@@ -11,7 +11,7 @@ export function findButton(element: HTMLElement, label: string): HTMLButtonEleme
 }
 
 /** The tooltip of a button, which screen readers also read as its description. */
-export function buttonTooltip(fixture: ComponentFixture<unknown>, label: string): string {
+function buttonTooltip(fixture: ComponentFixture<unknown>, label: string): string {
   return tooltipOf(fixture, findButton(fixture.nativeElement as HTMLElement, label));
 }
 

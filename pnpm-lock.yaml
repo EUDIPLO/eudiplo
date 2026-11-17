@@ -129,9 +129,6 @@ importers:
       '@azure/keyvault-secrets':
         specifier: ^4.12.0
         version: 4.12.0(supports-color@10.2.2)
-      '@badgateway/oauth2-client':
-        specifier: ^3.3.1
-        version: 3.3.1
       '@eudiplo/config-format':
         specifier: workspace:*
         version: link:../../packages/eudiplo-config-format
@@ -355,9 +352,6 @@ importers:
       '@biomejs/biome':
         specifier: 2.6.8
         version: 2.6.8
-      '@hey-api/openapi-ts':
-        specifier: ^0.99.0
-        version: 0.99.0(magicast@0.5.5)(typescript@6.0.3)
       '@nestjs/cli':
         specifier: ^12.0.13
         version: 12.0.13(1d503a17397c1678040421c7812b9197)

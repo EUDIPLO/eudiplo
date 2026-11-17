@@ -36,6 +36,7 @@ describe("PresentationsModule wiring", () => {
                     useValue: {
                         publicUrl: "https://eudiplo.example",
                         skipTrustAuthority: false,
+                        skipOveraskingCheck: false,
                     },
                 },
                 verifyPresentationResponseProvider,

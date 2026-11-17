@@ -1160,311 +1160,6 @@ export const CreateClientDtoSchema = {
     additionalProperties: false
 } as const;
 
-export const RegistrationCertificateDefaultsSchema = {
-    type: 'object',
-    properties: {
-        privacy_policy: {
-            type: 'string',
-            description: 'Default privacy policy URL for registration certificate creation.',
-            example: 'https://verifier.example/privacy'
-        },
-        support_uri: {
-            type: 'string',
-            description: 'Default support contact URI for registration certificate creation.',
-            example: 'mailto:support@verifier.example'
-        }
-    }
-} as const;
-
-export const RelyingPartyContactSchema = {
-    type: 'object',
-    properties: {
-        supportUri: {
-            type: 'string',
-            description: 'https URL where the relying party can be contacted.',
-            example: 'https://verifier.example/support'
-        },
-        email: {
-            type: 'string',
-            description: 'Email address of the relying party.',
-            example: 'support@verifier.example'
-        },
-        phone: {
-            type: 'string',
-            description: 'Phone number of the relying party.',
-            example: '+49 30 1234567'
-        }
-    }
-} as const;
-
-export const RegistrarConfigResponseDtoSchema = {
-    type: 'object',
-    properties: {
-        registrarUrl: {
-            type: 'string',
-            description: 'The base URL of the registrar API',
-            example: 'https://sandbox.eudi-wallet.org/api'
-        },
-        oidcUrl: {
-            type: 'string',
-            description: 'The OIDC issuer URL for authentication (e.g., Keycloak realm URL)',
-            example: 'https://auth.example.com/realms/my-realm'
-        },
-        clientId: {
-            type: 'string',
-            description: 'The OIDC client ID for the registrar',
-            example: 'registrar-client'
-        },
-        username: {
-            type: 'string',
-            description: 'The username for OIDC login',
-            example: 'admin@example.com'
-        },
-        registrationCertificateDefaults: {
-            description: 'Optional default values merged into registration certificate creation requests (for example privacy_policy, support_uri)',
-            additionalProperties: true,
-            anyOf: [
-                {
-                    $ref: '#/components/schemas/RegistrationCertificateDefaults'
-                },
-                {
-                    type: 'null'
-                }
-            ]
-        },
-        relyingPartyContact: {
-            description: 'Contact sent when EUDIPLO registers the relying party at the registrar. The registrar needs at least one value to issue access certificates. A relying party that is already registered keeps its contact.',
-            anyOf: [
-                {
-                    $ref: '#/components/schemas/RelyingPartyContact'
-                },
-                {
-                    type: 'null'
-                }
-            ]
-        },
-        hasPassword: {
-            type: 'boolean',
-            description: 'Indicates whether a password is configured (actual password is never returned)',
-            example: true
-        },
-        hasClientSecret: {
-            type: 'boolean',
-            description: 'Indicates whether a client secret is configured (actual client secret is never returned)',
-            example: false
-        }
-    },
-    required: [
-        'registrarUrl',
-        'oidcUrl',
-        'clientId',
-        'username',
-        'hasPassword',
-        'hasClientSecret'
-    ]
-} as const;
-
-export const CreateRegistrarConfigDtoSchema = {
-    type: 'object',
-    properties: {
-        registrarUrl: {
-            type: 'string',
-            format: 'uri',
-            description: 'Base URL of the registrar service.'
-        },
-        oidcUrl: {
-            type: 'string',
-            format: 'uri',
-            description: 'OIDC discovery or issuer URL used for authentication.'
-        },
-        clientId: {
-            type: 'string',
-            minLength: 1,
-            description: 'OAuth client ID used against the registrar.'
-        },
-        clientSecret: {
-            type: 'string',
-            description: 'Optional OAuth client secret for registrar authentication.',
-            minLength: 1
-        },
-        username: {
-            type: 'string',
-            minLength: 1,
-            description: 'Username used for registrar authentication.'
-        },
-        password: {
-            type: 'string',
-            minLength: 1,
-            description: 'Password used for registrar authentication.'
-        },
-        registrationCertificateDefaults: {
-            description: 'Optional default registration certificate values.',
-            anyOf: [
-                {
-                    type: 'object',
-                    propertyNames: {
-                        type: 'string'
-                    },
-                    additionalProperties: {}
-                },
-                {
-                    type: 'null'
-                }
-            ]
-        },
-        relyingPartyContact: {
-            description: 'Contact of the relying party, sent when EUDIPLO registers the relying party at the registrar. The registrar needs at least one contact value to issue access certificates. A relying party that is already registered keeps its contact.',
-            anyOf: [
-                {
-                    type: 'object',
-                    properties: {
-                        supportUri: {
-                            description: 'https URL where the relying party can be contacted.',
-                            type: 'string',
-                            format: 'uri'
-                        },
-                        email: {
-                            description: 'Email address of the relying party.',
-                            type: 'string',
-                            pattern: '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$'
-                        },
-                        phone: {
-                            description: 'Phone number of the relying party.',
-                            type: 'string',
-                            pattern: '^[+0-9()\\-\\s]{5,40}$'
-                        }
-                    },
-                    additionalProperties: false
-                },
-                {
-                    type: 'null'
-                }
-            ]
-        }
-    },
-    required: [
-        'registrarUrl',
-        'oidcUrl',
-        'clientId',
-        'username',
-        'password'
-    ],
-    additionalProperties: false
-} as const;
-
-export const UpdateRegistrarConfigDtoSchema = {
-    type: 'object',
-    properties: {
-        registrarUrl: {
-            type: 'string',
-            format: 'uri',
-            description: 'Base URL of the registrar service.'
-        },
-        oidcUrl: {
-            type: 'string',
-            format: 'uri',
-            description: 'OIDC discovery or issuer URL used for authentication.'
-        },
-        clientId: {
-            type: 'string',
-            minLength: 1,
-            description: 'OAuth client ID used against the registrar.'
-        },
-        clientSecret: {
-            type: 'string',
-            description: 'Optional OAuth client secret for registrar authentication.',
-            minLength: 1
-        },
-        username: {
-            type: 'string',
-            minLength: 1,
-            description: 'Username used for registrar authentication.'
-        },
-        password: {
-            type: 'string',
-            minLength: 1,
-            description: 'Password used for registrar authentication.'
-        },
-        registrationCertificateDefaults: {
-            description: 'Optional default registration certificate values.',
-            anyOf: [
-                {
-                    type: 'object',
-                    propertyNames: {
-                        type: 'string'
-                    },
-                    additionalProperties: {}
-                },
-                {
-                    type: 'null'
-                }
-            ]
-        },
-        relyingPartyContact: {
-            description: 'Contact of the relying party, sent when EUDIPLO registers the relying party at the registrar. The registrar needs at least one contact value to issue access certificates. A relying party that is already registered keeps its contact.',
-            anyOf: [
-                {
-                    type: 'object',
-                    properties: {
-                        supportUri: {
-                            description: 'https URL where the relying party can be contacted.',
-                            type: 'string',
-                            format: 'uri'
-                        },
-                        email: {
-                            description: 'Email address of the relying party.',
-                            type: 'string',
-                            pattern: '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$'
-                        },
-                        phone: {
-                            description: 'Phone number of the relying party.',
-                            type: 'string',
-                            pattern: '^[+0-9()\\-\\s]{5,40}$'
-                        }
-                    },
-                    additionalProperties: false
-                },
-                {
-                    type: 'null'
-                }
-            ]
-        }
-    },
-    additionalProperties: false
-} as const;
-
-export const CreateAccessCertificateDtoSchema = {
-    type: 'object',
-    properties: {
-        keyId: {
-            type: 'string',
-            minLength: 1,
-            description: 'Key chain id used to issue the access certificate.'
-        }
-    },
-    required: [
-        'keyId'
-    ],
-    additionalProperties: false
-} as const;
-
-export const CreateAccessKeyChainDtoSchema = {
-    type: 'object',
-    properties: {
-        description: {
-            description: 'Human-readable description for the new key chain.',
-            type: 'string',
-            example: 'Registrar access certificate'
-        },
-        kmsProvider: {
-            description: 'KMS provider for the new key chain (defaults to the configured default provider).',
-            type: 'string',
-            example: 'db'
-        }
-    },
-    additionalProperties: false
-} as const;
-
 export const ManagedUserDtoSchema = {
     type: 'object',
     properties: {
@@ -4589,8 +4284,8 @@ export const IssuerMetadataCredentialConfigSchema = {
         format: {
             type: 'string',
             enum: [
-                'dc+sd-jwt',
-                'mso_mdoc'
+                'mso_mdoc',
+                'dc+sd-jwt'
             ]
         },
         scope: {
@@ -4611,7 +4306,7 @@ export const SchemaUriEntrySchema = {
     type: 'object',
     properties: {
         credentialConfigId: {
-            description: 'Credential configuration whose schema EUDIPLO builds and uploads; `uri` and `meta` are not needed.',
+            description: 'Credential configuration whose schema EUDIPLO builds; `uri` and `meta` are not needed.',
             type: 'string',
             example: 'pid_de_credential_config'
         },
@@ -4621,7 +4316,7 @@ export const SchemaUriEntrySchema = {
             example: 'dc+sd-jwt'
         },
         uri: {
-            description: 'URL of a schema document that EUDIPLO downloads and uploads to the registrar. Requires `format` and `meta`.',
+            description: 'URL of a schema document. Requires `format` and `meta`.',
             type: 'string'
         },
         meta: {
@@ -4640,7 +4335,7 @@ export const TrustAuthorityEntrySchema = {
     type: 'object',
     properties: {
         trustListId: {
-            description: 'Trust list of the tenant. EUDIPLO publishes it as `etsi_tl` authority with its URL and the active certificate of its key chain (the first one of a chain); the other fields are not needed.',
+            description: 'Trust list of the tenant, standing for an `etsi_tl` authority with its URL and the active certificate of its key chain (the first one of a chain); the other fields are not needed.',
             type: 'string'
         },
         frameworkType: {
@@ -4690,12 +4385,12 @@ export const SchemaMetaConfigSchema = {
     type: 'object',
     properties: {
         id: {
-            description: 'Schema ID (attestation identifier URI). `publish` passes it to the registrar when set; `publish-version` requires the ID of the existing schema. With `credentialConfigId` and no `rulebookURI`, `publish` only links that credential configuration to this ID and uploads nothing.',
+            description: 'Schema ID (attestation identifier URI).',
             type: 'string',
             example: 'https://example.com/attestations/my-credential'
         },
         name: {
-            description: 'Human-readable name. Required when publishing; not needed for a link-only request.',
+            description: 'Human-readable name.',
             type: 'string',
             example: 'German PID'
         },
@@ -4705,7 +4400,7 @@ export const SchemaMetaConfigSchema = {
             example: '1.0.0'
         },
         rulebookURI: {
-            description: 'URL of the attestation rulebook, which EUDIPLO downloads and uploads to the registrar. Required when publishing.',
+            description: 'URL of the attestation rulebook.',
             type: 'string',
             example: 'https://example.com/rulebooks/my-credential/1.0.0.md'
         },
@@ -4735,7 +4430,7 @@ export const SchemaMetaConfigSchema = {
                 type: 'object',
                 properties: {
                     credentialConfigId: {
-                        description: 'Credential configuration whose schema EUDIPLO builds and uploads; `uri` and `meta` are not needed.',
+                        description: 'Credential configuration whose schema EUDIPLO builds; `uri` and `meta` are not needed.',
                         type: 'string'
                     },
                     format: {
@@ -4743,7 +4438,7 @@ export const SchemaMetaConfigSchema = {
                         type: 'string'
                     },
                     uri: {
-                        description: 'URL of a schema document that EUDIPLO downloads and uploads to the registrar. Requires `format` and `meta`.',
+                        description: 'URL of a schema document. Requires `format` and `meta`.',
                         type: 'string'
                     },
                     meta: {
@@ -4760,12 +4455,12 @@ export const SchemaMetaConfigSchema = {
             type: 'array'
         },
         trustedAuthorities: {
-            description: 'Trusted authorities for issuers of this attestation. Required when publishing: at least one entry must provide an X.509 certificate (`trustListId`, an `x509` entry or a `verificationMethod` whose `x509Certificate` is a single certificate).',
+            description: 'Trusted authorities for issuers of this attestation (`trustListId`, an `x509` entry or a `verificationMethod`).',
             items: {
                 type: 'object',
                 properties: {
                     trustListId: {
-                        description: 'Trust list of the tenant. EUDIPLO publishes it as `etsi_tl` authority with its URL and the active certificate of its key chain (the first one of a chain); the other fields are not needed.',
+                        description: 'Trust list of the tenant, standing for an `etsi_tl` authority with its URL and the active certificate of its key chain (the first one of a chain); the other fields are not needed.',
                         type: 'string'
                     },
                     frameworkType: {
@@ -5372,7 +5067,7 @@ export const CredentialConfigSchema = {
                 'null'
             ],
             description: 'List of IAE actions to execute before credential issuance',
-            example: '',
+            example: '[',
             items: {
                 oneOf: [
                     {
@@ -5542,7 +5237,7 @@ export const CredentialConfigCreateSchema = {
                 'null'
             ],
             description: 'List of IAE actions to execute before credential issuance',
-            example: '',
+            example: '[',
             items: {
                 oneOf: [
                     {
@@ -5694,7 +5389,7 @@ export const CredentialConfigUpdateSchema = {
                 'null'
             ],
             description: 'List of IAE actions to execute before credential issuance',
-            example: '',
+            example: '[',
             items: {
                 oneOf: [
                     {
@@ -6170,10 +5865,14 @@ export const RegistrationCertificatePurposeSchema = {
     type: 'object',
     properties: {
         lang: {
-            type: 'string'
+            type: 'string',
+            minLength: 1,
+            description: 'Language of the text, an ISO 639-1 code such as en.'
         },
         content: {
-            type: 'string'
+            type: 'string',
+            minLength: 1,
+            description: 'The purpose in that language.'
         }
     },
     required: [
@@ -6183,27 +5882,28 @@ export const RegistrationCertificatePurposeSchema = {
     additionalProperties: false
 } as const;
 
-export const RegistrationCertificateBodySchema = {
+export const PresentationRegistrationCertificateSchema = {
     type: 'object',
     properties: {
-        privacy_policy: {
-            type: 'string'
-        },
-        support_uri: {
-            type: 'string'
-        },
-        intermediary: {
-            type: 'string'
+        jwt: {
+            description: 'Registration certificate JWT issued by a registrar, attached to every\nrequest object.',
+            type: 'string',
+            minLength: 1
         },
         purpose: {
+            description: 'Why the data is requested, one text per language. Kept for requesting\na new certificate.',
             items: {
                 type: 'object',
                 properties: {
                     lang: {
-                        type: 'string'
+                        type: 'string',
+                        minLength: 1,
+                        description: 'Language of the text, an ISO 639-1 code such as en.'
                     },
                     content: {
-                        type: 'string'
+                        type: 'string',
+                        minLength: 1,
+                        description: 'The purpose in that language.'
                     }
                 },
                 required: [
@@ -6214,94 +5914,10 @@ export const RegistrationCertificateBodySchema = {
             },
             type: 'array'
         },
-        credentials: {
-            items: {
-                type: 'object',
-                propertyNames: {
-                    type: 'string'
-                },
-                additionalProperties: {}
-            },
-            type: 'array'
-        },
-        provides_attestations: {
-            items: {
-                type: 'string',
-                minLength: 1
-            },
-            description: 'Credential type identifiers (SD-JWT VC `vct` or mdoc doctype) provided\nby an issuer.',
-            type: 'array'
-        }
-    },
-    additionalProperties: false
-} as const;
-
-export const RegistrationCertificateRequestSchema = {
-    type: 'object',
-    properties: {
-        id: {
+        privacy_policy: {
+            description: 'Privacy policy URL that applies to this request. Kept for requesting a\nnew certificate.',
             type: 'string',
-            description: 'Optional registrar-side certificate identifier.\nIf provided and still valid, EUDIPLO reuses it instead of creating a new certificate.'
-        },
-        body: {
-            properties: {
-                privacy_policy: {
-                    type: 'string'
-                },
-                support_uri: {
-                    type: 'string'
-                },
-                intermediary: {
-                    type: 'string'
-                },
-                purpose: {
-                    type: 'array',
-                    items: {
-                        type: 'object',
-                        properties: {
-                            lang: {
-                                type: 'string'
-                            },
-                            content: {
-                                type: 'string'
-                            }
-                        },
-                        required: [
-                            'lang',
-                            'content'
-                        ],
-                        additionalProperties: false
-                    }
-                },
-                credentials: {
-                    type: 'array',
-                    items: {
-                        type: 'object',
-                        propertyNames: {
-                            type: 'string'
-                        },
-                        additionalProperties: {}
-                    }
-                },
-                provides_attestations: {
-                    type: 'array',
-                    items: {
-                        type: 'string',
-                        minLength: 1
-                    }
-                }
-            },
-            additionalProperties: false,
-            description: 'Registration certificate creation payload.\nThis is merged with tenant-level registrar defaults when a certificate is created.',
-            allOf: [
-                {
-                    $ref: '#/components/schemas/RegistrationCertificateBody'
-                }
-            ]
-        },
-        jwt: {
-            type: 'string',
-            description: 'Optional pre-existing registration certificate JWT.\nIf provided, EUDIPLO forwards it as-is and does not create a new one.'
+            minLength: 1
         }
     },
     additionalProperties: false
@@ -6347,16 +5963,6 @@ export const PresentationConfigSchema = {
             type: 'string',
             default: 'strict'
         },
-        registrationCertCache: {
-            type: [
-                'object',
-                'null'
-            ],
-            description: 'Server-managed cache of the materialized registration certificate. Read-only; values supplied by clients are ignored.',
-            example: '',
-            readOnly: true,
-            additionalProperties: true
-        },
         id: {
             type: 'string',
             description: 'Unique identifier for the VP request.'
@@ -6395,10 +6001,10 @@ export const PresentationConfigSchema = {
             }
         },
         registration_cert: {
-            description: 'The registration certificate request containing the necessary details.',
+            description: 'Registration certificate from a registrar, attached to every request\nobject, with the purpose and privacy policy it is requested with.',
             anyOf: [
                 {
-                    $ref: '#/components/schemas/RegistrationCertificateRequest'
+                    $ref: '#/components/schemas/PresentationRegistrationCertificate'
                 },
                 {
                     type: 'null'
@@ -6770,313 +6376,6 @@ export const ResolveSchemaMetadataJwtDtoSchema = {
         'signedJwt'
     ],
     additionalProperties: false
-} as const;
-
-export const MetadataSchemaDtoSchema = {
-    type: 'object',
-    properties: {
-        id: {
-            type: 'string',
-            description: 'Unique identifier for this schema entry'
-        },
-        formatIdentifier: {
-            enum: [
-                'dc+sd-jwt',
-                'mso_mdoc'
-            ],
-            type: 'string',
-            description: 'The credential format identifier'
-        },
-        uri: {
-            type: 'string',
-            description: 'URI to the schema definition'
-        },
-        meta: {
-            type: 'object',
-            additionalProperties: true,
-            description: 'Format-specific metadata for the schema entry'
-        },
-        integrity: {
-            type: 'string',
-            description: 'Subresource Integrity hash for the schema'
-        }
-    },
-    required: [
-        'id',
-        'formatIdentifier'
-    ]
-} as const;
-
-export const TrustAuthorityDtoSchema = {
-    type: 'object',
-    properties: {
-        id: {
-            type: 'string',
-            description: 'Unique identifier for this trust authority entry'
-        },
-        frameworkType: {
-            enum: [
-                'etsi_tl',
-                'x509'
-            ],
-            type: 'string',
-            description: 'Type of trust framework'
-        },
-        value: {
-            type: 'string',
-            description: 'URI or identifier for the trust list / authority'
-        },
-        verificationMethod: {
-            type: 'object',
-            additionalProperties: true,
-            description: 'Verification method for the trust list signature (e.g., JWK)'
-        }
-    },
-    required: [
-        'id',
-        'frameworkType',
-        'value'
-    ]
-} as const;
-
-export const IssuerOfferEntryDtoSchema = {
-    type: 'object',
-    properties: {
-        credentialOfferUrl: {
-            type: 'string',
-            description: 'URL where the user can receive a credential offer from this issuer.'
-        },
-        description: {
-            type: 'string',
-            description: 'Human-readable description explaining when this issuer offer is relevant for the user.'
-        }
-    },
-    required: [
-        'credentialOfferUrl',
-        'description'
-    ]
-} as const;
-
-export const AccessCertificateRefDtoSchema = {
-    type: 'object',
-    properties: {
-        id: {
-            type: 'string'
-        },
-        relyingPartyId: {
-            type: 'string'
-        },
-        certificate: {
-            type: 'string'
-        },
-        revoked: {
-            type: [
-                'string',
-                'null'
-            ]
-        },
-        createdAt: {
-            type: 'string'
-        }
-    },
-    required: [
-        'id',
-        'relyingPartyId',
-        'certificate',
-        'revoked',
-        'createdAt'
-    ]
-} as const;
-
-export const SchemaMetadataResponseDtoSchema = {
-    type: 'object',
-    properties: {
-        id: {
-            type: 'string',
-            description: 'The unique, server-assigned identifier (UUID) for the schema metadata'
-        },
-        version: {
-            type: 'string',
-            description: 'Version of this schema metadata (SemVer)'
-        },
-        rulebookURI: {
-            type: 'string',
-            description: 'URI of the human-readable Rulebook document'
-        },
-        rulebookIntegrity: {
-            type: 'string',
-            description: 'Subresource Integrity hash for the rulebook URI'
-        },
-        attestationLoS: {
-            enum: [
-                'iso_18045_high',
-                'iso_18045_moderate',
-                'iso_18045_enhanced-basic',
-                'iso_18045_basic'
-            ],
-            type: 'string',
-            description: 'Level of security (LoS) of this attestation'
-        },
-        bindingType: {
-            enum: [
-                'claim',
-                'key',
-                'biometric',
-                'none'
-            ],
-            type: 'string',
-            description: 'Required binding type between attestation and holder'
-        },
-        supportedFormats: {
-            type: 'array',
-            items: {
-                type: 'string',
-                enum: [
-                    'dc+sd-jwt',
-                    'mso_mdoc'
-                ]
-            },
-            description: 'Credential formats in which this attestation is available'
-        },
-        schemaURIs: {
-            description: 'Format-specific schema URIs for this schema metadata',
-            type: 'array',
-            items: {
-                $ref: '#/components/schemas/MetadataSchemaDto'
-            }
-        },
-        trustedAuthorities: {
-            description: 'Trust frameworks / trust anchors applicable to this schema metadata',
-            type: 'array',
-            items: {
-                $ref: '#/components/schemas/TrustAuthorityDto'
-            }
-        },
-        category: {
-            enum: [
-                'identity',
-                'health',
-                'finance',
-                'education',
-                'mobility',
-                'employment',
-                'other'
-            ],
-            type: 'string',
-            description: 'Domain category for filtering'
-        },
-        tags: {
-            description: 'Free-form tags for filtering and search',
-            type: 'array',
-            items: {
-                type: 'string'
-            }
-        },
-        displayName: {
-            type: 'string',
-            description: 'Optional human-readable schema name for UI display and filtering.'
-        },
-        issuerOffers: {
-            description: 'Issuer offer entries for this schema metadata. Each entry provides a credential offer URL and user-facing description.',
-            type: 'array',
-            items: {
-                $ref: '#/components/schemas/IssuerOfferEntryDto'
-            }
-        },
-        publicationStatus: {
-            enum: [
-                'published',
-                'superseded',
-                'withdrawn',
-                'disputed',
-                'suppressed'
-            ],
-            type: 'string',
-            description: 'Current publication lifecycle state.'
-        },
-        legacyPublication: {
-            type: 'boolean',
-            description: 'Whether this entry was backfilled from the legacy publication model.'
-        },
-        referenceVerificationStatus: {
-            enum: [
-                'pending',
-                'verified',
-                'warning',
-                'failed'
-            ],
-            type: 'string',
-            description: 'Current verification status for referenced assets.'
-        },
-        referenceVerificationChecks: {
-            type: 'array',
-            description: 'Verification checks performed for referenced assets.'
-        },
-        signedJwt: {
-            type: 'string',
-            description: 'The original signed JWT'
-        },
-        issuer: {
-            type: 'string',
-            description: 'Issuer from the JWT (`iss` claim)'
-        },
-        signerCertificate: {
-            description: 'The access certificate used to sign this schema metadata',
-            allOf: [
-                {
-                    $ref: '#/components/schemas/AccessCertificateRefDto'
-                }
-            ]
-        },
-        issuedAt: {
-            type: 'string',
-            description: 'Timestamp when the JWT was issued (from the `iat` claim)'
-        },
-        createdAt: {
-            type: 'string',
-            description: 'Server creation timestamp'
-        },
-        updatedAt: {
-            type: 'string',
-            description: 'Last update timestamp'
-        },
-        deprecated: {
-            type: 'boolean',
-            description: 'Whether this version is deprecated'
-        },
-        deprecationMessage: {
-            type: 'string',
-            description: 'Deprecation message shown to consumers'
-        },
-        supersededByVersion: {
-            type: 'string',
-            description: 'The version that supersedes this one'
-        },
-        deprecatedAt: {
-            type: 'string',
-            description: 'Timestamp when this version was marked as deprecated'
-        }
-    },
-    required: [
-        'id',
-        'version',
-        'attestationLoS',
-        'bindingType',
-        'supportedFormats',
-        'schemaURIs',
-        'trustedAuthorities',
-        'issuerOffers',
-        'publicationStatus',
-        'legacyPublication',
-        'referenceVerificationStatus',
-        'referenceVerificationChecks',
-        'signedJwt',
-        'issuer',
-        'issuedAt',
-        'createdAt',
-        'updatedAt',
-        'deprecated'
-    ]
 } as const;
 
 export const PresentationConfigCreateDtoSchema = {
@@ -7684,67 +6983,44 @@ export const PresentationConfigCreateDtoSchema = {
             ]
         },
         registration_cert: {
-            description: 'Optional registration certificate request settings.',
+            description: 'Registration certificate from a registrar, with the purpose and privacy policy it is requested with.',
             anyOf: [
                 {
                     type: 'object',
                     properties: {
-                        id: {
-                            type: 'string'
-                        },
-                        body: {
-                            type: 'object',
-                            properties: {
-                                privacy_policy: {
-                                    type: 'string'
-                                },
-                                support_uri: {
-                                    type: 'string'
-                                },
-                                intermediary: {
-                                    type: 'string'
-                                },
-                                purpose: {
-                                    type: 'array',
-                                    items: {
-                                        type: 'object',
-                                        properties: {
-                                            lang: {
-                                                type: 'string'
-                                            },
-                                            content: {
-                                                type: 'string'
-                                            }
-                                        },
-                                        required: [
-                                            'lang',
-                                            'content'
-                                        ],
-                                        additionalProperties: false
-                                    }
-                                },
-                                credentials: {
-                                    type: 'array',
-                                    items: {
-                                        type: 'object',
-                                        propertyNames: {
-                                            type: 'string'
-                                        },
-                                        additionalProperties: {}
-                                    }
-                                },
-                                provides_attestations: {
-                                    type: 'array',
-                                    items: {
-                                        type: 'string',
-                                        minLength: 1
-                                    }
-                                }
-                            },
-                            additionalProperties: false
-                        },
                         jwt: {
-                            type: 'string'
+                            description: 'Registration certificate JWT issued by a registrar. Attached to every request object as is; it must be valid and authorize every credential the DCQL query requests.',
+                            type: 'string',
+                            minLength: 1
+                        },
+                        purpose: {
+                            description: 'Why the data is requested (GDPR purpose), one text per language. Used when a certificate is requested from a registrar.',
+                            type: 'array',
+                            items: {
+                                type: 'object',
+                                properties: {
+                                    lang: {
+                                        type: 'string',
+                                        minLength: 1,
+                                        description: 'Language of the text, an ISO 639-1 code such as en.'
+                                    },
+                                    content: {
+                                        type: 'string',
+                                        minLength: 1,
+                                        description: 'The purpose in that language.'
+                                    }
+                                },
+                                required: [
+                                    'lang',
+                                    'content'
+                                ],
+                                additionalProperties: false
+                            }
+                        },
+                        privacy_policy: {
+                            description: 'URL of the privacy policy that applies to this request. Used when a certificate is requested from a registrar.',
+                            type: 'string',
+                            minLength: 1
                         }
                     },
                     additionalProperties: false
@@ -7754,70 +7030,12 @@ export const PresentationConfigCreateDtoSchema = {
                 }
             ]
         },
-        registrationCertImportJwt: {
-            description: 'Optional imported registration certificate JWT.',
-            type: 'array',
-            items: {
-                type: 'string'
-            }
-        },
-        registrationCertImportId: {
-            description: 'Optional registrar-side registration certificate id.',
-            type: 'array',
-            items: {
-                type: 'string'
-            }
-        },
-        registrationCertBodyPrivacyPolicy: {
-            description: 'Optional registration certificate privacy policy URI.',
-            type: 'array',
-            items: {
-                type: 'string'
-            }
-        },
-        registrationCertBodySupportUri: {
-            description: 'Optional registration certificate support URI.',
-            type: 'array',
-            items: {
-                type: 'string'
-            }
-        },
-        registrationCertBodyIntermediary: {
-            description: 'Optional registration certificate intermediary.',
-            type: 'array',
-            items: {
-                type: 'string'
-            }
-        },
-        registrationCertBodyPurpose: {
-            description: 'Optional registration certificate purpose entries.',
-            anyOf: [
-                {
-                    type: 'array',
-                    items: {
-                        type: 'object',
-                        properties: {
-                            lang: {
-                                type: 'string'
-                            },
-                            content: {
-                                type: 'string'
-                            }
-                        },
-                        additionalProperties: false
-                    }
-                },
-                {
-                    type: 'null'
-                }
-            ]
-        },
         webhookEndpointId: {
             description: 'Optional webhook endpoint id for presentation callbacks.',
-            type: 'array',
-            items: {
-                type: 'string'
-            }
+            type: [
+                'string',
+                'null'
+            ]
         },
         attached: {
             description: 'Optional attachments included with presentation requests.',
@@ -7856,17 +7074,17 @@ export const PresentationConfigCreateDtoSchema = {
         },
         redirectUri: {
             description: 'Optional redirect URI after presentation completion.',
-            type: 'array',
-            items: {
-                type: 'string'
-            }
+            type: [
+                'string',
+                'null'
+            ]
         },
         accessKeyChainId: {
             description: 'Optional key chain id for access token/auth operations.',
-            type: 'array',
-            items: {
-                type: 'string'
-            }
+            type: [
+                'string',
+                'null'
+            ]
         },
         allowedOrigins: {
             description: 'Origins (http(s)://host[:port]) of the web pages allowed to request this presentation over the Digital Credentials API. When set, dc-api and iso-18013-7 offers are refused for any other expected_origin, and an offer without expected_origin uses the only listed origin. Unset: any expected_origin is accepted. Not used for uri requests.',
@@ -7886,10 +7104,10 @@ export const PresentationConfigCreateDtoSchema = {
         },
         readerAuth: {
             description: 'Whether reader authentication is required for mDoc requests.',
-            type: 'array',
-            items: {
-                type: 'boolean'
-            }
+            type: [
+                'boolean',
+                'null'
+            ]
         }
     },
     required: [
@@ -8504,67 +7722,44 @@ export const PresentationConfigUpdateDtoSchema = {
             ]
         },
         registration_cert: {
-            description: 'Optional registration certificate request settings.',
+            description: 'Registration certificate from a registrar, with the purpose and privacy policy it is requested with.',
             anyOf: [
                 {
                     type: 'object',
                     properties: {
-                        id: {
-                            type: 'string'
-                        },
-                        body: {
-                            type: 'object',
-                            properties: {
-                                privacy_policy: {
-                                    type: 'string'
-                                },
-                                support_uri: {
-                                    type: 'string'
-                                },
-                                intermediary: {
-                                    type: 'string'
-                                },
-                                purpose: {
-                                    type: 'array',
-                                    items: {
-                                        type: 'object',
-                                        properties: {
-                                            lang: {
-                                                type: 'string'
-                                            },
-                                            content: {
-                                                type: 'string'
-                                            }
-                                        },
-                                        required: [
-                                            'lang',
-                                            'content'
-                                        ],
-                                        additionalProperties: false
-                                    }
-                                },
-                                credentials: {
-                                    type: 'array',
-                                    items: {
-                                        type: 'object',
-                                        propertyNames: {
-                                            type: 'string'
-                                        },
-                                        additionalProperties: {}
-                                    }
-                                },
-                                provides_attestations: {
-                                    type: 'array',
-                                    items: {
-                                        type: 'string',
-                                        minLength: 1
-                                    }
-                                }
-                            },
-                            additionalProperties: false
-                        },
                         jwt: {
-                            type: 'string'
+                            description: 'Registration certificate JWT issued by a registrar. Attached to every request object as is; it must be valid and authorize every credential the DCQL query requests.',
+                            type: 'string',
+                            minLength: 1
+                        },
+                        purpose: {
+                            description: 'Why the data is requested (GDPR purpose), one text per language. Used when a certificate is requested from a registrar.',
+                            type: 'array',
+                            items: {
+                                type: 'object',
+                                properties: {
+                                    lang: {
+                                        type: 'string',
+                                        minLength: 1,
+                                        description: 'Language of the text, an ISO 639-1 code such as en.'
+                                    },
+                                    content: {
+                                        type: 'string',
+                                        minLength: 1,
+                                        description: 'The purpose in that language.'
+                                    }
+                                },
+                                required: [
+                                    'lang',
+                                    'content'
+                                ],
+                                additionalProperties: false
+                            }
+                        },
+                        privacy_policy: {
+                            description: 'URL of the privacy policy that applies to this request. Used when a certificate is requested from a registrar.',
+                            type: 'string',
+                            minLength: 1
                         }
                     },
                     additionalProperties: false
@@ -8574,70 +7769,12 @@ export const PresentationConfigUpdateDtoSchema = {
                 }
             ]
         },
-        registrationCertImportJwt: {
-            description: 'Optional imported registration certificate JWT.',
-            type: 'array',
-            items: {
-                type: 'string'
-            }
-        },
-        registrationCertImportId: {
-            description: 'Optional registrar-side registration certificate id.',
-            type: 'array',
-            items: {
-                type: 'string'
-            }
-        },
-        registrationCertBodyPrivacyPolicy: {
-            description: 'Optional registration certificate privacy policy URI.',
-            type: 'array',
-            items: {
-                type: 'string'
-            }
-        },
-        registrationCertBodySupportUri: {
-            description: 'Optional registration certificate support URI.',
-            type: 'array',
-            items: {
-                type: 'string'
-            }
-        },
-        registrationCertBodyIntermediary: {
-            description: 'Optional registration certificate intermediary.',
-            type: 'array',
-            items: {
-                type: 'string'
-            }
-        },
-        registrationCertBodyPurpose: {
-            description: 'Optional registration certificate purpose entries.',
-            anyOf: [
-                {
-                    type: 'array',
-                    items: {
-                        type: 'object',
-                        properties: {
-                            lang: {
-                                type: 'string'
-                            },
-                            content: {
-                                type: 'string'
-                            }
-                        },
-                        additionalProperties: false
-                    }
-                },
-                {
-                    type: 'null'
-                }
-            ]
-        },
         webhookEndpointId: {
             description: 'Optional webhook endpoint id for presentation callbacks.',
-            type: 'array',
-            items: {
-                type: 'string'
-            }
+            type: [
+                'string',
+                'null'
+            ]
         },
         attached: {
             description: 'Optional attachments included with presentation requests.',
@@ -8676,17 +7813,17 @@ export const PresentationConfigUpdateDtoSchema = {
         },
         redirectUri: {
             description: 'Optional redirect URI after presentation completion.',
-            type: 'array',
-            items: {
-                type: 'string'
-            }
+            type: [
+                'string',
+                'null'
+            ]
         },
         accessKeyChainId: {
             description: 'Optional key chain id for access token/auth operations.',
-            type: 'array',
-            items: {
-                type: 'string'
-            }
+            type: [
+                'string',
+                'null'
+            ]
         },
         allowedOrigins: {
             description: 'Origins (http(s)://host[:port]) of the web pages allowed to request this presentation over the Digital Credentials API. When set, dc-api and iso-18013-7 offers are refused for any other expected_origin, and an offer without expected_origin uses the only listed origin. Unset: any expected_origin is accepted. Not used for uri requests.',
@@ -8706,10 +7843,10 @@ export const PresentationConfigUpdateDtoSchema = {
         },
         readerAuth: {
             description: 'Whether reader authentication is required for mDoc requests.',
-            type: 'array',
-            items: {
-                type: 'boolean'
-            }
+            type: [
+                'boolean',
+                'null'
+            ]
         }
     },
     additionalProperties: false
@@ -10605,6 +9742,7 @@ export const UpdateStatusListConfigDtoSchema = {
         },
         bits: {
             description: 'Bits per status entry of new status lists. Omit or set to null to follow STATUS_BITS of the instance.',
+            type: 'number',
             enum: [
                 1,
                 2,
@@ -10807,6 +9945,7 @@ export const CreateStatusListDtoSchema = {
                     const: 8
                 }
             ],
+            type: 'number',
             enum: [
                 1,
                 2,
@@ -12052,65 +11191,19 @@ export const IssuerRegistrationCertificateConfigSchema = {
             description: 'Enable inclusion of a registration certificate in credential issuer metadata.',
             default: false
         },
-        mode: {
-            type: 'string',
-            enum: [
-                'import',
-                'generate'
-            ],
-            description: 'import: use an existing JWT, generate: create via registrar using attestation data derived from configured credential configurations.',
-            default: 'generate'
-        },
         jwt: {
             type: 'string',
-            description: 'Existing registration certificate JWT used when mode is import.'
+            description: 'Registration certificate JWT advertised in the issuer metadata while it is valid, issued by a registrar such as the EUDI Hub.'
         },
         privacyPolicy: {
             type: 'string',
-            description: 'Privacy policy URL used when generating a registration certificate (optional if registrar defaults are configured).',
+            description: 'Privacy policy URL of the issuer. Stored only; EUDIPLO and the EUDI Hub request do not use it.',
             example: 'https://issuer.example/privacy'
         },
         supportUri: {
             type: 'string',
-            description: 'Support URI used when generating a registration certificate (optional if registrar defaults are configured).',
-            example: 'mailto:support@issuer.example'
-        },
-        renewal: {
-            type: 'string',
-            enum: [
-                'onCredentialConfigChange',
-                'onMetadataRequest',
-                'manual'
-            ],
-            description: 'When a generated certificate is renewed. onCredentialConfigChange (default): in the background after a credential or issuance configuration changes, and when issuer metadata is built. onMetadataRequest: only when issuer metadata is built. manual: only with Regenerate now. In every mode a missing or expired certificate is requested when issuer metadata is built.',
-            default: 'onCredentialConfigChange'
-        }
-    },
-    additionalProperties: false
-} as const;
-
-export const IssuerRegistrationCertificateCacheSchema = {
-    type: 'object',
-    properties: {
-        jwt: {
-            type: 'string',
-            description: 'Cached registration certificate JWT generated by EUDIPLO.',
-            readOnly: true
-        },
-        fingerprint: {
-            type: 'string',
-            description: 'Config fingerprint used to detect cache invalidation.',
-            readOnly: true
-        },
-        issuedAt: {
-            type: 'number',
-            description: 'JWT iat claim, seconds since epoch.',
-            readOnly: true
-        },
-        expiresAt: {
-            type: 'number',
-            description: 'JWT exp claim, seconds since epoch.',
-            readOnly: true
+            description: 'Support URI of the issuer. Kept with the certificate so that a new one can be requested from a registrar with the same values.',
+            example: 'https://issuer.example/support'
         }
     },
     additionalProperties: false
@@ -12223,22 +11316,10 @@ export const IssuanceConfigSchema = {
             ]
         },
         registrationCertificate: {
-            description: 'Optional registration certificate configuration for issuer metadata (`issuer_info`).\nSupports importing an existing JWT or generating one via registrar.',
+            description: 'Optional registration certificate configuration for issuer metadata (`issuer_info`).\nThe JWT comes from a registrar, for example the EUDI Hub.',
             anyOf: [
                 {
                     $ref: '#/components/schemas/IssuerRegistrationCertificateConfig'
-                },
-                {
-                    type: 'null'
-                }
-            ]
-        },
-        registrationCertificateCache: {
-            description: 'Server-managed cache for generated issuer registration certificates.',
-            readOnly: true,
-            anyOf: [
-                {
-                    $ref: '#/components/schemas/IssuerRegistrationCertificateCache'
                 },
                 {
                     type: 'null'
@@ -12386,22 +11467,10 @@ export const UpdateIssuanceDtoSchema = {
             ]
         },
         registrationCertificate: {
-            description: 'Optional registration certificate configuration for issuer metadata (`issuer_info`).\nSupports importing an existing JWT or generating one via registrar.',
+            description: 'Optional registration certificate configuration for issuer metadata (`issuer_info`).\nThe JWT comes from a registrar, for example the EUDI Hub.',
             anyOf: [
                 {
                     $ref: '#/components/schemas/IssuerRegistrationCertificateConfig'
-                },
-                {
-                    type: 'null'
-                }
-            ]
-        },
-        registrationCertificateCache: {
-            description: 'Server-managed cache for generated issuer registration certificates.',
-            readOnly: true,
-            anyOf: [
-                {
-                    $ref: '#/components/schemas/IssuerRegistrationCertificateCache'
                 },
                 {
                     type: 'null'
@@ -12458,671 +11527,6 @@ export const UpdateIssuanceDtoSchema = {
             }
         }
     }
-} as const;
-
-export const PublishSchemaMetaConfigSchema = {
-    type: 'object',
-    properties: {
-        schemaURIs: {
-            description: 'Schemas per attestation format. When omitted, the schema of `credentialConfigId` is used.',
-            items: {
-                type: 'object',
-                properties: {
-                    credentialConfigId: {
-                        description: 'Credential configuration whose schema EUDIPLO builds and uploads; `uri` and `meta` are not needed.',
-                        type: 'string'
-                    },
-                    format: {
-                        description: 'Attestation format of the schema, for example `dc+sd-jwt` or `mso_mdoc`. Required with `uri`; with `credentialConfigId`, the format of the configuration takes precedence.',
-                        type: 'string'
-                    },
-                    uri: {
-                        description: 'URL of a schema document that EUDIPLO downloads and uploads to the registrar. Requires `format` and `meta`.',
-                        type: 'string'
-                    },
-                    meta: {
-                        description: 'Format-specific schema metadata, for example `{ "vct": "urn:example:vct" }` for `dc+sd-jwt`. Required with `uri`.',
-                        type: 'object',
-                        propertyNames: {
-                            type: 'string'
-                        },
-                        additionalProperties: {}
-                    }
-                },
-                additionalProperties: false
-            },
-            type: 'array'
-        },
-        trustedAuthorities: {
-            description: 'Trusted authorities for issuers of this attestation. Required when publishing: at least one entry must provide an X.509 certificate (`trustListId`, an `x509` entry or a `verificationMethod` whose `x509Certificate` is a single certificate).',
-            items: {
-                type: 'object',
-                properties: {
-                    trustListId: {
-                        description: 'Trust list of the tenant. EUDIPLO publishes it as `etsi_tl` authority with its URL and the active certificate of its key chain (the first one of a chain); the other fields are not needed.',
-                        type: 'string'
-                    },
-                    frameworkType: {
-                        description: 'Trust framework of an external authority. `x509` takes a root certificate in `value` and no `verificationMethod`.',
-                        type: 'string',
-                        enum: [
-                            'aki',
-                            'etsi_tl',
-                            'openid_federation',
-                            'x509'
-                        ]
-                    },
-                    value: {
-                        description: 'Authority value, for example the trust list URL for `etsi_tl`, or for `x509` one root certificate in PEM or base64 DER. Publishing rejects an `x509` value that holds more than one certificate, such as a chain.',
-                        type: 'string'
-                    },
-                    verificationMethod: {
-                        description: 'Verification material of an external authority, for example a JWK, as object or JSON string. Required, except for `x509` (must be omitted) and for a `value` that is a trust list URL of this tenant (EUDIPLO adds the certificate).',
-                        anyOf: [
-                            {
-                                type: 'object',
-                                propertyNames: {
-                                    type: 'string'
-                                },
-                                additionalProperties: {}
-                            },
-                            {
-                                type: 'string'
-                            }
-                        ]
-                    }
-                },
-                additionalProperties: false
-            },
-            type: 'array'
-        },
-        id: {
-            type: 'string',
-            description: 'Schema ID (attestation identifier URI). `publish` passes it to the registrar when set; `publish-version` requires the ID of the existing schema. With `credentialConfigId` and no `rulebookURI`, `publish` only links that credential configuration to this ID and uploads nothing.'
-        },
-        name: {
-            type: 'string',
-            description: 'Human-readable name. Required when publishing; not needed for a link-only request.'
-        },
-        version: {
-            type: 'string',
-            description: 'Schema version, for example `1.0.0`.'
-        },
-        rulebookURI: {
-            type: 'string',
-            description: 'URL of the attestation rulebook, which EUDIPLO downloads and uploads to the registrar. Required when publishing.'
-        },
-        attestationLoS: {
-            type: 'string',
-            enum: [
-                'iso_18045_high',
-                'iso_18045_moderate',
-                'iso_18045_enhanced-basic',
-                'iso_18045_basic'
-            ],
-            description: 'Attestation level of security.'
-        },
-        bindingType: {
-            type: 'string',
-            enum: [
-                'claim',
-                'key',
-                'biometric',
-                'none'
-            ],
-            description: 'Cryptographic binding type.'
-        },
-        category: {
-            type: 'string',
-            description: 'Registrar category of the schema metadata, one of the predefined values of `GET /api/schema-metadata/vocabularies`. EUDIPLO sets it at the registrar after publishing; it is not stored in the credential configuration.',
-            enum: [
-                'identity',
-                'health',
-                'finance',
-                'education',
-                'mobility',
-                'employment',
-                'other'
-            ]
-        },
-        tags: {
-            type: 'array',
-            description: 'Registrar tags of the schema metadata, predefined values of `GET /api/schema-metadata/vocabularies`. EUDIPLO sets them at the registrar after publishing; they are not stored in the credential configuration.',
-            maxItems: 10,
-            items: {
-                type: 'string',
-                enum: [
-                    'pid',
-                    'eudi',
-                    'kyc',
-                    'aml',
-                    'age-verification',
-                    'residency',
-                    'membership',
-                    'education',
-                    'employment',
-                    'mobility'
-                ]
-            }
-        }
-    },
-    required: [
-        'version',
-        'attestationLoS',
-        'bindingType'
-    ],
-    description: 'Schema metadata values; the registrar builds and signs the result.',
-    additionalProperties: false
-} as const;
-
-export const SignSchemaMetaConfigDtoSchema = {
-    type: 'object',
-    properties: {
-        config: {
-            properties: {
-                id: {
-                    description: 'Schema ID (attestation identifier URI). `publish` passes it to the registrar when set; `publish-version` requires the ID of the existing schema. With `credentialConfigId` and no `rulebookURI`, `publish` only links that credential configuration to this ID and uploads nothing.',
-                    type: 'string'
-                },
-                name: {
-                    description: 'Human-readable name. Required when publishing; not needed for a link-only request.',
-                    type: 'string'
-                },
-                version: {
-                    type: 'string',
-                    description: 'Schema version, for example `1.0.0`.'
-                },
-                rulebookURI: {
-                    description: 'URL of the attestation rulebook, which EUDIPLO downloads and uploads to the registrar. Required when publishing.',
-                    type: 'string'
-                },
-                attestationLoS: {
-                    type: 'string',
-                    enum: [
-                        'iso_18045_high',
-                        'iso_18045_moderate',
-                        'iso_18045_enhanced-basic',
-                        'iso_18045_basic'
-                    ],
-                    description: 'Attestation level of security.'
-                },
-                bindingType: {
-                    type: 'string',
-                    enum: [
-                        'claim',
-                        'key',
-                        'biometric',
-                        'none'
-                    ],
-                    description: 'Cryptographic binding type.'
-                },
-                schemaURIs: {
-                    description: 'Schemas per attestation format. When omitted, the schema of `credentialConfigId` is used.',
-                    type: 'array',
-                    items: {
-                        type: 'object',
-                        properties: {
-                            credentialConfigId: {
-                                description: 'Credential configuration whose schema EUDIPLO builds and uploads; `uri` and `meta` are not needed.',
-                                type: 'string'
-                            },
-                            format: {
-                                description: 'Attestation format of the schema, for example `dc+sd-jwt` or `mso_mdoc`. Required with `uri`; with `credentialConfigId`, the format of the configuration takes precedence.',
-                                type: 'string'
-                            },
-                            uri: {
-                                description: 'URL of a schema document that EUDIPLO downloads and uploads to the registrar. Requires `format` and `meta`.',
-                                type: 'string'
-                            },
-                            meta: {
-                                description: 'Format-specific schema metadata, for example `{ "vct": "urn:example:vct" }` for `dc+sd-jwt`. Required with `uri`.',
-                                type: 'object',
-                                propertyNames: {
-                                    type: 'string'
-                                },
-                                additionalProperties: {}
-                            }
-                        },
-                        additionalProperties: false
-                    }
-                },
-                trustedAuthorities: {
-                    description: 'Trusted authorities for issuers of this attestation. Required when publishing: at least one entry must provide an X.509 certificate (`trustListId`, an `x509` entry or a `verificationMethod` whose `x509Certificate` is a single certificate).',
-                    type: 'array',
-                    items: {
-                        type: 'object',
-                        properties: {
-                            trustListId: {
-                                description: 'Trust list of the tenant. EUDIPLO publishes it as `etsi_tl` authority with its URL and the active certificate of its key chain (the first one of a chain); the other fields are not needed.',
-                                type: 'string'
-                            },
-                            frameworkType: {
-                                description: 'Trust framework of an external authority. `x509` takes a root certificate in `value` and no `verificationMethod`.',
-                                type: 'string',
-                                enum: [
-                                    'aki',
-                                    'etsi_tl',
-                                    'openid_federation',
-                                    'x509'
-                                ]
-                            },
-                            value: {
-                                description: 'Authority value, for example the trust list URL for `etsi_tl`, or for `x509` one root certificate in PEM or base64 DER. Publishing rejects an `x509` value that holds more than one certificate, such as a chain.',
-                                type: 'string'
-                            },
-                            verificationMethod: {
-                                description: 'Verification material of an external authority, for example a JWK, as object or JSON string. Required, except for `x509` (must be omitted) and for a `value` that is a trust list URL of this tenant (EUDIPLO adds the certificate).',
-                                anyOf: [
-                                    {
-                                        type: 'object',
-                                        propertyNames: {
-                                            type: 'string'
-                                        },
-                                        additionalProperties: {}
-                                    },
-                                    {
-                                        type: 'string'
-                                    }
-                                ]
-                            }
-                        },
-                        additionalProperties: false
-                    }
-                },
-                category: {
-                    description: 'Registrar category of the schema metadata, one of the predefined values of `GET /api/schema-metadata/vocabularies`. EUDIPLO sets it at the registrar after publishing; it is not stored in the credential configuration.',
-                    type: 'string',
-                    enum: [
-                        'identity',
-                        'health',
-                        'finance',
-                        'education',
-                        'mobility',
-                        'employment',
-                        'other'
-                    ]
-                },
-                tags: {
-                    description: 'Registrar tags of the schema metadata, predefined values of `GET /api/schema-metadata/vocabularies`. EUDIPLO sets them at the registrar after publishing; they are not stored in the credential configuration.',
-                    maxItems: 10,
-                    type: 'array',
-                    items: {
-                        type: 'string',
-                        enum: [
-                            'pid',
-                            'eudi',
-                            'kyc',
-                            'aml',
-                            'age-verification',
-                            'residency',
-                            'membership',
-                            'education',
-                            'employment',
-                            'mobility'
-                        ]
-                    }
-                }
-            },
-            additionalProperties: false,
-            description: 'The schema metadata configuration to submit. Registrar builds and signs the final schema metadata.',
-            allOf: [
-                {
-                    $ref: '#/components/schemas/PublishSchemaMetaConfig'
-                }
-            ]
-        },
-        credentialConfigId: {
-            description: 'Credential configuration to link to the published schema metadata ID.',
-            type: 'string'
-        },
-        pinMode: {
-            description: 'How to update the schema metadata pin of `credentialConfigId`: `keep_current` (default) keeps a pin to the same ID, `update_to_new_version` updates the pinned version under the same ID, `replace_id` repoints the pin to the new ID. A configuration without a pin is always linked. If it is pinned to another ID, only `replace_id` succeeds; the others answer `400` after the schema metadata was published.',
-            type: 'string',
-            enum: [
-                'keep_current',
-                'update_to_new_version',
-                'replace_id'
-            ],
-            default: 'keep_current'
-        }
-    },
-    required: [
-        'config'
-    ],
-    additionalProperties: false
-} as const;
-
-export const SignVersionSchemaMetaConfigDtoSchema = {
-    type: 'object',
-    properties: {
-        config: {
-            properties: {
-                id: {
-                    description: 'Schema ID (attestation identifier URI). `publish` passes it to the registrar when set; `publish-version` requires the ID of the existing schema. With `credentialConfigId` and no `rulebookURI`, `publish` only links that credential configuration to this ID and uploads nothing.',
-                    type: 'string'
-                },
-                name: {
-                    description: 'Human-readable name. Required when publishing; not needed for a link-only request.',
-                    type: 'string'
-                },
-                version: {
-                    type: 'string',
-                    description: 'Schema version, for example `1.0.0`.'
-                },
-                rulebookURI: {
-                    description: 'URL of the attestation rulebook, which EUDIPLO downloads and uploads to the registrar. Required when publishing.',
-                    type: 'string'
-                },
-                attestationLoS: {
-                    type: 'string',
-                    enum: [
-                        'iso_18045_high',
-                        'iso_18045_moderate',
-                        'iso_18045_enhanced-basic',
-                        'iso_18045_basic'
-                    ],
-                    description: 'Attestation level of security.'
-                },
-                bindingType: {
-                    type: 'string',
-                    enum: [
-                        'claim',
-                        'key',
-                        'biometric',
-                        'none'
-                    ],
-                    description: 'Cryptographic binding type.'
-                },
-                schemaURIs: {
-                    description: 'Schemas per attestation format. When omitted, the schema of `credentialConfigId` is used.',
-                    type: 'array',
-                    items: {
-                        type: 'object',
-                        properties: {
-                            credentialConfigId: {
-                                description: 'Credential configuration whose schema EUDIPLO builds and uploads; `uri` and `meta` are not needed.',
-                                type: 'string'
-                            },
-                            format: {
-                                description: 'Attestation format of the schema, for example `dc+sd-jwt` or `mso_mdoc`. Required with `uri`; with `credentialConfigId`, the format of the configuration takes precedence.',
-                                type: 'string'
-                            },
-                            uri: {
-                                description: 'URL of a schema document that EUDIPLO downloads and uploads to the registrar. Requires `format` and `meta`.',
-                                type: 'string'
-                            },
-                            meta: {
-                                description: 'Format-specific schema metadata, for example `{ "vct": "urn:example:vct" }` for `dc+sd-jwt`. Required with `uri`.',
-                                type: 'object',
-                                propertyNames: {
-                                    type: 'string'
-                                },
-                                additionalProperties: {}
-                            }
-                        },
-                        additionalProperties: false
-                    }
-                },
-                trustedAuthorities: {
-                    description: 'Trusted authorities for issuers of this attestation. Required when publishing: at least one entry must provide an X.509 certificate (`trustListId`, an `x509` entry or a `verificationMethod` whose `x509Certificate` is a single certificate).',
-                    type: 'array',
-                    items: {
-                        type: 'object',
-                        properties: {
-                            trustListId: {
-                                description: 'Trust list of the tenant. EUDIPLO publishes it as `etsi_tl` authority with its URL and the active certificate of its key chain (the first one of a chain); the other fields are not needed.',
-                                type: 'string'
-                            },
-                            frameworkType: {
-                                description: 'Trust framework of an external authority. `x509` takes a root certificate in `value` and no `verificationMethod`.',
-                                type: 'string',
-                                enum: [
-                                    'aki',
-                                    'etsi_tl',
-                                    'openid_federation',
-                                    'x509'
-                                ]
-                            },
-                            value: {
-                                description: 'Authority value, for example the trust list URL for `etsi_tl`, or for `x509` one root certificate in PEM or base64 DER. Publishing rejects an `x509` value that holds more than one certificate, such as a chain.',
-                                type: 'string'
-                            },
-                            verificationMethod: {
-                                description: 'Verification material of an external authority, for example a JWK, as object or JSON string. Required, except for `x509` (must be omitted) and for a `value` that is a trust list URL of this tenant (EUDIPLO adds the certificate).',
-                                anyOf: [
-                                    {
-                                        type: 'object',
-                                        propertyNames: {
-                                            type: 'string'
-                                        },
-                                        additionalProperties: {}
-                                    },
-                                    {
-                                        type: 'string'
-                                    }
-                                ]
-                            }
-                        },
-                        additionalProperties: false
-                    }
-                },
-                category: {
-                    description: 'Registrar category of the schema metadata, one of the predefined values of `GET /api/schema-metadata/vocabularies`. EUDIPLO sets it at the registrar after publishing; it is not stored in the credential configuration.',
-                    type: 'string',
-                    enum: [
-                        'identity',
-                        'health',
-                        'finance',
-                        'education',
-                        'mobility',
-                        'employment',
-                        'other'
-                    ]
-                },
-                tags: {
-                    description: 'Registrar tags of the schema metadata, predefined values of `GET /api/schema-metadata/vocabularies`. EUDIPLO sets them at the registrar after publishing; they are not stored in the credential configuration.',
-                    maxItems: 10,
-                    type: 'array',
-                    items: {
-                        type: 'string',
-                        enum: [
-                            'pid',
-                            'eudi',
-                            'kyc',
-                            'aml',
-                            'age-verification',
-                            'residency',
-                            'membership',
-                            'education',
-                            'employment',
-                            'mobility'
-                        ]
-                    }
-                }
-            },
-            additionalProperties: false,
-            description: 'The schema metadata configuration to submit as a new version. Must include the existing id.',
-            allOf: [
-                {
-                    $ref: '#/components/schemas/PublishSchemaMetaConfig'
-                }
-            ]
-        },
-        credentialConfigId: {
-            description: 'Credential configuration to link to the new version.',
-            type: 'string'
-        },
-        pinMode: {
-            description: 'How to update the schema metadata pin of `credentialConfigId`: `keep_current` (default) keeps a pin to the same ID, `update_to_new_version` updates the pinned version under the same ID, `replace_id` repoints the pin to `config.id`. A configuration without a pin is always linked. If it is pinned to another ID, only `replace_id` succeeds; the others answer `400` after the schema metadata was published.',
-            type: 'string',
-            enum: [
-                'keep_current',
-                'update_to_new_version',
-                'replace_id'
-            ],
-            default: 'keep_current'
-        }
-    },
-    required: [
-        'config'
-    ],
-    additionalProperties: false
-} as const;
-
-export const VocabularyEntryDtoSchema = {
-    type: 'object',
-    properties: {
-        code: {
-            type: 'string',
-            description: 'Stable machine-readable value to submit in schema metadata category/tags fields.'
-        },
-        label: {
-            type: 'string',
-            description: 'Display label for UI rendering.'
-        },
-        status: {
-            enum: [
-                'active',
-                'deprecated'
-            ],
-            type: 'string',
-            description: 'Vocabulary lifecycle status.'
-        },
-        replacedBy: {
-            type: 'string',
-            description: 'Replacement code when status is deprecated.'
-        }
-    },
-    required: [
-        'code',
-        'label',
-        'status'
-    ]
-} as const;
-
-export const SchemaMetadataVocabulariesDtoSchema = {
-    type: 'object',
-    properties: {
-        version: {
-            type: 'string',
-            description: 'Vocabulary publication version for cache invalidation.'
-        },
-        categories: {
-            description: 'Allowed category values that can be used when updating schema metadata category.',
-            type: 'array',
-            items: {
-                $ref: '#/components/schemas/VocabularyEntryDto'
-            }
-        },
-        tags: {
-            description: 'Allowed tag values that can be used when updating schema metadata tags.',
-            type: 'array',
-            items: {
-                $ref: '#/components/schemas/VocabularyEntryDto'
-            }
-        }
-    },
-    required: [
-        'version',
-        'categories',
-        'tags'
-    ]
-} as const;
-
-export const UpdateIssuerOfferDtoSchema = {
-    type: 'object',
-    properties: {
-        credentialOfferUrl: {
-            type: 'string',
-            description: 'URL where the user can receive a credential offer from this issuer.'
-        },
-        description: {
-            type: 'string',
-            description: 'Human-readable description to help users choose the right issuer.'
-        }
-    },
-    additionalProperties: false
-} as const;
-
-export const UpdateSchemaMetadataDtoSchema = {
-    type: 'object',
-    properties: {
-        category: {
-            type: 'string',
-            enum: [
-                'identity',
-                'health',
-                'finance',
-                'education',
-                'mobility',
-                'employment',
-                'other'
-            ],
-            description: 'Domain category for filtering'
-        },
-        tags: {
-            type: 'array',
-            items: {
-                type: 'string',
-                enum: [
-                    'pid',
-                    'eudi',
-                    'kyc',
-                    'aml',
-                    'age-verification',
-                    'residency',
-                    'membership',
-                    'education',
-                    'employment',
-                    'mobility'
-                ]
-            },
-            description: 'Predefined tags for filtering and search'
-        },
-        displayName: {
-            type: 'string',
-            description: 'Optional human-readable schema name for UI display and search'
-        },
-        issuerOffers: {
-            items: {
-                type: 'object',
-                properties: {
-                    credentialOfferUrl: {
-                        type: 'string'
-                    },
-                    description: {
-                        type: 'string'
-                    }
-                },
-                additionalProperties: false
-            },
-            description: 'Issuer offer entries shown to users, each with credential-offer URL and description',
-            type: 'array'
-        }
-    },
-    additionalProperties: false
-} as const;
-
-export const DeprecateSchemaMetadataDtoSchema = {
-    type: 'object',
-    properties: {
-        deprecated: {
-            type: 'boolean',
-            description: 'Whether to mark this version as deprecated'
-        },
-        message: {
-            type: 'string',
-            description: 'Deprecation message shown to consumers'
-        },
-        supersededByVersion: {
-            type: 'string',
-            description: 'The version that supersedes this one'
-        }
-    },
-    required: [
-        'deprecated'
-    ],
-    additionalProperties: false
 } as const;
 
 export const DeferredCredentialRequestDtoSchema = {
@@ -13341,12 +11745,7 @@ export const AuthorizationResponseSchema = {
             type: 'string',
             description: 'State value from the authorization request (for correlation).'
         }
-    },
-    additionalProperties: false
-} as const;
-
-export const ObjectSchema = {
-    type: 'object'
+    }
 } as const;
 
 export const ParResponseDtoSchema = {
@@ -13667,20 +12066,25 @@ export const ChainedAsParRequestDtoSchema = {
         },
         authorization_details: {
             items: {
-                oneOf: [
-                    {
-                        type: 'string',
-                        description: 'JSON-encoded authorization details array'
-                    },
-                    {
-                        type: 'array',
-                        items: {
-                            type: 'object',
-                            additionalProperties: true
-                        }
-                    }
-                ]
+                type: 'object',
+                propertyNames: {
+                    type: 'string'
+                },
+                additionalProperties: {}
             },
+            oneOf: [
+                {
+                    type: 'string',
+                    description: 'JSON-encoded authorization details array'
+                },
+                {
+                    type: 'array',
+                    items: {
+                        type: 'object',
+                        additionalProperties: true
+                    }
+                }
+            ],
             description: 'Authorization details',
             type: 'array'
         }
@@ -14273,6 +12677,7 @@ export const EudiHubPresentationRegistrationCertificateRequestDtoSchema = {
         },
         purpose: {
             type: 'array',
+            description: 'Why the data is requested, in German and English (GDPR purpose). Defaults to registration_cert.purpose of the presentation configuration; stored there with the certificate.',
             minItems: 2,
             maxItems: 24,
             items: {
@@ -14294,14 +12699,13 @@ export const EudiHubPresentationRegistrationCertificateRequestDtoSchema = {
                     'content'
                 ],
                 additionalProperties: false
-            },
-            description: 'Why the data is requested, in German and English (GDPR purpose).'
+            }
         },
         privacyPolicy: {
             type: 'string',
+            description: 'Privacy policy URL. Defaults to registration_cert.privacy_policy of the presentation configuration; stored there with the certificate.',
             maxLength: 2048,
-            format: 'uri',
-            description: 'Privacy policy URL.'
+            format: 'uri'
         }
     },
     required: [
@@ -14312,9 +12716,7 @@ export const EudiHubPresentationRegistrationCertificateRequestDtoSchema = {
         'serviceDescription',
         'supportUri',
         'infoUri',
-        'presentationConfigId',
-        'purpose',
-        'privacyPolicy'
+        'presentationConfigId'
     ],
     additionalProperties: false
 } as const;
@@ -14593,7 +12995,6 @@ export const ConfigResourceMetadataEntitySchema = {
                 'KmsConfig',
                 'KeyChain',
                 'KeyChainDefaults',
-                'RegistrarConfig',
                 'IssuanceConfig',
                 'CredentialConfig',
                 'PresentationConfig',
@@ -14659,7 +13060,6 @@ export const ConfigResourceOwnershipDtoSchema = {
                 'KmsConfig',
                 'KeyChain',
                 'KeyChainDefaults',
-                'RegistrarConfig',
                 'IssuanceConfig',
                 'CredentialConfig',
                 'PresentationConfig',
@@ -14747,423 +13147,4 @@ export const ConfigDocumentDtoSchema = {
         '$schema',
         'spec'
     ]
-} as const;
-
-export const PresentationConfigWritableSchema = {
-    type: 'object',
-    properties: {
-        skewSeconds: {
-            type: 'number',
-            description: 'Clock skew tolerance for credential JWT time validation, in seconds.',
-            default: 60
-        },
-        statusCheckMode: {
-            description: 'Status list verification mode for presentations: strict (default), best_effort, or disabled.',
-            enum: [
-                'strict',
-                'best_effort',
-                'disabled'
-            ],
-            type: 'string',
-            default: 'strict'
-        },
-        id: {
-            type: 'string',
-            description: 'Unique identifier for the VP request.'
-        },
-        tenant: {
-            description: 'The tenant that owns this object.',
-            allOf: [
-                {
-                    $ref: '#/components/schemas/TenantEntity'
-                }
-            ]
-        },
-        description: {
-            type: [
-                'string',
-                'null'
-            ],
-            description: 'Description of the presentation configuration.'
-        },
-        lifeTime: {
-            type: 'number',
-            description: 'Lifetime how long the presentation request is valid after creation, in seconds.'
-        },
-        dcql_query: {
-            description: 'The DCQL query to be used for the VP request.',
-            allOf: [
-                {
-                    $ref: '#/components/schemas/DCQL'
-                }
-            ]
-        },
-        transaction_data: {
-            type: 'array',
-            items: {
-                $ref: '#/components/schemas/TransactionData'
-            }
-        },
-        registration_cert: {
-            description: 'The registration certificate request containing the necessary details.',
-            anyOf: [
-                {
-                    $ref: '#/components/schemas/RegistrationCertificateRequest'
-                },
-                {
-                    type: 'null'
-                }
-            ]
-        },
-        webhookEndpointId: {
-            type: [
-                'string',
-                'null'
-            ],
-            description: 'Reference to the webhook endpoint used for notifications.\nOptional: if set, notifications will be sent to this endpoint.'
-        },
-        createdAt: {
-            format: 'date-time',
-            type: 'string',
-            description: 'The timestamp when the VP request was created.'
-        },
-        updatedAt: {
-            format: 'date-time',
-            type: 'string',
-            description: 'The timestamp when the VP request was last updated.'
-        },
-        attached: {
-            description: 'Attestation that should be attached',
-            type: [
-                'array',
-                'null'
-            ],
-            items: {
-                $ref: '#/components/schemas/PresentationAttachment'
-            }
-        },
-        redirectUri: {
-            type: [
-                'string',
-                'null'
-            ],
-            description: 'Redirect URI to which the user-agent should be redirected after the presentation is completed.\nYou can use the `{sessionId}` placeholder in the URI, which will be replaced with the actual session ID.',
-            example: 'https://example.com/callback?session={sessionId}'
-        },
-        accessKeyChainId: {
-            type: [
-                'string',
-                'null'
-            ],
-            description: 'Optional ID of the access certificate to use for signing the presentation request.\nIf not provided, the default access certificate for the tenant will be used.\n\nNote: This is intentionally NOT a TypeORM relationship because CertEntity uses\na composite primary key (id + tenantId), and SQLite cannot create foreign keys\nthat reference only part of a composite primary key. The relationship is handled\nat the application level in the service layer.'
-        },
-        allowedOrigins: {
-            description: 'Origins of the web pages allowed to request this presentation over the\nDigital Credentials API. When set, `dc-api` and `iso-18013-7` offers\nare bound to one of them; unset, any `expected_origin` is accepted.\n`uri` offers ignore them.',
-            example: [
-                'https://shop.example'
-            ],
-            type: [
-                'array',
-                'null'
-            ],
-            items: {
-                type: 'string'
-            }
-        },
-        readerAuth: {
-            type: [
-                'boolean',
-                'null'
-            ],
-            description: 'Enable reader authentication for the ISO 18013-7 Annex C (DC API) flow.\n\nWhen `true`, the DeviceRequest embeds a detached `readerAuth` COSE_Sign1\nsigned with the tenant\'s Access key chain (selected by\n{@link accessKeyChainId}), letting the wallet cryptographically\nauthenticate the verifier — the mDOC equivalent of the signed request\nobject used in the OID4VP flow. Defaults to disabled (null/false).\n\nOnly affects `response_type: "iso-18013-7"` offers.'
-        }
-    },
-    required: [
-        'id',
-        'tenant',
-        'dcql_query',
-        'createdAt',
-        'updatedAt'
-    ]
-} as const;
-
-export const IssuanceConfigWritableSchema = {
-    type: 'object',
-    properties: {
-        walletProviderTrustLists: {
-            description: 'Shared wallet provider trust lists for key attestations at the credential endpoint\nand default wallet-attestation trust at managed authorization servers.\nEach entry MUST include `verifierKey`, `verifierKeyPem` or `verifierX509Der`.',
-            type: 'array',
-            items: {
-                $ref: '#/components/schemas/WalletProviderTrustListRefDto'
-            }
-        },
-        walletAttestationStatusCheckMode: {
-            description: 'Status check mode for key attestations at the credential endpoint, and default for presented wallet attestations at managed authorization servers. strict rejects when the status list cannot be fetched or read; best_effort (used when unset) accepts when the list cannot be fetched but rejects an unreadable list or an index outside it; disabled skips the status check. A revoked or suspended attestation is rejected unless the check is disabled. The background check of revokeWithWalletUnit does not use this mode.',
-            enum: [
-                'strict',
-                'best_effort',
-                'disabled',
-                null
-            ],
-            type: [
-                'string',
-                'null'
-            ]
-        },
-        authorizationServers: {
-            type: 'array',
-            description: 'Dedicated managed authorization servers hosted by this issuer. At least one entry is required.',
-            items: {
-                oneOf: [
-                    {
-                        $ref: '#/components/schemas/ExternalAuthorizationServerConfig'
-                    },
-                    {
-                        $ref: '#/components/schemas/Oid4VpAuthorizationServerConfig'
-                    },
-                    {
-                        $ref: '#/components/schemas/ChainedAuthorizationServerConfig'
-                    },
-                    {
-                        $ref: '#/components/schemas/BuiltInAuthorizationServerConfig'
-                    }
-                ],
-                discriminator: {
-                    propertyName: 'type',
-                    mapping: {
-                        external: '#/components/schemas/ExternalAuthorizationServerConfig',
-                        oid4vp: '#/components/schemas/Oid4VpAuthorizationServerConfig',
-                        chained: '#/components/schemas/ChainedAuthorizationServerConfig',
-                        'built-in': '#/components/schemas/BuiltInAuthorizationServerConfig'
-                    }
-                }
-            }
-        },
-        federation: {
-            description: 'Optional OpenID Federation configuration used for trust evaluation.\nWhen omitted, trust checks rely on existing LoTE trust-list behavior.',
-            anyOf: [
-                {
-                    $ref: '#/components/schemas/FederationConfig'
-                },
-                {
-                    type: 'null'
-                }
-            ]
-        },
-        registrationCertificate: {
-            description: 'Optional registration certificate configuration for issuer metadata (`issuer_info`).\nSupports importing an existing JWT or generating one via registrar.',
-            anyOf: [
-                {
-                    $ref: '#/components/schemas/IssuerRegistrationCertificateConfig'
-                },
-                {
-                    type: 'null'
-                }
-            ]
-        },
-        notificationEndpointEnabled: {
-            type: 'boolean',
-            description: 'Whether the OID4VCI notification endpoint is exposed for this issuance configuration.',
-            default: true
-        },
-        credentialResponseEncryption: {
-            type: 'boolean',
-            description: 'Whether `credential_response_encryption` should be advertised in the credential issuer metadata.',
-            default: false
-        },
-        credentialRequestEncryption: {
-            type: 'boolean',
-            description: 'Whether `credential_request_encryption` should be advertised in the credential issuer metadata.',
-            default: false
-        },
-        txCodeMaxAttempts: {
-            type: [
-                'number',
-                'null'
-            ],
-            description: 'Maximum failed tx_code attempts before the pre-authorized code is invalidated. Defaults to 5.',
-            default: 5
-        },
-        offerLifetimeSeconds: {
-            type: [
-                'number',
-                'null'
-            ],
-            description: 'Default lifetime of credential offers in seconds. Can be overridden per offer request. Unset: offers do not expire.',
-            minimum: 1
-        },
-        tenant: {
-            description: 'The tenant that owns this object.',
-            allOf: [
-                {
-                    $ref: '#/components/schemas/TenantEntity'
-                }
-            ]
-        },
-        batchSize: {
-            type: 'number',
-            description: 'Value to determine the amount of credentials that are issued in a batch.\nDefault is 1.'
-        },
-        dPopRequired: {
-            type: 'boolean',
-            description: 'Indicates whether DPoP is required for the issuance process. Default value is true.'
-        },
-        walletAttestationRequired: {
-            type: 'boolean',
-            description: 'Default wallet attestation requirement for managed authorization servers.\nWhen enabled, wallets must provide OAuth-Client-Attestation headers.\nDefault value is false.'
-        },
-        display: {
-            type: 'array',
-            items: {
-                $ref: '#/components/schemas/DisplayInfo'
-            }
-        },
-        createdAt: {
-            format: 'date-time',
-            type: 'string',
-            description: 'The timestamp when the VP request was created.'
-        },
-        updatedAt: {
-            format: 'date-time',
-            type: 'string',
-            description: 'The timestamp when the VP request was last updated.'
-        }
-    },
-    required: [
-        'authorizationServers',
-        'tenant',
-        'display',
-        'createdAt',
-        'updatedAt'
-    ]
-} as const;
-
-export const UpdateIssuanceDtoWritableSchema = {
-    type: 'object',
-    properties: {
-        walletProviderTrustLists: {
-            description: 'Shared wallet provider trust lists for key attestations at the credential endpoint\nand default wallet-attestation trust at managed authorization servers.\nEach entry MUST include `verifierKey`, `verifierKeyPem` or `verifierX509Der`.',
-            type: 'array',
-            items: {
-                $ref: '#/components/schemas/WalletProviderTrustListRefDto'
-            }
-        },
-        walletAttestationStatusCheckMode: {
-            description: 'Status check mode for key attestations at the credential endpoint, and default for presented wallet attestations at managed authorization servers. strict rejects when the status list cannot be fetched or read; best_effort (used when unset) accepts when the list cannot be fetched but rejects an unreadable list or an index outside it; disabled skips the status check. A revoked or suspended attestation is rejected unless the check is disabled. The background check of revokeWithWalletUnit does not use this mode.',
-            enum: [
-                'strict',
-                'best_effort',
-                'disabled',
-                null
-            ],
-            type: [
-                'string',
-                'null'
-            ]
-        },
-        authorizationServers: {
-            type: 'array',
-            description: 'Dedicated managed authorization servers hosted by this issuer. At least one entry is required.',
-            items: {
-                oneOf: [
-                    {
-                        $ref: '#/components/schemas/ExternalAuthorizationServerConfig'
-                    },
-                    {
-                        $ref: '#/components/schemas/Oid4VpAuthorizationServerConfig'
-                    },
-                    {
-                        $ref: '#/components/schemas/ChainedAuthorizationServerConfig'
-                    },
-                    {
-                        $ref: '#/components/schemas/BuiltInAuthorizationServerConfig'
-                    }
-                ],
-                discriminator: {
-                    propertyName: 'type',
-                    mapping: {
-                        external: '#/components/schemas/ExternalAuthorizationServerConfig',
-                        oid4vp: '#/components/schemas/Oid4VpAuthorizationServerConfig',
-                        chained: '#/components/schemas/ChainedAuthorizationServerConfig',
-                        'built-in': '#/components/schemas/BuiltInAuthorizationServerConfig'
-                    }
-                }
-            }
-        },
-        federation: {
-            description: 'Optional OpenID Federation configuration used for trust evaluation.\nWhen omitted, trust checks rely on existing LoTE trust-list behavior.',
-            anyOf: [
-                {
-                    $ref: '#/components/schemas/FederationConfig'
-                },
-                {
-                    type: 'null'
-                }
-            ]
-        },
-        registrationCertificate: {
-            description: 'Optional registration certificate configuration for issuer metadata (`issuer_info`).\nSupports importing an existing JWT or generating one via registrar.',
-            anyOf: [
-                {
-                    $ref: '#/components/schemas/IssuerRegistrationCertificateConfig'
-                },
-                {
-                    type: 'null'
-                }
-            ]
-        },
-        notificationEndpointEnabled: {
-            type: 'boolean',
-            description: 'Whether the OID4VCI notification endpoint is exposed for this issuance configuration.',
-            default: true
-        },
-        credentialResponseEncryption: {
-            type: 'boolean',
-            description: 'Whether `credential_response_encryption` should be advertised in the credential issuer metadata.',
-            default: false
-        },
-        credentialRequestEncryption: {
-            type: 'boolean',
-            description: 'Whether `credential_request_encryption` should be advertised in the credential issuer metadata.',
-            default: false
-        },
-        txCodeMaxAttempts: {
-            type: [
-                'number',
-                'null'
-            ],
-            description: 'Maximum failed tx_code attempts before the pre-authorized code is invalidated. Defaults to 5.',
-            default: 5
-        },
-        offerLifetimeSeconds: {
-            type: [
-                'number',
-                'null'
-            ],
-            description: 'Default lifetime of credential offers in seconds. Can be overridden per offer request. Unset: offers do not expire.',
-            minimum: 1
-        },
-        batchSize: {
-            type: 'number',
-            description: 'Value to determine the amount of credentials that are issued in a batch.\nDefault is 1.'
-        },
-        dPopRequired: {
-            type: 'boolean',
-            description: 'Indicates whether DPoP is required for the issuance process. Default value is true.'
-        },
-        walletAttestationRequired: {
-            type: 'boolean',
-            description: 'Default wallet attestation requirement for managed authorization servers.\nWhen enabled, wallets must provide OAuth-Client-Attestation headers.\nDefault value is false.'
-        },
-        display: {
-            type: 'array',
-            items: {
-                $ref: '#/components/schemas/DisplayInfo'
-            }
-        }
-    }
-} as const;
-
-export const ObjectWritableSchema = {
-    type: 'object'
 } as const;

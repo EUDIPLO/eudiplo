@@ -34,12 +34,12 @@ export function issuanceRepositoryContract(database: () => DataSource) {
         await repo.save({
             ...saved,
             batchSize: 3,
-            registrationCertificateCache: { jwt: "cached", fingerprint: "v1" },
+            registrationCertificate: { enabled: true, jwt: "imported" },
         });
         expect(await repo.getForTenant(id)).toMatchObject({
             batchSize: 3,
             authorizationServers: [{ type: "built-in", id: "local" }],
-            registrationCertificateCache: { jwt: "cached", fingerprint: "v1" },
+            registrationCertificate: { enabled: true, jwt: "imported" },
         });
         expect(await repo.getForTenant(other)).toMatchObject({ batchSize: 9 });
         await repo.deleteForTenant(id);
@@ -88,34 +88,5 @@ export function issuanceRepositoryContract(database: () => DataSource) {
         expect(stored.upstream.clientSecret).not.toBe("upstream-secret");
         await repo.deleteForTenant(id);
         await db.getRepository(TenantEntity).delete({ id });
-    });
-
-    it("updates the registration certificate cache without overwriting other settings", async () => {
-        const db = database();
-        const id = randomUUID();
-        await db.getRepository(TenantEntity).save({ id });
-        const repo = new TypeOrmIssuanceConfigRepository(
-            db.getRepository(IssuanceConfig),
-        );
-        await repo.save({ tenantId: id, batchSize: 1 });
-        // An admin changes the configuration after a cache refresh started.
-        await repo.save({
-            ...(await repo.getForTenant(id)),
-            batchSize: 7,
-            authorizationServers: [{ type: "built-in", id: "local" }],
-        });
-        await repo.updateRegistrationCertificateCache(id, {
-            jwt: "cached",
-            fingerprint: "v2",
-        });
-
-        expect(await repo.getForTenant(id)).toMatchObject({
-            batchSize: 7,
-            authorizationServers: [{ type: "built-in", id: "local" }],
-            registrationCertificateCache: { jwt: "cached", fingerprint: "v2" },
-        });
-        await expect(
-            repo.updateRegistrationCertificateCache(randomUUID(), undefined),
-        ).rejects.toThrow();
     });
 }

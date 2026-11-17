@@ -540,185 +540,6 @@ export type CreateClientDto = {
     allowedIssuanceConfigs?: Array<string> | null;
 };
 
-export type RegistrationCertificateDefaults = {
-    /**
-     * Default privacy policy URL for registration certificate creation.
-     */
-    privacy_policy?: string;
-    /**
-     * Default support contact URI for registration certificate creation.
-     */
-    support_uri?: string;
-};
-
-export type RelyingPartyContact = {
-    /**
-     * https URL where the relying party can be contacted.
-     */
-    supportUri?: string;
-    /**
-     * Email address of the relying party.
-     */
-    email?: string;
-    /**
-     * Phone number of the relying party.
-     */
-    phone?: string;
-};
-
-export type RegistrarConfigResponseDto = {
-    /**
-     * The base URL of the registrar API
-     */
-    registrarUrl: string;
-    /**
-     * The OIDC issuer URL for authentication (e.g., Keycloak realm URL)
-     */
-    oidcUrl: string;
-    /**
-     * The OIDC client ID for the registrar
-     */
-    clientId: string;
-    /**
-     * The username for OIDC login
-     */
-    username: string;
-    /**
-     * Optional default values merged into registration certificate creation requests (for example privacy_policy, support_uri)
-     */
-    registrationCertificateDefaults?: RegistrationCertificateDefaults | null;
-    /**
-     * Contact sent when EUDIPLO registers the relying party at the registrar. The registrar needs at least one value to issue access certificates. A relying party that is already registered keeps its contact.
-     */
-    relyingPartyContact?: RelyingPartyContact | null;
-    /**
-     * Indicates whether a password is configured (actual password is never returned)
-     */
-    hasPassword: boolean;
-    /**
-     * Indicates whether a client secret is configured (actual client secret is never returned)
-     */
-    hasClientSecret: boolean;
-};
-
-export type CreateRegistrarConfigDto = {
-    /**
-     * Base URL of the registrar service.
-     */
-    registrarUrl: string;
-    /**
-     * OIDC discovery or issuer URL used for authentication.
-     */
-    oidcUrl: string;
-    /**
-     * OAuth client ID used against the registrar.
-     */
-    clientId: string;
-    /**
-     * Optional OAuth client secret for registrar authentication.
-     */
-    clientSecret?: string;
-    /**
-     * Username used for registrar authentication.
-     */
-    username: string;
-    /**
-     * Password used for registrar authentication.
-     */
-    password: string;
-    /**
-     * Optional default registration certificate values.
-     */
-    registrationCertificateDefaults?: {
-        [key: string]: unknown;
-    } | null;
-    /**
-     * Contact of the relying party, sent when EUDIPLO registers the relying party at the registrar. The registrar needs at least one contact value to issue access certificates. A relying party that is already registered keeps its contact.
-     */
-    relyingPartyContact?: {
-        /**
-         * https URL where the relying party can be contacted.
-         */
-        supportUri?: string;
-        /**
-         * Email address of the relying party.
-         */
-        email?: string;
-        /**
-         * Phone number of the relying party.
-         */
-        phone?: string;
-    } | null;
-};
-
-export type UpdateRegistrarConfigDto = {
-    /**
-     * Base URL of the registrar service.
-     */
-    registrarUrl?: string;
-    /**
-     * OIDC discovery or issuer URL used for authentication.
-     */
-    oidcUrl?: string;
-    /**
-     * OAuth client ID used against the registrar.
-     */
-    clientId?: string;
-    /**
-     * Optional OAuth client secret for registrar authentication.
-     */
-    clientSecret?: string;
-    /**
-     * Username used for registrar authentication.
-     */
-    username?: string;
-    /**
-     * Password used for registrar authentication.
-     */
-    password?: string;
-    /**
-     * Optional default registration certificate values.
-     */
-    registrationCertificateDefaults?: {
-        [key: string]: unknown;
-    } | null;
-    /**
-     * Contact of the relying party, sent when EUDIPLO registers the relying party at the registrar. The registrar needs at least one contact value to issue access certificates. A relying party that is already registered keeps its contact.
-     */
-    relyingPartyContact?: {
-        /**
-         * https URL where the relying party can be contacted.
-         */
-        supportUri?: string;
-        /**
-         * Email address of the relying party.
-         */
-        email?: string;
-        /**
-         * Phone number of the relying party.
-         */
-        phone?: string;
-    } | null;
-};
-
-export type CreateAccessCertificateDto = {
-    /**
-     * Key chain id used to issue the access certificate.
-     */
-    keyId: string;
-};
-
-export type CreateAccessKeyChainDto = {
-    /**
-     * Human-readable description for the new key chain.
-     */
-    description?: string;
-    /**
-     * KMS provider for the new key chain (defaults to the configured default provider).
-     */
-    kmsProvider?: string;
-};
-
 export type ManagedUserDto = {
     id: string;
     username: string;
@@ -1977,7 +1798,7 @@ export type IssuerMetadataCredentialConfig = {
      */
     proofTypesSupported?: Array<'jwt' | 'attestation'>;
     credentialReusePolicy?: CredentialReusePolicy;
-    format: 'dc+sd-jwt' | 'mso_mdoc';
+    format: 'mso_mdoc' | 'dc+sd-jwt';
     scope?: string;
     /**
      * Document type for mDOC credentials (e.g., "org.iso.18013.5.1.mDL").
@@ -1988,7 +1809,7 @@ export type IssuerMetadataCredentialConfig = {
 
 export type SchemaUriEntry = {
     /**
-     * Credential configuration whose schema EUDIPLO builds and uploads; `uri` and `meta` are not needed.
+     * Credential configuration whose schema EUDIPLO builds; `uri` and `meta` are not needed.
      */
     credentialConfigId?: string;
     /**
@@ -1996,7 +1817,7 @@ export type SchemaUriEntry = {
      */
     format?: string;
     /**
-     * URL of a schema document that EUDIPLO downloads and uploads to the registrar. Requires `format` and `meta`.
+     * URL of a schema document. Requires `format` and `meta`.
      */
     uri?: string;
     /**
@@ -2009,7 +1830,7 @@ export type SchemaUriEntry = {
 
 export type TrustAuthorityEntry = {
     /**
-     * Trust list of the tenant. EUDIPLO publishes it as `etsi_tl` authority with its URL and the active certificate of its key chain (the first one of a chain); the other fields are not needed.
+     * Trust list of the tenant, standing for an `etsi_tl` authority with its URL and the active certificate of its key chain (the first one of a chain); the other fields are not needed.
      */
     trustListId?: string;
     /**
@@ -2030,11 +1851,11 @@ export type TrustAuthorityEntry = {
 
 export type SchemaMetaConfig = {
     /**
-     * Schema ID (attestation identifier URI). `publish` passes it to the registrar when set; `publish-version` requires the ID of the existing schema. With `credentialConfigId` and no `rulebookURI`, `publish` only links that credential configuration to this ID and uploads nothing.
+     * Schema ID (attestation identifier URI).
      */
     id?: string;
     /**
-     * Human-readable name. Required when publishing; not needed for a link-only request.
+     * Human-readable name.
      */
     name?: string;
     /**
@@ -2042,7 +1863,7 @@ export type SchemaMetaConfig = {
      */
     version: string;
     /**
-     * URL of the attestation rulebook, which EUDIPLO downloads and uploads to the registrar. Required when publishing.
+     * URL of the attestation rulebook.
      */
     rulebookURI?: string;
     /**
@@ -2058,7 +1879,7 @@ export type SchemaMetaConfig = {
      */
     schemaURIs?: Array<{
         /**
-         * Credential configuration whose schema EUDIPLO builds and uploads; `uri` and `meta` are not needed.
+         * Credential configuration whose schema EUDIPLO builds; `uri` and `meta` are not needed.
          */
         credentialConfigId?: string;
         /**
@@ -2066,7 +1887,7 @@ export type SchemaMetaConfig = {
          */
         format?: string;
         /**
-         * URL of a schema document that EUDIPLO downloads and uploads to the registrar. Requires `format` and `meta`.
+         * URL of a schema document. Requires `format` and `meta`.
          */
         uri?: string;
         /**
@@ -2077,11 +1898,11 @@ export type SchemaMetaConfig = {
         };
     }>;
     /**
-     * Trusted authorities for issuers of this attestation. Required when publishing: at least one entry must provide an X.509 certificate (`trustListId`, an `x509` entry or a `verificationMethod` whose `x509Certificate` is a single certificate).
+     * Trusted authorities for issuers of this attestation (`trustListId`, an `x509` entry or a `verificationMethod`).
      */
     trustedAuthorities?: Array<{
         /**
-         * Trust list of the tenant. EUDIPLO publishes it as `etsi_tl` authority with its URL and the active certificate of its key chain (the first one of a chain); the other fields are not needed.
+         * Trust list of the tenant, standing for an `etsi_tl` authority with its URL and the active certificate of its key chain (the first one of a chain); the other fields are not needed.
          */
         trustListId?: string;
         /**
@@ -2679,56 +2500,41 @@ export type TransactionData = {
 };
 
 export type RegistrationCertificatePurpose = {
+    /**
+     * Language of the text, an ISO 639-1 code such as en.
+     */
     lang: string;
+    /**
+     * The purpose in that language.
+     */
     content: string;
 };
 
-export type RegistrationCertificateBody = {
-    privacy_policy?: string;
-    support_uri?: string;
-    intermediary?: string;
-    purpose?: Array<{
-        lang: string;
-        content: string;
-    }>;
-    credentials?: Array<{
-        [key: string]: unknown;
-    }>;
+export type PresentationRegistrationCertificate = {
     /**
-     * Credential type identifiers (SD-JWT VC `vct` or mdoc doctype) provided
-     * by an issuer.
-     */
-    provides_attestations?: Array<string>;
-};
-
-export type RegistrationCertificateRequest = {
-    /**
-     * Optional registrar-side certificate identifier.
-     * If provided and still valid, EUDIPLO reuses it instead of creating a new certificate.
-     */
-    id?: string;
-    /**
-     * Registration certificate creation payload.
-     * This is merged with tenant-level registrar defaults when a certificate is created.
-     */
-    body?: RegistrationCertificateBody & {
-        privacy_policy?: string;
-        support_uri?: string;
-        intermediary?: string;
-        purpose?: Array<{
-            lang: string;
-            content: string;
-        }>;
-        credentials?: Array<{
-            [key: string]: unknown;
-        }>;
-        provides_attestations?: Array<string>;
-    };
-    /**
-     * Optional pre-existing registration certificate JWT.
-     * If provided, EUDIPLO forwards it as-is and does not create a new one.
+     * Registration certificate JWT issued by a registrar, attached to every
+     * request object.
      */
     jwt?: string;
+    /**
+     * Why the data is requested, one text per language. Kept for requesting
+     * a new certificate.
+     */
+    purpose?: Array<{
+        /**
+         * Language of the text, an ISO 639-1 code such as en.
+         */
+        lang: string;
+        /**
+         * The purpose in that language.
+         */
+        content: string;
+    }>;
+    /**
+     * Privacy policy URL that applies to this request. Kept for requesting a
+     * new certificate.
+     */
+    privacy_policy?: string;
 };
 
 export type PresentationAttachment = {
@@ -2748,12 +2554,6 @@ export type PresentationConfig = {
      * Status list verification mode for presentations: strict (default), best_effort, or disabled.
      */
     statusCheckMode?: 'strict' | 'best_effort' | 'disabled';
-    /**
-     * Server-managed cache of the materialized registration certificate. Read-only; values supplied by clients are ignored.
-     */
-    readonly registrationCertCache?: {
-        [key: string]: unknown;
-    } | null;
     /**
      * Unique identifier for the VP request.
      */
@@ -2776,9 +2576,10 @@ export type PresentationConfig = {
     dcql_query: Dcql;
     transaction_data?: Array<TransactionData>;
     /**
-     * The registration certificate request containing the necessary details.
+     * Registration certificate from a registrar, attached to every request
+     * object, with the purpose and privacy policy it is requested with.
      */
-    registration_cert?: RegistrationCertificateRequest | null;
+    registration_cert?: PresentationRegistrationCertificate | null;
     /**
      * Reference to the webhook endpoint used for notifications.
      * Optional: if set, notifications will be sent to this endpoint.
@@ -3009,182 +2810,6 @@ export type ResolveSchemaMetadataJwtDto = {
      * Signed schema metadata JWT to resolve server-side. The JWT will be verified, resolved, and converted to DCQL.
      */
     signedJwt: string;
-};
-
-export type MetadataSchemaDto = {
-    /**
-     * Unique identifier for this schema entry
-     */
-    id: string;
-    /**
-     * The credential format identifier
-     */
-    formatIdentifier: 'dc+sd-jwt' | 'mso_mdoc';
-    /**
-     * URI to the schema definition
-     */
-    uri?: string;
-    /**
-     * Format-specific metadata for the schema entry
-     */
-    meta?: {
-        [key: string]: unknown;
-    };
-    /**
-     * Subresource Integrity hash for the schema
-     */
-    integrity?: string;
-};
-
-export type TrustAuthorityDto = {
-    /**
-     * Unique identifier for this trust authority entry
-     */
-    id: string;
-    /**
-     * Type of trust framework
-     */
-    frameworkType: 'etsi_tl' | 'x509';
-    /**
-     * URI or identifier for the trust list / authority
-     */
-    value: string;
-    /**
-     * Verification method for the trust list signature (e.g., JWK)
-     */
-    verificationMethod?: {
-        [key: string]: unknown;
-    };
-};
-
-export type IssuerOfferEntryDto = {
-    /**
-     * URL where the user can receive a credential offer from this issuer.
-     */
-    credentialOfferUrl: string;
-    /**
-     * Human-readable description explaining when this issuer offer is relevant for the user.
-     */
-    description: string;
-};
-
-export type AccessCertificateRefDto = {
-    id: string;
-    relyingPartyId: string;
-    certificate: string;
-    revoked: string | null;
-    createdAt: string;
-};
-
-export type SchemaMetadataResponseDto = {
-    /**
-     * The unique, server-assigned identifier (UUID) for the schema metadata
-     */
-    id: string;
-    /**
-     * Version of this schema metadata (SemVer)
-     */
-    version: string;
-    /**
-     * URI of the human-readable Rulebook document
-     */
-    rulebookURI?: string;
-    /**
-     * Subresource Integrity hash for the rulebook URI
-     */
-    rulebookIntegrity?: string;
-    /**
-     * Level of security (LoS) of this attestation
-     */
-    attestationLoS: 'iso_18045_high' | 'iso_18045_moderate' | 'iso_18045_enhanced-basic' | 'iso_18045_basic';
-    /**
-     * Required binding type between attestation and holder
-     */
-    bindingType: 'claim' | 'key' | 'biometric' | 'none';
-    /**
-     * Credential formats in which this attestation is available
-     */
-    supportedFormats: Array<'dc+sd-jwt' | 'mso_mdoc'>;
-    /**
-     * Format-specific schema URIs for this schema metadata
-     */
-    schemaURIs: Array<MetadataSchemaDto>;
-    /**
-     * Trust frameworks / trust anchors applicable to this schema metadata
-     */
-    trustedAuthorities: Array<TrustAuthorityDto>;
-    /**
-     * Domain category for filtering
-     */
-    category?: 'identity' | 'health' | 'finance' | 'education' | 'mobility' | 'employment' | 'other';
-    /**
-     * Free-form tags for filtering and search
-     */
-    tags?: Array<string>;
-    /**
-     * Optional human-readable schema name for UI display and filtering.
-     */
-    displayName?: string;
-    /**
-     * Issuer offer entries for this schema metadata. Each entry provides a credential offer URL and user-facing description.
-     */
-    issuerOffers: Array<IssuerOfferEntryDto>;
-    /**
-     * Current publication lifecycle state.
-     */
-    publicationStatus: 'published' | 'superseded' | 'withdrawn' | 'disputed' | 'suppressed';
-    /**
-     * Whether this entry was backfilled from the legacy publication model.
-     */
-    legacyPublication: boolean;
-    /**
-     * Current verification status for referenced assets.
-     */
-    referenceVerificationStatus: 'pending' | 'verified' | 'warning' | 'failed';
-    /**
-     * Verification checks performed for referenced assets.
-     */
-    referenceVerificationChecks: Array<unknown>;
-    /**
-     * The original signed JWT
-     */
-    signedJwt: string;
-    /**
-     * Issuer from the JWT (`iss` claim)
-     */
-    issuer: string;
-    /**
-     * The access certificate used to sign this schema metadata
-     */
-    signerCertificate?: AccessCertificateRefDto;
-    /**
-     * Timestamp when the JWT was issued (from the `iat` claim)
-     */
-    issuedAt: string;
-    /**
-     * Server creation timestamp
-     */
-    createdAt: string;
-    /**
-     * Last update timestamp
-     */
-    updatedAt: string;
-    /**
-     * Whether this version is deprecated
-     */
-    deprecated: boolean;
-    /**
-     * Deprecation message shown to consumers
-     */
-    deprecationMessage?: string;
-    /**
-     * The version that supersedes this one
-     */
-    supersededByVersion?: string;
-    /**
-     * Timestamp when this version was marked as deprecated
-     */
-    deprecatedAt?: string;
 };
 
 export type PresentationConfigCreateDto = {
@@ -3457,56 +3082,35 @@ export type PresentationConfigCreateDto = {
         [key: string]: unknown;
     }> | null;
     /**
-     * Optional registration certificate request settings.
+     * Registration certificate from a registrar, with the purpose and privacy policy it is requested with.
      */
     registration_cert?: {
-        id?: string;
-        body?: {
-            privacy_policy?: string;
-            support_uri?: string;
-            intermediary?: string;
-            purpose?: Array<{
-                lang: string;
-                content: string;
-            }>;
-            credentials?: Array<{
-                [key: string]: unknown;
-            }>;
-            provides_attestations?: Array<string>;
-        };
+        /**
+         * Registration certificate JWT issued by a registrar. Attached to every request object as is; it must be valid and authorize every credential the DCQL query requests.
+         */
         jwt?: string;
+        /**
+         * Why the data is requested (GDPR purpose), one text per language. Used when a certificate is requested from a registrar.
+         */
+        purpose?: Array<{
+            /**
+             * Language of the text, an ISO 639-1 code such as en.
+             */
+            lang: string;
+            /**
+             * The purpose in that language.
+             */
+            content: string;
+        }>;
+        /**
+         * URL of the privacy policy that applies to this request. Used when a certificate is requested from a registrar.
+         */
+        privacy_policy?: string;
     } | null;
-    /**
-     * Optional imported registration certificate JWT.
-     */
-    registrationCertImportJwt?: Array<string>;
-    /**
-     * Optional registrar-side registration certificate id.
-     */
-    registrationCertImportId?: Array<string>;
-    /**
-     * Optional registration certificate privacy policy URI.
-     */
-    registrationCertBodyPrivacyPolicy?: Array<string>;
-    /**
-     * Optional registration certificate support URI.
-     */
-    registrationCertBodySupportUri?: Array<string>;
-    /**
-     * Optional registration certificate intermediary.
-     */
-    registrationCertBodyIntermediary?: Array<string>;
-    /**
-     * Optional registration certificate purpose entries.
-     */
-    registrationCertBodyPurpose?: Array<{
-        lang?: string;
-        content?: string;
-    }> | null;
     /**
      * Optional webhook endpoint id for presentation callbacks.
      */
-    webhookEndpointId?: Array<string>;
+    webhookEndpointId?: string | null;
     /**
      * Optional attachments included with presentation requests.
      */
@@ -3527,11 +3131,11 @@ export type PresentationConfigCreateDto = {
     /**
      * Optional redirect URI after presentation completion.
      */
-    redirectUri?: Array<string>;
+    redirectUri?: string | null;
     /**
      * Optional key chain id for access token/auth operations.
      */
-    accessKeyChainId?: Array<string>;
+    accessKeyChainId?: string | null;
     /**
      * Origins (http(s)://host[:port]) of the web pages allowed to request this presentation over the Digital Credentials API. When set, dc-api and iso-18013-7 offers are refused for any other expected_origin, and an offer without expected_origin uses the only listed origin. Unset: any expected_origin is accepted. Not used for uri requests.
      */
@@ -3539,7 +3143,7 @@ export type PresentationConfigCreateDto = {
     /**
      * Whether reader authentication is required for mDoc requests.
      */
-    readerAuth?: Array<boolean>;
+    readerAuth?: boolean | null;
 };
 
 export type PresentationConfigUpdateDto = {
@@ -3812,56 +3416,35 @@ export type PresentationConfigUpdateDto = {
         [key: string]: unknown;
     }> | null;
     /**
-     * Optional registration certificate request settings.
+     * Registration certificate from a registrar, with the purpose and privacy policy it is requested with.
      */
     registration_cert?: {
-        id?: string;
-        body?: {
-            privacy_policy?: string;
-            support_uri?: string;
-            intermediary?: string;
-            purpose?: Array<{
-                lang: string;
-                content: string;
-            }>;
-            credentials?: Array<{
-                [key: string]: unknown;
-            }>;
-            provides_attestations?: Array<string>;
-        };
+        /**
+         * Registration certificate JWT issued by a registrar. Attached to every request object as is; it must be valid and authorize every credential the DCQL query requests.
+         */
         jwt?: string;
+        /**
+         * Why the data is requested (GDPR purpose), one text per language. Used when a certificate is requested from a registrar.
+         */
+        purpose?: Array<{
+            /**
+             * Language of the text, an ISO 639-1 code such as en.
+             */
+            lang: string;
+            /**
+             * The purpose in that language.
+             */
+            content: string;
+        }>;
+        /**
+         * URL of the privacy policy that applies to this request. Used when a certificate is requested from a registrar.
+         */
+        privacy_policy?: string;
     } | null;
-    /**
-     * Optional imported registration certificate JWT.
-     */
-    registrationCertImportJwt?: Array<string>;
-    /**
-     * Optional registrar-side registration certificate id.
-     */
-    registrationCertImportId?: Array<string>;
-    /**
-     * Optional registration certificate privacy policy URI.
-     */
-    registrationCertBodyPrivacyPolicy?: Array<string>;
-    /**
-     * Optional registration certificate support URI.
-     */
-    registrationCertBodySupportUri?: Array<string>;
-    /**
-     * Optional registration certificate intermediary.
-     */
-    registrationCertBodyIntermediary?: Array<string>;
-    /**
-     * Optional registration certificate purpose entries.
-     */
-    registrationCertBodyPurpose?: Array<{
-        lang?: string;
-        content?: string;
-    }> | null;
     /**
      * Optional webhook endpoint id for presentation callbacks.
      */
-    webhookEndpointId?: Array<string>;
+    webhookEndpointId?: string | null;
     /**
      * Optional attachments included with presentation requests.
      */
@@ -3882,11 +3465,11 @@ export type PresentationConfigUpdateDto = {
     /**
      * Optional redirect URI after presentation completion.
      */
-    redirectUri?: Array<string>;
+    redirectUri?: string | null;
     /**
      * Optional key chain id for access token/auth operations.
      */
-    accessKeyChainId?: Array<string>;
+    accessKeyChainId?: string | null;
     /**
      * Origins (http(s)://host[:port]) of the web pages allowed to request this presentation over the Digital Credentials API. When set, dc-api and iso-18013-7 offers are refused for any other expected_origin, and an offer without expected_origin uses the only listed origin. Unset: any expected_origin is accepted. Not used for uri requests.
      */
@@ -3894,7 +3477,7 @@ export type PresentationConfigUpdateDto = {
     /**
      * Whether reader authentication is required for mDoc requests.
      */
-    readerAuth?: Array<boolean>;
+    readerAuth?: boolean | null;
 };
 
 export type TrustListEntityInfo = {
@@ -5577,44 +5160,17 @@ export type IssuerRegistrationCertificateConfig = {
      */
     enabled?: boolean;
     /**
-     * import: use an existing JWT, generate: create via registrar using attestation data derived from configured credential configurations.
-     */
-    mode?: 'import' | 'generate';
-    /**
-     * Existing registration certificate JWT used when mode is import.
+     * Registration certificate JWT advertised in the issuer metadata while it is valid, issued by a registrar such as the EUDI Hub.
      */
     jwt?: string;
     /**
-     * Privacy policy URL used when generating a registration certificate (optional if registrar defaults are configured).
+     * Privacy policy URL of the issuer. Stored only; EUDIPLO and the EUDI Hub request do not use it.
      */
     privacyPolicy?: string;
     /**
-     * Support URI used when generating a registration certificate (optional if registrar defaults are configured).
+     * Support URI of the issuer. Kept with the certificate so that a new one can be requested from a registrar with the same values.
      */
     supportUri?: string;
-    /**
-     * When a generated certificate is renewed. onCredentialConfigChange (default): in the background after a credential or issuance configuration changes, and when issuer metadata is built. onMetadataRequest: only when issuer metadata is built. manual: only with Regenerate now. In every mode a missing or expired certificate is requested when issuer metadata is built.
-     */
-    renewal?: 'onCredentialConfigChange' | 'onMetadataRequest' | 'manual';
-};
-
-export type IssuerRegistrationCertificateCache = {
-    /**
-     * Cached registration certificate JWT generated by EUDIPLO.
-     */
-    readonly jwt?: string;
-    /**
-     * Config fingerprint used to detect cache invalidation.
-     */
-    readonly fingerprint?: string;
-    /**
-     * JWT iat claim, seconds since epoch.
-     */
-    readonly issuedAt?: number;
-    /**
-     * JWT exp claim, seconds since epoch.
-     */
-    readonly expiresAt?: number;
 };
 
 export type DisplayLogo = {
@@ -5654,13 +5210,9 @@ export type IssuanceConfig = {
     federation?: FederationConfig | null;
     /**
      * Optional registration certificate configuration for issuer metadata (`issuer_info`).
-     * Supports importing an existing JWT or generating one via registrar.
+     * The JWT comes from a registrar, for example the EUDI Hub.
      */
     registrationCertificate?: IssuerRegistrationCertificateConfig | null;
-    /**
-     * Server-managed cache for generated issuer registration certificates.
-     */
-    readonly registrationCertificateCache?: IssuerRegistrationCertificateCache | null;
     /**
      * Whether the OID4VCI notification endpoint is exposed for this issuance configuration.
      */
@@ -5733,13 +5285,9 @@ export type UpdateIssuanceDto = {
     federation?: FederationConfig | null;
     /**
      * Optional registration certificate configuration for issuer metadata (`issuer_info`).
-     * Supports importing an existing JWT or generating one via registrar.
+     * The JWT comes from a registrar, for example the EUDI Hub.
      */
     registrationCertificate?: IssuerRegistrationCertificateConfig | null;
-    /**
-     * Server-managed cache for generated issuer registration certificates.
-     */
-    readonly registrationCertificateCache?: IssuerRegistrationCertificateCache | null;
     /**
      * Whether the OID4VCI notification endpoint is exposed for this issuance configuration.
      */
@@ -5776,360 +5324,6 @@ export type UpdateIssuanceDto = {
      */
     walletAttestationRequired?: boolean;
     display?: Array<DisplayInfo>;
-};
-
-/**
- * Schema metadata values; the registrar builds and signs the result.
- */
-export type PublishSchemaMetaConfig = {
-    /**
-     * Schemas per attestation format. When omitted, the schema of `credentialConfigId` is used.
-     */
-    schemaURIs?: Array<{
-        /**
-         * Credential configuration whose schema EUDIPLO builds and uploads; `uri` and `meta` are not needed.
-         */
-        credentialConfigId?: string;
-        /**
-         * Attestation format of the schema, for example `dc+sd-jwt` or `mso_mdoc`. Required with `uri`; with `credentialConfigId`, the format of the configuration takes precedence.
-         */
-        format?: string;
-        /**
-         * URL of a schema document that EUDIPLO downloads and uploads to the registrar. Requires `format` and `meta`.
-         */
-        uri?: string;
-        /**
-         * Format-specific schema metadata, for example `{ "vct": "urn:example:vct" }` for `dc+sd-jwt`. Required with `uri`.
-         */
-        meta?: {
-            [key: string]: unknown;
-        };
-    }>;
-    /**
-     * Trusted authorities for issuers of this attestation. Required when publishing: at least one entry must provide an X.509 certificate (`trustListId`, an `x509` entry or a `verificationMethod` whose `x509Certificate` is a single certificate).
-     */
-    trustedAuthorities?: Array<{
-        /**
-         * Trust list of the tenant. EUDIPLO publishes it as `etsi_tl` authority with its URL and the active certificate of its key chain (the first one of a chain); the other fields are not needed.
-         */
-        trustListId?: string;
-        /**
-         * Trust framework of an external authority. `x509` takes a root certificate in `value` and no `verificationMethod`.
-         */
-        frameworkType?: 'aki' | 'etsi_tl' | 'openid_federation' | 'x509';
-        /**
-         * Authority value, for example the trust list URL for `etsi_tl`, or for `x509` one root certificate in PEM or base64 DER. Publishing rejects an `x509` value that holds more than one certificate, such as a chain.
-         */
-        value?: string;
-        /**
-         * Verification material of an external authority, for example a JWK, as object or JSON string. Required, except for `x509` (must be omitted) and for a `value` that is a trust list URL of this tenant (EUDIPLO adds the certificate).
-         */
-        verificationMethod?: {
-            [key: string]: unknown;
-        } | string;
-    }>;
-    /**
-     * Schema ID (attestation identifier URI). `publish` passes it to the registrar when set; `publish-version` requires the ID of the existing schema. With `credentialConfigId` and no `rulebookURI`, `publish` only links that credential configuration to this ID and uploads nothing.
-     */
-    id?: string;
-    /**
-     * Human-readable name. Required when publishing; not needed for a link-only request.
-     */
-    name?: string;
-    /**
-     * Schema version, for example `1.0.0`.
-     */
-    version: string;
-    /**
-     * URL of the attestation rulebook, which EUDIPLO downloads and uploads to the registrar. Required when publishing.
-     */
-    rulebookURI?: string;
-    /**
-     * Attestation level of security.
-     */
-    attestationLoS: 'iso_18045_high' | 'iso_18045_moderate' | 'iso_18045_enhanced-basic' | 'iso_18045_basic';
-    /**
-     * Cryptographic binding type.
-     */
-    bindingType: 'claim' | 'key' | 'biometric' | 'none';
-    /**
-     * Registrar category of the schema metadata, one of the predefined values of `GET /api/schema-metadata/vocabularies`. EUDIPLO sets it at the registrar after publishing; it is not stored in the credential configuration.
-     */
-    category?: 'identity' | 'health' | 'finance' | 'education' | 'mobility' | 'employment' | 'other';
-    /**
-     * Registrar tags of the schema metadata, predefined values of `GET /api/schema-metadata/vocabularies`. EUDIPLO sets them at the registrar after publishing; they are not stored in the credential configuration.
-     */
-    tags?: Array<'pid' | 'eudi' | 'kyc' | 'aml' | 'age-verification' | 'residency' | 'membership' | 'education' | 'employment' | 'mobility'>;
-};
-
-export type SignSchemaMetaConfigDto = {
-    /**
-     * The schema metadata configuration to submit. Registrar builds and signs the final schema metadata.
-     */
-    config: PublishSchemaMetaConfig & {
-        /**
-         * Schema ID (attestation identifier URI). `publish` passes it to the registrar when set; `publish-version` requires the ID of the existing schema. With `credentialConfigId` and no `rulebookURI`, `publish` only links that credential configuration to this ID and uploads nothing.
-         */
-        id?: string;
-        /**
-         * Human-readable name. Required when publishing; not needed for a link-only request.
-         */
-        name?: string;
-        /**
-         * Schema version, for example `1.0.0`.
-         */
-        version?: string;
-        /**
-         * URL of the attestation rulebook, which EUDIPLO downloads and uploads to the registrar. Required when publishing.
-         */
-        rulebookURI?: string;
-        /**
-         * Attestation level of security.
-         */
-        attestationLoS?: 'iso_18045_high' | 'iso_18045_moderate' | 'iso_18045_enhanced-basic' | 'iso_18045_basic';
-        /**
-         * Cryptographic binding type.
-         */
-        bindingType?: 'claim' | 'key' | 'biometric' | 'none';
-        /**
-         * Schemas per attestation format. When omitted, the schema of `credentialConfigId` is used.
-         */
-        schemaURIs?: Array<{
-            /**
-             * Credential configuration whose schema EUDIPLO builds and uploads; `uri` and `meta` are not needed.
-             */
-            credentialConfigId?: string;
-            /**
-             * Attestation format of the schema, for example `dc+sd-jwt` or `mso_mdoc`. Required with `uri`; with `credentialConfigId`, the format of the configuration takes precedence.
-             */
-            format?: string;
-            /**
-             * URL of a schema document that EUDIPLO downloads and uploads to the registrar. Requires `format` and `meta`.
-             */
-            uri?: string;
-            /**
-             * Format-specific schema metadata, for example `{ "vct": "urn:example:vct" }` for `dc+sd-jwt`. Required with `uri`.
-             */
-            meta?: {
-                [key: string]: unknown;
-            };
-        }>;
-        /**
-         * Trusted authorities for issuers of this attestation. Required when publishing: at least one entry must provide an X.509 certificate (`trustListId`, an `x509` entry or a `verificationMethod` whose `x509Certificate` is a single certificate).
-         */
-        trustedAuthorities?: Array<{
-            /**
-             * Trust list of the tenant. EUDIPLO publishes it as `etsi_tl` authority with its URL and the active certificate of its key chain (the first one of a chain); the other fields are not needed.
-             */
-            trustListId?: string;
-            /**
-             * Trust framework of an external authority. `x509` takes a root certificate in `value` and no `verificationMethod`.
-             */
-            frameworkType?: 'aki' | 'etsi_tl' | 'openid_federation' | 'x509';
-            /**
-             * Authority value, for example the trust list URL for `etsi_tl`, or for `x509` one root certificate in PEM or base64 DER. Publishing rejects an `x509` value that holds more than one certificate, such as a chain.
-             */
-            value?: string;
-            /**
-             * Verification material of an external authority, for example a JWK, as object or JSON string. Required, except for `x509` (must be omitted) and for a `value` that is a trust list URL of this tenant (EUDIPLO adds the certificate).
-             */
-            verificationMethod?: {
-                [key: string]: unknown;
-            } | string;
-        }>;
-        /**
-         * Registrar category of the schema metadata, one of the predefined values of `GET /api/schema-metadata/vocabularies`. EUDIPLO sets it at the registrar after publishing; it is not stored in the credential configuration.
-         */
-        category?: 'identity' | 'health' | 'finance' | 'education' | 'mobility' | 'employment' | 'other';
-        /**
-         * Registrar tags of the schema metadata, predefined values of `GET /api/schema-metadata/vocabularies`. EUDIPLO sets them at the registrar after publishing; they are not stored in the credential configuration.
-         */
-        tags?: Array<'pid' | 'eudi' | 'kyc' | 'aml' | 'age-verification' | 'residency' | 'membership' | 'education' | 'employment' | 'mobility'>;
-    };
-    /**
-     * Credential configuration to link to the published schema metadata ID.
-     */
-    credentialConfigId?: string;
-    /**
-     * How to update the schema metadata pin of `credentialConfigId`: `keep_current` (default) keeps a pin to the same ID, `update_to_new_version` updates the pinned version under the same ID, `replace_id` repoints the pin to the new ID. A configuration without a pin is always linked. If it is pinned to another ID, only `replace_id` succeeds; the others answer `400` after the schema metadata was published.
-     */
-    pinMode?: 'keep_current' | 'update_to_new_version' | 'replace_id';
-};
-
-export type SignVersionSchemaMetaConfigDto = {
-    /**
-     * The schema metadata configuration to submit as a new version. Must include the existing id.
-     */
-    config: PublishSchemaMetaConfig & {
-        /**
-         * Schema ID (attestation identifier URI). `publish` passes it to the registrar when set; `publish-version` requires the ID of the existing schema. With `credentialConfigId` and no `rulebookURI`, `publish` only links that credential configuration to this ID and uploads nothing.
-         */
-        id?: string;
-        /**
-         * Human-readable name. Required when publishing; not needed for a link-only request.
-         */
-        name?: string;
-        /**
-         * Schema version, for example `1.0.0`.
-         */
-        version?: string;
-        /**
-         * URL of the attestation rulebook, which EUDIPLO downloads and uploads to the registrar. Required when publishing.
-         */
-        rulebookURI?: string;
-        /**
-         * Attestation level of security.
-         */
-        attestationLoS?: 'iso_18045_high' | 'iso_18045_moderate' | 'iso_18045_enhanced-basic' | 'iso_18045_basic';
-        /**
-         * Cryptographic binding type.
-         */
-        bindingType?: 'claim' | 'key' | 'biometric' | 'none';
-        /**
-         * Schemas per attestation format. When omitted, the schema of `credentialConfigId` is used.
-         */
-        schemaURIs?: Array<{
-            /**
-             * Credential configuration whose schema EUDIPLO builds and uploads; `uri` and `meta` are not needed.
-             */
-            credentialConfigId?: string;
-            /**
-             * Attestation format of the schema, for example `dc+sd-jwt` or `mso_mdoc`. Required with `uri`; with `credentialConfigId`, the format of the configuration takes precedence.
-             */
-            format?: string;
-            /**
-             * URL of a schema document that EUDIPLO downloads and uploads to the registrar. Requires `format` and `meta`.
-             */
-            uri?: string;
-            /**
-             * Format-specific schema metadata, for example `{ "vct": "urn:example:vct" }` for `dc+sd-jwt`. Required with `uri`.
-             */
-            meta?: {
-                [key: string]: unknown;
-            };
-        }>;
-        /**
-         * Trusted authorities for issuers of this attestation. Required when publishing: at least one entry must provide an X.509 certificate (`trustListId`, an `x509` entry or a `verificationMethod` whose `x509Certificate` is a single certificate).
-         */
-        trustedAuthorities?: Array<{
-            /**
-             * Trust list of the tenant. EUDIPLO publishes it as `etsi_tl` authority with its URL and the active certificate of its key chain (the first one of a chain); the other fields are not needed.
-             */
-            trustListId?: string;
-            /**
-             * Trust framework of an external authority. `x509` takes a root certificate in `value` and no `verificationMethod`.
-             */
-            frameworkType?: 'aki' | 'etsi_tl' | 'openid_federation' | 'x509';
-            /**
-             * Authority value, for example the trust list URL for `etsi_tl`, or for `x509` one root certificate in PEM or base64 DER. Publishing rejects an `x509` value that holds more than one certificate, such as a chain.
-             */
-            value?: string;
-            /**
-             * Verification material of an external authority, for example a JWK, as object or JSON string. Required, except for `x509` (must be omitted) and for a `value` that is a trust list URL of this tenant (EUDIPLO adds the certificate).
-             */
-            verificationMethod?: {
-                [key: string]: unknown;
-            } | string;
-        }>;
-        /**
-         * Registrar category of the schema metadata, one of the predefined values of `GET /api/schema-metadata/vocabularies`. EUDIPLO sets it at the registrar after publishing; it is not stored in the credential configuration.
-         */
-        category?: 'identity' | 'health' | 'finance' | 'education' | 'mobility' | 'employment' | 'other';
-        /**
-         * Registrar tags of the schema metadata, predefined values of `GET /api/schema-metadata/vocabularies`. EUDIPLO sets them at the registrar after publishing; they are not stored in the credential configuration.
-         */
-        tags?: Array<'pid' | 'eudi' | 'kyc' | 'aml' | 'age-verification' | 'residency' | 'membership' | 'education' | 'employment' | 'mobility'>;
-    };
-    /**
-     * Credential configuration to link to the new version.
-     */
-    credentialConfigId?: string;
-    /**
-     * How to update the schema metadata pin of `credentialConfigId`: `keep_current` (default) keeps a pin to the same ID, `update_to_new_version` updates the pinned version under the same ID, `replace_id` repoints the pin to `config.id`. A configuration without a pin is always linked. If it is pinned to another ID, only `replace_id` succeeds; the others answer `400` after the schema metadata was published.
-     */
-    pinMode?: 'keep_current' | 'update_to_new_version' | 'replace_id';
-};
-
-export type VocabularyEntryDto = {
-    /**
-     * Stable machine-readable value to submit in schema metadata category/tags fields.
-     */
-    code: string;
-    /**
-     * Display label for UI rendering.
-     */
-    label: string;
-    /**
-     * Vocabulary lifecycle status.
-     */
-    status: 'active' | 'deprecated';
-    /**
-     * Replacement code when status is deprecated.
-     */
-    replacedBy?: string;
-};
-
-export type SchemaMetadataVocabulariesDto = {
-    /**
-     * Vocabulary publication version for cache invalidation.
-     */
-    version: string;
-    /**
-     * Allowed category values that can be used when updating schema metadata category.
-     */
-    categories: Array<VocabularyEntryDto>;
-    /**
-     * Allowed tag values that can be used when updating schema metadata tags.
-     */
-    tags: Array<VocabularyEntryDto>;
-};
-
-export type UpdateIssuerOfferDto = {
-    /**
-     * URL where the user can receive a credential offer from this issuer.
-     */
-    credentialOfferUrl?: string;
-    /**
-     * Human-readable description to help users choose the right issuer.
-     */
-    description?: string;
-};
-
-export type UpdateSchemaMetadataDto = {
-    /**
-     * Domain category for filtering
-     */
-    category?: 'identity' | 'health' | 'finance' | 'education' | 'mobility' | 'employment' | 'other';
-    /**
-     * Predefined tags for filtering and search
-     */
-    tags?: Array<'pid' | 'eudi' | 'kyc' | 'aml' | 'age-verification' | 'residency' | 'membership' | 'education' | 'employment' | 'mobility'>;
-    /**
-     * Optional human-readable schema name for UI display and search
-     */
-    displayName?: string;
-    /**
-     * Issuer offer entries shown to users, each with credential-offer URL and description
-     */
-    issuerOffers?: Array<{
-        credentialOfferUrl?: string;
-        description?: string;
-    }>;
-};
-
-export type DeprecateSchemaMetadataDto = {
-    /**
-     * Whether to mark this version as deprecated
-     */
-    deprecated: boolean;
-    /**
-     * Deprecation message shown to consumers
-     */
-    message?: string;
-    /**
-     * The version that supersedes this one
-     */
-    supersededByVersion?: string;
 };
 
 export type DeferredCredentialRequestDto = {
@@ -6241,10 +5435,6 @@ export type AuthorizationResponse = {
      * State value from the authorization request (for correlation).
      */
     state?: string;
-};
-
-export type Object = {
-    [key: string]: unknown;
 };
 
 export type ParResponseDto = {
@@ -6470,9 +5660,9 @@ export type ChainedAsParRequestDto = {
     /**
      * Authorization details
      */
-    authorization_details?: Array<string | Array<{
+    authorization_details?: string | Array<{
         [key: string]: unknown;
-    }>>;
+    }>;
 };
 
 export type OrgIsoMdocRequest = {
@@ -6774,9 +5964,9 @@ export type EudiHubPresentationRegistrationCertificateRequestDto = {
      */
     presentationConfigId: string;
     /**
-     * Why the data is requested, in German and English (GDPR purpose).
+     * Why the data is requested, in German and English (GDPR purpose). Defaults to registration_cert.purpose of the presentation configuration; stored there with the certificate.
      */
-    purpose: Array<{
+    purpose?: Array<{
         /**
          * ISO 639-1 language code, such as de or en.
          */
@@ -6784,9 +5974,9 @@ export type EudiHubPresentationRegistrationCertificateRequestDto = {
         content: string;
     }>;
     /**
-     * Privacy policy URL.
+     * Privacy policy URL. Defaults to registration_cert.privacy_policy of the presentation configuration; stored there with the certificate.
      */
-    privacyPolicy: string;
+    privacyPolicy?: string;
 };
 
 export type EudiHubRegistrationCertificateDto = {
@@ -6907,7 +6097,7 @@ export type ConfigImportRunEntity = {
 
 export type ConfigResourceMetadataEntity = {
     tenantId: string;
-    kind: 'Tenant' | 'Client' | 'KmsConfig' | 'KeyChain' | 'KeyChainDefaults' | 'RegistrarConfig' | 'IssuanceConfig' | 'CredentialConfig' | 'PresentationConfig' | 'AttributeProvider' | 'WebhookEndpoint' | 'TrustList' | 'FederationTrustAnchor' | 'StatusList';
+    kind: 'Tenant' | 'Client' | 'KmsConfig' | 'KeyChain' | 'KeyChainDefaults' | 'IssuanceConfig' | 'CredentialConfig' | 'PresentationConfig' | 'AttributeProvider' | 'WebhookEndpoint' | 'TrustList' | 'FederationTrustAnchor' | 'StatusList';
     resourceId: string;
     ownership: 'unmanaged' | 'file-managed' | 'detached';
     generation: number;
@@ -6922,7 +6112,7 @@ export type ConfigResourceOwnershipDto = {
     /**
      * Resource kind, as in the config bundle format
      */
-    kind: 'Tenant' | 'Client' | 'KmsConfig' | 'KeyChain' | 'KeyChainDefaults' | 'RegistrarConfig' | 'IssuanceConfig' | 'CredentialConfig' | 'PresentationConfig' | 'AttributeProvider' | 'WebhookEndpoint' | 'TrustList' | 'FederationTrustAnchor' | 'StatusList';
+    kind: 'Tenant' | 'Client' | 'KmsConfig' | 'KeyChain' | 'KeyChainDefaults' | 'IssuanceConfig' | 'CredentialConfig' | 'PresentationConfig' | 'AttributeProvider' | 'WebhookEndpoint' | 'TrustList' | 'FederationTrustAnchor' | 'StatusList';
     /**
      * Resource ID, or the singleton ID such as `issuance`
      */
@@ -6968,235 +6158,6 @@ export type ConfigDocumentDto = {
     spec: {
         [key: string]: unknown;
     };
-};
-
-export type PresentationConfigWritable = {
-    /**
-     * Clock skew tolerance for credential JWT time validation, in seconds.
-     */
-    skewSeconds?: number;
-    /**
-     * Status list verification mode for presentations: strict (default), best_effort, or disabled.
-     */
-    statusCheckMode?: 'strict' | 'best_effort' | 'disabled';
-    /**
-     * Unique identifier for the VP request.
-     */
-    id: string;
-    /**
-     * The tenant that owns this object.
-     */
-    tenant: TenantEntity;
-    /**
-     * Description of the presentation configuration.
-     */
-    description?: string | null;
-    /**
-     * Lifetime how long the presentation request is valid after creation, in seconds.
-     */
-    lifeTime?: number;
-    /**
-     * The DCQL query to be used for the VP request.
-     */
-    dcql_query: Dcql;
-    transaction_data?: Array<TransactionData>;
-    /**
-     * The registration certificate request containing the necessary details.
-     */
-    registration_cert?: RegistrationCertificateRequest | null;
-    /**
-     * Reference to the webhook endpoint used for notifications.
-     * Optional: if set, notifications will be sent to this endpoint.
-     */
-    webhookEndpointId?: string | null;
-    /**
-     * The timestamp when the VP request was created.
-     */
-    createdAt: string;
-    /**
-     * The timestamp when the VP request was last updated.
-     */
-    updatedAt: string;
-    /**
-     * Attestation that should be attached
-     */
-    attached?: Array<PresentationAttachment> | null;
-    /**
-     * Redirect URI to which the user-agent should be redirected after the presentation is completed.
-     * You can use the `{sessionId}` placeholder in the URI, which will be replaced with the actual session ID.
-     */
-    redirectUri?: string | null;
-    /**
-     * Optional ID of the access certificate to use for signing the presentation request.
-     * If not provided, the default access certificate for the tenant will be used.
-     *
-     * Note: This is intentionally NOT a TypeORM relationship because CertEntity uses
-     * a composite primary key (id + tenantId), and SQLite cannot create foreign keys
-     * that reference only part of a composite primary key. The relationship is handled
-     * at the application level in the service layer.
-     */
-    accessKeyChainId?: string | null;
-    /**
-     * Origins of the web pages allowed to request this presentation over the
-     * Digital Credentials API. When set, `dc-api` and `iso-18013-7` offers
-     * are bound to one of them; unset, any `expected_origin` is accepted.
-     * `uri` offers ignore them.
-     */
-    allowedOrigins?: Array<string> | null;
-    /**
-     * Enable reader authentication for the ISO 18013-7 Annex C (DC API) flow.
-     *
-     * When `true`, the DeviceRequest embeds a detached `readerAuth` COSE_Sign1
-     * signed with the tenant's Access key chain (selected by
-     * {@link accessKeyChainId}), letting the wallet cryptographically
-     * authenticate the verifier — the mDOC equivalent of the signed request
-     * object used in the OID4VP flow. Defaults to disabled (null/false).
-     *
-     * Only affects `response_type: "iso-18013-7"` offers.
-     */
-    readerAuth?: boolean | null;
-};
-
-export type IssuanceConfigWritable = {
-    /**
-     * Shared wallet provider trust lists for key attestations at the credential endpoint
-     * and default wallet-attestation trust at managed authorization servers.
-     * Each entry MUST include `verifierKey`, `verifierKeyPem` or `verifierX509Der`.
-     */
-    walletProviderTrustLists?: Array<WalletProviderTrustListRefDto>;
-    /**
-     * Status check mode for key attestations at the credential endpoint, and default for presented wallet attestations at managed authorization servers. strict rejects when the status list cannot be fetched or read; best_effort (used when unset) accepts when the list cannot be fetched but rejects an unreadable list or an index outside it; disabled skips the status check. A revoked or suspended attestation is rejected unless the check is disabled. The background check of revokeWithWalletUnit does not use this mode.
-     */
-    walletAttestationStatusCheckMode?: 'strict' | 'best_effort' | 'disabled' | null;
-    /**
-     * Dedicated managed authorization servers hosted by this issuer. At least one entry is required.
-     */
-    authorizationServers: Array<ExternalAuthorizationServerConfig | Oid4VpAuthorizationServerConfig | ChainedAuthorizationServerConfig | BuiltInAuthorizationServerConfig>;
-    /**
-     * Optional OpenID Federation configuration used for trust evaluation.
-     * When omitted, trust checks rely on existing LoTE trust-list behavior.
-     */
-    federation?: FederationConfig | null;
-    /**
-     * Optional registration certificate configuration for issuer metadata (`issuer_info`).
-     * Supports importing an existing JWT or generating one via registrar.
-     */
-    registrationCertificate?: IssuerRegistrationCertificateConfig | null;
-    /**
-     * Whether the OID4VCI notification endpoint is exposed for this issuance configuration.
-     */
-    notificationEndpointEnabled?: boolean;
-    /**
-     * Whether `credential_response_encryption` should be advertised in the credential issuer metadata.
-     */
-    credentialResponseEncryption?: boolean;
-    /**
-     * Whether `credential_request_encryption` should be advertised in the credential issuer metadata.
-     */
-    credentialRequestEncryption?: boolean;
-    /**
-     * Maximum failed tx_code attempts before the pre-authorized code is invalidated. Defaults to 5.
-     */
-    txCodeMaxAttempts?: number | null;
-    /**
-     * Default lifetime of credential offers in seconds. Can be overridden per offer request. Unset: offers do not expire.
-     */
-    offerLifetimeSeconds?: number | null;
-    /**
-     * The tenant that owns this object.
-     */
-    tenant: TenantEntity;
-    /**
-     * Value to determine the amount of credentials that are issued in a batch.
-     * Default is 1.
-     */
-    batchSize?: number;
-    /**
-     * Indicates whether DPoP is required for the issuance process. Default value is true.
-     */
-    dPopRequired?: boolean;
-    /**
-     * Default wallet attestation requirement for managed authorization servers.
-     * When enabled, wallets must provide OAuth-Client-Attestation headers.
-     * Default value is false.
-     */
-    walletAttestationRequired?: boolean;
-    display: Array<DisplayInfo>;
-    /**
-     * The timestamp when the VP request was created.
-     */
-    createdAt: string;
-    /**
-     * The timestamp when the VP request was last updated.
-     */
-    updatedAt: string;
-};
-
-export type UpdateIssuanceDtoWritable = {
-    /**
-     * Shared wallet provider trust lists for key attestations at the credential endpoint
-     * and default wallet-attestation trust at managed authorization servers.
-     * Each entry MUST include `verifierKey`, `verifierKeyPem` or `verifierX509Der`.
-     */
-    walletProviderTrustLists?: Array<WalletProviderTrustListRefDto>;
-    /**
-     * Status check mode for key attestations at the credential endpoint, and default for presented wallet attestations at managed authorization servers. strict rejects when the status list cannot be fetched or read; best_effort (used when unset) accepts when the list cannot be fetched but rejects an unreadable list or an index outside it; disabled skips the status check. A revoked or suspended attestation is rejected unless the check is disabled. The background check of revokeWithWalletUnit does not use this mode.
-     */
-    walletAttestationStatusCheckMode?: 'strict' | 'best_effort' | 'disabled' | null;
-    /**
-     * Dedicated managed authorization servers hosted by this issuer. At least one entry is required.
-     */
-    authorizationServers?: Array<ExternalAuthorizationServerConfig | Oid4VpAuthorizationServerConfig | ChainedAuthorizationServerConfig | BuiltInAuthorizationServerConfig>;
-    /**
-     * Optional OpenID Federation configuration used for trust evaluation.
-     * When omitted, trust checks rely on existing LoTE trust-list behavior.
-     */
-    federation?: FederationConfig | null;
-    /**
-     * Optional registration certificate configuration for issuer metadata (`issuer_info`).
-     * Supports importing an existing JWT or generating one via registrar.
-     */
-    registrationCertificate?: IssuerRegistrationCertificateConfig | null;
-    /**
-     * Whether the OID4VCI notification endpoint is exposed for this issuance configuration.
-     */
-    notificationEndpointEnabled?: boolean;
-    /**
-     * Whether `credential_response_encryption` should be advertised in the credential issuer metadata.
-     */
-    credentialResponseEncryption?: boolean;
-    /**
-     * Whether `credential_request_encryption` should be advertised in the credential issuer metadata.
-     */
-    credentialRequestEncryption?: boolean;
-    /**
-     * Maximum failed tx_code attempts before the pre-authorized code is invalidated. Defaults to 5.
-     */
-    txCodeMaxAttempts?: number | null;
-    /**
-     * Default lifetime of credential offers in seconds. Can be overridden per offer request. Unset: offers do not expire.
-     */
-    offerLifetimeSeconds?: number | null;
-    /**
-     * Value to determine the amount of credentials that are issued in a batch.
-     * Default is 1.
-     */
-    batchSize?: number;
-    /**
-     * Indicates whether DPoP is required for the issuance process. Default value is true.
-     */
-    dPopRequired?: boolean;
-    /**
-     * Default wallet attestation requirement for managed authorization servers.
-     * When enabled, wallets must provide OAuth-Client-Attestation headers.
-     * Default value is false.
-     */
-    walletAttestationRequired?: boolean;
-    display?: Array<DisplayInfo>;
-};
-
-export type ObjectWritable = {
-    [key: string]: unknown;
 };
 
 export type AppControllerGetVersionData = {
@@ -7586,191 +6547,6 @@ export type ClientControllerRotateClientSecretResponses = {
 };
 
 export type ClientControllerRotateClientSecretResponse = ClientControllerRotateClientSecretResponses[keyof ClientControllerRotateClientSecretResponses];
-
-export type RegistrarControllerDeleteConfigData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/registrar/config';
-};
-
-export type RegistrarControllerDeleteConfigResponses = {
-    /**
-     * Configuration deleted successfully
-     */
-    204: void;
-};
-
-export type RegistrarControllerDeleteConfigResponse = RegistrarControllerDeleteConfigResponses[keyof RegistrarControllerDeleteConfigResponses];
-
-export type RegistrarControllerGetConfigData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/registrar/config';
-};
-
-export type RegistrarControllerGetConfigErrors = {
-    /**
-     * No registrar configuration found
-     */
-    404: unknown;
-};
-
-export type RegistrarControllerGetConfigResponses = {
-    /**
-     * The registrar configuration
-     */
-    200: RegistrarConfigResponseDto;
-};
-
-export type RegistrarControllerGetConfigResponse = RegistrarControllerGetConfigResponses[keyof RegistrarControllerGetConfigResponses];
-
-export type RegistrarControllerUpdateConfigData = {
-    body: UpdateRegistrarConfigDto;
-    path?: never;
-    query?: never;
-    url: '/api/registrar/config';
-};
-
-export type RegistrarControllerUpdateConfigErrors = {
-    /**
-     * The token endpoint answered with an error status (for example wrong credentials), a registrar or OIDC URL is malformed or blocked by the outbound URL policy, the policy blocks the token endpoint from the discovery document or a redirect target, or oidcUrl or registrarUrl changes without password (and clientSecret, if one is stored) sent again
-     */
-    400: unknown;
-    /**
-     * No registrar configuration found
-     */
-    404: unknown;
-    /**
-     * Registrar OIDC provider unreachable or without a token — credentials could not be verified
-     */
-    503: unknown;
-};
-
-export type RegistrarControllerUpdateConfigResponses = {
-    /**
-     * Configuration updated successfully
-     */
-    200: RegistrarConfigResponseDto;
-};
-
-export type RegistrarControllerUpdateConfigResponse = RegistrarControllerUpdateConfigResponses[keyof RegistrarControllerUpdateConfigResponses];
-
-export type RegistrarControllerCreateConfigData = {
-    body: CreateRegistrarConfigDto;
-    path?: never;
-    query?: never;
-    url: '/api/registrar/config';
-};
-
-export type RegistrarControllerCreateConfigErrors = {
-    /**
-     * The token endpoint answered with an error status (for example wrong credentials), a registrar or OIDC URL is malformed or blocked by the outbound URL policy, or the policy blocks the token endpoint from the discovery document or a redirect target
-     */
-    400: unknown;
-    /**
-     * Registrar OIDC provider unreachable or without a token — credentials could not be verified
-     */
-    503: unknown;
-};
-
-export type RegistrarControllerCreateConfigResponses = {
-    /**
-     * Configuration created successfully
-     */
-    201: RegistrarConfigResponseDto;
-};
-
-export type RegistrarControllerCreateConfigResponse = RegistrarControllerCreateConfigResponses[keyof RegistrarControllerCreateConfigResponses];
-
-export type RegistrarControllerCreateAccessCertificateData = {
-    body: CreateAccessCertificateDto;
-    path?: never;
-    query?: never;
-    url: '/api/registrar/access-certificate';
-};
-
-export type RegistrarControllerCreateAccessCertificateErrors = {
-    /**
-     * Authentication with the registrar failed (for example wrong credentials or an unreachable OIDC provider), the registrar or OIDC URL is blocked by the outbound URL policy, or the registrar rejected the relying-party lookup or registration or the certificate request
-     */
-    400: unknown;
-    /**
-     * The caller lacks the registrar:manage role
-     */
-    403: unknown;
-    /**
-     * No registrar configuration found or key not found
-     */
-    404: unknown;
-};
-
-export type RegistrarControllerCreateAccessCertificateResponses = {
-    /**
-     * Access certificate created successfully
-     */
-    201: {
-        /**
-         * The certificate ID at the registrar
-         */
-        id: string;
-        /**
-         * ID of the key chain that now holds the certificate
-         */
-        certId: string;
-        /**
-         * The certificate in PEM format
-         */
-        crt: string;
-    };
-};
-
-export type RegistrarControllerCreateAccessCertificateResponse = RegistrarControllerCreateAccessCertificateResponses[keyof RegistrarControllerCreateAccessCertificateResponses];
-
-export type RegistrarControllerCreateAccessKeyChainData = {
-    body: CreateAccessKeyChainDto;
-    path?: never;
-    query?: never;
-    url: '/api/registrar/access-key-chain';
-};
-
-export type RegistrarControllerCreateAccessKeyChainErrors = {
-    /**
-     * The registrar rejected the relying-party registration or the certificate request; no key chain was kept
-     */
-    400: unknown;
-    /**
-     * No registrar configuration found
-     */
-    404: unknown;
-    /**
-     * The enrollment failed and the new key chain could not be deleted; the message names it. Also returned when the registrar stops answering during the certificate request
-     */
-    500: unknown;
-};
-
-export type RegistrarControllerCreateAccessKeyChainResponses = {
-    /**
-     * Access key chain created and enrolled
-     */
-    201: {
-        /**
-         * The certificate ID at the registrar
-         */
-        id: string;
-        /**
-         * ID of the key chain that now holds the certificate
-         */
-        certId: string;
-        /**
-         * The certificate in PEM format
-         */
-        crt: string;
-    };
-};
-
-export type RegistrarControllerCreateAccessKeyChainResponse = RegistrarControllerCreateAccessKeyChainResponses[keyof RegistrarControllerCreateAccessKeyChainResponses];
 
 export type UserControllerGetUsersData = {
     body?: never;
@@ -8518,22 +7294,6 @@ export type PresentationManagementControllerResolveSchemaMetadataJwtResponses = 
 
 export type PresentationManagementControllerResolveSchemaMetadataJwtResponse = PresentationManagementControllerResolveSchemaMetadataJwtResponses[keyof PresentationManagementControllerResolveSchemaMetadataJwtResponses];
 
-export type PresentationManagementControllerListSchemaMetadataCatalogData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/verifier/config/schema-metadata/catalog';
-};
-
-export type PresentationManagementControllerListSchemaMetadataCatalogResponses = {
-    /**
-     * Catalog entries from the registrar
-     */
-    200: Array<SchemaMetadataResponseDto>;
-};
-
-export type PresentationManagementControllerListSchemaMetadataCatalogResponse = PresentationManagementControllerListSchemaMetadataCatalogResponses[keyof PresentationManagementControllerListSchemaMetadataCatalogResponses];
-
 export type PresentationManagementControllerDeleteConfigurationData = {
     body?: never;
     path: {
@@ -8588,31 +7348,6 @@ export type PresentationManagementControllerUpdateConfigurationResponses = {
 };
 
 export type PresentationManagementControllerUpdateConfigurationResponse = PresentationManagementControllerUpdateConfigurationResponses[keyof PresentationManagementControllerUpdateConfigurationResponses];
-
-export type PresentationManagementControllerReissueRegistrationCertificateData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/verifier/config/{id}/registration-cert/reissue';
-};
-
-export type PresentationManagementControllerReissueRegistrationCertificateErrors = {
-    /**
-     * Config has no registrationCert spec, the spec needs the registrar (id or body) and none is enabled, or the certificate fails its checks
-     */
-    400: unknown;
-};
-
-export type PresentationManagementControllerReissueRegistrationCertificateResponses = {
-    /**
-     * Updated presentation configuration
-     */
-    200: PresentationConfig;
-};
-
-export type PresentationManagementControllerReissueRegistrationCertificateResponse = PresentationManagementControllerReissueRegistrationCertificateResponses[keyof PresentationManagementControllerReissueRegistrationCertificateResponses];
 
 export type TrustListControllerGetAllTrustListsData = {
     body?: never;
@@ -9579,7 +8314,7 @@ export type IssuanceConfigControllerGetIssuanceConfigurationsResponses = {
 export type IssuanceConfigControllerGetIssuanceConfigurationsResponse = IssuanceConfigControllerGetIssuanceConfigurationsResponses[keyof IssuanceConfigControllerGetIssuanceConfigurationsResponses];
 
 export type IssuanceConfigControllerStoreIssuanceConfigurationData = {
-    body: UpdateIssuanceDtoWritable;
+    body: UpdateIssuanceDto;
     path?: never;
     query?: never;
     url: '/api/issuer/config';
@@ -9590,254 +8325,6 @@ export type IssuanceConfigControllerStoreIssuanceConfigurationResponses = {
 };
 
 export type IssuanceConfigControllerStoreIssuanceConfigurationResponse = IssuanceConfigControllerStoreIssuanceConfigurationResponses[keyof IssuanceConfigControllerStoreIssuanceConfigurationResponses];
-
-export type IssuanceConfigControllerReissueRegistrationCertificateData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/issuer/config/registration-cert/reissue';
-};
-
-export type IssuanceConfigControllerReissueRegistrationCertificateErrors = {
-    /**
-     * Registration certificate is not enabled/generate mode, registrar is unavailable, or no SD-JWT VC credential configuration has a vct and no mDOC credential configuration a docType
-     */
-    400: unknown;
-};
-
-export type IssuanceConfigControllerReissueRegistrationCertificateResponses = {
-    /**
-     * Updated issuance configuration
-     */
-    201: IssuanceConfig;
-};
-
-export type IssuanceConfigControllerReissueRegistrationCertificateResponse = IssuanceConfigControllerReissueRegistrationCertificateResponses[keyof IssuanceConfigControllerReissueRegistrationCertificateResponses];
-
-export type SchemaMetadataControllerPublishSchemaMetadataData = {
-    body: SignSchemaMetaConfigDto;
-    path?: never;
-    query?: never;
-    url: '/api/schema-metadata/publish';
-};
-
-export type SchemaMetadataControllerPublishSchemaMetadataErrors = {
-    /**
-     * Invalid schema metadata input or file mapping
-     */
-    400: unknown;
-};
-
-export type SchemaMetadataControllerPublishSchemaMetadataResponses = {
-    /**
-     * Registrar metadata entry for the freshly submitted schema metadata.
-     */
-    201: SchemaMetadataResponseDto;
-};
-
-export type SchemaMetadataControllerPublishSchemaMetadataResponse = SchemaMetadataControllerPublishSchemaMetadataResponses[keyof SchemaMetadataControllerPublishSchemaMetadataResponses];
-
-export type SchemaMetadataControllerPublishSchemaMetadataVersionData = {
-    body: SignVersionSchemaMetaConfigDto;
-    path?: never;
-    query?: never;
-    url: '/api/schema-metadata/publish-version';
-};
-
-export type SchemaMetadataControllerPublishSchemaMetadataVersionErrors = {
-    /**
-     * config.id is required; or invalid schema metadata
-     */
-    400: unknown;
-};
-
-export type SchemaMetadataControllerPublishSchemaMetadataVersionResponses = {
-    /**
-     * Registrar metadata entry for the newly submitted version.
-     */
-    201: SchemaMetadataResponseDto;
-};
-
-export type SchemaMetadataControllerPublishSchemaMetadataVersionResponse = SchemaMetadataControllerPublishSchemaMetadataVersionResponses[keyof SchemaMetadataControllerPublishSchemaMetadataVersionResponses];
-
-export type SchemaMetadataControllerGetVocabulariesData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/schema-metadata/vocabularies';
-};
-
-export type SchemaMetadataControllerGetVocabulariesResponses = {
-    200: SchemaMetadataVocabulariesDto;
-};
-
-export type SchemaMetadataControllerGetVocabulariesResponse = SchemaMetadataControllerGetVocabulariesResponses[keyof SchemaMetadataControllerGetVocabulariesResponses];
-
-export type SchemaMetadataControllerFindAllData = {
-    body?: never;
-    path?: never;
-    query?: {
-        attestationId?: string;
-        version?: string;
-    };
-    url: '/api/schema-metadata';
-};
-
-export type SchemaMetadataControllerFindAllResponses = {
-    200: Array<SchemaMetadataResponseDto>;
-};
-
-export type SchemaMetadataControllerFindAllResponse = SchemaMetadataControllerFindAllResponses[keyof SchemaMetadataControllerFindAllResponses];
-
-export type SchemaMetadataControllerGetMineData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/schema-metadata/mine';
-};
-
-export type SchemaMetadataControllerGetMineResponses = {
-    200: Array<SchemaMetadataResponseDto>;
-};
-
-export type SchemaMetadataControllerGetMineResponse = SchemaMetadataControllerGetMineResponses[keyof SchemaMetadataControllerGetMineResponses];
-
-export type SchemaMetadataControllerFindOneData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/schema-metadata/{id}';
-};
-
-export type SchemaMetadataControllerFindOneResponses = {
-    200: SchemaMetadataResponseDto;
-};
-
-export type SchemaMetadataControllerFindOneResponse = SchemaMetadataControllerFindOneResponses[keyof SchemaMetadataControllerFindOneResponses];
-
-export type SchemaMetadataControllerRemoveData = {
-    body?: never;
-    path: {
-        id: string;
-        version: string;
-    };
-    query?: never;
-    url: '/api/schema-metadata/{id}/versions/{version}';
-};
-
-export type SchemaMetadataControllerRemoveResponses = {
-    /**
-     * Deleted
-     */
-    204: void;
-};
-
-export type SchemaMetadataControllerRemoveResponse = SchemaMetadataControllerRemoveResponses[keyof SchemaMetadataControllerRemoveResponses];
-
-export type SchemaMetadataControllerUpdateData = {
-    body: UpdateSchemaMetadataDto;
-    path: {
-        id: string;
-        version: string;
-    };
-    query?: never;
-    url: '/api/schema-metadata/{id}/versions/{version}';
-};
-
-export type SchemaMetadataControllerUpdateResponses = {
-    200: SchemaMetadataResponseDto;
-};
-
-export type SchemaMetadataControllerUpdateResponse = SchemaMetadataControllerUpdateResponses[keyof SchemaMetadataControllerUpdateResponses];
-
-export type SchemaMetadataControllerGetLatestData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/schema-metadata/{id}/latest';
-};
-
-export type SchemaMetadataControllerGetLatestResponses = {
-    200: SchemaMetadataResponseDto;
-};
-
-export type SchemaMetadataControllerGetLatestResponse = SchemaMetadataControllerGetLatestResponses[keyof SchemaMetadataControllerGetLatestResponses];
-
-export type SchemaMetadataControllerGetVersionsData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/schema-metadata/{id}/versions';
-};
-
-export type SchemaMetadataControllerGetVersionsResponses = {
-    200: Array<SchemaMetadataResponseDto>;
-};
-
-export type SchemaMetadataControllerGetVersionsResponse = SchemaMetadataControllerGetVersionsResponses[keyof SchemaMetadataControllerGetVersionsResponses];
-
-export type SchemaMetadataControllerGetJwtData = {
-    body?: never;
-    path: {
-        id: string;
-        version: string;
-    };
-    query?: never;
-    url: '/api/schema-metadata/{id}/versions/{version}/jwt';
-};
-
-export type SchemaMetadataControllerGetJwtResponses = {
-    /**
-     * Compact-serialization JWS string
-     */
-    200: string;
-};
-
-export type SchemaMetadataControllerGetJwtResponse = SchemaMetadataControllerGetJwtResponses[keyof SchemaMetadataControllerGetJwtResponses];
-
-export type SchemaMetadataControllerGetSchemaData = {
-    body?: never;
-    path: {
-        id: string;
-        version: string;
-        format: string;
-    };
-    query?: never;
-    url: '/api/schema-metadata/{id}/versions/{version}/schemas/{format}';
-};
-
-export type SchemaMetadataControllerGetSchemaResponses = {
-    /**
-     * JSON Schema document for the requested format
-     */
-    200: {
-        [key: string]: unknown;
-    };
-};
-
-export type SchemaMetadataControllerGetSchemaResponse = SchemaMetadataControllerGetSchemaResponses[keyof SchemaMetadataControllerGetSchemaResponses];
-
-export type SchemaMetadataControllerDeprecateVersionData = {
-    body: DeprecateSchemaMetadataDto;
-    path: {
-        id: string;
-        version: string;
-    };
-    query?: never;
-    url: '/api/schema-metadata/{id}/versions/{version}/deprecation';
-};
-
-export type SchemaMetadataControllerDeprecateVersionResponses = {
-    200: SchemaMetadataResponseDto;
-};
-
-export type SchemaMetadataControllerDeprecateVersionResponse = SchemaMetadataControllerDeprecateVersionResponses[keyof SchemaMetadataControllerDeprecateVersionResponses];
 
 export type CredentialOfferControllerGetOfferData = {
     body: OfferRequestDto;
@@ -10033,7 +8520,7 @@ export type EudiHubControllerRequestPresentationRegistrationCertificateData = {
 
 export type EudiHubControllerRequestPresentationRegistrationCertificateErrors = {
     /**
-     * The request is invalid, or the EUDI Hub refused the access token (expired, not from the portal) or the request; the message carries the EUDI Hub's reason. Also returned when the DCQL query cannot be registered at the EUDI Hub (no credential queries, a format other than dc+sd-jwt or mso_mdoc, several vct values, meta other than vct_values or doctype_value, no claims, array indexes or wildcards in claim paths) or the certificate fails the checks of an imported certificate, such as the overasking check
+     * The request is invalid, or the EUDI Hub refused the access token (expired, not from the portal) or the request; the message carries the EUDI Hub's reason. Also returned when neither the request nor registration_cert has a purpose or privacy policy, the purpose lacks a German or English text, the DCQL query cannot be registered at the EUDI Hub (no credential queries, a format other than dc+sd-jwt or mso_mdoc, several vct values, meta other than vct_values or doctype_value, no claims, array indexes or wildcards in claim paths) or the certificate fails the checks of a registration certificate, such as the overasking check
      */
     400: unknown;
     /**
@@ -10270,7 +8757,7 @@ export type ConfigPortabilityControllerResourcesResponse = ConfigPortabilityCont
 export type ConfigPortabilityControllerResourcesOfKindData = {
     body?: never;
     path: {
-        kind: 'Tenant' | 'Client' | 'KmsConfig' | 'KeyChain' | 'KeyChainDefaults' | 'RegistrarConfig' | 'IssuanceConfig' | 'CredentialConfig' | 'PresentationConfig' | 'AttributeProvider' | 'WebhookEndpoint' | 'TrustList' | 'FederationTrustAnchor' | 'StatusList';
+        kind: 'Tenant' | 'Client' | 'KmsConfig' | 'KeyChain' | 'KeyChainDefaults' | 'IssuanceConfig' | 'CredentialConfig' | 'PresentationConfig' | 'AttributeProvider' | 'WebhookEndpoint' | 'TrustList' | 'FederationTrustAnchor' | 'StatusList';
     };
     query?: never;
     url: '/api/config-bundles/resources/{kind}';
@@ -10296,7 +8783,7 @@ export type ConfigPortabilityControllerResourcesOfKindResponse = ConfigPortabili
 export type ConfigPortabilityControllerExportDocumentData = {
     body?: never;
     path: {
-        kind: 'Tenant' | 'Client' | 'KmsConfig' | 'KeyChain' | 'KeyChainDefaults' | 'RegistrarConfig' | 'IssuanceConfig' | 'CredentialConfig' | 'PresentationConfig' | 'AttributeProvider' | 'WebhookEndpoint' | 'TrustList' | 'FederationTrustAnchor' | 'StatusList';
+        kind: 'Tenant' | 'Client' | 'KmsConfig' | 'KeyChain' | 'KeyChainDefaults' | 'IssuanceConfig' | 'CredentialConfig' | 'PresentationConfig' | 'AttributeProvider' | 'WebhookEndpoint' | 'TrustList' | 'FederationTrustAnchor' | 'StatusList';
         /**
          * Resource ID
          */
@@ -10353,7 +8840,7 @@ export type ConfigPortabilityControllerDetachResponse = ConfigPortabilityControl
 export type ConfigPortabilityControllerPlanReattachData = {
     body?: never;
     path: {
-        kind: 'Tenant' | 'Client' | 'KmsConfig' | 'KeyChain' | 'KeyChainDefaults' | 'RegistrarConfig' | 'IssuanceConfig' | 'CredentialConfig' | 'PresentationConfig' | 'AttributeProvider' | 'WebhookEndpoint' | 'TrustList' | 'FederationTrustAnchor' | 'StatusList';
+        kind: 'Tenant' | 'Client' | 'KmsConfig' | 'KeyChain' | 'KeyChainDefaults' | 'IssuanceConfig' | 'CredentialConfig' | 'PresentationConfig' | 'AttributeProvider' | 'WebhookEndpoint' | 'TrustList' | 'FederationTrustAnchor' | 'StatusList';
         /**
          * Resource ID
          */
@@ -10389,7 +8876,7 @@ export type ConfigPortabilityControllerPlanReattachResponse = ConfigPortabilityC
 export type ConfigPortabilityControllerReattachData = {
     body?: never;
     path: {
-        kind: 'Tenant' | 'Client' | 'KmsConfig' | 'KeyChain' | 'KeyChainDefaults' | 'RegistrarConfig' | 'IssuanceConfig' | 'CredentialConfig' | 'PresentationConfig' | 'AttributeProvider' | 'WebhookEndpoint' | 'TrustList' | 'FederationTrustAnchor' | 'StatusList';
+        kind: 'Tenant' | 'Client' | 'KmsConfig' | 'KeyChain' | 'KeyChainDefaults' | 'IssuanceConfig' | 'CredentialConfig' | 'PresentationConfig' | 'AttributeProvider' | 'WebhookEndpoint' | 'TrustList' | 'FederationTrustAnchor' | 'StatusList';
         /**
          * Resource ID
          */

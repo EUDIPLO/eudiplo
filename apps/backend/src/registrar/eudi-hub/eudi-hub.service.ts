@@ -1,14 +1,7 @@
-import { X509Certificate } from "node:crypto";
-import {
-    BadRequestException,
-    HttpException,
-    Injectable,
-    Logger,
-} from "@nestjs/common";
-import { CertService } from "../../crypto/key/cert/cert.service.js";
-import { certificateHoldsKey } from "../../crypto/key/domain/public-jwk-match.js";
-import { KeyChainService } from "../../crypto/key/key-chain.service.js";
-import { KeyUsageType } from "../../crypto/key/types/key-usage-type.js";
+import { HttpException, Injectable, Logger } from "@nestjs/common";
+import { AccessCertificateStorage } from "../access-certificate-storage.service.js";
+import type { IssuedCertificate } from "../issued-certificate.js";
+import { revokeUnstored } from "../revoke-unstored.js";
 import type { EudiHubAccessCertificateRequest } from "./dto/eudi-hub-request.dto.js";
 import type {
     EudiHubAccessCertificateDto,
@@ -19,7 +12,7 @@ import {
     EudiHubClient,
     EudiHubRequestError,
 } from "./eudi-hub.client.js";
-import { eudiHubHttpException } from "./eudi-hub-errors.js";
+import { EUDI_HUB, eudiHubHttpException } from "./eudi-hub-errors.js";
 
 /** How many certificates of the same name a lost answer is looked for in. */
 const MAX_RECOVERY_DOWNLOADS = 5;
@@ -35,8 +28,7 @@ export class EudiHubService {
 
     constructor(
         private readonly client: EudiHubClient,
-        private readonly keyChainService: KeyChainService,
-        private readonly certService: CertService,
+        private readonly storage: AccessCertificateStorage,
     ) {}
 
     /** The organizations the user of the token is assigned to. */
@@ -71,20 +63,12 @@ export class EudiHubService {
         dto: EudiHubAccessCertificateRequest,
     ): Promise<EudiHubAccessCertificateDto> {
         const { token, organizationId, keyId, environment, supportUri } = dto;
-        const keyChain = await this.keyChainService.getEntity(tenantId, keyId);
-        if (
-            keyChain.usageType !== KeyUsageType.Access ||
-            keyChain.hasInternalCa()
-        ) {
-            throw new BadRequestException(
-                `Key chain ${keyId} is not a standalone access key chain; only those can get an access certificate from the EUDI Hub.`,
-            );
-        }
-        const name = (dto.name ?? keyChain.description?.trim()) || keyId;
-        const csr = await this.keyChainService.createCertificateSigningRequest(
+        const { csr, defaultName } = await this.storage.prepare(
             tenantId,
             keyId,
+            EUDI_HUB,
         );
+        const name = dto.name ?? defaultName;
 
         let certificate: EudiHubAccessCertificate;
         try {
@@ -107,15 +91,20 @@ export class EudiHubService {
             this.logger.warn(
                 `[${tenantId}] The EUDI Hub request for key chain ${keyId} failed, but the EUDI Hub lists access certificate ${recovered.certificate.id} for its key; storing that certificate`,
             );
-            return this.store(
-                tenantId,
-                dto,
-                recovered.certificate,
-                recovered.crt,
-                false,
-            );
+            // Not issued by this request, so it is not revoked either.
+            return this.store(tenantId, dto, recovered.certificate, {
+                registrar: EUDI_HUB,
+                id: recovered.certificate.id,
+                value: recovered.crt,
+            });
         }
 
+        const revoke = () =>
+            this.client.revokeAccessCertificate(
+                token,
+                organizationId,
+                certificate.id,
+            );
         let crt: string;
         try {
             crt = await this.client.downloadAccessCertificate(
@@ -124,87 +113,52 @@ export class EudiHubService {
                 certificate.id,
             );
         } catch (error) {
-            await this.revoke(tenantId, dto, certificate.id);
+            await revokeUnstored(
+                this.logger,
+                tenantId,
+                {
+                    registrar: EUDI_HUB,
+                    id: certificate.id,
+                    value: undefined,
+                    revoke,
+                },
+                "access",
+                "Could not download",
+            );
             throw this.toHttpException(
                 tenantId,
                 error,
                 `The EUDI Hub issued access certificate ${certificate.id}, but it could not be downloaded, so it was revoked`,
             );
         }
-        return this.store(tenantId, dto, certificate, crt, true);
+        return this.store(tenantId, dto, certificate, {
+            registrar: EUDI_HUB,
+            id: certificate.id,
+            value: crt,
+            revoke,
+        });
     }
 
     private async store(
         tenantId: string,
         dto: EudiHubAccessCertificateRequest,
         certificate: EudiHubAccessCertificate,
-        crt: string,
-        issuedNow: boolean,
+        issued: IssuedCertificate,
     ): Promise<EudiHubAccessCertificateDto> {
-        const chain = await this.chainFor(tenantId, crt);
-        let certId: string;
-        try {
-            certId = await this.certService.addCertificate(tenantId, {
-                crt: chain,
-                keyId: dto.keyId,
-                defaultDescription: `Access certificate from the EUDI Hub (${dto.environment}, ID: ${certificate.id})`,
-            });
-        } catch (error) {
-            if (issuedNow) await this.revoke(tenantId, dto, certificate.id);
-            throw error;
-        }
-        this.logger.log(
-            `[${tenantId}] Stored EUDI Hub access certificate ${certificate.id} (${dto.environment}) in key chain ${certId}`,
+        const certId = await this.storage.store(
+            tenantId,
+            dto.keyId,
+            issued,
+            `Access certificate from the EUDI Hub (${dto.environment}, ID: ${certificate.id})`,
         );
         return {
             id: certificate.id,
             certId,
-            crt,
+            crt: issued.value,
             environment: dto.environment,
             clientId: certificate.clientId,
             expirationDate: certificate.expirationDate,
         };
-    }
-
-    /**
-     * The certificate followed by the CA that issued it, as wallets need it
-     * in `x5c` to build the path to the root they trust (OID4VP 1.0, section
-     * 5.9.3). The EUDI Hub signs with an issuing CA below its root and hands
-     * out the certificate alone, so the issuing CA is fetched from the URL
-     * the certificate names in its Authority Information Access extension.
-     * It is added only when it issued the certificate and is not self-signed:
-     * a root is the trust anchor and stays out of `x5c`. When it cannot be
-     * fetched, the certificate is stored alone and the log says so.
-     */
-    private async chainFor(tenantId: string, crt: string): Promise<string[]> {
-        const leaf = new X509Certificate(crt);
-        const url = leaf.infoAccess
-            ?.split("\n")
-            .map((line) => /^CA Issuers - URI:(\S+)$/.exec(line.trim())?.[1])
-            .find((value) => value !== undefined);
-        if (!url) {
-            this.logger.warn(
-                `[${tenantId}] The EUDI Hub access certificate names no issuing CA; storing it without one, so wallets need that CA as trust anchor`,
-            );
-            return [crt];
-        }
-        try {
-            const issuer = await this.client.fetchCaCertificate(url);
-            if (!leaf.checkIssued(issuer) || !leaf.verify(issuer.publicKey)) {
-                this.logger.warn(
-                    `[${tenantId}] The certificate at ${url} did not issue the EUDI Hub access certificate; storing it without its issuing CA`,
-                );
-                return [crt];
-            }
-            return issuer.checkIssued(issuer)
-                ? [crt]
-                : [crt, issuer.toString()];
-        } catch (error) {
-            this.logger.warn(
-                `[${tenantId}] Could not fetch the issuing CA of the EUDI Hub access certificate from ${url}; storing it without one: ${error instanceof Error ? error.message : String(error)}`,
-            );
-            return [crt];
-        }
     }
 
     /** No answer, or a server error: the certificate may exist anyway. */
@@ -230,15 +184,7 @@ export class EudiHubService {
         { certificate: EudiHubAccessCertificate; crt: string } | undefined
     > {
         try {
-            const keyChain = await this.keyChainService.getEntity(
-                tenantId,
-                dto.keyId,
-            );
-            const current = keyChain.activeCertificate
-                ? new X509Certificate(keyChain.activeCertificate)
-                : undefined;
-            const publicKey = await this.keyChainService.getPublicKey(
-                "jwk",
+            const issuedForKey = await this.storage.issuedFor(
                 tenantId,
                 dto.keyId,
             );
@@ -268,11 +214,7 @@ export class EudiHubService {
                     );
                     continue;
                 }
-                const listed = new X509Certificate(crt);
-                if (
-                    listed.fingerprint256 !== current?.fingerprint256 &&
-                    certificateHoldsKey(listed, publicKey)
-                ) {
+                if (issuedForKey(crt)) {
                     return { certificate, crt };
                 }
             }
@@ -282,28 +224,6 @@ export class EudiHubService {
                 `[${tenantId}] Could not check the EUDI Hub for an access certificate of key chain ${dto.keyId}: ${error instanceof Error ? error.message : String(error)}`,
             );
             return undefined;
-        }
-    }
-
-    /** Best-effort revocation of a certificate EUDIPLO could not store. */
-    private async revoke(
-        tenantId: string,
-        dto: EudiHubAccessCertificateRequest,
-        certificateId: string,
-    ): Promise<void> {
-        try {
-            await this.client.revokeAccessCertificate(
-                dto.token,
-                dto.organizationId,
-                certificateId,
-            );
-            this.logger.warn(
-                `[${tenantId}] Could not store EUDI Hub access certificate ${certificateId}; revoked it at the EUDI Hub`,
-            );
-        } catch (error) {
-            this.logger.error(
-                `[${tenantId}] Could not store EUDI Hub access certificate ${certificateId} and could not revoke it at the EUDI Hub; revoke it in the portal: ${error instanceof Error ? error.message : String(error)}`,
-            );
         }
     }
 

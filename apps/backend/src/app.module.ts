@@ -18,7 +18,6 @@ import { ConfigResourceCoreModule } from "./platform/config-portability/config-r
 import { DataEncryptionModule } from "./platform/data-encryption/data-encryption.module.js";
 import { LogContextModule } from "./platform/observability/log-context.module.js";
 import { createLoggerOptions } from "./platform/observability/logger.factory.js";
-import { EudiHubModule } from "./registrar/eudi-hub/eudi-hub.module.js";
 import { RegistrarModule } from "./registrar/registrar.module.js";
 import { SessionModule } from "./session/session.module.js";
 import { StorageModule } from "./storage/storage.module.js";
@@ -53,7 +52,6 @@ import { VerifierModule } from "./verifier/verifier.module.js";
         IssuerModule,
         VerifierModule,
         RegistrarModule,
-        EudiHubModule,
         ScheduleModule.forRoot(),
         SessionModule,
         DatabaseModule,

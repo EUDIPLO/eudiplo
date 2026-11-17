@@ -141,7 +141,7 @@ function problem(
  * `id`, `values` or `intent_to_retain`. With `sortClaims`, claims are sorted so
  * the fingerprint does not depend on their order.
  */
-export function credentialFingerprint(
+function credentialFingerprint(
     cred: unknown,
     { sortClaims = false }: { sortClaims?: boolean } = {},
 ): string {

@@ -470,26 +470,23 @@ const IssuerRegistrationCertificateConfigSchema = z
             .boolean()
             .optional()
             .describe("Enable issuer registration certificate support."),
-        mode: z
-            .enum(["import", "generate"])
-            .optional()
-            .describe("How registration certificate data is provided."),
         jwt: z
             .string()
             .optional()
             .describe(
-                "Optional registration certificate JWT when using import mode.",
+                "Registration certificate JWT issued by a registrar, advertised in the issuer metadata while it is valid.",
             ),
         privacyPolicy: z
             .string()
             .optional()
-            .describe("Optional privacy policy URI."),
-        supportUri: z.string().optional().describe("Optional support URI."),
-        renewal: z
-            .enum(["onCredentialConfigChange", "onMetadataRequest", "manual"])
+            .describe(
+                "Privacy policy URI of the issuer. Stored only; EUDIPLO and the EUDI Hub request do not use it.",
+            ),
+        supportUri: z
+            .string()
             .optional()
             .describe(
-                "When a generated certificate is renewed. onCredentialConfigChange (default): in the background after a credential or issuance configuration changes, and when issuer metadata is built. onMetadataRequest: only when issuer metadata is built. manual: only with Regenerate now. In every mode a missing or expired certificate is requested when issuer metadata is built.",
+                "Support URI of the issuer, kept for requesting a new certificate.",
             ),
     })
     .describe("Issuer registration certificate settings.")

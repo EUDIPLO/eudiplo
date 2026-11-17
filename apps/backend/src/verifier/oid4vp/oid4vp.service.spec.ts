@@ -1333,9 +1333,10 @@ describe("OID4VP request object signing key", () => {
             `cert-of-${keyId}`,
         ]);
         const signJWT = vi.fn().mockResolvedValue("signed.request.object");
-        const getOrIssueRegistrationCertificate = vi
-            .fn()
-            .mockResolvedValue("registration.cert.jwt");
+        const forRequest = vi.fn(
+            (config: { registration_cert?: { jwt?: string } | null }) =>
+                config.registration_cert?.jwt,
+        );
         const federationIdentity = {
             forTenant: vi.fn().mockResolvedValue({
                 entityId: "https://verifier.example/issuers/tenant",
@@ -1399,16 +1400,14 @@ describe("OID4VP request object signing key", () => {
                     ),
                 },
                 keyChainService: { signJWT },
-                registrationCertificateService: {
-                    getOrIssueRegistrationCertificate,
-                },
+                registrationCertificateService: { forRequest },
             },
         );
         return {
             service,
             find,
             signJWT,
-            getOrIssueRegistrationCertificate,
+            forRequest,
             federationIdentity,
         };
     }
@@ -1529,23 +1528,23 @@ describe("OID4VP request object signing key", () => {
         expect(keyId).toBe("access-a");
     });
 
-    it("links the registration certificate to the access key chain stored with the client_id", async () => {
-        const { service, signJWT, getOrIssueRegistrationCertificate } =
-            createService(
-                {
-                    clientId: "x509_hash:hash-of-access-a",
-                    accessKeyChainId: "access-a",
-                },
-                { registration_cert: { body: {} } },
-            );
+    it("hands the configured registration certificate and the request's DCQL query to the check and attaches the result", async () => {
+        const { service, signJWT, forRequest } = createService(
+            {
+                clientId: "x509_hash:hash-of-access-a",
+                accessKeyChainId: "access-a",
+            },
+            { registration_cert: { jwt: "registration.cert.jwt" } },
+        );
 
         await service.createAuthorizationRequest("session");
 
-        expect(getOrIssueRegistrationCertificate).toHaveBeenCalledWith(
-            expect.objectContaining({ registration_cert: { body: {} } }),
+        expect(forRequest).toHaveBeenCalledWith(
+            expect.objectContaining({
+                registration_cert: { jwt: "registration.cert.jwt" },
+            }),
             { credentials: [] },
             "presentation",
-            expect.objectContaining({ keyId: "access-a" }),
         );
         expect(signJWT.mock.calls[0][0].verifier_info).toEqual([
             expect.objectContaining({ data: "registration.cert.jwt" }),

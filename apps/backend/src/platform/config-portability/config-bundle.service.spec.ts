@@ -1,7 +1,6 @@
 import { schemaUrl } from "@eudiplo/config-format/config-format.js";
 import { describe, expect, it } from "vitest";
 import type { AuthSettings } from "../../auth/auth-settings.js";
-import { CreateRegistrarConfigSchema } from "../../registrar/schemas/registrar.schema.js";
 import { ConfigBundleService } from "./config-bundle.service.js";
 import { ConfigResourceRegistry } from "./config-resource.registry.js";
 import type {
@@ -105,86 +104,6 @@ describe("ConfigBundleService secret handling", () => {
                 path: "/spec/authorizationServers/1/upstream/clientSecret",
             },
         ]);
-    });
-
-    it("exports a registrar configuration without client secret without requiring one", async () => {
-        const requirements: ConfigBundleRequirement[] = [];
-        const documents: ConfigDocument[] = [];
-        const canonicalEntitySpec = Reflect.get(
-            service,
-            "canonicalEntitySpec",
-        ) as (
-            kind: ConfigResourceKind,
-            entity: Record<string, unknown>,
-        ) => Record<string, unknown>;
-        const addDocument = Reflect.get(service, "addDocument") as (
-            documents: ConfigDocument[],
-            requirements: ConfigBundleRequirement[],
-            tenantId: string,
-            kind: ConfigResourceKind,
-            id: string,
-            rawSpec: Record<string, unknown>,
-        ) => Promise<void>;
-        Reflect.set(service, "ownershipService", {
-            get: async () => ({ generation: 1, ownership: "unmanaged" }),
-        });
-
-        await addDocument.call(
-            service,
-            documents,
-            requirements,
-            "tenant",
-            "RegistrarConfig",
-            "registrar",
-            canonicalEntitySpec.call(service, "RegistrarConfig", {
-                registrarUrl: "https://registrar.example/api",
-                oidcUrl: "https://auth.example/realms/registrar",
-                clientId: "client",
-                clientSecret: null,
-                username: "user",
-                password: "registrar-password",
-                registrationCertificateDefaults: null,
-                relyingPartyContact: null,
-            }),
-        );
-
-        const { spec } = documents[0];
-        expect(spec).not.toHaveProperty("clientSecret");
-        expect(spec).not.toHaveProperty("registrationCertificateDefaults");
-        expect(spec).not.toHaveProperty("relyingPartyContact");
-        expect(spec.password).toBe("${REGISTRARCONFIG_REGISTRAR_PASSWORD}");
-        expect(requirements).toMatchObject([
-            { code: "SECRET_REQUIRED", path: "/spec/password" },
-        ]);
-        expect(
-            CreateRegistrarConfigSchema.safeParse({
-                ...spec,
-                password: "supplied",
-            }).success,
-        ).toBe(true);
-    });
-
-    it("exports the relying party contact of a registrar configuration", () => {
-        const canonicalEntitySpec = Reflect.get(
-            service,
-            "canonicalEntitySpec",
-        ) as (
-            kind: ConfigResourceKind,
-            entity: Record<string, unknown>,
-        ) => Record<string, unknown>;
-        const contact = { email: "support@verifier.example" };
-
-        const spec = canonicalEntitySpec.call(service, "RegistrarConfig", {
-            registrarUrl: "https://registrar.example/api",
-            oidcUrl: "https://auth.example/realms/registrar",
-            clientId: "client",
-            username: "user",
-            password: "registrar-password",
-            relyingPartyContact: contact,
-        });
-
-        expect(spec.relyingPartyContact).toEqual(contact);
-        expect(CreateRegistrarConfigSchema.safeParse(spec).success).toBe(true);
     });
 
     it("removes private parameters from exported public JWKs", () => {

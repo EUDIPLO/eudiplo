@@ -18,7 +18,9 @@ import { decodeJwt, decodeProtectedHeader } from 'jose';
 import {
   formatRegistrationCertExpiresIn,
   getRegistrationCertStatus,
+  getRegistrationCertTimes,
   type RegistrationCertStatus,
+  type RegistrationCertTimes,
 } from '../../../utils/registration-cert-status';
 import { ConfigDocumentService } from '../../../config-portability/config-document.service';
 import { ConfigOwnershipDirective } from '../../../config-portability/config-ownership.directive';
@@ -61,13 +63,16 @@ export class PresentationShowComponent implements OnInit {
   config?: PresentationConfig;
   /** Set when the page's data could not be loaded, so the page is not left blank. */
   loadError = '';
-  reissuing = false;
 
   readonly statusCheckModeLabels: Record<'strict' | 'best_effort' | 'disabled', string> = {
     strict: 'Strict',
     best_effort: 'Best effort',
     disabled: 'Disabled',
   };
+
+  /** Index of the Security tab, which `#security` opens. */
+  static readonly SECURITY_TAB = 2;
+  selectedTab = 0;
 
   constructor(
     private readonly presentationService: PresentationManagementService,
@@ -94,17 +99,13 @@ export class PresentationShowComponent implements OnInit {
     const config = this.config;
     if (!config) return;
     if (
-      config.registration_cert &&
+      config.registration_cert?.jwt &&
       !confirm(
-        'This stores a registration certificate from the EUDI Hub in this configuration; it takes precedence over the current registration certificate settings, which are kept. It is not reissued automatically; request a new one before it expires and after the DCQL query changes.\n\nRequest a registration certificate from the EUDI Hub?'
+        'This replaces the registration certificate of this configuration with one from the EUDI Hub. It is not renewed automatically; request a new one before it expires and after the DCQL query changes.\n\nRequest a registration certificate from the EUDI Hub?'
       )
     ) {
       return;
     }
-    const purposeEn = (
-      config.registration_cert?.body as
-        { purpose?: { lang?: string; content?: string }[] } | undefined
-    )?.purpose?.find((entry) => entry.lang?.startsWith('en'))?.content;
     this.dialog
       .open<
         EudiHubRegistrationDialogComponent,
@@ -115,7 +116,8 @@ export class PresentationShowComponent implements OnInit {
           kind: 'presentation',
           presentationConfigId: config.id,
           defaultName: config.description?.trim() || config.id,
-          purposeEn,
+          purpose: config.registration_cert?.purpose,
+          privacyPolicy: config.registration_cert?.privacy_policy,
         },
         width: '720px',
         maxWidth: '95vw',
@@ -137,6 +139,9 @@ export class PresentationShowComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    if (this.route.snapshot.fragment === 'security') {
+      this.selectedTab = PresentationShowComponent.SECURITY_TAB;
+    }
     this.loadPresentation();
   }
 
@@ -167,48 +172,20 @@ export class PresentationShowComponent implements OnInit {
   }
 
   get registrationCertStatus(): RegistrationCertStatus {
-    if (!this.config) return 'none';
-    return getRegistrationCertStatus({
-      registration_cert: this.config.registration_cert,
-      registrationCertCache: this.registrationCertCache as never,
-    });
+    return getRegistrationCertStatus(this.config);
   }
 
   get registrationCertExpiresIn(): string | null {
-    return formatRegistrationCertExpiresIn(this.registrationCertCache);
+    return formatRegistrationCertExpiresIn(this.registrationCertTimes);
   }
 
-  get registrationCertCache(): {
-    jwt?: string;
-    source?: string;
-    issuedAt?: number;
-    expiresAt?: number;
-  } | null {
-    const cache = (this.config?.registrationCertCache as any) ?? null;
-    if (cache) return cache;
-    // An imported JWT is cached in the background after it was saved, for
-    // example from the EUDI Hub; until then its own times are shown.
-    const jwt = this.config?.registration_cert?.jwt;
-    if (typeof jwt !== 'string' || jwt.length === 0) return null;
-    try {
-      const { iat, exp } = decodeJwt(jwt);
-      return { jwt, source: 'imported', issuedAt: iat, expiresAt: exp };
-    } catch {
-      return { jwt, source: 'imported' };
-    }
+  /** Issue and expiry time of the registration certificate, read from its JWT. */
+  get registrationCertTimes(): RegistrationCertTimes | undefined {
+    return getRegistrationCertTimes(this.config);
   }
 
   get registrationCertJwt(): string | null {
-    const cachedJwt = this.registrationCertCache?.jwt;
-    if (cachedJwt) return cachedJwt;
-
-    const configuredJwt = (this.config as any)?.registration_cert?.jwt;
-    return typeof configuredJwt === 'string' && configuredJwt.length > 0 ? configuredJwt : null;
-  }
-
-  get registrationCertSource(): string | null {
-    const source = this.registrationCertCache?.source;
-    return typeof source === 'string' && source.length > 0 ? source : null;
+    return this.config?.registration_cert?.jwt || null;
   }
 
   get parsedRegistrationCertHeader(): string {
@@ -231,32 +208,6 @@ export class PresentationShowComponent implements OnInit {
     } catch (error) {
       return `Unable to decode JWT payload: ${error instanceof Error ? error.message : 'Unknown error'}`;
     }
-  }
-
-  reissueRegistrationCert(): void {
-    // `disabledInteractive` keeps the button clickable while it looks disabled.
-    if (!this.config || this.reissuing) return;
-    this.reissuing = true;
-    this.presentationService
-      .reissueRegistrationCertificate(this.config.id)
-      .then((updated) => {
-        if (updated) {
-          this.config = updated;
-        }
-        this.snackBar.open('Registration certificate reissued', 'Close', {
-          duration: 3000,
-        });
-      })
-      .catch((err) => {
-        console.error('Failed to reissue registration certificate', err);
-        openErrorSnackBar(
-          this.snackBar,
-          getApiErrorMessage(err, 'Failed to reissue registration certificate')
-        );
-      })
-      .finally(() => {
-        this.reissuing = false;
-      });
   }
 
   formatLifetime(seconds: number): string {

@@ -325,33 +325,6 @@
           </app-nav-section>
         }
 
-        <!-- Registrar Section -->
-        @if (hasRole('registrar:manage')) {
-          <app-nav-section section="registrar" icon="app_registration" label="Registrar">
-            <a
-              mat-list-item
-              [routerLink]="['/registrar']"
-              routerLinkActive="active-link"
-              ariaCurrentWhenActive="page"
-              (click)="closeSidenavOnMobile()"
-            >
-              <mat-icon matListItemIcon>app_registration</mat-icon>
-              <span matListItemTitle>Registrar Config</span>
-            </a>
-
-            <a
-              mat-list-item
-              [routerLink]="['/schema']"
-              routerLinkActive="active-link"
-              ariaCurrentWhenActive="page"
-              (click)="closeSidenavOnMobile()"
-            >
-              <mat-icon matListItemIcon>schema</mat-icon>
-              <span matListItemTitle>Schema</span>
-            </a>
-          </app-nav-section>
-        }
-
         <!-- Credential Verification Section -->
         @if (hasRole(['presentation:manage', 'presentation:request'])) {
           <app-nav-section section="verification" icon="verified" label="Credential Verification">

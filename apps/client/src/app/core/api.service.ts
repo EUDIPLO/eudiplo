@@ -316,7 +316,7 @@ export class ApiService implements OnDestroy {
   }
 
   /**
-   * Refreshes the access token for the registrar using client credentials.
+   * Refreshes the access token for the EUDIPLO backend using client credentials.
    * This method is called periodically to ensure the access token is valid.
    *
    * When the token endpoint rejects the credentials, the session ends and the

@@ -1,8 +1,7 @@
 /**
  * Self-signed EC P-256 test root certificates, generated with
  * `openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256`. Their
- * private keys were discarded. The backend tests use the same ones
- * (apps/backend/test/fixtures/test-certificates.ts).
+ * private keys were discarded.
  */
 
 /** 372 bytes of DER, so its base64 has no `=` padding. */

@@ -65,6 +65,14 @@ describe('singleDocumentBundle', () => {
     ]);
   });
 
+  it('says why a registrar configuration cannot be imported any more', async () => {
+    await expect(
+      singleDocumentBundle({ $schema: schema('RegistrarConfigFile', 1), spec: {} }, 'acme')
+    ).rejects.toThrow(
+      'The registrar configuration was removed; request certificates from the EUDI Hub instead.'
+    );
+  });
+
   it('refuses an unknown schema and a document without ID', async () => {
     await expect(
       singleDocumentBundle({ $schema: 'https://example.com/x.json', spec: {} }, 'acme')

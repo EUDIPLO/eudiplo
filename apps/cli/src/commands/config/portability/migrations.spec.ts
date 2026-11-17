@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { upgradeDocument } from "./migrations.js";
 
 describe("offline configuration migrations", () => {
-    it("upgrades a v1 issuance document to v5 without retaining metadata.id", () => {
+    it("upgrades a v1 issuance document to v7 without retaining metadata.id", () => {
         const result = upgradeDocument({
             $schema:
                 "https://eudiplo.dev/schemas/v1/IssuanceConfigFile.schema.json",
@@ -16,7 +16,7 @@ describe("offline configuration migrations", () => {
         });
 
         expect(result.document.$schema).toBe(
-            "https://eudiplo.dev/schemas/v6/IssuanceConfigFile.schema.json",
+            "https://eudiplo.dev/schemas/v7/IssuanceConfigFile.schema.json",
         );
         expect(result.document.spec.walletProviderTrustLists).toEqual([
             { url: "https://example.com/trust-list" },
@@ -27,6 +27,7 @@ describe("offline configuration migrations", () => {
             "issuance-config-v4-wallet-attestation-status-check-mode",
             "issuance-config-v5-federation-entity",
             "issuance-config-v6-access-token-signing-key",
+            "issuance-config-v7-registration-certificate-import-only",
         ]);
         expect(result.issues).toEqual([]);
     });

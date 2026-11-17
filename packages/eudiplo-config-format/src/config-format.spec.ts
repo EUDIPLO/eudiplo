@@ -6,10 +6,13 @@ import {
     CONFIG_SINGLETON_IDS,
     type ConfigMigration,
     isConfigDocument,
+    isRetiredConfigIssue,
     migrateDocument,
     normalizeDocument,
     resolveConfigIdentity,
     resourceId,
+    RETIRED_TENANT_FOLDER_FILES,
+    retiredConfigIssue,
     schemaUrl,
     serializeDocument,
 } from "./config-format.js";
@@ -98,7 +101,7 @@ describe("portable schema identity and migrations", () => {
         expect(result.migrations).toEqual(["rename-name"]);
     });
 
-    it("upgrades a v1 issuance configuration to v6 unchanged", () => {
+    it("upgrades a v1 issuance configuration to v7 unchanged", () => {
         const v1 = {
             $schema: schemaUrl("IssuanceConfig", 1),
             metadata: { generation: 2 },
@@ -115,8 +118,9 @@ describe("portable schema identity and migrations", () => {
             "issuance-config-v4-wallet-attestation-status-check-mode",
             "issuance-config-v5-federation-entity",
             "issuance-config-v6-access-token-signing-key",
+            "issuance-config-v7-registration-certificate-import-only",
         ]);
-        expect(result.document.$schema).toBe(schemaUrl("IssuanceConfig", 6));
+        expect(result.document.$schema).toBe(schemaUrl("IssuanceConfig", 7));
         expect(result.document.spec).toEqual(v1.spec);
         expect(result.document.metadata).toEqual({ generation: 2 });
         // Repeating the upgrade on the result is a no-op.
@@ -356,12 +360,6 @@ describe("portable schema identity and migrations", () => {
             2,
         ],
         ["KmsConfig", { providers: [{ id: "db", type: "db" }] }, 1],
-        [
-            "RegistrarConfig",
-            { relyingPartyContact: { email: "support@verifier.example" } },
-            2,
-        ],
-        ["RegistrarConfig", { registrarUrl: "https://registrar.example" }, 1],
         ["Tenant", { name: "Demo", defaultKeyChains: { access: "access" } }, 3],
         ["Tenant", { name: "Demo", defaultAccessKeyChainId: "access" }, 2],
         ["Tenant", { name: "Demo" }, 1],
@@ -369,6 +367,21 @@ describe("portable schema identity and migrations", () => {
             "PresentationConfig",
             { id: "age", allowedOrigins: ["https://shop.example"] },
             4,
+        ],
+        [
+            "PresentationConfig",
+            { id: "age", registration_cert: { privacy_policy: "https://a.example" } },
+            5,
+        ],
+        [
+            "PresentationConfig",
+            { id: "age", registration_cert: { purpose: [] } },
+            5,
+        ],
+        [
+            "PresentationConfig",
+            { id: "age", registration_cert: { body: { purpose: [] } } },
+            1,
         ],
         [
             "PresentationConfig",
@@ -827,30 +840,6 @@ describe("portable schema identity and migrations", () => {
         ).toEqual([]);
     });
 
-    it("upgrades a v1 registrar configuration to v2 unchanged", () => {
-        const v1 = {
-            $schema: schemaUrl("RegistrarConfig", 1),
-            metadata: { generation: 1 },
-            spec: {
-                registrarUrl: "https://registrar.example/api",
-                oidcUrl: "https://auth.example/realms/registrar",
-                clientId: "registrar-client",
-                username: "verifier",
-                password: "secret",
-            },
-        };
-        const result = migrateDocument(v1, validateConfigDocument);
-        expect(result.issues).toEqual([]);
-        expect(result.migrations).toEqual([
-            "registrar-config-v2-relying-party-contact",
-        ]);
-        expect(result.document.$schema).toBe(schemaUrl("RegistrarConfig", 2));
-        expect(result.document.spec).toEqual(v1.spec);
-        expect(
-            migrateDocument(result.document, validateConfigDocument).migrations,
-        ).toEqual([]);
-    });
-
     it("upgrades a v1 tenant to v4 unchanged", () => {
         const v1 = {
             $schema: schemaUrl("Tenant", 1),
@@ -1024,33 +1013,6 @@ describe("portable schema identity and migrations", () => {
         ).toBeGreaterThan(0);
     });
 
-    it("accepts a relying party contact only from registrar configuration v2 on", () => {
-        const spec = {
-            registrarUrl: "https://registrar.example/api",
-            oidcUrl: "https://auth.example/realms/registrar",
-            clientId: "registrar-client",
-            username: "verifier",
-            password: "secret",
-            relyingPartyContact: { email: "support@verifier.example" },
-        };
-        expect(
-            validateConfigDocument(
-                normalizeDocument({
-                    $schema: schemaUrl("RegistrarConfig", 2),
-                    spec,
-                }),
-            ),
-        ).toEqual([]);
-        expect(
-            validateConfigDocument(
-                normalizeDocument({
-                    $schema: schemaUrl("RegistrarConfig", 1),
-                    spec,
-                }),
-            ).length,
-        ).toBeGreaterThan(0);
-    });
-
     it("accepts provider algorithms only from KMS configuration v2 on", () => {
         const spec = {
             providers: [
@@ -1190,6 +1152,7 @@ describe("IssuanceConfig v4 to v5", () => {
         expect(result.migrations).toEqual([
             "issuance-config-v5-federation-entity",
             "issuance-config-v6-access-token-signing-key",
+            "issuance-config-v7-registration-certificate-import-only",
         ]);
         expect(result.issues).toEqual([]);
         expect(result.document.spec).toEqual(v4(entityId).spec);
@@ -1236,6 +1199,7 @@ describe("IssuanceConfig v5 to v6", () => {
 
         expect(result.migrations).toEqual([
             "issuance-config-v6-access-token-signing-key",
+            "issuance-config-v7-registration-certificate-import-only",
         ]);
         expect(result.issues).toEqual([
             expect.objectContaining({
@@ -1244,7 +1208,7 @@ describe("IssuanceConfig v5 to v6", () => {
                 path: "/spec/signingKeyId",
             }),
         ]);
-        expect(result.document.$schema).toBe(schemaUrl("IssuanceConfig", 6));
+        expect(result.document.$schema).toBe(schemaUrl("IssuanceConfig", 7));
         expect(result.document.spec).toEqual(v5().spec);
         expect(
             migrateDocument(result.document, validateConfigDocument).migrations,
@@ -1321,15 +1285,26 @@ describe("PresentationConfig v1 to v2", () => {
             "presentation-config-v2-provides-attestations",
             "presentation-config-v3-typed-claim-values",
             "presentation-config-v4-allowed-origins",
+            "presentation-config-v5-registration-certificate",
         ]);
         expect(result.document.spec.registration_cert).toEqual({
-            body: privacy,
+            privacy_policy: privacy.privacy_policy,
         });
         expect(result.issues).toEqual([
             expect.objectContaining({
                 severity: "warning",
                 code: "PROVIDED_ATTESTATIONS_REMOVED",
                 path: "/spec/registration_cert/body/provided_attestations",
+            }),
+            expect.objectContaining({
+                severity: "warning",
+                code: "REGISTRATION_CERT_FIELD_REMOVED",
+                path: "/spec/registration_cert/body/support_uri",
+            }),
+            expect.objectContaining({
+                severity: "warning",
+                code: "REGISTRATION_CERT_NOT_REQUESTED",
+                path: "/spec/registration_cert",
             }),
         ]);
     });
@@ -1416,9 +1391,10 @@ describe("PresentationConfig v2 to v3", () => {
         expect(result.migrations).toEqual([
             "presentation-config-v3-typed-claim-values",
             "presentation-config-v4-allowed-origins",
+            "presentation-config-v5-registration-certificate",
         ]);
         expect(result.document.$schema).toBe(
-            schemaUrl("PresentationConfig", 4),
+            schemaUrl("PresentationConfig", 5),
         );
         expect(result.document.spec).toEqual(v2.spec);
         expect(
@@ -1484,9 +1460,10 @@ describe("PresentationConfig v3 to v4", () => {
         expect(result.issues).toEqual([]);
         expect(result.migrations).toEqual([
             "presentation-config-v4-allowed-origins",
+            "presentation-config-v5-registration-certificate",
         ]);
         expect(result.document.$schema).toBe(
-            schemaUrl("PresentationConfig", 4),
+            schemaUrl("PresentationConfig", 5),
         );
         expect(result.document.spec).toEqual(spec);
         expect(
@@ -1774,5 +1751,359 @@ describe("TrustList v1 to v2", () => {
         { ...address, phone: "0301234567" },
     ])("refuses the v2 electronic address %j", (info) => {
         expect(validateConfigDocument(document(2, info))).not.toEqual([]);
+    });
+});
+
+describe("retiredConfigIssue", () => {
+    it("reports a registrar configuration and ignores names of Object.prototype members", () => {
+        expect(
+            retiredConfigIssue({
+                $schema: "https://eudiplo.dev/schemas/v2/RegistrarConfigFile.schema.json",
+            })?.code,
+        ).toBe("REGISTRAR_CONFIG_REMOVED");
+        for (const name of ["constructor", "valueOf", "toString", "hasOwnProperty"]) {
+            expect(
+                retiredConfigIssue({
+                    $schema: `https://eudiplo.dev/schemas/v1/${name}.schema.json`,
+                }),
+            ).toBeUndefined();
+        }
+    });
+});
+
+describe("IssuanceConfig v6 to v7", () => {
+    const servers = [{ id: "issuer", type: "built-in" }];
+    const v6 = (registrationCertificate: Record<string, unknown>) => ({
+        $schema: schemaUrl("IssuanceConfig", 6),
+        spec: { authorizationServers: servers, registrationCertificate },
+    });
+
+    it("drops mode and renewal and keeps an imported certificate", () => {
+        const result = migrateDocument(
+            v6({
+                enabled: true,
+                mode: "import",
+                jwt: "a.b.c",
+                renewal: "manual",
+                supportUri: "https://issuer.example/support",
+            }),
+            validateConfigDocument,
+        );
+
+        expect(result.migrations).toEqual([
+            "issuance-config-v7-registration-certificate-import-only",
+        ]);
+        expect(result.issues).toEqual([]);
+        expect(result.document.spec.registrationCertificate).toEqual({
+            enabled: true,
+            jwt: "a.b.c",
+            supportUri: "https://issuer.example/support",
+        });
+        expect(
+            migrateDocument(result.document, validateConfigDocument).migrations,
+        ).toEqual([]);
+    });
+
+    it.each([
+        ["generate mode", { enabled: true, mode: "generate" }],
+        ["the default mode", { enabled: true, privacyPolicy: "https://p" }],
+        ["generate mode with renewal", { enabled: true, renewal: "manual" }],
+    ])("warns that a certificate in %s is no longer generated", (_, settings) => {
+        const result = migrateDocument(v6(settings), validateConfigDocument);
+
+        expect(result.issues).toEqual([
+            expect.objectContaining({
+                severity: "warning",
+                code: "ISSUER_REGISTRATION_CERTIFICATE_NOT_GENERATED",
+                path: "/spec/registrationCertificate",
+            }),
+        ]);
+        expect(result.document.spec.registrationCertificate).not.toHaveProperty(
+            "mode",
+        );
+        expect(result.document.spec.registrationCertificate).not.toHaveProperty(
+            "renewal",
+        );
+    });
+
+    it.each([
+        ["generate mode", { enabled: true, mode: "generate", jwt: "a.b.c" }],
+        ["the default mode", { enabled: true, jwt: "a.b.c" }],
+    ])(
+        "drops a JWT that %s did not serve, so the issuer metadata does not start to carry it",
+        (_, settings) => {
+            const result = migrateDocument(v6(settings), validateConfigDocument);
+
+            expect(result.document.spec.registrationCertificate).toEqual({
+                enabled: true,
+            });
+            expect(result.issues.map(({ code }) => code)).toEqual([
+                "ISSUER_REGISTRATION_CERTIFICATE_JWT_DROPPED",
+                "ISSUER_REGISTRATION_CERTIFICATE_NOT_GENERATED",
+            ]);
+        },
+    );
+
+    it("does not warn for a disabled certificate", () => {
+        const result = migrateDocument(
+            v6({ enabled: false, mode: "generate" }),
+            validateConfigDocument,
+        );
+        expect(result.issues).toEqual([]);
+        expect(result.document.spec.registrationCertificate).toEqual({
+            enabled: false,
+        });
+    });
+
+    it("accepts mode and renewal only before v7", () => {
+        const spec = {
+            authorizationServers: servers,
+            registrationCertificate: { enabled: true, mode: "import", jwt: "a" },
+        };
+        expect(
+            validateConfigDocument(
+                normalizeDocument({ $schema: schemaUrl("IssuanceConfig", 6), spec }),
+            ),
+        ).toEqual([]);
+        expect(
+            validateConfigDocument(
+                normalizeDocument({ $schema: schemaUrl("IssuanceConfig", 7), spec }),
+            ),
+        ).toContainEqual(
+            expect.objectContaining({
+                code: "CONFIG_SCHEMA_VALIDATION_FAILED",
+                message: "Unknown property: mode",
+            }),
+        );
+    });
+});
+
+describe("PresentationConfig v4 to v5", () => {
+    const dcql_query = {
+        credentials: [
+            {
+                id: "pid",
+                format: "dc+sd-jwt",
+                meta: { vct_values: ["urn:eudi:pid:de:1"] },
+            },
+        ],
+    };
+    const purpose = [
+        { lang: "de", content: "Altersprüfung" },
+        { lang: "en", content: "Age check" },
+    ];
+    const v4 = (fields: Record<string, unknown>) => ({
+        $schema: schemaUrl("PresentationConfig", 4),
+        spec: { id: "age", dcql_query, ...fields },
+    });
+    const upgrade = (fields: Record<string, unknown>) =>
+        migrateDocument(v4(fields), validateConfigDocument);
+
+    it("keeps the JWT and moves purpose and privacy policy out of body", () => {
+        const result = upgrade({
+            registration_cert: {
+                jwt: "a.b.c",
+                body: {
+                    purpose,
+                    privacy_policy: "https://verifier.example/privacy",
+                },
+            },
+        });
+
+        expect(result.migrations).toEqual([
+            "presentation-config-v5-registration-certificate",
+        ]);
+        expect(result.issues).toEqual([]);
+        expect(result.document.spec.registration_cert).toEqual({
+            jwt: "a.b.c",
+            purpose,
+            privacy_policy: "https://verifier.example/privacy",
+        });
+        expect(
+            migrateDocument(result.document, validateConfigDocument).migrations,
+        ).toEqual([]);
+    });
+
+    it("drops the registrar-only fields with a warning each", () => {
+        const result = upgrade({
+            registration_cert: {
+                id: "cert-1",
+                body: {
+                    purpose,
+                    support_uri: "https://verifier.example/support",
+                    intermediary: "https://intermediary.example",
+                    credentials: [{ format: "dc+sd-jwt" }],
+                    provides_attestations: ["urn:eudi:pid:de:1"],
+                },
+            },
+        });
+
+        expect(result.document.spec.registration_cert).toEqual({ purpose });
+        expect(result.issues.map((issue) => [issue.code, issue.path])).toEqual([
+            ["REGISTRATION_CERT_FIELD_REMOVED", "/spec/registration_cert/id"],
+            [
+                "REGISTRATION_CERT_FIELD_REMOVED",
+                "/spec/registration_cert/body/support_uri",
+            ],
+            [
+                "REGISTRATION_CERT_FIELD_REMOVED",
+                "/spec/registration_cert/body/intermediary",
+            ],
+            [
+                "REGISTRATION_CERT_FIELD_REMOVED",
+                "/spec/registration_cert/body/credentials",
+            ],
+            [
+                "REGISTRATION_CERT_FIELD_REMOVED",
+                "/spec/registration_cert/body/provides_attestations",
+            ],
+            ["REGISTRATION_CERT_NOT_REQUESTED", "/spec/registration_cert"],
+        ]);
+        expect(result.issues.every((issue) => issue.severity === "warning")).toBe(
+            true,
+        );
+    });
+
+    it("removes a registration_cert that is left empty", () => {
+        const result = upgrade({ registration_cert: { id: "cert-1" } });
+        expect(result.document.spec).not.toHaveProperty("registration_cert");
+        expect(result.issues.map((issue) => issue.code)).toEqual([
+            "REGISTRATION_CERT_FIELD_REMOVED",
+            "REGISTRATION_CERT_NOT_REQUESTED",
+        ]);
+    });
+
+    it("keeps a null registration_cert", () => {
+        const result = upgrade({ registration_cert: null });
+        expect(result.issues).toEqual([]);
+        expect(result.document.spec.registration_cert).toBeNull();
+    });
+
+    it("drops empty values and incomplete purposes, which v5 refuses", () => {
+        const result = upgrade({
+            registration_cert: {
+                jwt: "",
+                body: {
+                    privacy_policy: " ",
+                    purpose: [{ lang: "en", content: "" }, ...purpose],
+                },
+            },
+        });
+        expect(result.document.spec.registration_cert).toEqual({ purpose });
+        expect(result.issues.map((issue) => issue.code)).toEqual([
+            "REGISTRATION_CERT_PURPOSE_INCOMPLETE",
+            "REGISTRATION_CERT_NOT_REQUESTED",
+        ]);
+    });
+
+    it("maps the flat form fields when no registration_cert is set", () => {
+        const result = upgrade({
+            registrationCertImportJwt: "a.b.c",
+            registrationCertImportId: "cert-1",
+            registrationCertBodyPrivacyPolicy: "https://verifier.example/privacy",
+            registrationCertBodySupportUri: "https://verifier.example/support",
+            registrationCertBodyIntermediary: "",
+            registrationCertBodyPurpose: purpose,
+        });
+
+        expect(result.document.spec).toEqual({
+            id: "age",
+            dcql_query,
+            registration_cert: {
+                jwt: "a.b.c",
+                purpose,
+                privacy_policy: "https://verifier.example/privacy",
+            },
+        });
+        expect(result.issues.map((issue) => [issue.code, issue.path])).toEqual([
+            ["REGISTRATION_CERT_FIELD_REMOVED", "/spec/registrationCertImportId"],
+            [
+                "REGISTRATION_CERT_FIELD_REMOVED",
+                "/spec/registrationCertBodySupportUri",
+            ],
+        ]);
+    });
+
+    it("drops the flat form fields next to a registration_cert, which took precedence", () => {
+        const result = upgrade({
+            registration_cert: { jwt: "a.b.c" },
+            registrationCertImportJwt: "x.y.z",
+            registrationCertBodyPurpose: purpose,
+        });
+        expect(result.issues).toEqual([]);
+        expect(result.document.spec).toEqual({
+            id: "age",
+            dcql_query,
+            registration_cert: { jwt: "a.b.c" },
+        });
+    });
+
+    it("accepts purpose and privacy_policy only from v5 on", () => {
+        const spec = {
+            id: "age",
+            dcql_query,
+            registration_cert: { purpose, privacy_policy: "https://p" },
+        };
+        expect(
+            validateConfigDocument(
+                normalizeDocument({
+                    $schema: schemaUrl("PresentationConfig", 5),
+                    spec,
+                }),
+            ),
+        ).toEqual([]);
+        expect(
+            validateConfigDocument(
+                normalizeDocument({
+                    $schema: schemaUrl("PresentationConfig", 4),
+                    spec,
+                }),
+            ).length,
+        ).toBeGreaterThan(0);
+    });
+});
+
+describe("retired resource kinds", () => {
+    const registrar = {
+        $schema: "https://eudiplo.dev/schemas/v1/RegistrarConfigFile.schema.json",
+        spec: { registrarUrl: "https://registrar.example" },
+    };
+
+    it("reports a registrar configuration as skipped", () => {
+        const issue = retiredConfigIssue(registrar, "registrar.json");
+        expect(issue).toEqual(
+            expect.objectContaining({
+                severity: "warning",
+                code: "REGISTRAR_CONFIG_REMOVED",
+            }),
+        );
+        expect(issue?.message).toMatch(/^registrar\.json is skipped/);
+        expect(isRetiredConfigIssue(issue!)).toBe(true);
+    });
+
+    it("reports nothing for current kinds or unknown input", () => {
+        expect(
+            retiredConfigIssue({ $schema: schemaUrl("Tenant"), spec: {} }),
+        ).toBeUndefined();
+        expect(retiredConfigIssue("registrar.json")).toBeUndefined();
+        expect(retiredConfigIssue({ spec: {} })).toBeUndefined();
+    });
+
+    it("no longer reads a registrar configuration as a document", () => {
+        expect(() => normalizeDocument(registrar)).toThrow(
+            "Unknown configuration schema",
+        );
+        expect(CONFIG_RESOURCE_KINDS).not.toContain("RegistrarConfig");
+    });
+
+    it("names registrar.json as a retired tenant folder file", () => {
+        expect(RETIRED_TENANT_FOLDER_FILES).toEqual([
+            {
+                file: "registrar.json",
+                issue: expect.objectContaining({
+                    code: "REGISTRAR_CONFIG_REMOVED",
+                }),
+            },
+        ]);
     });
 });

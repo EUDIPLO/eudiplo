@@ -3,21 +3,16 @@ import { SchemaUriMeta } from "@owf/eudi-attestation-schema";
 import { createZodDto } from "nestjs-zod";
 import {
     AttestationLoS,
-    PublishSchemaMetaConfigSchema,
     SchemaMetaBindingType,
     SchemaMetaConfigSchema,
-    SchemaMetadataPinMode,
     SchemaMetaFrameworkType,
     SchemaUriEntrySchema,
-    SignSchemaMetaConfigSchema,
-    SignVersionSchemaMetaConfigSchema,
     TrustAuthorityEntrySchema,
 } from "./schema-meta-config.schema.js";
 
 export {
     AttestationLoS,
     SchemaMetaBindingType,
-    SchemaMetadataPinMode,
     SchemaMetaFrameworkType,
 } from "./schema-meta-config.schema.js";
 
@@ -107,68 +102,4 @@ export class SchemaMetaConfig extends createZodDto(SchemaMetaConfigSchema) {
 
     @ApiPropertyOptional({ type: () => [TrustAuthorityEntry] })
     trustedAuthorities?: TrustAuthorityEntry[];
-}
-
-/**
- * Schema metadata configuration of a publish request: the credential
- * config's SchemaMetaConfig plus the registrar catalogue fields.
- */
-export class PublishSchemaMetaConfig extends createZodDto(
-    PublishSchemaMetaConfigSchema,
-) {
-    @ApiPropertyOptional({ type: () => [SchemaUriEntry] })
-    schemaURIs?: SchemaUriEntry[];
-
-    @ApiPropertyOptional({ type: () => [TrustAuthorityEntry] })
-    trustedAuthorities?: TrustAuthorityEntry[];
-}
-
-/**
- * Request body for schema metadata submission.
- *
- * The registrar builds and signs schema metadata from the submitted values.
- */
-export class SignSchemaMetaConfigDto extends createZodDto(
-    SignSchemaMetaConfigSchema,
-) {
-    @ApiProperty({
-        type: () => PublishSchemaMetaConfig,
-        description:
-            "The schema metadata configuration to submit. Registrar builds and signs the final schema metadata.",
-    })
-    config!: PublishSchemaMetaConfig;
-
-    @ApiPropertyOptional()
-    credentialConfigId?: string;
-
-    @ApiPropertyOptional({
-        enum: SchemaMetadataPinMode,
-        default: SchemaMetadataPinMode.KEEP_CURRENT,
-    })
-    pinMode?: SchemaMetadataPinMode;
-}
-
-/**
- * Request body for new schema metadata version submission.
- *
- * The registrar builds and signs the new version.
- */
-export class SignVersionSchemaMetaConfigDto extends createZodDto(
-    SignVersionSchemaMetaConfigSchema,
-) {
-    @ApiProperty({
-        type: () => PublishSchemaMetaConfig,
-        description:
-            "The schema metadata configuration to submit as a new version. Must include the existing id.",
-    })
-    config!: PublishSchemaMetaConfig;
-
-    @ApiPropertyOptional()
-    credentialConfigId?: string;
-
-    @ApiPropertyOptional({
-        enum: SchemaMetadataPinMode,
-        default: SchemaMetadataPinMode.KEEP_CURRENT,
-    })
-    pinMode?: SchemaMetadataPinMode;
 }

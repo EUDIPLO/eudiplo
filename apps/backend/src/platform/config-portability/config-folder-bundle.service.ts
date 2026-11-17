@@ -2,7 +2,9 @@ import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import {
+    isRetiredConfigIssue,
     normalizeDocument,
+    RETIRED_TENANT_FOLDER_FILES,
     resourceId,
     schemaUrl,
     serializeDocument,
@@ -123,6 +125,9 @@ export class ConfigFolderBundleService {
             throw error;
         }
         this.warnGeneratedSecrets(tenantId, plan.generatedSecrets);
+        for (const issue of (plan.issues ?? []).filter(isRetiredConfigIssue)) {
+            this.logger.warn(`[${tenantId}] ${issue.message}`);
+        }
         for (const item of plan.items) {
             if (item.action !== "skip") continue;
             for (const issue of item.issues) {
@@ -273,11 +278,19 @@ export class ConfigFolderBundleService {
     }
 
     buildBundle(tenantId: string, tenantRoot: string): ConfigBundle {
-        return this.collectBundle(
+        const bundle = this.collectBundle(
             tenantId,
             tenantRoot,
             TENANT_FOLDER_RESOURCES,
         );
+        // Files of retired kinds, such as registrar.json of 9.x, are skipped
+        // with a warning that the plan reports.
+        for (const { file, issue } of RETIRED_TENANT_FOLDER_FILES) {
+            if (existsSync(join(tenantRoot, file))) {
+                bundle.manifest.warnings.push({ ...issue });
+            }
+        }
+        return bundle;
     }
 
     private collectBundle(

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+    readReplicaCounts,
+    unreadyEndpoints,
+} from "../src/services/deployment-drivers.js";
+import {
     assertContextName,
     assertNamespace,
     assertWorkloadReference,
@@ -13,10 +17,6 @@ import {
     resolveWorkload,
     resolveWorkloads,
 } from "../src/services/kubectl.js";
-import {
-    readReplicaCounts,
-    unreadyEndpoints,
-} from "../src/services/deployment-drivers.js";
 import type { InstanceConfig } from "../src/types.js";
 
 const scope = { context: "production", namespace: "eudiplo" };

@@ -1,12 +1,9 @@
 import { Injectable } from '@angular/core';
 import {
-  type SchemaMetadataResponseDto,
   type IssuanceConfig,
   issuanceConfigControllerGetIssuanceConfigurations,
-  issuanceConfigControllerReissueRegistrationCertificate,
   issuanceConfigControllerStoreIssuanceConfiguration,
   credentialOfferControllerGetOffer,
-  schemaMetadataControllerFindAll,
   type OfferRequestDto,
   UpdateIssuanceDto,
 } from '@eudiplo/sdk-core';
@@ -62,17 +59,7 @@ export class IssuanceConfigService {
     );
   }
 
-  reissueRegistrationCertificate() {
-    return issuanceConfigControllerReissueRegistrationCertificate().then(
-      (response) => response.data as IssuanceConfig
-    );
-  }
-
   getOffer(values: OfferRequestDto) {
     return credentialOfferControllerGetOffer({ body: values }).then((response) => response.data);
-  }
-
-  getSchemaMetadata(): Promise<SchemaMetadataResponseDto[]> {
-    return schemaMetadataControllerFindAll().then((response) => response.data || []);
   }
 }

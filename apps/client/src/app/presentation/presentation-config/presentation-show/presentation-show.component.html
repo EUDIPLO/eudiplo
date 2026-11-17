@@ -69,7 +69,11 @@
     </div>
 
     <!-- Configuration Details Card -->
-    <mat-tab-group animationDuration="200ms">
+    <mat-tab-group
+      animationDuration="200ms"
+      [selectedIndex]="selectedTab"
+      (selectedIndexChange)="selectedTab = $event"
+    >
       <!-- TAB 1: Overview -->
       <mat-tab>
         <ng-template mat-tab-label>
@@ -349,7 +353,9 @@
                   <mat-icon>verified_user</mat-icon>
                   Registration Certificate
                 </mat-card-title>
-                <mat-card-subtitle>Certificate used for the presentation</mat-card-subtitle>
+                <mat-card-subtitle
+                  >Attached to every request; EUDIPLO does not renew it</mat-card-subtitle
+                >
               </mat-card-header>
               <mat-card-content>
                 <div
@@ -366,9 +372,6 @@
                         @if (registrationCertExpiresIn) {
                           — expires in {{ registrationCertExpiresIn }}
                         }
-                        @if (registrationCertSource) {
-                          ({{ registrationCertSource }})
-                        }
                       </span>
                     }
                     @case ('expiring') {
@@ -380,26 +383,54 @@
                     }
                     @case ('expired') {
                       <mat-icon color="warn">error_outline</mat-icon>
-                      <span><strong>Expired</strong> — reissue required</span>
+                      <span
+                        ><strong>Expired</strong> — requests fail until you request a new one</span
+                      >
                     }
-                    @case ('pending') {
-                      <mat-icon color="accent">refresh</mat-icon>
-                      <span><strong>Pending</strong> — will be issued on next request</span>
+                    @case ('notYetValid') {
+                      <mat-icon color="warn">schedule</mat-icon>
+                      <span
+                        ><strong>Not yet valid</strong> — requests fail until its start time</span
+                      >
+                    }
+                    @case ('invalid') {
+                      <mat-icon color="warn">gpp_bad</mat-icon>
+                      <span
+                        ><strong>Not a valid JWT</strong> — requests fail until you request a new
+                        one</span
+                      >
+                    }
+                    @case ('missing') {
+                      <mat-icon color="accent">report</mat-icon>
+                      <span
+                        ><strong>No certificate</strong> — the purpose and privacy policy are kept
+                        for the next request</span
+                      >
                     }
                   }
-                  <span fxFlex></span>
-                  <button
-                    mat-stroked-button
-                    type="button"
-                    [disabled]="reissuing"
-                    disabledInteractive
-                    [matTooltip]="reissuing ? 'Reissuing the registration certificate…' : ''"
-                    (click)="reissueRegistrationCert()"
-                  >
-                    <mat-icon>refresh</mat-icon>
-                    {{ reissuing ? 'Reissuing…' : 'Reissue now' }}
-                  </button>
                 </div>
+
+                @if (
+                  config.registration_cert.purpose?.length ||
+                  config.registration_cert.privacy_policy
+                ) {
+                  <mat-list class="config-list">
+                    @for (entry of config.registration_cert.purpose ?? []; track entry) {
+                      <mat-list-item>
+                        <mat-icon matListItemIcon>description</mat-icon>
+                        <span matListItemTitle>Purpose ({{ entry.lang }})</span>
+                        <span matListItemLine>{{ entry.content }}</span>
+                      </mat-list-item>
+                    }
+                    @if (config.registration_cert.privacy_policy) {
+                      <mat-list-item>
+                        <mat-icon matListItemIcon>policy</mat-icon>
+                        <span matListItemTitle>Privacy policy</span>
+                        <span matListItemLine>{{ config.registration_cert.privacy_policy }}</span>
+                      </mat-list-item>
+                    }
+                  </mat-list>
+                }
 
                 @if (registrationCertJwt) {
                   <mat-divider></mat-divider>
@@ -411,21 +442,21 @@
                         >{{ registrationCertJwt | slice: 0 : 50 }}...</span
                       >
                     </mat-list-item>
-                    @if (registrationCertCache?.issuedAt) {
+                    @if (registrationCertTimes?.issuedAt) {
                       <mat-list-item>
                         <mat-icon matListItemIcon>event</mat-icon>
                         <span matListItemTitle>Issued at</span>
                         <span matListItemLine>{{
-                          registrationCertCache!.issuedAt! * 1000 | date: 'medium'
+                          registrationCertTimes!.issuedAt! * 1000 | date: 'medium'
                         }}</span>
                       </mat-list-item>
                     }
-                    @if (registrationCertCache?.expiresAt) {
+                    @if (registrationCertTimes?.expiresAt) {
                       <mat-list-item>
                         <mat-icon matListItemIcon>event_busy</mat-icon>
                         <span matListItemTitle>Expires at</span>
                         <span matListItemLine>{{
-                          registrationCertCache!.expiresAt! * 1000 | date: 'medium'
+                          registrationCertTimes!.expiresAt! * 1000 | date: 'medium'
                         }}</span>
                       </mat-list-item>
                     }

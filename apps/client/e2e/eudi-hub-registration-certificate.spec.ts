@@ -144,6 +144,54 @@ test('requests a verifier registration certificate for a presentation configurat
   ]);
 });
 
+test('starts the request from the purpose and privacy policy kept in the configuration', async ({
+  page,
+}) => {
+  const tenant = await createTenant('eudi-hub-rc-renew-e2e', 'EUDI Hub RC renew E2E', [
+    'registrar:manage',
+    'presentation:manage',
+  ]);
+  const id = `age-${randomBytes(3).toString('hex')}`;
+  const created = await call(tenant, 'POST', '/api/verifier/config', {
+    id,
+    description: 'Age check',
+    dcql_query: {
+      credentials: [
+        {
+          id: 'pid',
+          format: 'dc+sd-jwt',
+          meta: { vct_values: ['urn:eudi:pid:de:1'] },
+          claims: [{ path: ['age_over_18'] }],
+          trusted_authorities: [{ type: 'etsi_tl', values: [{ trustListId: 'pid-providers' }] }],
+        },
+      ],
+    },
+    registration_cert: {
+      purpose: [
+        { lang: 'de', content: 'Prüfung, ob Sie volljährig sind' },
+        { lang: 'en', content: 'Checks that you are of age' },
+      ],
+      privacy_policy: 'https://verifier.example/privacy',
+    },
+  });
+  expect(created.status, await created.clone().text()).toBe(201);
+  await stubOrganization(page);
+
+  await loginWithClientCredentials(page, tenant.clientId, tenant.clientSecret);
+  await page.goto(`/presentation-config/${id}`);
+  await page.getByRole('tab', { name: /Security/ }).click();
+  await expect(page.getByText('Checks that you are of age')).toBeVisible();
+  await page.getByRole('button', { name: 'Request from EUDI Hub' }).click();
+  await pasteTokenAndLoad(page);
+
+  await expect(page.getByLabel('Purpose (German)')).toHaveValue('Prüfung, ob Sie volljährig sind');
+  await expect(page.getByLabel('Purpose (English)')).toHaveValue('Checks that you are of age');
+  // The organization's privacy policy does not replace the kept one.
+  await expect(page.getByLabel('Privacy policy', { exact: false })).toHaveValue(
+    'https://verifier.example/privacy'
+  );
+});
+
 test('requests an issuer registration certificate from the issuer settings', async ({ page }) => {
   const tenant = await createTenant('eudi-hub-rc-e2e', 'EUDI Hub RC E2E', [
     'registrar:manage',
@@ -158,7 +206,7 @@ test('requests an issuer registration certificate from the issuer settings', asy
     json(route, 400, {
       statusCode: 400,
       message:
-        'Create an SD-JWT VC credential configuration with a vct or an mDOC credential configuration with a docType before generating an issuer registration certificate',
+        'Create an SD-JWT VC credential configuration with a vct or an mDOC credential configuration with a docType before requesting an issuer registration certificate',
     })
   );
 

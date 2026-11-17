@@ -35,10 +35,6 @@
         "src/**/*.spec.ts",
         "test/**/*.e2e-spec.ts"
       ],
-      "ignore": [
-        "src/**/generated/**",
-        "src/registrar/generated/**"
-      ],
       "ignoreDependencies": [
         "tsconfig-paths",
         "source-map-support",

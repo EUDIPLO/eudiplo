@@ -21,8 +21,8 @@ import {
     saveConfig,
     updateInstance,
 } from "../src/services/cli-config.js";
-import type { CliConfig, CommandContext } from "../src/types.js";
 import { describeRequestError, redactUrl } from "../src/services/url.js";
+import type { CliConfig, CommandContext } from "../src/types.js";
 
 const production = {
     target: "external" as const,

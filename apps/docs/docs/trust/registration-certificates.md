@@ -2,51 +2,47 @@
 title: Registration Certificates
 ---
 
-A registration certificate is a JWT, issued by a registrar, that states what a relying party is registered for: a verifier the data it may request and why, an issuer the attestations it provides. EUDIPLO presents it to wallets, which can warn about or refuse requests that go beyond it; wallets do not present registration certificates. Creating certificates needs a [registrar configuration](registrar.md). Certificates from the German EUDI Hub are requested once from the Web Client and stored as imported certificates ([EUDI Hub](eudi-hub.md#request-a-registration-certificate)).
+A registration certificate is a JWT, issued by a registrar, that states what a relying party is registered for: a verifier the data it may request and why, an issuer the attestations it provides. EUDIPLO presents it to wallets, which can warn about or refuse requests that go beyond it; wallets do not present registration certificates. EUDIPLO requests certificates from the German EUDI Hub ([EUDI Hub](eudi-hub.md#request-a-registration-certificate)) and stores them; a certificate from another registrar is stored the same way. EUDIPLO does not renew certificates: request a new one before it expires.
 
 ## Verifier registration certificate
 
-Set `registration_cert` in a [presentation configuration](../presentation/configure-verification.md#registration-certificate). EUDIPLO adds the certificate to the signed request as `verifier_info: [{ "format": "registration_cert", "data": "<JWT>" }]`. An imported `jwt` works without a registrar configuration. `id` and `body` need one; without it the request is sent without a registration certificate.
+Set `registration_cert` in a [presentation configuration](../presentation/configure-verification.md#registration-certificate). EUDIPLO adds the certificate to the signed request as `verifier_info: [{ "format": "registration_cert", "data": "<JWT>" }]`.
 
-### Strategies
+| Field            | Meaning                                                                                                                                                     |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `jwt`            | The certificate, attached to every request object as is. Without it, requests carry no registration certificate.                                           |
+| `purpose`        | Why the data is requested (GDPR purpose), `[{ "lang", "content" }]`. Used when a certificate is requested from a registrar; the EUDI Hub needs `de` and `en`. |
+| `privacy_policy` | URL of the privacy policy for this request. Used when a certificate is requested from a registrar.                                                          |
 
-| Field  | Behavior                                                                                                                                                        |
-| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `jwt`  | Uses this JWT as is; no registrar call. Takes precedence over `id` and `body`.                                                                                  |
-| `id`   | Uses the active (not revoked) certificate with this ID of the tenant's relying party. If none is found, falls back to `body`; without `body` the request fails. |
-| `body` | Creates a new certificate at the registrar.                                                                                                                     |
-
-At least one of them is required.
-
-### Payload of a new certificate
-
-For `body`, EUDIPLO merges, with later values winning:
-
-1. `registrationCertificateDefaults` of the registrar configuration,
-2. `registration_cert.body` of the presentation configuration.
-
-The relying party (`rpId`) is always set by EUDIPLO. If neither `credentials` nor `provides_attestations` is set, `credentials` is derived from the DCQL query: `format`, `meta` and `claims` of every credential query. After merging, `privacy_policy` and `support_uri` must be present, and so must `purpose` (as `[{ "lang", "content" }]`) and `credentials` unless `provides_attestations` is set; otherwise creating the request fails with `400`.
+A request to the EUDI Hub stores all three, so a later request for a new certificate, for example after the DCQL query changed or before the certificate expires, can leave out the purpose and privacy policy. You can also set `purpose` and `privacy_policy` before the first request.
 
 ```json
 {
     "registration_cert": {
-        "body": {
-            "purpose": [{ "lang": "en", "content": "Check your club membership" }]
-        }
+        "jwt": "eyJ...",
+        "purpose": [
+            { "lang": "de", "content": "Prüfung Ihrer Vereinsmitgliedschaft" },
+            { "lang": "en", "content": "Check your club membership" }
+        ],
+        "privacy_policy": "https://verifier.example/privacy"
     }
 }
 ```
 
-### Validation and caching
+### Validation
 
-Every certificate, also an imported `jwt`, is checked before use:
+The certificate is checked before every use:
 
 - **Time:** `exp` and `nbf` with 60 seconds tolerance.
-- **Overasking:** the certificate's authorized `credentials` must exactly cover every credential query of the DCQL query; see [Overasking check](registrar.md#overasking-check). `SKIP_OVERASKING_CHECK=true` disables this for development.
+- **Overasking:** the certificate's authorized `credentials` must cover the request exactly; see [Overasking check](#overasking-check).
 
-An imported `jwt` is checked when the configuration is created and when an update changes `registration_cert` or `dcql_query`; the API refuses a failed check with `400` and the reason. The plan of a [configuration bundle](../operate/configuration-as-code.md#plan-and-import) (`eudiplo config plan`) or a [config folder](../operate/configuration-as-code.md#provision-tenants-from-a-folder) runs the same check for each presentation config it creates or updates: the item is `blocked` with `REGISTRATION_CERTIFICATE_REFUSED` at `/spec/registration_cert` and the reason as message, so the import applies nothing. At startup, EUDIPLO then logs the issue and imports none of that tenant's files until the file is fixed. Exports of bundles and of single presentation configs keep an imported `jwt`, and a plan treats a changed `jwt` as a change. A presentation config the plan leaves `unchanged` or skips is not checked again, so a certificate that expires after it was imported does not block later imports; the presentation request fails instead. Any other change to that file, even to its description, checks the certificate again. Certificates from `id` or `body` are checked after they are resolved; a failed check makes the presentation request fail with `400`. The resolved certificate is cached on the configuration (`registrationCertCache`) and reused until the DCQL query or `registration_cert` changes, the access certificate that signs the request changes, or until 60 seconds before it expires. After `registration_cert` or `dcql_query` changes, EUDIPLO resolves it again in the background; after the access certificate changes (including a new `accessKeyChainId`) or the cached certificate expires, the next presentation request resolves it, and fails if the registrar cannot be reached. `POST /api/verifier/config/{id}/registration-cert/reissue` forces a new certificate.
+The certificate is checked when the configuration is created and when an update changes `registration_cert` or `dcql_query`; the API refuses a failed check with `400` and the reason. The plan of a [configuration bundle](../operate/configuration-as-code.md#plan-and-import) (`eudiplo config plan`) or a [config folder](../operate/configuration-as-code.md#provision-tenants-from-a-folder) runs the same check for each presentation config it creates or updates: the item is `blocked` with `REGISTRATION_CERTIFICATE_REFUSED` at `/spec/registration_cert` and the reason as message, so the import applies nothing. At startup, EUDIPLO then logs the issue and imports none of that tenant's files until the file is fixed. Exports of bundles and of single presentation configs keep the `jwt`, and a plan treats a changed `jwt` as a change. A presentation config the plan leaves `unchanged` or skips is not checked again, so a certificate that expires after it was imported does not block later imports. Any other change to that file, even to its description, checks the certificate again.
 
-A certificate created from `body` names the registrar access certificate of the access key chain that signs the request (`accessCertificateId`) when the registrar lists one, unless the body sets it. The cache holds the certificate for the configuration's current access key chain: its `accessKeyChainId`, or the tenant's default. A request whose session keeps another access key chain, for example a step of the Interactive Authorization Endpoint started before the default access key chain changed, gets a certificate for that key chain; EUDIPLO creates it at the registrar for that request and does not cache it.
+Every presentation request checks the certificate again; when it has expired since it was stored, or no longer covers the DCQL query, the request fails with `400`. EUDIPLO does not check which access certificate the registration certificate belongs to: it is attached whichever access key chain signs the request. When you change the access key chain of a presentation configuration, or the tenant's default access key chain, request a new registration certificate for it.
+
+### Overasking check
+
+EUDIPLO only sends a registration certificate whose authorized `credentials` cover the request exactly. Each credential query of the DCQL query, with `<TENANT_URL>` resolved, must equal one authorized credential in `format`, `meta` and the claim paths; the order of the claims, claim IDs, `values` and `intent_to_retain` are ignored. Requesting fewer claims than authorized also fails ("Registration certificate does not authorize the requested DCQL credentials"). After you change the DCQL query, request a new certificate. For development and interoperability tests only, `SKIP_OVERASKING_CHECK=true` disables the check; see [Skip Flags](../reference/environment-variables.md#skip-flags).
 
 ## Issuer registration certificate
 
@@ -56,34 +52,28 @@ Set `registrationCertificate` in the issuance configuration to publish a certifi
 {
     "registrationCertificate": {
         "enabled": true,
-        "mode": "generate",
+        "jwt": "eyJ...",
         "privacyPolicy": "https://issuer.example.com/privacy",
-        "supportUri": "mailto:support@issuer.example.com",
-        "renewal": "onCredentialConfigChange"
+        "supportUri": "https://issuer.example.com/support"
     }
 }
 ```
 
-| `mode`     | Behavior                                                                                                                                                                                                                                                                                       |
-| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `import`   | Publishes `jwt` while it is within `nbf`/`exp` (30 seconds tolerance). No registrar configuration needed.                                                                                                                                                                                      |
-| `generate` | Requests a certificate from the registrar with `custom_provides_attestations` set to the credential types of all SD-JWT VC and mDOC credential configurations: the `vct` of each SD-JWT VC configuration (for a `vct` object, its [hosted VCT URL](../issuance/credential-configuration.md)) as `{ "format": "dc+sd-jwt", "meta": { "vct_values": [...] } }` and the `docType` of each mDOC configuration as `{ "format": "mso_mdoc", "meta": { "doctype_value": ... } }`. The registrar takes these types as given, so they do not need a published schema in its catalog; `provides_attestations` is sent empty, so a value in the registrar defaults is not used. Schema metadata (`schemaMeta`) is not used. At least one credential configuration needs a `vct` or `docType`, otherwise **Regenerate now** (`POST /api/issuer/config/registration-cert/reissue`) fails with `400`. `privacyPolicy` and `supportUri` fall back to the registrar defaults. |
+| Field           | Meaning                                                                                                    |
+| --------------- | ---------------------------------------------------------------------------------------------------------- |
+| `enabled`       | Publish the certificate.                                                                                   |
+| `jwt`           | The certificate, published while it is within `nbf`/`exp` (30 seconds tolerance). An expired one is left out and logged. |
+| `privacyPolicy` | Privacy policy URL of the issuer. Stored only; neither EUDIPLO nor the EUDI Hub request uses it.            |
+| `supportUri`    | Support URI of the issuer, kept for requesting a new certificate. A request to the EUDI Hub stores the one it used. |
 
-A generated certificate is cached in the issuance configuration. Its inputs are the credential types with their formats, `privacyPolicy` and `supportUri`. `renewal` decides when a change of these inputs leads to a new certificate (in the Web Client: **Renewal**):
+The certificate must list the credential types of the issuer: the `vct` of each SD-JWT VC configuration (for a `vct` object, its [hosted VCT URL](../issuance/credential-configuration.md)) and the `docType` of each mDOC configuration. A request to the EUDI Hub registers exactly these and refuses a certificate that misses one. After you add a credential type, request a new certificate.
 
-| `renewal` | A new certificate is requested |
-| --- | --- |
-| `onCredentialConfigChange` (default) | In the background about two seconds after a credential configuration or the issuance configuration is saved, deleted, imported or applied from a configuration bundle, and when the issuer metadata is built |
-| `onMetadataRequest` | When the issuer metadata is built, for example when a wallet fetches `/.well-known/openid-credential-issuer/issuers/<tenant>` |
-| `manual` | Only with **Regenerate now**; an active certificate is kept even if the inputs changed, so until then wallets may refuse credential types it does not list |
+## Verifier and issuer compared
 
-In every mode a certificate is also requested when the issuer metadata is built and no certificate is cached or the cached one has expired. Metadata requests, background renewals and **Regenerate now** of one tenant run one at a time within an EUDIPLO instance; several instances behind a load balancer may still request one at the same time. When a new certificate replaces a valid one, EUDIPLO revokes the old one at the registrar. If the returned certificate does not list every requested type in `provides_attestations` (a registrar without `custom_provides_attestations` support), EUDIPLO revokes it and treats the request as refused, and **Regenerate now** fails with `400`. If generation fails, the metadata is served without `issuer_info` and the reason is logged; a failed background renewal is logged and retried with the next change or metadata request.
-
-## Import and generate compared
-
-|                   | Verifier (presentation configuration)                                       | Issuer (issuance configuration)                         |
-| ----------------- | --------------------------------------------------------------------------- | ------------------------------------------------------- |
-| Bring your own JWT | `registration_cert.jwt`; works without a registrar configuration            | `mode: "import"`; works without a registrar configuration |
-| Checks            | Time (60 s tolerance) and overasking                                         | Time (30 s tolerance)                                   |
-| Generated by the registrar | `registration_cert.body`, or `id` for an existing one              | `mode: "generate"`, from `vct` and `docType`            |
-| Replaced certificate | Not revoked                                                              | Revoked at the registrar                                |
+|                       | Verifier (presentation configuration)       | Issuer (issuance configuration)                  |
+| --------------------- | ------------------------------------------- | ------------------------------------------------ |
+| Certificate           | `registration_cert.jwt`                     | `registrationCertificate.jwt` with `enabled: true` |
+| Kept request values   | `purpose`, `privacy_policy`                 | `supportUri`                                     |
+| Checks                | Time (60 s tolerance) and overasking         | Time (30 s tolerance)                            |
+| After a change        | New DCQL query: request a new certificate    | New credential type: request a new certificate   |
+| Replaced certificate  | Not revoked; revoke it at the registrar      | Not revoked; revoke it at the registrar          |

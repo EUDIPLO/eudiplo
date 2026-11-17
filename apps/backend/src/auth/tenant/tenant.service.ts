@@ -25,7 +25,6 @@ import {
     ConfigOwnershipService,
     sourceInScope,
 } from "../../platform/config-portability/config-ownership.service.js";
-import { RegistrarService } from "../../registrar/registrar.service.js";
 import { tenantConfigFolder } from "../../shared/utils/tenant-config-folder.util.js";
 import { FilesService } from "../../storage/files.service.js";
 import {
@@ -60,7 +59,6 @@ export class TenantService implements OnApplicationBootstrap {
         @Inject(CLIENTS_PROVIDER) private readonly clients: ClientsProvider,
         private readonly configService: ConfigService,
         private readonly encryptionService: EncryptionService,
-        private readonly registrarService: RegistrarService,
         @Inject(TENANT_REPOSITORY)
         private readonly tenantRepository: TenantRepository,
         metricService: MetricService,
@@ -372,7 +370,6 @@ export class TenantService implements OnApplicationBootstrap {
      */
     async setUpTenant(tenant: TenantData) {
         await this.encryptionService.onTenantInit(tenant.id);
-        await this.registrarService.onTenantInit(tenant);
         await this.tenantRepository.update(tenant.id, { status: "active" });
     }
 

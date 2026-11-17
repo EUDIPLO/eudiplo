@@ -1,6 +1,6 @@
 import { isSea } from "node:sea";
-import type { CommandContext } from "../../types.js";
 import packageJson from "../../../package.json" with { type: "json" };
+import type { CommandContext } from "../../types.js";
 
 export function versionText(): string {
     return `${packageJson.name} ${packageJson.version}`;

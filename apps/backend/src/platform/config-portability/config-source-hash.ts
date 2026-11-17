@@ -46,8 +46,7 @@ function matchesSourceHash(
  * Some documents never equal their resource once applied:
  *
  * - A key chain: importers add key IDs, EUDIPLO creates the signing key of a
- *   CA key, and rotation or registrar enrollment replace keys and
- *   certificates.
+ *   CA key, and rotation replaces keys and certificates.
  * - A client with `"secret": "!generate"`: applying it generates a new secret.
  *
  * So such a document that this source applied as it is, while the resource

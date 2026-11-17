@@ -30,11 +30,6 @@ export const TENANT_FOLDER_RESOURCES: readonly TenantFolderResource[] = [
         file: "key-chain-defaults.json",
         bundlePath: "key-chain-defaults.json",
     },
-    {
-        kind: "RegistrarConfig",
-        file: "registrar.json",
-        bundlePath: "registrar.json",
-    },
     { kind: "AttributeProvider", directory: "attribute-providers" },
     { kind: "WebhookEndpoint", directory: "webhook-endpoints" },
     {

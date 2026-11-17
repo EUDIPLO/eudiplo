@@ -6,6 +6,7 @@ import {
     isConfigDocument,
     migrateDocument,
     normalizeDocument,
+    RETIRED_TENANT_FOLDER_FILES,
     schemaUrl,
     serializeDocument,
 } from "@eudiplo/config-format/config-format.js";
@@ -93,12 +94,17 @@ export async function validateTenantDirectory(
             await validateDirectoryEntry(tenantPath, entry, state);
         }
     }
+    // Files of retired kinds are skipped on import, with this warning.
+    const warnings: ValidationIssue[] = RETIRED_TENANT_FOLDER_FILES.filter(
+        ({ file }) => existsSync(join(tenantPath, file)),
+    ).map(({ file, issue }) => ({ file, message: issue.message }));
 
     return {
         id: tenantId,
         valid: state.errors.length === 0,
         files: state.files,
         errors: state.errors,
+        warnings,
         ...(options.allowUnresolvedPlaceholders
             ? { unresolved: state.unresolved }
             : {}),

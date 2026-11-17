@@ -1,7 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { readStringFlag } from "../../options.js";
 import { saveConfig, upsertInstance } from "../../services/cli-config.js";
-import { validateHttpUrl } from "../../services/url.js";
 import type {
     ComposeDatabase,
     ComposeKms,
@@ -13,6 +12,7 @@ import {
 } from "../../services/deployment-drivers.js";
 import { parseTarget } from "../../services/deployment-target.js";
 import { resolveProjectDirectory } from "../../services/project-directory.js";
+import { validateHttpUrl } from "../../services/url.js";
 import type { CliConfig, CommandContext, ParsedArgs } from "../../types.js";
 import { createPrompter, type Prompter } from "../shared.js";
 

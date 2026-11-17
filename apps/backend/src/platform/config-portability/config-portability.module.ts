@@ -16,8 +16,6 @@ import { StatusListEntity } from "../../issuer/status-list/entities/status-list.
 import { StatusListModule } from "../../issuer/status-list/status-list.module.js";
 import { TrustList } from "../../issuer/trust-list/entities/trust-list.entity.js";
 import { TrustListModule } from "../../issuer/trust-list/trustlist.module.js";
-import { RegistrarConfigEntity } from "../../registrar/entities/registrar-config.entity.js";
-import { RegistrarModule } from "../../registrar/registrar.module.js";
 import { FileEntity } from "../../storage/entities/files.entity.js";
 import { FederationTrustAnchorEntity } from "../../trust/federation-trust-anchor/entities/federation-trust-anchor.entity.js";
 import { FederationTrustAnchorModule } from "../../trust/federation-trust-anchor/federation-trust-anchor.module.js";
@@ -51,7 +49,6 @@ import { ConfigResourceMetadataEntity } from "./entities/config-resource-metadat
         StatusListModule,
         TrustListModule,
         FederationTrustAnchorModule,
-        RegistrarModule,
         PresentationsModule,
         TypeOrmModule.forFeature([
             ConfigResourceMetadataEntity,
@@ -59,7 +56,6 @@ import { ConfigResourceMetadataEntity } from "./entities/config-resource-metadat
             TenantEntity,
             ClientEntity,
             KeyChainEntity,
-            RegistrarConfigEntity,
             IssuanceConfig,
             CredentialConfig,
             PresentationConfig,

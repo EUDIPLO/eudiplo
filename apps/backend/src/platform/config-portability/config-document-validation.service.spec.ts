@@ -445,29 +445,6 @@ describe("ConfigDocumentValidationService", () => {
                 ]);
             });
 
-            it("checks the flat registrationCertImportJwt form field", () => {
-                const {
-                    spec: { registration_cert: _, ...spec },
-                    ...document
-                } = withCertificate(undefined);
-                expect(
-                    service.validateRegistrationCertificate(
-                        {
-                            ...document,
-                            spec: {
-                                ...spec,
-                                registrationCertImportJwt: "not-a-jwt",
-                            },
-                        },
-                        "acme",
-                    ),
-                ).toEqual([
-                    expect.objectContaining({
-                        message: "Registration certificate is not a valid JWT",
-                    }),
-                ]);
-            });
-
             it("leaves malformed fields to the schema check", () => {
                 const {
                     spec: { registration_cert: _, ...spec },
@@ -478,19 +455,6 @@ describe("ConfigDocumentValidationService", () => {
                         {
                             ...document,
                             spec: { ...spec, registration_cert: { jwt: 42 } },
-                        },
-                        "acme",
-                    ),
-                ).toEqual([]);
-                expect(
-                    service.validateRegistrationCertificate(
-                        {
-                            ...document,
-                            spec: {
-                                ...spec,
-                                registrationCertBodyPurpose: "x",
-                                registrationCertImportJwt: 42,
-                            },
                         },
                         "acme",
                     ),
@@ -510,15 +474,6 @@ describe("ConfigDocumentValidationService", () => {
                 expect(
                     service.validate(
                         withCertificate({ jwt: certificate(tenantVct, 1_000) }),
-                    ),
-                ).toEqual([]);
-            });
-
-            it("leaves certificates the registrar resolves to apply", () => {
-                expect(
-                    service.validateRegistrationCertificate(
-                        withCertificate({ id: "rc-1" }),
-                        "acme",
                     ),
                 ).toEqual([]);
             });

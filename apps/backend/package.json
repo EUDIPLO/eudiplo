@@ -34,7 +34,6 @@
         "test:e2e:local": "pnpm build:deps && vitest run --config ./test/vitest.config.ts",
         "test:e2e:watch": "pnpm build:deps && vitest --coverage --config ./test/vitest.config.ts",
         "test:oidf": "pnpm build:deps && vitest run --config ./test/vitest.oidf.config.ts",
-        "registrar": "openapi-ts",
         "typeorm": "tsx ./node_modules/typeorm/cli.js -d ./src/database/data-source.ts",
         "migration:create": "tsx ./node_modules/typeorm/cli.js migration:create",
         "migration:run": "pnpm typeorm migration:run",
@@ -47,7 +46,6 @@
         "@aws-sdk/client-secrets-manager": "^3.1169.0",
         "@azure/identity": "^4.14.1",
         "@azure/keyvault-secrets": "^4.12.0",
-        "@badgateway/oauth2-client": "^3.3.1",
         "@eudiplo/config-format": "workspace:*",
         "@keycloak/keycloak-admin-client": "^26.8.2",
         "@nestjs/axios": "^12.0.2",
@@ -124,7 +122,6 @@
     },
     "devDependencies": {
         "@biomejs/biome": "2.6.8",
-        "@hey-api/openapi-ts": "^0.99.0",
         "@nestjs/cli": "^12.0.13",
         "@nestjs/schematics": "^12.0.13",
         "@nestjs/testing": "^12.5.0",

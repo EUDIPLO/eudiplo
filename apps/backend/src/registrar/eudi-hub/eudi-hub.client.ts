@@ -238,40 +238,6 @@ export class EudiHubClient {
         }
     }
 
-    /**
-     * A CA certificate from the URL an issued certificate names in its
-     * Authority Information Access extension (`caIssuers`), DER or PEM. The
-     * request carries no token, as the URL is public and may be on another
-     * host; the outbound URL policy applies to it.
-     */
-    async fetchCaCertificate(url: string): Promise<X509Certificate> {
-        let response: Response;
-        try {
-            response = await this.fetch(url, { method: "GET" });
-        } catch (error) {
-            throw new EudiHubRequestError(
-                error instanceof Error ? error.message : String(error),
-                {
-                    blocked:
-                        error instanceof OutboundFetchError && error.blocked,
-                },
-            );
-        }
-        if (!response.ok) {
-            throw new EudiHubRequestError(
-                `The CA certificate at ${url} could not be fetched (HTTP ${response.status})`,
-                { status: response.status },
-            );
-        }
-        try {
-            return new X509Certificate(
-                Buffer.from(await response.arrayBuffer()),
-            );
-        } catch {
-            throw invalidAnswer(`${url} did not answer with a certificate`);
-        }
-    }
-
     /** Revoke an access certificate right away. */
     async revokeAccessCertificate(
         token: string,

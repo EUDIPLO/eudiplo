@@ -18,43 +18,45 @@ const basePresentationConfig = {
 };
 
 describe("PresentationConfigCreateSchema", () => {
-    it("accepts registration certificate fields submitted by the management UI", () => {
-        const result = PresentationConfigCreateSchema.safeParse({
-            ...basePresentationConfig,
-            registrationCertImportJwt: "",
-            registrationCertImportId: "cert-1",
-            registrationCertBodyPrivacyPolicy: "https://example.com/privacy",
-            registrationCertBodySupportUri: "https://example.com/support",
-            registrationCertBodyIntermediary: "Example Verifier",
-            registrationCertBodyPurpose: [
-                {
-                    lang: "en-US",
-                    content: "Verify age eligibility",
-                },
-            ],
-        });
-
-        expect(result.success).toBe(true);
-    });
-
-    it("uses the registrar's provides_attestations for issuer registrations", () => {
-        const withBody = (body: Record<string, unknown>) =>
+    it("keeps the purpose and privacy policy with the registration certificate", () => {
+        const withCert = (registration_cert: unknown) =>
             PresentationConfigCreateSchema.safeParse({
                 ...basePresentationConfig,
-                registration_cert: {
-                    body: {
-                        privacy_policy: "https://example.com/privacy",
-                        support_uri: "https://example.com/support",
-                        ...body,
-                    },
-                },
+                registration_cert,
             }).success;
 
         expect(
-            withBody({ provides_attestations: ["https://example.com/age"] }),
+            withCert({
+                jwt: "a.b.c",
+                purpose: [{ lang: "en", content: "Verify age eligibility" }],
+                privacy_policy: "https://example.com/privacy",
+            }),
         ).toBe(true);
-        expect(withBody({ provides_attestations: [{ vct: "x" }] })).toBe(false);
-        expect(withBody({ provided_attestations: [{ vct: "x" }] })).toBe(false);
+        expect(
+            withCert({
+                purpose: [{ lang: "en", content: "Verify age eligibility" }],
+            }),
+        ).toBe(true);
+        expect(withCert(null)).toBe(true);
+        expect(withCert({ purpose: [{ lang: "en" }] })).toBe(false);
+    });
+
+    it("refuses the removed registrar fields", () => {
+        const parse = (fields: Record<string, unknown>) =>
+            PresentationConfigCreateSchema.safeParse({
+                ...basePresentationConfig,
+                ...fields,
+            }).success;
+
+        expect(parse({ registration_cert: { id: "cert-1" } })).toBe(false);
+        expect(
+            parse({
+                registration_cert: {
+                    body: { privacy_policy: "https://example.com/privacy" },
+                },
+            }),
+        ).toBe(false);
+        expect(parse({ registrationCertImportJwt: "a.b.c" })).toBe(false);
     });
 
     it("accepts allowedOrigins only in serialized origin form", () => {

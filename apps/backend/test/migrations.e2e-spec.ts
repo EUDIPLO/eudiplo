@@ -30,6 +30,7 @@ import { AddAllowedOriginsToPresentationConfig1786000000000 } from "../src/datab
 import { AddTrustListSequenceNumber1786100000000 } from "../src/database/migrations/1786100000000-AddTrustListSequenceNumber.js";
 import { NormalizeTrustListEntityInfo1786200000000 } from "../src/database/migrations/1786200000000-NormalizeTrustListEntityInfo.js";
 import { AddWalletUnitRevocation1786300000000 } from "../src/database/migrations/1786300000000-AddWalletUnitRevocation.js";
+import { RemoveSandboxRegistrar1786400000000 } from "../src/database/migrations/1786400000000-RemoveSandboxRegistrar.js";
 import { describeWithContainers } from "./container-runtime.js";
 import {
     addTokensValidAfterContract,
@@ -1695,9 +1696,83 @@ describe("Migration tests", () => {
             new AddRelyingPartyContactToRegistrarConfig1785200000000();
         const table = "registrar_config_entity";
         const column = "relyingPartyContact";
+        let dataSource: DataSource;
+        let tmpDir: string;
 
-        /** Registrar config schema from the entities, then the column removed again. */
-        async function registrarSchemaBefore(
+        beforeAll(async () => {
+            tmpDir = mkdtempSync(join(tmpdir(), "eudiplo-migration-test-"));
+            const { TenantEntity } = await import(
+                "../src/auth/tenant/entities/tenant.entity.js"
+            );
+            const { ClientEntity } = await import(
+                "../src/auth/client/entities/client.entity.js"
+            );
+            dataSource = new DataSource({
+                type: "better-sqlite3",
+                database: join(tmpDir, "test.db"),
+                entities: [TenantEntity, ClientEntity],
+                synchronize: true,
+                logging: false,
+            });
+            await dataSource.initialize();
+            // The entity is gone; the later migration's down() creates the
+            // 9.x table, which this migration then changes.
+            const queryRunner = dataSource.createQueryRunner();
+            await new RemoveSandboxRegistrar1786400000000().down(queryRunner);
+            await migration.down(queryRunner);
+            await queryRunner.release();
+            await dataSource.query(
+                `INSERT INTO "tenant_entity" ("id", "name") VALUES ('t', 't')`,
+            );
+            await dataSource.query(
+                `INSERT INTO "${table}" ("tenantId", "registrarUrl", "oidcUrl", "clientId", "username", "password") VALUES ('t', 'https://registrar.example', 'https://auth.example', 'c', 'u', 'p')`,
+            );
+        }, 30_000);
+
+        afterAll(async () => {
+            await dataSource?.destroy();
+            if (tmpDir) rmSync(tmpDir, { recursive: true, force: true });
+        });
+
+        test("adds a nullable column on SQLite, keeps the rows, is idempotent and reversible", async () => {
+            const queryRunner = dataSource.createQueryRunner();
+            expect(
+                (await queryRunner.getTable(table))?.findColumnByName(column),
+            ).toBeUndefined();
+
+            await migration.up(queryRunner);
+            await migration.up(queryRunner);
+
+            expect(
+                (await queryRunner.getTable(table))?.findColumnByName(column)
+                    ?.isNullable,
+            ).toBe(true);
+            await expect(
+                dataSource.query(
+                    `SELECT "${column}" FROM "${table}" WHERE "tenantId" = 't'`,
+                ),
+            ).resolves.toEqual([{ [column]: null }]);
+
+            await migration.down(queryRunner);
+            expect(
+                (await queryRunner.getTable(table))?.findColumnByName(column),
+            ).toBeUndefined();
+            await queryRunner.release();
+        });
+    });
+
+    describe("RemoveSandboxRegistrar1786400000000", () => {
+        const migration = new RemoveSandboxRegistrar1786400000000();
+        const now = Math.floor(Date.now() / 1000);
+        const unsigned = (payload: Record<string, unknown>) =>
+            `e30.${Buffer.from(JSON.stringify(payload)).toString("base64url")}.`;
+        const valid = unsigned({ exp: now + 3600 });
+        const expired = unsigned({ exp: now - 3600 });
+        const purpose = [{ lang: "en", content: "Age check" }];
+        const servers = [{ type: "built-in", id: "issuer-built-in" }];
+
+        /** The schema from the entities, then the 10.0 pre-release state with data. */
+        async function schemaBefore(
             options:
                 | { type: "better-sqlite3"; database: string }
                 | { type: "postgres"; url: string },
@@ -1710,13 +1785,23 @@ describe("Migration tests", () => {
                 { SessionLogEntry },
                 { TenantEntity },
                 { ClientEntity },
-                { RegistrarConfigEntity },
+                { IssuanceConfig },
+                { PresentationConfig },
+                { WebhookEndpointEntity },
             ] = await Promise.all([
                 import("../src/session/entities/session.entity.js"),
                 import("../src/session/entities/session-log-entry.entity.js"),
                 import("../src/auth/tenant/entities/tenant.entity.js"),
                 import("../src/auth/client/entities/client.entity.js"),
-                import("../src/registrar/entities/registrar-config.entity.js"),
+                import(
+                    "../src/issuer/configuration/issuance/entities/issuance-config.entity.js"
+                ),
+                import(
+                    "../src/verifier/presentations/entities/presentation-config.entity.js"
+                ),
+                import(
+                    "../src/issuer/configuration/webhook-endpoint/entities/webhook-endpoint.entity.js"
+                ),
             ]);
             const dataSource = new DataSource({
                 ...options,
@@ -1725,7 +1810,9 @@ describe("Migration tests", () => {
                     SessionLogEntry,
                     TenantEntity,
                     ClientEntity,
-                    RegistrarConfigEntity,
+                    IssuanceConfig,
+                    PresentationConfig,
+                    WebhookEndpointEntity,
                 ],
                 synchronize: true,
                 logging: false,
@@ -1736,11 +1823,36 @@ describe("Migration tests", () => {
             const queryRunner = dataSource.createQueryRunner();
             await migration.down(queryRunner);
             await queryRunner.release();
+            const json = (value: unknown) => `'${JSON.stringify(value)}'`;
             await dataSource.query(
-                `INSERT INTO "tenant_entity" ("id", "name") VALUES ('t', 't')`,
+                `INSERT INTO "tenant_entity" ("id", "name") VALUES ('t', 't'), ('u', 'u')`,
             );
             await dataSource.query(
-                `INSERT INTO "${table}" ("tenantId", "registrarUrl", "oidcUrl", "clientId", "username", "password") VALUES ('t', 'https://registrar.example', 'https://auth.example', 'c', 'u', 'p')`,
+                `INSERT INTO "registrar_config_entity" ("tenantId", "registrarUrl", "oidcUrl", "clientId", "username", "password") VALUES ('t', 'https://registrar.example', 'https://auth.example', 'c', 'u', 'p')`,
+            );
+            const presentation = (
+                id: string,
+                spec: unknown,
+                cache: unknown = null,
+            ) =>
+                dataSource.query(
+                    `INSERT INTO "presentation_config" ("id", "tenantId", "dcql_query", "registration_cert", "registrationCertCache") VALUES ('${id}', 't', '{"credentials":[]}', ${json(spec)}, ${cache === null ? "NULL" : json(cache)})`,
+                );
+            await presentation(
+                "generated",
+                {
+                    body: {
+                        purpose,
+                        privacy_policy: "https://rp.example/privacy",
+                        support_uri: "https://rp.example/support",
+                    },
+                },
+                { jwt: valid, fingerprint: "f" },
+            );
+            await presentation("expired", { id: "cert-1" }, { jwt: expired });
+            await presentation("imported", { jwt: valid, id: "ignored" });
+            await dataSource.query(
+                `INSERT INTO "issuance_config" ("tenantId", "authorizationServers", "registrationCertificate", "registrationCertificateCache") VALUES ('t', ${json(servers)}, ${json({ enabled: true, mode: "generate", renewal: "manual", jwt: "stale", supportUri: "https://issuer.example/support" })}, ${json({ jwt: valid, fingerprint: "f" })}), ('u', ${json(servers)}, ${json({ enabled: true, mode: "import", jwt: expired })}, NULL)`,
             );
             return { dataSource, driftAfterSynchronize };
         }
@@ -1750,37 +1862,80 @@ describe("Migration tests", () => {
                 .map((query) => query.query)
                 .sort();
 
-        async function expectAddedAndReversible(
+        const parsed = (value: unknown) =>
+            typeof value === "string" ? JSON.parse(value) : value;
+
+        async function expectMigratedAndReversible(
             dataSource: DataSource,
             driftAfterSynchronize: string[],
         ) {
             const queryRunner = dataSource.createQueryRunner();
+            await migration.up(queryRunner);
+            await migration.up(queryRunner);
+
+            expect(await queryRunner.getTable("registrar_config_entity")).toBe(
+                undefined,
+            );
             expect(
-                (await queryRunner.getTable(table))?.findColumnByName(column),
+                (
+                    await queryRunner.getTable("presentation_config")
+                )?.findColumnByName("registrationCertCache"),
+            ).toBeUndefined();
+            expect(
+                (
+                    await queryRunner.getTable("issuance_config")
+                )?.findColumnByName("registrationCertificateCache"),
             ).toBeUndefined();
 
-            await migration.up(queryRunner);
-            await migration.up(queryRunner);
-
-            const added = (await queryRunner.getTable(table))?.findColumnByName(
-                column,
+            const presentations = Object.fromEntries(
+                (
+                    await dataSource.query(
+                        `SELECT "id", "registration_cert" FROM "presentation_config"`,
+                    )
+                ).map((row: { id: string; registration_cert: unknown }) => [
+                    row.id,
+                    parsed(row.registration_cert),
+                ]),
             );
-            expect(added?.isNullable).toBe(true);
-            await expect(
-                dataSource.query(
-                    `SELECT "${column}" FROM "${table}" WHERE "tenantId" = 't'`,
+            expect(presentations).toEqual({
+                generated: {
+                    jwt: valid,
+                    purpose,
+                    privacy_policy: "https://rp.example/privacy",
+                },
+                expired: null,
+                imported: { jwt: valid },
+            });
+
+            const issuance = Object.fromEntries(
+                (
+                    await dataSource.query(
+                        `SELECT "tenantId", "registrationCertificate" FROM "issuance_config"`,
+                    )
+                ).map(
+                    (row: {
+                        tenantId: string;
+                        registrationCertificate: unknown;
+                    }) => [row.tenantId, parsed(row.registrationCertificate)],
                 ),
-            ).resolves.toEqual([{ [column]: null }]);
-            // SQLite always rebuilds the table here; only the column order
-            // differs, so the drift check is for PostgreSQL.
+            );
+            expect(issuance).toEqual({
+                t: {
+                    enabled: true,
+                    jwt: valid,
+                    supportUri: "https://issuer.example/support",
+                },
+                u: { enabled: true, jwt: expired },
+            });
+
             if (dataSource.options.type === "postgres") {
                 expect(await drift(dataSource)).toEqual(driftAfterSynchronize);
             }
 
             await migration.down(queryRunner);
             expect(
-                (await queryRunner.getTable(table))?.findColumnByName(column),
-            ).toBeUndefined();
+                await queryRunner.getTable("registrar_config_entity"),
+            ).toBeDefined();
             await queryRunner.release();
         }
 
@@ -1791,11 +1946,10 @@ describe("Migration tests", () => {
 
             beforeAll(async () => {
                 tmpDir = mkdtempSync(join(tmpdir(), "eudiplo-migration-test-"));
-                ({ dataSource, driftAfterSynchronize } =
-                    await registrarSchemaBefore({
-                        type: "better-sqlite3",
-                        database: join(tmpDir, "test.db"),
-                    }));
+                ({ dataSource, driftAfterSynchronize } = await schemaBefore({
+                    type: "better-sqlite3",
+                    database: join(tmpDir, "test.db"),
+                }));
             }, 30_000);
 
             afterAll(async () => {
@@ -1803,8 +1957,8 @@ describe("Migration tests", () => {
                 if (tmpDir) rmSync(tmpDir, { recursive: true, force: true });
             });
 
-            test("adds a nullable column, keeps the rows, is idempotent and reversible", async () => {
-                await expectAddedAndReversible(
+            test("keeps valid generated certificates as JWTs, drops the caches and the registrar table, is idempotent and reversible", async () => {
+                await expectMigratedAndReversible(
                     dataSource,
                     driftAfterSynchronize,
                 );
@@ -1820,11 +1974,10 @@ describe("Migration tests", () => {
                 postgresContainer = await new PostgreSqlContainer(
                     "postgres:alpine",
                 ).start();
-                ({ dataSource, driftAfterSynchronize } =
-                    await registrarSchemaBefore({
-                        type: "postgres",
-                        url: postgresContainer.getConnectionUri(),
-                    }));
+                ({ dataSource, driftAfterSynchronize } = await schemaBefore({
+                    type: "postgres",
+                    url: postgresContainer.getConnectionUri(),
+                }));
             }, 60_000);
 
             afterAll(async () => {
@@ -1832,15 +1985,14 @@ describe("Migration tests", () => {
                 await postgresContainer?.stop();
             });
 
-            test("adds a nullable column, keeps the rows, is idempotent and reversible", async () => {
-                await expectAddedAndReversible(
+            test("keeps valid generated certificates as JWTs, drops the caches and the registrar table, is idempotent and reversible", async () => {
+                await expectMigratedAndReversible(
                     dataSource,
                     driftAfterSynchronize,
                 );
             });
         });
     });
-
     describe("BackfillIssuanceWalletNonce1785300000000", () => {
         const migration = new BackfillIssuanceWalletNonce1785300000000();
         const issuance = "00000000-0000-4000-8000-000000000001";

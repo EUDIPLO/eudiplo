@@ -1,7 +1,7 @@
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import type { KeyChainResponseDto } from '@eudiplo/sdk-core';
-import { BehaviorSubject, Subject, of } from 'rxjs';
+import { of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { renderDownloadButton } from '../../config-portability/config-document.testing';
@@ -10,7 +10,6 @@ import { KeyChainService } from '../key-chain.service';
 import { KeyManagementShowComponent } from './key-management-show.component';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { JwtService } from '../../services/jwt.service';
-import { RegistrarService } from '../../registrar/registrar.service';
 import { ConfigOwnershipService } from '../../config-portability/config-ownership.service';
 import { expectAvailable, expectUnavailable } from '../../common/unavailable-action.testing';
 
@@ -184,7 +183,6 @@ describe('KeyManagementShowComponent configuration download', () => {
       {} as never,
       dialog as never,
       {} as never,
-      {} as never,
       configDocuments as never
     );
     component.keyChain = keyChain;
@@ -282,7 +280,6 @@ describe('KeyManagementShowComponent loading', () => {
       {} as never,
       {} as never,
       { hasRole: () => true } as never,
-      { getConfig: vi.fn().mockResolvedValue(null) } as never,
       {} as never
     );
 
@@ -302,7 +299,6 @@ describe('KeyManagementShowComponent loading', () => {
 describe('KeyManagementShowComponent type description', () => {
   function describeKey(keyChain: Partial<KeyChainResponseDto>): string {
     const component = new KeyManagementShowComponent(
-      {} as never,
       {} as never,
       {} as never,
       {} as never,
@@ -350,17 +346,11 @@ describe('KeyManagementShowComponent type description', () => {
   });
 });
 
-describe('KeyManagementShowComponent registrar enrollment', () => {
+describe('KeyManagementShowComponent EUDI Hub', () => {
   const selfSigned = { subject: 'CN=Tenant', issuer: 'CN=Tenant', pem: '' };
   const registrarIssued = { subject: 'CN=Tenant', issuer: 'CN=Registrar CA', pem: '' };
   let keyChainService: { getById: ReturnType<typeof vi.fn> };
-  let registrarService: {
-    getConfig: ReturnType<typeof vi.fn>;
-    createAccessCertificate: ReturnType<typeof vi.fn>;
-  };
   let snackBar: { open: ReturnType<typeof vi.fn> };
-  let snackBarAction: Subject<void>;
-  let router: { navigate: ReturnType<typeof vi.fn> };
   let dialog: { open: ReturnType<typeof vi.fn> };
   let roles: string[];
 
@@ -375,47 +365,29 @@ describe('KeyManagementShowComponent registrar enrollment', () => {
     } as unknown as KeyChainResponseDto;
   }
 
-  async function create(
-    key = keyChain(),
-    ownership: string | undefined = 'unmanaged'
-  ): Promise<KeyManagementShowComponent> {
+  async function create(key = keyChain()): Promise<KeyManagementShowComponent> {
     keyChainService.getById.mockResolvedValue(key);
-    const configOwnership = {
-      get:
-        ownership === 'reject'
-          ? vi.fn().mockRejectedValue(new Error('ownership unavailable'))
-          : vi.fn().mockResolvedValue(ownership ? { ownership } : undefined),
-    };
     const component = new KeyManagementShowComponent(
       keyChainService as never,
       { paramMap: of(convertToParamMap({ id: key.id })) } as never,
       snackBar as never,
-      router as never,
+      { navigate: vi.fn() } as never,
       dialog as never,
       { hasRole: (role: string) => roles.includes(role) } as never,
-      registrarService as never,
-      {} as never,
-      configOwnership as never
+      {} as never
     );
     component.ngOnInit();
     await vi.waitFor(() => expect(component.keyChain).toBeDefined());
-    await vi.waitFor(() => expect(configOwnership.get).toHaveBeenCalled());
-    await Promise.resolve();
-    if (roles.includes('registrar:manage')) {
-      await vi.waitFor(() => expect(component.registrarConfig).not.toBe('checking'));
-    }
     return component;
+  }
+
+  function closesWith(result: unknown) {
+    dialog.open.mockReturnValue({ afterClosed: () => of(result) });
   }
 
   beforeEach(() => {
     keyChainService = { getById: vi.fn() };
-    registrarService = {
-      getConfig: vi.fn().mockResolvedValue({ registrarUrl: 'https://registrar.example' }),
-      createAccessCertificate: vi.fn().mockResolvedValue({}),
-    };
-    snackBarAction = new Subject<void>();
-    snackBar = { open: vi.fn(() => ({ onAction: () => snackBarAction })) };
-    router = { navigate: vi.fn() };
+    snackBar = { open: vi.fn(() => ({ onAction: () => of() })) };
     dialog = { open: vi.fn() };
     roles = ['registrar:manage'];
     vi.spyOn(window, 'confirm').mockReturnValue(true);
@@ -423,401 +395,74 @@ describe('KeyManagementShowComponent registrar enrollment', () => {
 
   afterEach(() => vi.restoreAllMocks());
 
-  it('offers the enrollment for a standalone access key when a registrar is configured', async () => {
-    expect((await create()).canEnrollWithRegistrar).toBe(true);
-  });
-
-  it('does not offer it without the registrar:manage role or read the configuration', async () => {
-    roles = ['keys:manage'];
-    const component = await create();
-
-    expect(registrarService.getConfig).not.toHaveBeenCalled();
-    expect(component.canEnrollWithRegistrar).toBe(false);
-  });
-
-  it('hints at a missing relying party contact and keeps the enrollment', async () => {
-    const component = await create();
-
-    expect(component.showRegistrarContactHint).toBe(true);
-    expect(component.canEnrollWithRegistrar).toBe(true);
-  });
-
-  it('drops the contact hint once the active certificate comes from the registrar', async () => {
-    const component = await create();
-    keyChainService.getById.mockResolvedValue(keyChain({ activeCertificate: registrarIssued }));
-
-    await component.enrollWithRegistrar();
-
-    expect(component.showRegistrarContactHint).toBe(false);
-    expect(
-      (await create(keyChain({ activeCertificate: registrarIssued }))).showRegistrarContactHint
-    ).toBe(false);
-  });
-
-  it('keeps the contact hint when the ownership lookup fails', async () => {
-    expect((await create(keyChain(), 'reject')).showRegistrarContactHint).toBe(true);
-  });
-
-  it('hints at a contact only where the enrollment can be started', async () => {
-    expect((await create(keyChain(), 'file-managed')).showRegistrarContactHint).toBe(false);
-    expect((await create(keyChain({ usageType: 'attestation' }))).showRegistrarContactHint).toBe(
-      false
-    );
-    expect((await create(keyChain({ type: 'internalChain' }))).showRegistrarContactHint).toBe(
-      false
-    );
-
-    roles = ['keys:manage'];
-    expect((await create()).showRegistrarContactHint).toBe(false);
-  });
-
-  it('does not hint when the configuration has a relying party contact', async () => {
-    registrarService.getConfig.mockResolvedValue({
-      registrarUrl: 'https://registrar.example',
-      relyingPartyContact: { email: 'support@verifier.example' },
-    });
-
-    expect((await create()).showRegistrarContactHint).toBe(false);
-  });
-
-  it('does not hint at a contact without a configuration or when it could not be read', async () => {
-    registrarService.getConfig.mockResolvedValue(null);
-    expect((await create()).showRegistrarContactHint).toBe(false);
-
-    registrarService.getConfig.mockRejectedValue({ status: 500 });
-    vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    expect((await create()).showRegistrarContactHint).toBe(false);
-  });
-
-  it('links to the registrar configuration instead when there is none', async () => {
-    registrarService.getConfig.mockResolvedValue(null);
-    const component = await create();
-
-    expect(component.canEnrollWithRegistrar).toBe(false);
-    expect(component.needsRegistrarConfig).toBe(true);
-  });
-
-  it('keeps the page shown while it reloads the enrolled key', async () => {
-    const component = await create();
-    let resolveReload!: (key: KeyChainResponseDto) => void;
-    keyChainService.getById.mockReturnValue(new Promise((resolve) => (resolveReload = resolve)));
-
-    const enrolling = component.enrollWithRegistrar();
-    await vi.waitFor(() => expect(keyChainService.getById).toHaveBeenCalledTimes(2));
-    expect(component.keyChain).toBeDefined();
-    resolveReload(keyChain({ activeCertificate: registrarIssued }));
-    await enrolling;
-
-    expect(component.keyChain?.activeCertificate?.issuer).toBe('CN=Registrar CA');
-  });
-
-  it('offers it when the registrar configuration could not be read', async () => {
-    registrarService.getConfig.mockRejectedValue({ status: 500 });
-    const component = await create();
-
-    expect(component.registrarConfig).toBe('unknown');
-    expect(component.canEnrollWithRegistrar).toBe(true);
+  it('offers the EUDI Hub request for a standalone access key', async () => {
+    expect((await create()).canRequestFromEudiHub).toBe(true);
   });
 
   it.each([
     ['an internal chain', { type: 'internalChain' }],
     ['an attestation key', { usageType: 'attestation' }],
   ])('does not offer it for %s', async (_, overrides) => {
-    expect((await create(keyChain(overrides))).canEnrollWithRegistrar).toBe(false);
+    expect((await create(keyChain(overrides))).canRequestFromEudiHub).toBe(false);
   });
 
-  it('enrolls a self-signed key without asking and reloads it', async () => {
-    const component = await create();
-    keyChainService.getById.mockResolvedValue(keyChain({ activeCertificate: registrarIssued }));
+  it('does not offer it without the registrar:manage role', async () => {
+    roles = ['keys:manage'];
 
-    await component.enrollWithRegistrar();
+    expect((await create()).canRequestFromEudiHub).toBe(false);
+  });
+
+  it('opens the dialog for the key and reloads the key with the stored certificate', async () => {
+    const component = await create(keyChain({ description: 'Verifier key' }));
+    keyChainService.getById.mockClear();
+    closesWith({ id: 'hub-1', certId: 'access-key', crt: 'PEM', environment: 'sandbox' });
+
+    component.requestFromEudiHub();
 
     expect(window.confirm).not.toHaveBeenCalled();
-    expect(registrarService.createAccessCertificate).toHaveBeenCalledWith('access-key');
-    expect(snackBar.open.mock.lastCall?.[0]).toBe('Access certificate enrolled via registrar');
-    expect(component.keyChain?.activeCertificate?.issuer).toBe('CN=Registrar CA');
-    expect(component.isEnrolling).toBe(false);
+    expect(dialog.open.mock.lastCall?.[1].data).toEqual({
+      keyId: 'access-key',
+      description: 'Verifier key',
+    });
+    await vi.waitFor(() => expect(keyChainService.getById).toHaveBeenCalledWith('access-key'));
+    expect(snackBar.open.mock.lastCall?.[0]).toContain('EUDI Hub (sandbox)');
+  });
+
+  it('reloads the key without a success message when the dialog closes without a certificate', async () => {
+    const component = await create();
+    keyChainService.getById.mockClear();
+    snackBar.open.mockClear();
+    closesWith(undefined);
+
+    component.requestFromEudiHub();
+
+    await vi.waitFor(() => expect(keyChainService.getById).toHaveBeenCalledWith('access-key'));
+    expect(snackBar.open).not.toHaveBeenCalled();
+    expect(dialog.open.mock.lastCall?.[1].disableClose).toBe(true);
+  });
+
+  it('warns that rotation replaces the certificate from the EUDI Hub', async () => {
+    const component = await create(keyChain({ rotationPolicy: { enabled: true } }));
+    vi.mocked(window.confirm).mockReturnValue(false);
+
+    component.requestFromEudiHub();
+
+    expect(vi.mocked(window.confirm).mock.lastCall?.[0]).toContain(
+      'replaces the certificate from the EUDI Hub with a self-signed one'
+    );
+    expect(dialog.open).not.toHaveBeenCalled();
   });
 
   it('asks before replacing a certificate issued by someone else', async () => {
     const component = await create(keyChain({ activeCertificate: registrarIssued }));
     vi.mocked(window.confirm).mockReturnValue(false);
 
-    await component.enrollWithRegistrar();
+    component.requestFromEudiHub();
 
-    expect(vi.mocked(window.confirm).mock.lastCall?.[0]).toContain('CN=Registrar CA');
-    expect(registrarService.createAccessCertificate).not.toHaveBeenCalled();
-  });
-
-  it('replaces a certificate issued by someone else once confirmed', async () => {
-    const component = await create(keyChain({ activeCertificate: registrarIssued }));
-
-    await component.enrollWithRegistrar();
-
-    expect(window.confirm).toHaveBeenCalled();
-    expect(registrarService.createAccessCertificate).toHaveBeenCalledWith('access-key');
-  });
-
-  it('keeps showing another key the user opened during the enrollment', async () => {
-    const paramMap = new BehaviorSubject(convertToParamMap({ id: 'access-key' }));
-    keyChainService.getById.mockImplementation((...args: unknown[]) =>
-      Promise.resolve(keyChain({ id: args[0] }))
+    expect(vi.mocked(window.confirm).mock.lastCall?.[0]).toContain(
+      'new certificate from the EUDI Hub'
     );
-    let finishEnrollment!: () => void;
-    registrarService.createAccessCertificate.mockReturnValue(
-      new Promise<void>((resolve) => (finishEnrollment = resolve))
-    );
-    const component = new KeyManagementShowComponent(
-      keyChainService as never,
-      { paramMap } as never,
-      snackBar as never,
-      router as never,
-      {} as never,
-      { hasRole: (role: string) => roles.includes(role) } as never,
-      registrarService as never,
-      {} as never
-    );
-    component.ngOnInit();
-    await vi.waitFor(() => expect(component.keyChain?.id).toBe('access-key'));
-    await vi.waitFor(() => expect(component.registrarConfig).toBe('configured'));
-
-    const enrolling = component.enrollWithRegistrar();
-    paramMap.next(convertToParamMap({ id: 'other-key' }));
-    await vi.waitFor(() => expect(component.keyChain?.id).toBe('other-key'));
-    expect(component.isEnrolling).toBe(false);
-    finishEnrollment();
-    await enrolling;
-
-    expect(component.keyChain?.id).toBe('other-key');
-    expect(component.isEnrolling).toBe(false);
-    component.ngOnDestroy();
-  });
-
-  it('warns before enrolling a rotating key', async () => {
-    const component = await create(
-      keyChain({ rotationPolicy: { enabled: true, intervalDays: 30 } })
-    );
-    vi.mocked(window.confirm).mockReturnValue(false);
-
-    await component.enrollWithRegistrar();
-
-    expect(vi.mocked(window.confirm).mock.lastCall?.[0]).toContain('rotates automatically');
-    expect(registrarService.createAccessCertificate).not.toHaveBeenCalled();
-  });
-
-  it('sends one request when the action is selected twice', async () => {
-    const component = await create();
-    let finishEnrollment!: () => void;
-    registrarService.createAccessCertificate.mockReturnValue(
-      new Promise<void>((resolve) => (finishEnrollment = resolve))
-    );
-
-    const first = component.enrollWithRegistrar();
-    expect(component.isEnrolling).toBe(true);
-    await component.enrollWithRegistrar();
-    finishEnrollment();
-    await first;
-
-    expect(registrarService.createAccessCertificate).toHaveBeenCalledTimes(1);
-    expect(component.isEnrolling).toBe(false);
-  });
-
-  it('keeps Enroll focusable while it runs: a second click sends one request', async () => {
-    registrarService.createAccessCertificate.mockReturnValue(new Promise(() => undefined));
-    keyChainService.getById.mockResolvedValue(keyChain());
-    TestBed.configureTestingModule({
-      imports: [KeyManagementShowComponent],
-      providers: [
-        provideRouter([]),
-        {
-          provide: ActivatedRoute,
-          useValue: { paramMap: of(convertToParamMap({ id: 'access-key' })) },
-        },
-        { provide: KeyChainService, useValue: keyChainService },
-        { provide: RegistrarService, useValue: registrarService },
-        {
-          provide: JwtService,
-          useValue: {
-            hasRole: (role: string) => roles.includes(role),
-            canUseConfigPortability: () => false,
-          },
-        },
-        { provide: MatSnackBar, useValue: snackBar },
-        { provide: ConfigOwnershipService, useValue: { get: async () => undefined } },
-      ],
-    });
-    const fixture = TestBed.createComponent(KeyManagementShowComponent);
-    fixture.detectChanges();
-    await vi.waitFor(() => expect(fixture.componentInstance.canEnrollWithRegistrar).toBe(true));
-    fixture.detectChanges();
-    const enroll = [
-      ...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('button'),
-    ].find((b) => b.textContent?.includes('Enroll with Registrar'))!;
-    // The ownership lookup of `appConfigManaged` holds clicks back until it answers.
-    await vi.waitFor(() => {
-      fixture.detectChanges();
-      expect(enroll.getAttribute('aria-busy')).toBeNull();
-    });
-    expectAvailable(fixture, enroll, 'Request a certificate for this key from the registrar');
-
-    enroll.click();
-    fixture.detectChanges();
-    enroll.click();
-    fixture.detectChanges();
-
-    expect(registrarService.createAccessCertificate).toHaveBeenCalledOnce();
-    expectUnavailable(fixture, enroll, 'Enrolling this key with the registrar…');
-  });
-
-  it('keeps the key shown when its reload after the enrollment fails', async () => {
-    const component = await create();
-    keyChainService.getById.mockRejectedValue({
-      statusCode: 500,
-      message: 'Internal server error',
-    });
-
-    await component.enrollWithRegistrar();
-
-    expect(component.keyChain?.id).toBe('access-key');
-    expect(snackBar.open.mock.lastCall?.[0]).toBe(
-      'Failed to reload key chain: Internal server error'
-    );
-  });
-
-  it('offers neither the action nor the link while the configuration is read', async () => {
-    registrarService.getConfig.mockReturnValue(new Promise(() => undefined));
-    keyChainService.getById.mockResolvedValue(keyChain());
-    const component = new KeyManagementShowComponent(
-      keyChainService as never,
-      { paramMap: of(convertToParamMap({ id: 'access-key' })) } as never,
-      snackBar as never,
-      router as never,
-      {} as never,
-      { hasRole: (role: string) => roles.includes(role) } as never,
-      registrarService as never,
-      {} as never
-    );
-    component.ngOnInit();
-    await vi.waitFor(() => expect(component.keyChain).toBeDefined());
-
-    expect(component.canEnrollWithRegistrar).toBe(false);
-    expect(component.needsRegistrarConfig).toBe(false);
-  });
-
-  it("shows the backend's reason for a refusal and links to the registrar page", async () => {
-    const component = await create();
-    keyChainService.getById.mockClear();
-    registrarService.createAccessCertificate.mockRejectedValue({
-      status: 400,
-      error: { message: 'Failed to authenticate with registrar' },
-    });
-
-    await component.enrollWithRegistrar();
-
-    expect(snackBar.open.mock.lastCall?.[0]).toBe('Failed to authenticate with registrar');
-    expect(snackBar.open.mock.lastCall?.[1]).toBe('Go to Registrar');
-    snackBarAction.next();
-    expect(router.navigate).toHaveBeenCalledWith(['/registrar']);
-    // A refused request stored nothing.
-    expect(keyChainService.getById).not.toHaveBeenCalled();
-  });
-
-  it('reloads the key after a failure that may have stored the certificate', async () => {
-    const component = await create();
-    keyChainService.getById.mockClear();
-    registrarService.createAccessCertificate.mockRejectedValue({ status: 0 });
-
-    await component.enrollWithRegistrar();
-
-    expect(snackBar.open.mock.lastCall?.[0]).toContain('the backend could not be reached');
-    expect(keyChainService.getById).toHaveBeenCalledWith('access-key');
-  });
-
-  it('does not link to the registrar page when the role is missing', async () => {
-    const component = await create();
-    registrarService.createAccessCertificate.mockRejectedValue({ status: 403 });
-
-    await component.enrollWithRegistrar();
-
-    expect(snackBar.open.mock.lastCall?.[1]).toBe('Close');
-  });
-
-  describe('EUDI Hub', () => {
-    function closesWith(result: unknown) {
-      dialog.open.mockReturnValue({ afterClosed: () => of(result) });
-    }
-
-    it('offers the EUDI Hub request without a registrar configuration', async () => {
-      registrarService.getConfig.mockResolvedValue(null);
-
-      expect((await create()).canRequestFromEudiHub).toBe(true);
-    });
-
-    it.each([
-      ['an internal chain', { type: 'internalChain' }],
-      ['an attestation key', { usageType: 'attestation' }],
-    ])('does not offer it for %s', async (_, overrides) => {
-      expect((await create(keyChain(overrides))).canRequestFromEudiHub).toBe(false);
-    });
-
-    it('does not offer it without the registrar:manage role', async () => {
-      roles = ['keys:manage'];
-
-      expect((await create()).canRequestFromEudiHub).toBe(false);
-    });
-
-    it('opens the dialog for the key and reloads the key with the stored certificate', async () => {
-      const component = await create(keyChain({ description: 'Verifier key' }));
-      keyChainService.getById.mockClear();
-      closesWith({ id: 'hub-1', certId: 'access-key', crt: 'PEM', environment: 'sandbox' });
-
-      component.requestFromEudiHub();
-
-      expect(window.confirm).not.toHaveBeenCalled();
-      expect(dialog.open.mock.lastCall?.[1].data).toEqual({
-        keyId: 'access-key',
-        description: 'Verifier key',
-      });
-      await vi.waitFor(() => expect(keyChainService.getById).toHaveBeenCalledWith('access-key'));
-      expect(snackBar.open.mock.lastCall?.[0]).toContain('EUDI Hub (sandbox)');
-    });
-
-    it('reloads the key without a success message when the dialog closes without a certificate', async () => {
-      const component = await create();
-      keyChainService.getById.mockClear();
-      snackBar.open.mockClear();
-      closesWith(undefined);
-
-      component.requestFromEudiHub();
-
-      await vi.waitFor(() => expect(keyChainService.getById).toHaveBeenCalledWith('access-key'));
-      expect(snackBar.open).not.toHaveBeenCalled();
-      expect(dialog.open.mock.lastCall?.[1].disableClose).toBe(true);
-    });
-
-    it('warns that rotation replaces the certificate from the EUDI Hub', async () => {
-      const component = await create(keyChain({ rotationPolicy: { enabled: true } }));
-      vi.mocked(window.confirm).mockReturnValue(false);
-
-      component.requestFromEudiHub();
-
-      expect(vi.mocked(window.confirm).mock.lastCall?.[0]).toContain(
-        'replaces the certificate from the EUDI Hub with a self-signed one'
-      );
-      expect(dialog.open).not.toHaveBeenCalled();
-    });
-
-    it('asks before replacing a certificate issued by someone else', async () => {
-      const component = await create(keyChain({ activeCertificate: registrarIssued }));
-      vi.mocked(window.confirm).mockReturnValue(false);
-
-      component.requestFromEudiHub();
-
-      expect(vi.mocked(window.confirm).mock.lastCall?.[0]).toContain(
-        'new certificate from the EUDI Hub'
-      );
-      expect(dialog.open).not.toHaveBeenCalled();
-    });
+    expect(dialog.open).not.toHaveBeenCalled();
   });
 });
 
@@ -837,7 +482,6 @@ describe('KeyManagementShowComponent delete', () => {
       {} as never,
       snackBar as never,
       router as never,
-      {} as never,
       {} as never,
       {} as never,
       {} as never
@@ -999,7 +643,6 @@ describe('KeyManagementShowComponent default access key chain', () => {
       { navigate: vi.fn() } as never,
       {} as never,
       { hasRole: () => false } as never,
-      {} as never,
       {} as never
     );
     component.ngOnInit();
@@ -1110,7 +753,6 @@ describe('KeyManagementShowComponent certificate request', () => {
       {} as never,
       {} as never,
       { hasRole: () => false } as never,
-      {} as never,
       {} as never
     );
     component.keyChain = keyChain as KeyChainResponseDto;
@@ -1140,7 +782,6 @@ describe('KeyManagementShowComponent certificate request', () => {
       { navigate } as never,
       {} as never,
       { hasRole: () => false } as never,
-      {} as never,
       {} as never
     );
 

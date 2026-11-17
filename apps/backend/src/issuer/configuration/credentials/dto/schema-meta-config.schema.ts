@@ -1,8 +1,4 @@
 import { z } from "zod";
-import {
-    CATEGORY_VALUES,
-    TAG_VALUES,
-} from "../../../../registrar/schema-metadata/dto/schema-metadata-vocabulary.js";
 
 /**
  * Attestation Level of Security (LoS) as defined in TS11.
@@ -40,21 +36,13 @@ export const SchemaMetaFrameworkType = {
 export type SchemaMetaFrameworkType =
     (typeof SchemaMetaFrameworkType)[keyof typeof SchemaMetaFrameworkType];
 
-export const SchemaMetadataPinMode = {
-    KEEP_CURRENT: "keep_current",
-    UPDATE_TO_NEW_VERSION: "update_to_new_version",
-    REPLACE_ID: "replace_id",
-} as const;
-export type SchemaMetadataPinMode =
-    (typeof SchemaMetadataPinMode)[keyof typeof SchemaMetadataPinMode];
-
 export const SchemaUriEntrySchema = z
     .object({
         credentialConfigId: z
             .string()
             .optional()
             .describe(
-                "Credential configuration whose schema EUDIPLO builds and uploads; `uri` and `meta` are not needed.",
+                "Credential configuration whose schema EUDIPLO builds; `uri` and `meta` are not needed.",
             ),
         format: z
             .string()
@@ -66,7 +54,7 @@ export const SchemaUriEntrySchema = z
             .string()
             .optional()
             .describe(
-                "URL of a schema document that EUDIPLO downloads and uploads to the registrar. Requires `format` and `meta`.",
+                "URL of a schema document. Requires `format` and `meta`.",
             ),
         meta: z
             .record(z.string(), z.unknown())
@@ -86,7 +74,7 @@ export const TrustAuthorityEntrySchema = z
             .string()
             .optional()
             .describe(
-                "Trust list of the tenant. EUDIPLO publishes it as `etsi_tl` authority with its URL and the active certificate of its key chain (the first one of a chain); the other fields are not needed.",
+                "Trust list of the tenant, standing for an `etsi_tl` authority with its URL and the active certificate of its key chain (the first one of a chain); the other fields are not needed.",
             ),
         frameworkType: z
             .enum(SchemaMetaFrameworkType)
@@ -117,22 +105,13 @@ export const SchemaMetaConfigSchema = z
         id: z
             .string()
             .optional()
-            .describe(
-                "Schema ID (attestation identifier URI). `publish` passes it to the registrar when set; `publish-version` requires the ID of the existing schema. With `credentialConfigId` and no `rulebookURI`, `publish` only links that credential configuration to this ID and uploads nothing.",
-            ),
-        name: z
-            .string()
-            .optional()
-            .describe(
-                "Human-readable name. Required when publishing; not needed for a link-only request.",
-            ),
+            .describe("Schema ID (attestation identifier URI)."),
+        name: z.string().optional().describe("Human-readable name."),
         version: z.string().describe("Schema version, for example `1.0.0`."),
         rulebookURI: z
             .string()
             .optional()
-            .describe(
-                "URL of the attestation rulebook, which EUDIPLO downloads and uploads to the registrar. Required when publishing.",
-            ),
+            .describe("URL of the attestation rulebook."),
         attestationLoS: z
             .enum(AttestationLoS)
             .describe("Attestation level of security."),
@@ -149,71 +128,10 @@ export const SchemaMetaConfigSchema = z
             .array(TrustAuthorityEntrySchema)
             .optional()
             .describe(
-                "Trusted authorities for issuers of this attestation. Required when publishing: at least one entry must provide an X.509 certificate (`trustListId`, an `x509` entry or a `verificationMethod` whose `x509Certificate` is a single certificate).",
+                "Trusted authorities for issuers of this attestation (`trustListId`, an `x509` entry or a `verificationMethod`).",
             ),
     })
     .describe(
-        "Schema metadata values; the registrar builds and signs the result.",
+        "TS11 schema metadata values of the credential type. EUDIPLO stores them; no registrar adapter publishes them yet.",
     )
-    .strict();
-
-/**
- * Schema metadata values of a publish request: SchemaMetaConfigSchema plus
- * the registrar catalogue fields, which are not part of a credential
- * configuration's schemaMeta.
- */
-export const PublishSchemaMetaConfigSchema = SchemaMetaConfigSchema.extend({
-    category: z
-        .enum(CATEGORY_VALUES)
-        .optional()
-        .describe(
-            "Registrar category of the schema metadata, one of the predefined values of `GET /api/schema-metadata/vocabularies`. EUDIPLO sets it at the registrar after publishing; it is not stored in the credential configuration.",
-        ),
-    tags: z
-        .array(z.enum(TAG_VALUES))
-        .max(TAG_VALUES.length)
-        .refine((tags) => new Set(tags).size === tags.length, {
-            message: "tags must not repeat",
-        })
-        .optional()
-        .describe(
-            "Registrar tags of the schema metadata, predefined values of `GET /api/schema-metadata/vocabularies`. EUDIPLO sets them at the registrar after publishing; they are not stored in the credential configuration.",
-        ),
-}).describe(
-    "Schema metadata values; the registrar builds and signs the result.",
-);
-
-const pinModeDescription = (target: string) =>
-    `How to update the schema metadata pin of \`credentialConfigId\`: \`keep_current\` (default) keeps a pin to the same ID, \`update_to_new_version\` updates the pinned version under the same ID, \`replace_id\` repoints the pin to ${target}. A configuration without a pin is always linked. If it is pinned to another ID, only \`replace_id\` succeeds; the others answer \`400\` after the schema metadata was published.`;
-
-export const SignSchemaMetaConfigSchema = z
-    .object({
-        config: PublishSchemaMetaConfigSchema,
-        credentialConfigId: z
-            .string()
-            .optional()
-            .describe(
-                "Credential configuration to link to the published schema metadata ID.",
-            ),
-        pinMode: z
-            .enum(SchemaMetadataPinMode)
-            .optional()
-            .describe(pinModeDescription("the new ID")),
-    })
-    .describe("Request body of `POST /api/schema-metadata/publish`.")
-    .strict();
-
-export const SignVersionSchemaMetaConfigSchema = z
-    .object({
-        config: PublishSchemaMetaConfigSchema,
-        credentialConfigId: z
-            .string()
-            .optional()
-            .describe("Credential configuration to link to the new version."),
-        pinMode: z
-            .enum(SchemaMetadataPinMode)
-            .optional()
-            .describe(pinModeDescription("`config.id`")),
-    })
-    .describe("Request body of `POST /api/schema-metadata/publish-version`.")
     .strict();

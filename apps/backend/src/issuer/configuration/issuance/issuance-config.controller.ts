@@ -18,7 +18,11 @@ import { IssuanceConfig } from "./entities/issuance-config.entity.js";
 import { IssuanceService } from "./issuance.service.js";
 import { IssuanceConfigSchema } from "./schemas/issuance.schema.js";
 
-/** Fields a GET response adds to the configuration. */
+/**
+ * Fields a GET response adds to the configuration. 9.x also returned
+ * `registrationCertificateCache`; it is still stripped from a body saved
+ * from such a response.
+ */
 const readOnly = [
     "tenantId",
     "tenant",
@@ -96,35 +100,6 @@ export class IssuanceConfigController {
                 restoreSecrets(config, stored, SECRET),
                 user,
                 requestMeta,
-            ),
-        );
-    }
-
-    /**
-     * Force-reissue issuer registration certificate cache.
-     */
-    @Post("registration-cert/reissue")
-    @ApiOperation({
-        summary: "Reissue issuer registration certificate",
-        description:
-            "Bypasses and refreshes the issuer registration certificate cache, revoking the previous active certificate when replaced.",
-    })
-    @ApiResponse({
-        status: 201,
-        description: "Updated issuance configuration",
-        type: IssuanceConfig,
-    })
-    @ApiResponse({
-        status: 400,
-        description:
-            "Registration certificate is not enabled/generate mode, registrar is unavailable, or no SD-JWT VC credential configuration has a vct and no mDOC credential configuration a docType",
-    })
-    async reissueRegistrationCertificate(
-        @Token() user: TokenPayload,
-    ): Promise<IssuanceConfiguration> {
-        return redact(
-            await this.issuanceService.reissueRegistrationCertificate(
-                user.entity!.id,
             ),
         );
     }

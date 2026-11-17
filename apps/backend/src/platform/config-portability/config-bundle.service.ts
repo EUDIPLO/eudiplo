@@ -1,8 +1,12 @@
 import { createHash } from "node:crypto";
 import { sanitizeClaimFields } from "@eudiplo/config-format/claim-constraints.js";
-import { assertConfigBundle } from "@eudiplo/config-format/config-bundle.js";
+import {
+    assertConfigBundle,
+    withoutRetiredResources,
+} from "@eudiplo/config-format/config-bundle.js";
 import {
     CONFIG_SINGLETON_IDS,
+    isRetiredConfigIssue,
     resourceId,
     schemaUrl,
     serializeDocument,
@@ -119,7 +123,6 @@ const OMITTED_FIELDS = new Set([
     "tenantId",
     "createdAt",
     "updatedAt",
-    "registrationCertificateCache",
     "readerAuthCache",
     "cwt",
     "list",
@@ -247,9 +250,6 @@ export class ConfigBundleService {
     private get keyChains() {
         return this.repos.keyChains;
     }
-    private get registrarConfigs() {
-        return this.repos.registrarConfigs;
-    }
     private get issuanceConfigs() {
         return this.repos.issuanceConfigs;
     }
@@ -355,18 +355,6 @@ export class ConfigBundleService {
                 "KeyChainDefaults",
                 "defaults",
                 { ...defaultKeyChains },
-            );
-        }
-
-        const registrar = await this.registrarConfigs.findOneBy({ tenantId });
-        if (registrar) {
-            await this.addDocument(
-                documents,
-                requirements,
-                tenantId,
-                "RegistrarConfig",
-                "registrar",
-                this.canonicalEntitySpec("RegistrarConfig", registrar),
             );
         }
 
@@ -556,11 +544,14 @@ export class ConfigBundleService {
 
     async plan(
         tenantId: string,
-        bundle: ConfigBundle,
+        received: ConfigBundle,
         mode: ConfigImportMode,
-        ownershipSource = `bundle:${bundle.manifest.tenant}`,
+        ownershipSource = `bundle:${received.manifest.tenant}`,
         options: ConfigPlanOptions = {},
     ): Promise<ConfigImportPlan> {
+        // Resources of retired kinds, such as a registrar configuration, are
+        // skipped with a warning instead of failing the import.
+        const bundle = withoutRetiredResources(received);
         try {
             this.assertBundle(bundle);
         } catch (error) {
@@ -571,7 +562,9 @@ export class ConfigBundleService {
         const revision = await this.configurationRevision(tenantId);
         const assets = await this.planAssets(tenantId, bundle, mode);
         const items: ConfigImportPlanItem[] = [];
-        const issues: ConfigMigrationIssue[] = [];
+        const issues: ConfigMigrationIssue[] = (
+            bundle.manifest.warnings ?? []
+        ).filter(isRetiredConfigIssue);
         const upgradedDocuments: ConfigDocument[] = [];
         const systemOwnedKeyChains =
             await this.systemOwnedKeyChainIds(tenantId);
@@ -1291,7 +1284,6 @@ export class ConfigBundleService {
         const repositories: Repository<any>[] = [
             this.clients,
             this.keyChains,
-            this.registrarConfigs,
             this.issuanceConfigs,
             this.credentialConfigs,
             this.presentationConfigs,
@@ -1982,20 +1974,6 @@ export class ConfigBundleService {
         entity: Record<string, any>,
     ): Record<string, unknown> {
         switch (kind) {
-            case "RegistrarConfig":
-                return {
-                    registrarUrl: entity.registrarUrl,
-                    oidcUrl: entity.oidcUrl,
-                    clientId: entity.clientId,
-                    // Unset columns are null; the schema has them optional.
-                    clientSecret: entity.clientSecret ?? undefined,
-                    username: entity.username,
-                    password: entity.password,
-                    registrationCertificateDefaults:
-                        entity.registrationCertificateDefaults ?? undefined,
-                    relyingPartyContact:
-                        entity.relyingPartyContact ?? undefined,
-                };
             case "IssuanceConfig":
                 return {
                     batchSize: entity.batchSize,
@@ -2463,15 +2441,6 @@ export class ConfigBundleService {
             desired.clientId ??= resourceId(document);
         else if (!this.registry.get(document.kind).singletonId)
             desired.id ??= resourceId(document);
-        // No defaults are stored as null, and 9.x exports wrote that null.
-        // A null contact is stored the same way.
-        if (document.kind === "RegistrarConfig") {
-            for (const field of [
-                "registrationCertificateDefaults",
-                "relyingPartyContact",
-            ])
-                if (desired[field] === null) delete desired[field];
-        }
         // Compare with the settings the importers store for the document.
         if (document.kind === "KeyChain") {
             desired.rotationPolicy = appliedRotationPolicy(desired);
@@ -2498,8 +2467,7 @@ export class ConfigBundleService {
         const replacesSpec =
             document.kind === "KmsConfig" ||
             document.kind === "KeyChain" ||
-            document.kind === "KeyChainDefaults" ||
-            document.kind === "RegistrarConfig";
+            document.kind === "KeyChainDefaults";
         const after = this.documentValidationService.normalizeForComparison({
             ...document,
             spec: replacesSpec ? desired : { ...current, ...desired },
@@ -2589,9 +2557,6 @@ export class ConfigBundleService {
                 const defaults = await this.tenantDefaultKeyChains(tenantId);
                 return defaults === undefined ? undefined : { ...defaults };
             }
-            case "RegistrarConfig":
-                entity = await this.registrarConfigs.findOneBy({ tenantId });
-                break;
             case "IssuanceConfig":
                 entity = await this.issuanceConfigs.findOneBy({ tenantId });
                 break;
@@ -2689,8 +2654,6 @@ export class ConfigBundleService {
                     ))
                 );
             }
-            case "RegistrarConfig":
-                return (await this.registrarConfigs.countBy({ tenantId })) > 0;
             case "IssuanceConfig":
                 return (await this.issuanceConfigs.countBy({ tenantId })) > 0;
             case "CredentialConfig":

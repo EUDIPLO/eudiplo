@@ -6,6 +6,9 @@ import {
 } from "@nestjs/common";
 import { EudiHubRequestError } from "./eudi-hub.client.js";
 
+/** Name of the registrar in messages and logs. */
+export const EUDI_HUB = "EUDI Hub";
+
 /**
  * The answer for a failed EUDI Hub request, logged. A refused token is a 400,
  * not a 401, since EUDIPLO's own session is fine. Other refusals and a

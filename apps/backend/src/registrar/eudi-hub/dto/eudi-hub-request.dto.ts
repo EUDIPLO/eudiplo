@@ -24,7 +24,7 @@ const EudiHubTokenSchema = z
         "Access token of the EUDI Hub portal (the value of the Authorization header the portal sends, with or without 'Bearer '). EUDIPLO uses it for this request only and does not store it.",
     );
 
-const HttpUrlSchema = z.url({ protocol: /^https?$/ }).max(2048);
+export const HttpUrlSchema = z.url({ protocol: /^https?$/ }).max(2048);
 
 const OrganizationIdSchema = z
     .uuid()
@@ -81,7 +81,7 @@ export class EudiHubAccessCertificateRequestDto extends createZodDto(
 ) {}
 
 /** Texts in German and English, as the EUDI Hub requires, and optionally more languages. */
-const BilingualTextSchema = z
+export const BilingualTextSchema = z
     .array(
         z
             .object({
@@ -167,10 +167,12 @@ export const EudiHubPresentationRegistrationCertificateRequestSchema =
             .describe(
                 "Presentation configuration whose DCQL query the certificate covers and that stores it.",
             ),
-        purpose: BilingualTextSchema.describe(
-            "Why the data is requested, in German and English (GDPR purpose).",
+        purpose: BilingualTextSchema.optional().describe(
+            "Why the data is requested, in German and English (GDPR purpose). Defaults to registration_cert.purpose of the presentation configuration; stored there with the certificate.",
         ),
-        privacyPolicy: HttpUrlSchema.describe("Privacy policy URL."),
+        privacyPolicy: HttpUrlSchema.optional().describe(
+            "Privacy policy URL. Defaults to registration_cert.privacy_policy of the presentation configuration; stored there with the certificate.",
+        ),
     })
         .describe(
             "Payload for requesting a verifier registration certificate from the EUDI Hub.",

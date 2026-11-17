@@ -1,7 +1,6 @@
 import { HttpModule } from "@nestjs/axios";
 import { Module } from "@nestjs/common";
 import { CryptoModule } from "../crypto/crypto.module.js";
-import { RegistrarModule } from "../registrar/registrar.module.js";
 import { SessionModule } from "../session/session.module.js";
 import { Iso18013Module } from "./iso18013/iso18013.module.js";
 import { Oid4vpModule } from "./oid4vp/oid4vp.module.js";
@@ -11,7 +10,6 @@ import { VerifierOfferController } from "./verifier-offer/verifier-offer.control
 @Module({
     imports: [
         CryptoModule,
-        RegistrarModule,
         SessionModule,
         HttpModule,
         PresentationsModule,

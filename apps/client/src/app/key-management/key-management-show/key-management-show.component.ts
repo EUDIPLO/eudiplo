@@ -30,7 +30,6 @@ import { Subscription } from 'rxjs';
 import { JsonViewDialogComponent } from '../../issuance/credential-config/credential-config-create/json-view-dialog/json-view-dialog.component';
 import { ConfigDocumentService } from '../../config-portability/config-document.service';
 import { ConfigOwnershipDirective } from '../../config-portability/config-ownership.directive';
-import { ConfigOwnershipService } from '../../config-portability/config-ownership.service';
 import { ConfigOwnershipNoticeComponent } from '../../config-portability/config-ownership-notice.component';
 import { LoadErrorComponent } from '../../common/load-error.component';
 import { KeyCertificateRequestComponent } from '../key-certificate-request/key-certificate-request.component';
@@ -40,13 +39,7 @@ import {
   type EudiHubDialogData,
 } from '../../registrar/eudi-hub-dialog/eudi-hub-dialog.component';
 import type { EudiHubAccessCertificate } from '../../registrar/eudi-hub.service';
-import {
-  RegistrarService,
-  accessCertificateRefusal,
-  hasRelyingPartyContact,
-  RELYING_PARTY_CONTACT_ANCHOR,
-} from '../../registrar/registrar.service';
-import { getApiErrorMessage, getHttpErrorMessage } from '../../utils/error-message';
+import { getApiErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { copyToClipboard } from '../../utils/copy-to-clipboard';
 
@@ -88,24 +81,6 @@ export class KeyManagementShowComponent implements OnInit, OnDestroy {
 
   private routeSubscription?: Subscription;
 
-  /**
-   * Whether a registrar configuration exists. `unknown` when it could not be
-   * read, which does not mean that it is missing.
-   */
-  registrarConfig: 'checking' | 'unknown' | 'configured' | 'missing' = 'checking';
-  /** The configuration has no relying party contact, which the first enrollment needs. */
-  registrarContactMissing = false;
-  /** Fragment of the registrar page's contact section. */
-  readonly contactAnchor = RELYING_PARTY_CONTACT_ANCHOR;
-  /** The key chain was provisioned from a configuration file, so its enrollment is locked. */
-  private keyChainFileManaged = false;
-  /** The key chain whose enrollment is running, so another key's page is not held up. */
-  private enrollingKeyId?: string;
-
-  get isEnrolling(): boolean {
-    return !!this.enrollingKeyId && this.enrollingKeyId === this.keyChain?.id;
-  }
-
   constructor(
     private readonly keyChainService: KeyChainService,
     private readonly route: ActivatedRoute,
@@ -113,13 +88,10 @@ export class KeyManagementShowComponent implements OnInit, OnDestroy {
     private readonly router: Router,
     private readonly dialog: MatDialog,
     private readonly jwtService: JwtService,
-    private readonly registrarService: RegistrarService,
-    private readonly configDocuments: ConfigDocumentService,
-    private readonly configOwnership?: ConfigOwnershipService
+    private readonly configDocuments: ConfigDocumentService
   ) {}
 
   ngOnInit(): void {
-    if (this.canUseRegistrar) void this.checkRegistrarConfig();
     this.routeSubscription = this.route.paramMap.subscribe((params) => {
       const keyId = params.get('id');
       if (keyId) {
@@ -139,8 +111,6 @@ export class KeyManagementShowComponent implements OnInit, OnDestroy {
 
     this.defaultAccess = undefined;
 
-    this.keyChainFileManaged = false;
-    void this.checkFileManaged(id);
     try {
       this.keyChain = await this.keyChainService.getById(id);
     } catch (error) {
@@ -406,43 +376,9 @@ export class KeyManagementShowComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** Reading the registrar configuration and enrolling through it need registrar:manage. */
+  /** Requesting a certificate from a registrar such as the EUDI Hub needs registrar:manage. */
   private get canUseRegistrar(): boolean {
     return this.jwtService.hasRole('registrar:manage');
-  }
-
-  /**
-   * Only a standalone access key chain can be enrolled with the registrar,
-   * and only when a registrar configuration exists. One that could not be
-   * read keeps the action; the enrollment then says what failed.
-   */
-  get canEnrollWithRegistrar(): boolean {
-    return (
-      this.isEnrollableKey &&
-      (this.registrarConfig === 'configured' || this.registrarConfig === 'unknown')
-    );
-  }
-
-  /**
-   * Hint at a missing relying party contact where an enrollment can still be
-   * the first: not on a key chain provisioned from a configuration file, whose
-   * **Enroll with Registrar** is locked, and not on one whose active
-   * certificate another issuer signed, since the relying party is then
-   * registered already.
-   */
-  get showRegistrarContactHint(): boolean {
-    const certificate = this.keyChain?.activeCertificate;
-    return (
-      this.canEnrollWithRegistrar &&
-      this.registrarContactMissing &&
-      !this.keyChainFileManaged &&
-      (!certificate || certificate.issuer === certificate.subject)
-    );
-  }
-
-  /** The enrollment would be offered once a registrar configuration exists. */
-  get needsRegistrarConfig(): boolean {
-    return this.isEnrollableKey && this.registrarConfig === 'missing';
   }
 
   private get isEnrollableKey(): boolean {
@@ -453,38 +389,12 @@ export class KeyManagementShowComponent implements OnInit, OnDestroy {
     );
   }
 
-  /** The ownership the lock of **Enroll with Registrar** checks; the service caches requests per kind while they run. */
-  private async checkFileManaged(id: string): Promise<void> {
-    try {
-      const ownership = await this.configOwnership?.get('KeyChain', id);
-      if (this.requestedId === id) {
-        this.keyChainFileManaged = ownership?.ownership === 'file-managed';
-      }
-    } catch {
-      // Without ownership data the hint stays; the lock reports its own state.
-    }
-  }
-
-  private async checkRegistrarConfig(): Promise<void> {
-    try {
-      const config = await this.registrarService.getConfig();
-      this.registrarConfig = config ? 'configured' : 'missing';
-      this.registrarContactMissing = !!config && !hasRelyingPartyContact(config);
-    } catch (error) {
-      console.error('Registrar configuration check failed:', error);
-      this.registrarConfig = 'unknown';
-    }
-  }
-
   /**
-   * What to confirm before an enrollment: replacing a certificate issued by
-   * someone else, and enrolling a rotating key, whose next rotation replaces
+   * What to confirm before requesting a certificate: replacing a certificate
+   * issued by someone else, and a rotating key, whose next rotation replaces
    * the registrar certificate with a self-signed one. Undefined when nothing.
    */
-  private enrollmentQuestion(
-    source = 'the registrar',
-    question = 'Enroll with the registrar?'
-  ): string | undefined {
+  private enrollmentQuestion(source: string, question: string): string | undefined {
     const certificate = this.keyChain?.activeCertificate;
     const parts: string[] = [];
     if (certificate && !this.isSelfSigned()) {
@@ -515,7 +425,7 @@ export class KeyManagementShowComponent implements OnInit, OnDestroy {
    * is only replaced after confirmation.
    */
   requestFromEudiHub(): void {
-    if (!this.keyChain || this.isEnrolling) return;
+    if (!this.keyChain) return;
     const question = this.enrollmentQuestion(
       'the EUDI Hub',
       'Request a certificate from the EUDI Hub?'
@@ -546,42 +456,6 @@ export class KeyManagementShowComponent implements OnInit, OnDestroy {
         // A failed request may still have stored a recovered certificate.
         void this.refreshKey(keyId);
       });
-  }
-
-  /**
-   * Requests a certificate for the key from the registrar, which replaces its
-   * active certificate. A certificate issued by someone else, such as an
-   * earlier registrar certificate, is only replaced after confirmation.
-   */
-  async enrollWithRegistrar(): Promise<void> {
-    // `disabledInteractive` keeps Enroll clickable while it looks disabled.
-    if (!this.keyChain || this.enrollingKeyId === this.keyChain.id) return;
-    const question = this.enrollmentQuestion();
-    if (question && !confirm(question)) return;
-
-    const keyId = this.keyChain.id;
-    this.enrollingKeyId = keyId;
-    try {
-      await this.registrarService.createAccessCertificate(keyId);
-      this.snackBar.open('Access certificate enrolled via registrar', 'Close', { duration: 3000 });
-      await this.refreshKey(keyId);
-    } catch (error) {
-      console.error('Enroll error:', error);
-      // Names an unreachable backend separately from a registrar failure.
-      const message = getHttpErrorMessage(error, 'Failed to enroll certificate from registrar');
-      const refusal = accessCertificateRefusal(error);
-      if (refusal === 'role') {
-        openErrorSnackBar(this.snackBar, message);
-      } else {
-        openErrorSnackBar(this.snackBar, message, 'Go to Registrar')
-          .onAction()
-          .subscribe(() => this.router.navigate(['/registrar']));
-      }
-      // Without a refusal the certificate may have been stored; show what the key holds now.
-      if (!refusal) await this.refreshKey(keyId);
-    } finally {
-      if (this.enrollingKeyId === keyId) this.enrollingKeyId = undefined;
-    }
   }
 
   get canRotate(): boolean {

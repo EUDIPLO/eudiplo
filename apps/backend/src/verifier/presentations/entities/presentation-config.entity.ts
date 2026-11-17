@@ -18,7 +18,7 @@ import { TenantEntity } from "../../../auth/tenant/entities/tenant.entity.js";
 import { WebhookEndpointEntity } from "../../../issuer/configuration/webhook-endpoint/entities/webhook-endpoint.entity.js";
 import { MAX_FOLLOWED_TRUSTED_LISTS } from "../../../trust/domain/trusted-list-services.js";
 import { RevocationCheckMode } from "../../../trust/types.js";
-import { RegistrationCertificateRequest } from "../dto/vp-request.dto.js";
+import { PresentationRegistrationCertificate } from "../dto/registration-certificate.dto.js";
 
 export enum TrustedAuthorityType {
     ETSI_TL = "etsi_tl",
@@ -314,36 +314,6 @@ export class TransactionData {
 }
 
 /**
- * Cached/materialized registration certificate state for a presentation config.
- *
- * Server-managed; recomputed when {@link PresentationConfig.registration_cert} or
- * {@link PresentationConfig.dcql_query} change, or when the JWT expires.
- */
-export interface RegistrationCertCache {
-    /** The issued/imported registration certificate JWT. */
-    jwt: string;
-    /** Canonical-JSON hash of the cert's authorized `credentials` claim. */
-    fingerprint: string;
-    /** Canonical-JSON hash of the presentation's `dcql_query.credentials` at cache time. */
-    dcqlFingerprint: string;
-    /** Canonical-JSON hash of the {@link PresentationConfig.registration_cert} spec at cache time. */
-    specFingerprint: string;
-    /** JWT `iat` (seconds since epoch). */
-    issuedAt?: number;
-    /** JWT `exp` (seconds since epoch). */
-    expiresAt?: number;
-    /** Origin of the cached JWT. */
-    source: "imported" | "registrar";
-    /** Access key chain whose access certificate the JWT was resolved for. */
-    accessKeyChainId?: string;
-    /**
-     * SHA-256 (base64url) of the leaf access certificate the JWT was resolved
-     * for. The cache is not used for requests signed by another certificate.
-     */
-    accessCertificateHash?: string;
-}
-
-/**
  * Entity representing a configuration for a Verifiable Presentation (VP) request.
  */
 @Entity()
@@ -415,42 +385,11 @@ export class PresentationConfig {
     transaction_data?: TransactionData[];
 
     /**
-     * The registration certificate request containing the necessary details.
+     * Registration certificate from a registrar, attached to every request
+     * object, with the purpose and privacy policy it is requested with.
      */
     @Column("json", { nullable: true })
-    registration_cert?: RegistrationCertificateRequest | null;
-
-    /**
-     * Cached/materialized registration certificate derived from {@link registration_cert}.
-     *
-     * This is a server-managed field (not user-editable). It stores the JWT that
-     * was actually issued (or imported) together with fingerprints used to detect
-     * configuration drift. The cache is invalidated automatically when either the
-     * `registrationCert` spec or the `dcql_query` of this presentation config
-     * changes, ensuring no stale/over-broad authorizations leak into VP requests,
-     * and is not used when the request is signed by another access certificate
-     * than the one it was resolved for.
-     *
-     * @example
-     * {
-     *   "jwt": "eyJ...",
-     *   "fingerprint": "<canonical hash of authorized credentials[]>",
-     *   "dcqlFingerprint": "<canonical hash of dcql_query.credentials>",
-     *   "issuedAt": 1714050000,
-     *   "expiresAt": 1714650000,
-     *   "source": "registrar"
-     * }
-     */
-    @ApiPropertyOptional({
-        description:
-            "Server-managed cache of the materialized registration certificate. Read-only; values supplied by clients are ignored.",
-        readOnly: true,
-        type: "object",
-        additionalProperties: true,
-        nullable: true,
-    })
-    @Column("json", { nullable: true })
-    registrationCertCache?: RegistrationCertCache | null;
+    registration_cert?: PresentationRegistrationCertificate | null;
 
     /**
      * Reference to the webhook endpoint used for notifications.

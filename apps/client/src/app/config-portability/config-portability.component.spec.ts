@@ -112,10 +112,10 @@ describe('ConfigPortabilityComponent import plan', () => {
     documents: [],
   } as unknown as ConfigBundle;
 
-  /** A plan item for the registrar configuration with these field changes. */
-  const registrarUpdate = (changes: ConfigPlanItem['changes']): ConfigPlanItem => ({
-    kind: 'RegistrarConfig',
-    id: 'registrar',
+  /** A plan item for the issuance configuration with these field changes. */
+  const issuanceUpdate = (changes: ConfigPlanItem['changes']): ConfigPlanItem => ({
+    kind: 'IssuanceConfig',
+    id: 'issuance',
     action: 'update',
     sourceVersion: 'v1',
     targetVersion: 'v1',
@@ -134,7 +134,7 @@ describe('ConfigPortabilityComponent import plan', () => {
   });
 
   // As the backend reports leaving out clientSecret and registrationCertificateDefaults.
-  const removals = registrarUpdate([
+  const removals = issuanceUpdate([
     { path: '/spec/clientSecret', before: '[redacted]', redacted: true },
     {
       path: '/spec/registrationCertificateDefaults/privacy_policy',
@@ -205,11 +205,11 @@ describe('ConfigPortabilityComponent import plan', () => {
   it('lists the field changes of an update with removed, secret and changed values', async () => {
     const element = await planImport(
       planWith(
-        registrarUpdate([
+        issuanceUpdate([
           { path: '/spec/clientSecret', before: '[redacted]', redacted: true },
           { path: '/spec/password', before: '[redacted]', after: '[redacted]', redacted: true },
           {
-            path: '/spec/registrarUrl',
+            path: '/spec/federation/entityId',
             before: 'https://old.example',
             after: 'https://new.example',
           },
@@ -224,12 +224,12 @@ describe('ConfigPortabilityComponent import plan', () => {
     );
 
     expect(element.querySelector('h3')?.textContent).toContain(
-      'Changes to RegistrarConfig/registrar'
+      'Changes to IssuanceConfig/issuance'
     );
     expect(changeRows(element)).toEqual([
       ['/spec/clientSecret', 'secret', 'removed'],
       ['/spec/password', 'secret', 'secret'],
-      ['/spec/registrarUrl', '"https://old.example"', '"https://new.example"'],
+      ['/spec/federation/entityId', '"https://old.example"', '"https://new.example"'],
       ['/spec/retries', 'not set', '3'],
       ['/spec/headers', 'changed', 'changed'],
       [
@@ -253,7 +253,7 @@ describe('ConfigPortabilityComponent import plan', () => {
 
   it('shows a value that only looks like a redaction marker as it is', async () => {
     const element = await planImport(
-      planWith(registrarUpdate([{ path: '/spec/clientId', before: '[redacted]', after: 'client' }]))
+      planWith(issuanceUpdate([{ path: '/spec/clientId', before: '[redacted]', after: 'client' }]))
     );
 
     expect(changeRows(element)).toEqual([['/spec/clientId', '"[redacted]"', '"client"']]);
@@ -263,9 +263,7 @@ describe('ConfigPortabilityComponent import plan', () => {
   it('shows null as a value, not as a removal', async () => {
     const element = await planImport(
       planWith(
-        registrarUpdate([
-          { path: '/spec/dcql_query/claims/0/path/1', before: 'given', after: null },
-        ])
+        issuanceUpdate([{ path: '/spec/dcql_query/claims/0/path/1', before: 'given', after: null }])
       )
     );
 
@@ -311,7 +309,7 @@ describe('ConfigPortabilityComponent import plan', () => {
 
   it('applies a plan without removals in upsert mode without asking', async () => {
     await planImport(
-      planWith(registrarUpdate([{ path: '/spec/clientId', before: 'old', after: 'new' }]))
+      planWith(issuanceUpdate([{ path: '/spec/clientId', before: 'old', after: 'new' }]))
     );
 
     await component.applyImport();
@@ -327,7 +325,7 @@ describe('ConfigPortabilityComponent import plan', () => {
 
     expect(confirm).toHaveBeenCalledWith(
       'The import removes stored values that the bundle leaves out, marked as removed in the ' +
-        'plan: RegistrarConfig/registrar (2 fields). This cannot be undone. Continue?'
+        'plan: IssuanceConfig/issuance (2 fields). This cannot be undone. Continue?'
     );
     expect(portability.import).toHaveBeenCalledWith(bundle, 'upsert', false, 'fingerprint');
   });
@@ -336,7 +334,7 @@ describe('ConfigPortabilityComponent import plan', () => {
     await planImport(
       planWith(
         {
-          ...registrarUpdate([{ path: '/spec/description', before: 'old' }]),
+          ...issuanceUpdate([{ path: '/spec/description', before: 'old' }]),
           kind: 'KmsConfig',
           id: 'kms',
         },
@@ -348,7 +346,7 @@ describe('ConfigPortabilityComponent import plan', () => {
 
     expect(confirm).toHaveBeenCalledWith(
       'The import removes stored values that the bundle leaves out, marked as removed in the ' +
-        'plan: KmsConfig/kms (1 field), RegistrarConfig/registrar (2 fields). ' +
+        'plan: KmsConfig/kms (1 field), IssuanceConfig/issuance (2 fields). ' +
         'This cannot be undone. Continue?'
     );
   });
@@ -365,7 +363,7 @@ describe('ConfigPortabilityComponent import plan', () => {
   it('asks once about the resources it deletes and the values it removes in replace mode', async () => {
     component.mode = 'replace';
     const deletion = (kind: string, id: string): ConfigPlanItem => ({
-      ...registrarUpdate(undefined),
+      ...issuanceUpdate(undefined),
       kind,
       id,
       action: 'delete',
@@ -380,7 +378,7 @@ describe('ConfigPortabilityComponent import plan', () => {
     expect(confirm).toHaveBeenCalledWith(
       'Replace mode deletes file-managed resources from this bundle source that are not in the ' +
         'bundle: CredentialConfig/pid, TrustList/tl-1. The import removes stored values that the ' +
-        'bundle leaves out, marked as removed in the plan: RegistrarConfig/registrar (2 fields). ' +
+        'bundle leaves out, marked as removed in the plan: IssuanceConfig/issuance (2 fields). ' +
         'This cannot be undone. Continue?'
     );
     expect(portability.import).toHaveBeenCalledWith(bundle, 'replace', true, 'fingerprint');
@@ -390,7 +388,7 @@ describe('ConfigPortabilityComponent import plan', () => {
     component.mode = 'replace';
     confirm.mockReturnValue(false);
     await planImport(
-      planWith(registrarUpdate([{ path: '/spec/clientId', before: 'a', after: 'b' }]))
+      planWith(issuanceUpdate([{ path: '/spec/clientId', before: 'a', after: 'b' }]))
     );
 
     await component.applyImport();
@@ -423,8 +421,8 @@ describe('ConfigPortabilityComponent import plan', () => {
 
     try {
       await component.planReattach({
-        kind: 'RegistrarConfig',
-        resourceId: 'registrar',
+        kind: 'IssuanceConfig',
+        resourceId: 'issuance',
       } as ConfigResourceMetadata);
       fixture.detectChanges();
       const element = fixture.nativeElement as HTMLElement;

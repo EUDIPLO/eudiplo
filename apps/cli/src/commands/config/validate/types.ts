@@ -36,6 +36,8 @@ export interface TenantValidationResult {
     valid: boolean;
     files: number;
     errors: ValidationIssue[];
+    /** Files that are skipped, such as registrar.json of a retired resource kind. */
+    warnings: ValidationIssue[];
     /** Placeholders without a value, when validated with allowUnresolvedPlaceholders. */
     unresolved?: ValidationIssue[];
     resourceCounts: Record<string, number>;

@@ -384,7 +384,10 @@
       </mat-card-header>
       <mat-card-content>
         <div class="setup-steps" fxLayout="column" fxLayoutGap="8px">
-          @for (warning of dashboardService.warnings; track warning.message) {
+          @for (
+            warning of dashboardService.warnings;
+            track warning.message + (warning.action?.route?.join('/') ?? '')
+          ) {
             <div class="setup-step" fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="12px">
               <mat-icon>warning_amber</mat-icon>
               <div fxFlex>{{ warning.message }}</div>
@@ -398,7 +401,13 @@
                   <mat-icon>refresh</mat-icon> Retry
                 </button>
               } @else if (warning.action) {
-                <a mat-stroked-button color="primary" [routerLink]="warning.action.route">
+                <a
+                  mat-stroked-button
+                  color="primary"
+                  [routerLink]="warning.action.route"
+                  [fragment]="warning.action.fragment"
+                  [attr.aria-label]="warning.action.ariaLabel ?? null"
+                >
                   {{ warning.action.label }}
                 </a>
               }
@@ -531,11 +540,7 @@
         <mat-card-subtitle>Readiness and integration health signals</mat-card-subtitle>
       </mat-card-header>
       <mat-card-content>
-        @if (
-          dashboardService.canManageKeyChains ||
-          dashboardService.canManagePresentation ||
-          dashboardService.canManageRegistrar
-        ) {
+        @if (dashboardService.canManageKeyChains || dashboardService.canManagePresentation) {
           <div class="session-stats" fxLayout="row wrap" fxLayoutGap="24px">
             @if (dashboardService.canManageKeyChains) {
               <div
@@ -578,25 +583,6 @@
               >
                 <mat-icon class="status-fetched">dns</mat-icon>
                 <span><strong>KMS:</strong> {{ loadedValue('kmsHealth', kmsSummary) }}</span>
-              </div>
-            }
-            @if (dashboardService.canManageRegistrar) {
-              <div
-                class="session-stat"
-                fxLayout="row"
-                fxLayoutAlign="start center"
-                fxLayoutGap="8px"
-              >
-                <mat-icon class="status-active">hub</mat-icon>
-                <span
-                  ><strong>Registrar:</strong>
-                  {{
-                    loadedValue(
-                      'registrar',
-                      dashboardService.hasRegistrarConfig ? 'Configured' : 'Not configured'
-                    )
-                  }}</span
-                >
               </div>
             }
           </div>

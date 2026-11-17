@@ -195,7 +195,6 @@ describe('ConfigDocumentService', () => {
     ['KeyChainDefaults', 'clients:manage', false],
     ['StatusList', 'presentation:manage', false],
     ['AttributeProvider', 'presentation:manage', false],
-    ['RegistrarConfig', 'registrar:manage', true],
     ['Client', 'clients:manage', true],
     ['Client', 'issuance:manage', false],
     ['KmsConfig', 'issuance:manage', false],

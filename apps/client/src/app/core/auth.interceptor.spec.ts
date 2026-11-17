@@ -46,7 +46,7 @@ describe('authInterceptor', () => {
   }
 
   it('sends the token and reports refusals of the management API', async () => {
-    const authorization = await answer('http://backend.test/api/registrar/config', 401);
+    const authorization = await answer('http://backend.test/api/session', 401);
 
     expect(authorization).toBe('Bearer token-1');
     expect(refusals.handleApiResponse).toHaveBeenCalledWith(401, 'token-1', null);
@@ -54,13 +54,13 @@ describe('authInterceptor', () => {
 
   it('passes the body of a refusal on, which says why', async () => {
     const reason = { statusCode: 403, message: 'Forbidden resource' };
-    await answer('http://backend.test/api/registrar/config', 403, undefined, reason);
+    await answer('http://backend.test/api/session', 403, undefined, reason);
 
     expect(refusals.handleApiResponse).toHaveBeenCalledWith(403, 'token-1', reason);
   });
 
   it('reports the token the request was sent with, not one renewed meanwhile', async () => {
-    await answer('http://backend.test/api/registrar/config', 401, () => {
+    await answer('http://backend.test/api/session', 401, () => {
       api.accessToken = 'token-2';
     });
 
@@ -97,7 +97,7 @@ describe('authInterceptor', () => {
   it('sends the token to an instance kept with a trailing slash', async () => {
     const getBaseUrl = vi.spyOn(api, 'getBaseUrl').mockReturnValue('http://backend.test/');
     try {
-      expect(await answer('http://backend.test/api/registrar/config', 401)).toBe('Bearer token-1');
+      expect(await answer('http://backend.test/api/session', 401)).toBe('Bearer token-1');
       expect(refusals.handleApiResponse).toHaveBeenCalledWith(401, 'token-1', null);
     } finally {
       getBaseUrl.mockRestore();

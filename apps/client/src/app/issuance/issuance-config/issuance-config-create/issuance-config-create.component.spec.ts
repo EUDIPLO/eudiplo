@@ -16,7 +16,6 @@ import { ApiService } from '../../../core';
 import { FederationTrustAnchorService } from '../../../federation-trust-anchor/federation-trust-anchor.service';
 import { KeyChainService } from '../../../key-management/key-chain.service';
 import { PresentationManagementService } from '../../../presentation/presentation-config/presentation-management.service';
-import { RegistrarService } from '../../../registrar/registrar.service';
 import { FrontendConfigService } from '../../../services/frontend-config.service';
 import { JwtService } from '../../../services/jwt.service';
 import {
@@ -66,7 +65,6 @@ describe('issuer settings guided setup', () => {
       snackBar as any,
       {} as any,
       new FormBuilder(),
-      {} as any,
       {} as any,
       keyChains as any,
       frontendConfig as any,
@@ -242,7 +240,7 @@ describe('issuer settings guided setup', () => {
 
   it('opens trust settings for missing prerequisites', async () => {
     await component.loadConfigForEdit();
-    component.registrationCertificate.patchValue({ enabled: true, mode: 'import', jwt: '' });
+    component.registrationCertificate.patchValue({ enabled: true, jwt: '' });
     component.onSubmit();
     expect(component.activeStep).toBe(2);
     expect(component.stepError).toContain('JWT');
@@ -364,12 +362,12 @@ describe('issuer settings guided setup', () => {
           },
         ],
       },
-      registrationCertificate: { enabled: true, mode: 'import', jwt: 'existing.jwt.value' },
+      registrationCertificate: { enabled: true, jwt: 'existing.jwt.value' },
     });
     await component.loadConfigForEdit();
     expect(component.federationEnabled).toBe(true);
     component.federation.patchValue({ enabled: false });
-    component.registrationCertificate.patchValue({ enabled: false });
+    component.registrationCertificate.patchValue({ enabled: false, jwt: '' });
     component.form.get('txCodeMaxAttempts')!.setValue(null);
     component.onSubmit();
     expect(service.saveConfiguration.mock.calls[0][0]).toMatchObject({
@@ -379,69 +377,63 @@ describe('issuer settings guided setup', () => {
     });
   });
 
-  it('keeps and saves the renewal of a generated registration certificate', async () => {
-    service.getConfig.mockResolvedValue({
-      ...config,
-      registrationCertificate: { enabled: true, mode: 'generate', renewal: 'manual' },
-    });
-    await component.loadConfigForEdit();
-    expect(component.registrationCertificate.get('renewal')!.value).toBe('manual');
-    component.onSubmit();
-    expect(service.saveConfiguration.mock.calls[0][0].registrationCertificate).toEqual({
-      enabled: true,
-      mode: 'generate',
-      renewal: 'manual',
-    });
-  });
-
-  it('leaves the default renewal out of the saved registration certificate', async () => {
+  it('saves the registration certificate JWT with the values kept for the next request', async () => {
     service.getConfig.mockResolvedValue({
       ...config,
       registrationCertificate: {
         enabled: true,
-        mode: 'generate',
-        renewal: 'onCredentialConfigChange',
+        jwt: 'existing.jwt.value',
+        privacyPolicy: 'https://issuer.example/privacy',
+        supportUri: 'https://issuer.example/support',
       },
     });
     await component.loadConfigForEdit();
     component.onSubmit();
     expect(service.saveConfiguration.mock.calls[0][0].registrationCertificate).toEqual({
       enabled: true,
-      mode: 'generate',
+      jwt: 'existing.jwt.value',
+      privacyPolicy: 'https://issuer.example/privacy',
+      supportUri: 'https://issuer.example/support',
     });
   });
 
-  it('does not save a renewal for an imported registration certificate', async () => {
+  it('does not let hidden registration certificate fields block saving', async () => {
     service.getConfig.mockResolvedValue({
       ...config,
-      registrationCertificate: { enabled: true, mode: 'import', jwt: 'existing.jwt.value' },
+      registrationCertificate: {
+        enabled: false,
+        jwt: 'existing.jwt.value',
+        supportUri: 'mailto:support@issuer.example',
+      },
     });
     await component.loadConfigForEdit();
-    component.registrationCertificate.patchValue({ renewal: 'manual' });
+    expect(component.registrationCertificate.get('supportUri')!.disabled).toBe(true);
     component.onSubmit();
-    expect(service.saveConfiguration.mock.calls[0][0].registrationCertificate).not.toHaveProperty(
-      'renewal'
-    );
+    expect(service.saveConfiguration.mock.calls[0][0].registrationCertificate).toEqual({
+      enabled: false,
+      jwt: 'existing.jwt.value',
+      privacyPolicy: undefined,
+      supportUri: 'mailto:support@issuer.example',
+    });
+
+    component.registrationCertificate.patchValue({ enabled: true });
+    expect(component.registrationCertificate.get('supportUri')!.hasError('url')).toBe(true);
   });
 
-  it('says after saving when the certificate is renewed in the background', async () => {
-    const saveWith = async (registrationCertificate: unknown) => {
-      service.getConfig.mockResolvedValue({ ...config, registrationCertificate });
-      snackBar.open.mockClear();
-      await component.loadConfigForEdit();
-      component.onSubmit();
-      await vi.waitFor(() => expect(snackBar.open).toHaveBeenCalled());
-      return snackBar.open.mock.lastCall?.[0] as string;
-    };
-    expect(await saveWith({ enabled: true, mode: 'generate' })).toContain(
-      'requested in the background'
-    );
-    expect(await saveWith({ enabled: true, mode: 'generate', renewal: 'manual' })).toBe(
-      'Configuration saved successfully'
-    );
-    expect(await saveWith({ enabled: true, mode: 'import', jwt: 'existing.jwt.value' })).toBe(
-      'Configuration saved successfully'
-    );
+  it('keeps the JWT of a turned-off registration certificate', async () => {
+    service.getConfig.mockResolvedValue({
+      ...config,
+      registrationCertificate: { enabled: true, jwt: 'existing.jwt.value' },
+    });
+    await component.loadConfigForEdit();
+    component.registrationCertificate.patchValue({ enabled: false });
+    component.onSubmit();
+    expect(service.saveConfiguration.mock.calls[0][0].registrationCertificate).toEqual({
+      enabled: false,
+      jwt: 'existing.jwt.value',
+      privacyPolicy: undefined,
+      supportUri: undefined,
+    });
   });
 
   it('rejects duplicate and reserved authorization IDs before save', async () => {
@@ -778,7 +770,6 @@ describe('issuer settings Save', () => {
           provide: PresentationManagementService,
           useValue: { loadConfigurations: vi.fn().mockResolvedValue([]) },
         },
-        { provide: RegistrarService, useValue: { getConfig: vi.fn().mockResolvedValue(null) } },
         { provide: KeyChainService, useValue: { getAll: vi.fn().mockResolvedValue([]) } },
         {
           provide: FrontendConfigService,

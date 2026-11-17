@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import packageJson from "../package.json" with { type: "json" };
 import { requestAccessToken } from "../src/services/api-auth.js";
 import {
     compareVersions,
@@ -8,7 +9,6 @@ import {
 } from "../src/services/backend-checks.js";
 import { hasFailedChecks, runDoctor } from "../src/services/diagnostics.js";
 import type { CommandContext, DoctorCheck } from "../src/types.js";
-import packageJson from "../package.json" with { type: "json" };
 
 const instance = {
     target: "external",

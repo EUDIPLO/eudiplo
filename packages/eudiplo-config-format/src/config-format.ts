@@ -33,15 +33,10 @@ export const CONFIG_FORMATS = {
         file: "KeyChainDefaultsConfigFile",
         version: 2,
     },
-    RegistrarConfig: {
-        slug: "registrar-config",
-        file: "RegistrarConfigFile",
-        version: 2,
-    },
     IssuanceConfig: {
         slug: "issuance-config",
         file: "IssuanceConfigFile",
-        version: 6,
+        version: 7,
     },
     CredentialConfig: {
         slug: "credential-config",
@@ -51,7 +46,7 @@ export const CONFIG_FORMATS = {
     PresentationConfig: {
         slug: "presentation-config",
         file: "PresentationConfigFile",
-        version: 4,
+        version: 5,
     },
     AttributeProvider: {
         slug: "attribute-provider",
@@ -104,7 +99,6 @@ export const CONFIG_SINGLETON_IDS: Partial<Record<ConfigResourceKind, string>> =
     {
         Tenant: "tenant",
         KmsConfig: "kms",
-        RegistrarConfig: "registrar",
         IssuanceConfig: "issuance",
         KeyChainDefaults: "defaults",
     };
@@ -153,14 +147,14 @@ function hasTrustListFormat(spec: Record<string, unknown>): boolean {
  * key chain export writes (v3 for usage type `federation`, which KeyChain v3
  * added, v4 for `authorizationServer`, which KeyChain v4 added), and a KMS configuration with a provider that sets
  * `algorithms` or `defaultAlgorithm`, which KmsConfig v2 added and which the
- * tenant `kms.json` is saved as, a registrar configuration with
- * `relyingPartyContact`, which RegistrarConfig v2 added, key chain defaults
+ * tenant `kms.json` is saved as, key chain defaults
  * with `authorizationServer`, which KeyChainDefaults v2 added, and a tenant
  * `info.json` with `defaultAccessKeyChainId`, which TenantConfig v2 added, or
  * with `defaultKeyChains`, which TenantConfig v3 replaced it with (TenantConfig
  * v4 moved it to `key-chain-defaults.json`), and a presentation configuration
  * with `allowedOrigins` or an `etsi_tl` value with `format`, which
- * PresentationConfig v4 added.
+ * PresentationConfig v4 added, or with `registration_cert.purpose` or
+ * `registration_cert.privacy_policy`, which PresentationConfig v5 added.
  */
 export function bareFileVersion(
     kind: ConfigResourceKind,
@@ -171,11 +165,16 @@ export function bareFileVersion(
         if (spec.usageType === "federation") return 3;
         return "type" in spec ? 2 : 1;
     }
-    if (kind === "RegistrarConfig")
-        return "relyingPartyContact" in spec ? 2 : 1;
     if (kind === "KeyChainDefaults") return "authorizationServer" in spec ? 2 : 1;
-    if (kind === "PresentationConfig")
+    if (kind === "PresentationConfig") {
+        const certificate = spec.registration_cert;
+        if (
+            object(certificate) &&
+            ("purpose" in certificate || "privacy_policy" in certificate)
+        )
+            return 5;
         return "allowedOrigins" in spec || hasTrustListFormat(spec) ? 4 : 1;
+    }
     if (kind === "Tenant") {
         if ("defaultKeyChains" in spec) return 3;
         return "defaultAccessKeyChainId" in spec ? 2 : 1;
@@ -622,6 +621,190 @@ const trustListV1ToV2: ConfigMigration = {
     },
 };
 
+/**
+ * IssuanceConfig v7 removes `registrationCertificate.mode` and `.renewal`:
+ * EUDIPLO no longer generates issuer registration certificates at the
+ * sandbox registrar, it advertises the configured `jwt` only. Both fields are
+ * dropped. A certificate that was generated (mode `generate`, the default)
+ * is not carried by the file, so an enabled one gets a warning to request one
+ * from the EUDI Hub or set `jwt`; a `jwt` outside import mode was never
+ * served and is dropped with a warning.
+ */
+const issuanceConfigV6ToV7: ConfigMigration = {
+    id: "issuance-config-v7-registration-certificate-import-only",
+    kind: "IssuanceConfig",
+    from: 6,
+    to: 7,
+    migrate(spec) {
+        const certificate = spec.registrationCertificate;
+        if (!object(certificate)) return { spec };
+        const { mode, renewal: _, ...rest } = certificate;
+        const issues: ConfigMigrationIssue[] = [];
+        // v6 served `jwt` only in import mode; generate mode, the default,
+        // served the generated certificate, which a file does not carry.
+        if (mode !== "import") {
+            if ("jwt" in rest) {
+                delete rest.jwt;
+                issues.push({
+                    severity: "warning",
+                    code: "ISSUER_REGISTRATION_CERTIFICATE_JWT_DROPPED",
+                    path: "/spec/registrationCertificate/jwt",
+                    message:
+                        "registrationCertificate.jwt was not used in generate mode and is dropped, so that the issuer metadata does not start to carry it. Set it again if it is the certificate you want to publish.",
+                });
+            }
+            if (rest.enabled === true) {
+                issues.push(registrationCertificateNotGenerated());
+            }
+        }
+        return { spec: { ...spec, registrationCertificate: rest }, issues };
+    },
+};
+
+function registrationCertificateNotGenerated(): ConfigMigrationIssue {
+    return {
+        severity: "warning",
+        code: "ISSUER_REGISTRATION_CERTIFICATE_NOT_GENERATED",
+        path: "/spec/registrationCertificate",
+        message:
+            "EUDIPLO no longer generates issuer registration certificates at the sandbox registrar, so the issuer metadata carries none until registrationCertificate.jwt is set. Request one from the EUDI Hub (Issuer Settings → Request from EUDI Hub, or POST /api/eudi-hub/registration-certificate/issuer), or set the JWT from another registrar.",
+    };
+}
+
+/** The flat registration certificate fields of PresentationConfig v4 and earlier. */
+const PRESENTATION_REGISTRATION_CERT_FORM_FIELDS = [
+    "registrationCertImportJwt",
+    "registrationCertImportId",
+    "registrationCertBodyPrivacyPolicy",
+    "registrationCertBodySupportUri",
+    "registrationCertBodyIntermediary",
+    "registrationCertBodyPurpose",
+] as const;
+
+/**
+ * PresentationConfig v5 keeps only what a registrar-issued certificate needs
+ * in `registration_cert`: the `jwt`, and the `purpose` and `privacy_policy`
+ * a new certificate is requested with. `body.purpose` and
+ * `body.privacy_policy` move up a level; `id` and the other `body` fields
+ * only served requests to the removed sandbox registrar and are dropped with
+ * a warning. The flat `registrationCert*` form fields are mapped the same
+ * way when no `registration_cert` is set, which took precedence over them;
+ * next to one they had no effect and are dropped. Empty values, which v5
+ * refuses, are dropped; a `registration_cert` left empty is removed.
+ */
+const presentationConfigV4ToV5: ConfigMigration = {
+    id: "presentation-config-v5-registration-certificate",
+    kind: "PresentationConfig",
+    from: 4,
+    to: 5,
+    migrate(spec) {
+        const issues: ConfigMigrationIssue[] = [];
+        const removed = (path: string, what: string) =>
+            issues.push({
+                severity: "warning",
+                code: "REGISTRATION_CERT_FIELD_REMOVED",
+                path,
+                message: `${what} was only used to request certificates from the sandbox registrar, which EUDIPLO no longer supports, and was removed.`,
+            });
+        const result: Record<string, unknown> = { ...spec };
+        for (const field of PRESENTATION_REGISTRATION_CERT_FORM_FIELDS) {
+            delete result[field];
+        }
+
+        let jwt: unknown;
+        let purpose: unknown;
+        let privacyPolicy: unknown;
+        let requested = false;
+        if (Object.hasOwn(spec, "registration_cert")) {
+            const current = spec.registration_cert;
+            if (!object(current)) return { spec: result };
+            const body = object(current.body) ? current.body : {};
+            jwt = current.jwt;
+            purpose = body.purpose;
+            privacyPolicy = body.privacy_policy;
+            requested = "id" in current || "body" in current;
+            if ("id" in current) {
+                removed("/spec/registration_cert/id", "registration_cert.id");
+            }
+            for (const field of [
+                "support_uri",
+                "intermediary",
+                "credentials",
+                "provides_attestations",
+            ]) {
+                if (field in body) {
+                    removed(
+                        `/spec/registration_cert/body/${field}`,
+                        `registration_cert.body.${field}`,
+                    );
+                }
+            }
+        } else {
+            jwt = spec.registrationCertImportJwt;
+            purpose = spec.registrationCertBodyPurpose;
+            privacyPolicy = spec.registrationCertBodyPrivacyPolicy;
+            for (const field of [
+                "registrationCertImportId",
+                "registrationCertBodySupportUri",
+                "registrationCertBodyIntermediary",
+            ] as const) {
+                if (hasText(spec[field])) {
+                    requested = true;
+                    removed(`/spec/${field}`, field);
+                }
+            }
+            requested ||= hasText(privacyPolicy) || Array.isArray(purpose);
+        }
+
+        const certificate: Record<string, unknown> = {};
+        if (hasText(jwt)) certificate.jwt = jwt;
+        if (Array.isArray(purpose)) {
+            const complete = purpose.filter(
+                (entry) =>
+                    object(entry) &&
+                    hasText(entry.lang) &&
+                    hasText(entry.content),
+            );
+            if (complete.length < purpose.length) {
+                issues.push({
+                    severity: "warning",
+                    code: "REGISTRATION_CERT_PURPOSE_INCOMPLETE",
+                    path: "/spec/registration_cert/purpose",
+                    message:
+                        "Purpose entries without lang or content were removed.",
+                });
+            }
+            if (complete.length > 0) {
+                certificate.purpose = complete.map((entry) => ({
+                    lang: entry.lang,
+                    content: entry.content,
+                }));
+            }
+        }
+        if (hasText(privacyPolicy)) certificate.privacy_policy = privacyPolicy;
+
+        if (requested && certificate.jwt === undefined) {
+            issues.push({
+                severity: "warning",
+                code: "REGISTRATION_CERT_NOT_REQUESTED",
+                path: "/spec/registration_cert",
+                message:
+                    "EUDIPLO no longer requests registration certificates from the sandbox registrar, so requests of this configuration carry none until registration_cert.jwt is set. Request one from the EUDI Hub (the presentation configuration's Security tab → Request from EUDI Hub, or POST /api/eudi-hub/registration-certificate/presentation), or set the JWT from another registrar.",
+            });
+        }
+        if (Object.keys(certificate).length > 0) {
+            result.registration_cert = certificate;
+        } else {
+            delete result.registration_cert;
+        }
+        return { spec: result, issues };
+    },
+};
+
+function hasText(value: unknown): value is string {
+    return typeof value === "string" && value.trim() !== "";
+}
+
 // The first published format is v1. Register one step per later version.
 const CONFIG_MIGRATIONS: readonly ConfigMigration[] = [
     {
@@ -654,6 +837,7 @@ const CONFIG_MIGRATIONS: readonly ConfigMigration[] = [
     },
     issuanceConfigV4ToV5,
     issuanceConfigV5ToV6,
+    issuanceConfigV6ToV7,
     {
         id: "client-v2-read-and-status-roles",
         kind: "Client",
@@ -671,16 +855,6 @@ const CONFIG_MIGRATIONS: readonly ConfigMigration[] = [
         // v2 only adds the optional provider fields algorithms and
         // defaultAlgorithm: a v1 spec is a valid v2 spec, whose providers keep
         // their default algorithms.
-        migrate: (spec) => ({ spec }),
-    },
-    {
-        id: "registrar-config-v2-relying-party-contact",
-        kind: "RegistrarConfig",
-        from: 1,
-        to: 2,
-        // v2 only adds the optional relyingPartyContact: a v1 spec is a
-        // valid v2 spec, whose relying party is registered without contact
-        // as before.
         migrate: (spec) => ({ spec }),
     },
     {
@@ -789,6 +963,7 @@ const CONFIG_MIGRATIONS: readonly ConfigMigration[] = [
         // etsi_tl value is a LoTE, as before.
         migrate: (spec) => ({ spec }),
     },
+    presentationConfigV4ToV5,
     trustListV1ToV2,
 ];
 export function schemaUrl(
@@ -802,6 +977,69 @@ export function schemaUrl(
 function object(value: unknown): value is Record<string, unknown> {
     return !!value && typeof value === "object" && !Array.isArray(value);
 }
+/**
+ * Why a resource of a retired kind is skipped. `source` names it, such as
+ * its file or bundle path.
+ */
+function registrarConfigRemoved(source: string): ConfigMigrationIssue {
+    return {
+        severity: "warning",
+        code: "REGISTRAR_CONFIG_REMOVED",
+        path: "",
+        message: `${source} is skipped: EUDIPLO no longer supports the registrar configuration, since its sandbox registrar integration was removed. Request access and registration certificates from the EUDI Hub instead, and delete the file.`,
+    };
+}
+
+/**
+ * Resource kinds EUDIPLO no longer imports, by the file name of their schema
+ * URL, with the warning a skipped resource gets. Snapshots that a release
+ * shipped stay published and immutable (`RegistrarConfig` v1 of 9.x);
+ * versions only development builds had are removed (`RegistrarConfig` v2).
+ */
+const RETIRED_CONFIG_FILES: Readonly<
+    Record<string, (source: string) => ConfigMigrationIssue>
+> = {
+    RegistrarConfigFile: registrarConfigRemoved,
+};
+
+/**
+ * Files of a tenant folder that earlier versions imported and this version
+ * skips, with the warning each gets.
+ */
+export const RETIRED_TENANT_FOLDER_FILES: readonly {
+    file: string;
+    issue: ConfigMigrationIssue;
+}[] = [{ file: "registrar.json", issue: registrarConfigRemoved("registrar.json") }];
+
+const RETIRED_ISSUE_CODES = new Set(["REGISTRAR_CONFIG_REMOVED"]);
+
+/**
+ * The warning for a document or manifest entry whose `$schema` names a
+ * retired resource kind; `undefined` for every other input.
+ */
+export function retiredConfigIssue(
+    input: unknown,
+    source = "This resource",
+): ConfigMigrationIssue | undefined {
+    if (!object(input) || typeof input.$schema !== "string") return undefined;
+    const match = SCHEMA_URL_PATTERN.exec(input.$schema);
+    // The name comes from the input; only own entries count, never
+    // Object.prototype members such as `constructor` or `valueOf`.
+    const issue =
+        match && Object.hasOwn(RETIRED_CONFIG_FILES, match[2])
+            ? RETIRED_CONFIG_FILES[match[2]]
+            : undefined;
+    return issue?.(source);
+}
+
+/** Whether an issue reports a skipped resource of a retired kind. */
+export function isRetiredConfigIssue(issue: ConfigMigrationIssue): boolean {
+    return RETIRED_ISSUE_CODES.has(issue.code);
+}
+
+const SCHEMA_URL_PATTERN =
+    /^https:\/\/eudiplo\.dev\/schemas\/v([1-9][0-9]*)\/([A-Za-z]+)\.schema\.json$/;
+
 export function isConfigDocument(value: unknown): value is ConfigFile {
     return object(value) && "$schema" in value;
 }
@@ -811,10 +1049,7 @@ export function resolveConfigIdentity(input: { $schema?: unknown }): {
 } {
     if (typeof input.$schema !== "string")
         throw new Error("$schema must be a canonical EUDIPLO schema URL");
-    const match =
-        /^https:\/\/eudiplo\.dev\/schemas\/v([1-9][0-9]*)\/([A-Za-z]+)\.schema\.json$/.exec(
-            input.$schema,
-        );
+    const match = SCHEMA_URL_PATTERN.exec(input.$schema);
     const kind = CONFIG_RESOURCE_KINDS.find(
         (candidate) => CONFIG_FORMATS[candidate].file === match?.[2],
     );

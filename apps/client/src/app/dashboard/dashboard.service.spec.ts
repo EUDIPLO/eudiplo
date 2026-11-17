@@ -279,29 +279,133 @@ describe('DashboardService', () => {
     expect(messages()).toEqual(['Could not load key chains.']);
   });
 
-  it('treats a registrar 404 as not configured and links to its setup', async () => {
+  it('loads nothing for a caller with only registrar:manage', async () => {
     roles = ['registrar:manage'];
 
     await service.getCounters();
 
-    expect(service.isLoaded('registrar')).toBe(true);
-    expect(service.warnings).toEqual([
-      {
-        message:
-          'Registrar is not configured. Access certificate enrollment via registrar is unavailable.',
-        action: { label: 'Configure Registrar', route: ['/registrar'] },
-      },
-    ]);
+    expect(service.hasHealthSignals).toBe(false);
+    expect(service.warnings).toEqual([]);
   });
 
-  it('reports other registrar errors as a failed request', async () => {
-    roles = ['registrar:manage'];
-    failures['/api/registrar/config'] = 500;
+  describe('registration certificates', () => {
+    const part = (value: unknown) =>
+      btoa(JSON.stringify(value)).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
+    const seconds = (days: number) => Math.floor(now.getTime() / 1000) + days * 24 * 3600;
+    /** An unsigned JWT expiring this many days after the fixed time of the tests. */
+    const certificate = (days: number) =>
+      `${part({ alg: 'ES256' })}.${part({ exp: seconds(days) })}.c2ln`;
+    const notYetValid = `${part({ alg: 'ES256' })}.${part({ nbf: seconds(1), exp: seconds(60) })}.c2ln`;
 
-    await service.getCounters();
+    it('names each presentation configuration whose certificate needs attention, with a link', async () => {
+      roles = ['presentation:manage', 'registrar:manage'];
+      responses['/api/trust-list'] = [{ id: 'list' }];
+      responses['/api/verifier/config'] = [
+        { id: 'fine', registration_cert: { jwt: certificate(60) } },
+        { id: 'soon', description: 'Age check', registration_cert: { jwt: certificate(3) } },
+        { id: 'old', registration_cert: { jwt: certificate(-1) } },
+        { id: 'purpose', registration_cert: { purpose: [{ lang: 'en', content: 'Age' }] } },
+        { id: 'broken', registration_cert: { jwt: 'not-a-jwt' } },
+        { id: 'early', registration_cert: { jwt: notYetValid } },
+        { id: 'none' },
+      ];
 
-    expect(service.hasFailed('registrar')).toBe(true);
-    expect(messages()).toEqual(['Could not load registrar config.']);
+      await service.getCounters();
+
+      const warnings = service.warnings.filter((warning) =>
+        warning.message.startsWith('Registration certificate')
+      );
+      // A purpose kept without JWT is no warning: requests still work.
+      expect(warnings.map((warning) => warning.message)).toEqual([
+        'Registration certificate of presentation configuration "Age check" (soon): Expiring soon — 3 days remaining; request a new one.',
+        'Registration certificate of presentation configuration old: Expired — request a new one or remove it.',
+        'Registration certificate of presentation configuration broken: Not a valid JWT — request a new one or paste a valid JWT.',
+        'Registration certificate of presentation configuration early: Not yet valid — requests fail until its start time; check the date or request a new one.',
+      ]);
+      expect(warnings[0].action).toEqual({
+        label: 'Open Security Tab',
+        route: ['/presentation-config', 'soon'],
+        fragment: 'security',
+        ariaLabel: 'Open the Security tab of presentation configuration "Age check" (soon)',
+      });
+    });
+
+    it('does not warn users who can only read presentation configurations', async () => {
+      roles = ['presentation:request'];
+      responses['/api/verifier/config'] = [
+        { id: 'old', registration_cert: { jwt: certificate(-1) } },
+      ];
+
+      await service.getCounters();
+
+      expect(messages().some((message) => message.includes('Registration certificate'))).toBe(
+        false
+      );
+    });
+
+    it('warns about the issuer registration certificate with a link to its tab', async () => {
+      roles = ['issuance:manage'];
+      responses['/api/issuer/credentials'] = [];
+      responses['/api/issuer/config'] = {
+        id: 'config',
+        registrationCertificate: { enabled: true, jwt: certificate(2) },
+      };
+
+      await service.getCounters();
+
+      const warning = service.warnings.find((entry) =>
+        entry.message.startsWith('Issuer registration certificate')
+      );
+      expect(warning).toEqual({
+        message:
+          'Issuer registration certificate: Expiring soon — 2 days remaining; request a new one.',
+        action: {
+          label: 'Open Registration Certificate',
+          route: ['/issuance-config'],
+          fragment: 'registration-certificate',
+        },
+      });
+    });
+
+    it('suggests the EUDI Hub for a missing issuer certificate only with registrar:manage', async () => {
+      responses['/api/issuer/credentials'] = [];
+      responses['/api/issuer/config'] = {
+        id: 'config',
+        registrationCertificate: { enabled: true },
+      };
+      const issuerWarning = () =>
+        service.warnings.find((entry) => entry.message.startsWith('Issuer registration'))?.message;
+
+      roles = ['issuance:manage'];
+      await service.getCounters();
+      expect(issuerWarning()).toBe(
+        'Issuer registration certificate: No certificate — paste a JWT from a registrar.'
+      );
+
+      roles = ['issuance:manage', 'registrar:manage'];
+      await service.getCounters();
+      expect(issuerWarning()).toBe(
+        'Issuer registration certificate: No certificate — request one from the EUDI Hub or paste a JWT.'
+      );
+    });
+
+    it('does not warn about a turned-off or valid issuer registration certificate', async () => {
+      roles = ['issuance:manage'];
+      responses['/api/issuer/credentials'] = [];
+      responses['/api/issuer/config'] = {
+        id: 'config',
+        registrationCertificate: { enabled: false },
+      };
+      await service.getCounters();
+      expect(messages().some((message) => message.startsWith('Issuer registration'))).toBe(false);
+
+      responses['/api/issuer/config'] = {
+        id: 'config',
+        registrationCertificate: { enabled: true, jwt: certificate(60) },
+      };
+      await service.getCounters();
+      expect(messages().some((message) => message.startsWith('Issuer registration'))).toBe(false);
+    });
   });
 
   it('links a missing trust list to the trust list form', async () => {

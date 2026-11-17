@@ -15,7 +15,6 @@ import { Role } from "../../auth/roles/role.enum.js";
 import { Secured } from "../../auth/secure.decorator.js";
 import { Token, TokenPayload } from "../../auth/token.decorator.js";
 import { CredentialIssuerMetadataDto } from "../../issuer/issuance/oid4vci/well-known/dto/credential-issuer-metadata.dto.js";
-import { SchemaMetadataResponseDto } from "../../registrar/schema-metadata/dto/schema-metadata.dto.js";
 import { MetadataImportService } from "./configuration/metadata-import.service.js";
 import { PresentationConfigService } from "./configuration/presentation-config.service.js";
 import { PresentationConfigCreateDto } from "./dto/presentation-config-create.dto.js";
@@ -135,28 +134,6 @@ export class PresentationManagementController {
     }
 
     /**
-     * List schema metadata entries from the connected registrar catalog.
-     * Returns an empty array when the registrar is not enabled for this tenant.
-     */
-    @Secured([Role.Presentations, Role.PresentationRequest])
-    @Get("schema-metadata/catalog")
-    @ApiOperation({
-        summary: "List schema metadata from the registrar catalog",
-        description:
-            "Returns all schema metadata entries from the configured registrar. Returns an empty array when no registrar is configured.",
-    })
-    @ApiResponse({
-        status: 200,
-        description: "Catalog entries from the registrar",
-        type: [SchemaMetadataResponseDto],
-    })
-    listSchemaMetadataCatalog(@Token() user: TokenPayload) {
-        return this.metadataImportService.listSchemaMetadataCatalog(
-            user.entity!.id,
-        );
-    }
-
-    /**
      * Store a presentation request configuration. If it already exists, it will be updated.
      * @param config
      * @returns
@@ -242,37 +219,6 @@ export class PresentationManagementController {
             user.entity!.id,
             user,
             requestMeta,
-        );
-    }
-
-    /**
-     * Force-reissue the registration certificate for a presentation
-     * configuration. Bypasses and refreshes the embedded cache.
-     */
-    @Secured([Role.Presentations])
-    @Post(":id/registration-cert/reissue")
-    @ApiOperation({
-        summary: "Reissue the registration certificate cache",
-        description:
-            "Bypasses the embedded registration-certificate cache and resolves the certificate again: an imported JWT is checked again, `id` and `body` are resolved at the configured registrar.",
-    })
-    @ApiResponse({
-        status: 200,
-        description: "Updated presentation configuration",
-        type: PresentationConfig,
-    })
-    @ApiResponse({
-        status: 400,
-        description:
-            "Config has no registrationCert spec, the spec needs the registrar (id or body) and none is enabled, or the certificate fails its checks",
-    })
-    reissueRegistrationCertificate(
-        @Param("id") id: string,
-        @Token() user: TokenPayload,
-    ) {
-        return this.presentationConfigService.reissueRegistrationCertificate(
-            id,
-            user.entity!.id,
         );
     }
 }

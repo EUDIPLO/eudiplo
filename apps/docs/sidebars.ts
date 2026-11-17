@@ -71,7 +71,6 @@ const sidebars: SidebarsConfig = {
       items: [
         'trust/keys-and-certificates',
         'trust/eudi-hub',
-        'trust/registrar',
         'trust/registration-certificates',
         'trust/trust-lists',
         'trust/federation',
