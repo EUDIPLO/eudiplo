@@ -93,7 +93,10 @@ describe("BuildIssuerMetadata", () => {
             batchSize: 3,
             credentialRequestEncryption: true,
             notificationEndpointEnabled: false,
-            registrationCertificate: { enabled: true, mode: "generate" },
+            registrationCertificate: {
+                enabled: true,
+                jwt: "registration.cert",
+            },
         });
 
         const { credentialIssuer } = await run();
@@ -119,7 +122,7 @@ describe("BuildIssuerMetadata", () => {
         });
         expect(certificates.resolve).toHaveBeenCalledWith("tenant", {
             enabled: true,
-            mode: "generate",
+            jwt: "registration.cert",
         });
     });
 

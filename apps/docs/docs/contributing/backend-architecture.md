@@ -13,7 +13,7 @@ EUDIPLO's backend is a NestJS modular monolith that is migrating incrementally t
 | Area | Expected shape | Why |
 | --- | --- | --- |
 | Protocol and trust core: OID4VCI, OID4VP, authorization, credential formats, trust evaluation, sessions | Use cases in `application/`, rules in `domain/`, infrastructure behind `ports/` | Security-critical branching that must be testable without HTTP or a database; real extension points (formats, claims providers, trust sources, KMS, storage). |
-| Administrative CRUD: tenant, client, credential/issuance/presentation configuration, status-list configuration, registrar configuration, audit log, config import/export | A feature service with an injected TypeORM repository | Read, validate and save have little logic; extra layers add ceremony. |
+| Administrative CRUD: tenant, client, credential/issuance/presentation configuration, status-list configuration, audit log, config import/export | A feature service with an injected TypeORM repository | Read, validate and save have little logic; extra layers add ceremony. |
 
 CRUD services keep DTO validation in the controller, scope every query to the tenant, throw `NotFoundError` subclasses or Nest HTTP exceptions and contain no protocol logic. When a CRUD service gains business rules or becomes a dependency of the protocol core, extract a port for what the core needs. The migration is done when the protocol and trust core follows the target shape and the ratchet baseline has no core entries.
 
@@ -106,7 +106,7 @@ apps/backend/src/
 │   ├── verifier-offer/# presentation request API
 │   ├── iso18013/      # ISO 18013-7 (mdoc over the DC API)
 │   └── resolver/      # key resolution for verification
-├── registrar/         # registrar configuration and schema metadata
+├── registrar/         # registrar adapters (EUDI Hub) and registrar-neutral certificate storage
 ├── session/           # session lifecycle, events, retention, session logs
 ├── storage/           # file storage (local, S3)
 ├── trust/             # trust store, LoTE lists, OpenID Federation, X.509 validation
@@ -158,6 +158,15 @@ A pure source move of an entity needs no migration. Migrations run on startup, s
 | Claims source | `CredentialClaimsProvider` (`issuer/configuration/credentials/domain/credential-claims.ts`) | `ConfiguredCredentialClaimsProvider` in `application/`, with the webhook adapters |
 
 OpenID Federation is split the same way: the `FederationResolver` port (`trust/ports/`) with the `LocalFederationResolver` ([`@owf/openid-federation`](https://github.com/openwallet-foundation-labs/identity-common-ts/tree/main/packages/openid-federation)) and `HttpFederationResolver` (external trust engine) adapters in `trust/adapters/`, selected by `FEDERATION_RESOLVER` in `trust.module.ts`, and `FederationTrustService` for trust modes, caching and metrics. Another resolver is added as an adapter of the port and a `FEDERATION_RESOLVER` value. The tenant's own entity configuration comes from the `FederationEntityProvider` port (`trust/ports/`) with the `LocalFederationEntityProvider` (signs with the `federation` key chain through `@owf/openid-federation`) and `HttpFederationEntityProvider` (passes on a trust engine's signed entity configuration) adapters, selected by `FEDERATION_ENTITY_PROVIDER`. The metadata it contains is assembled by `PublishEntityConfiguration` in `issuer/issuance/federation-entity/` from the issuer metadata (`BuildIssuerMetadata`) and the verifier metadata (`VerifierMetadataService`).
+
+### A registrar adapter
+
+A registrar issues access certificates for access key chains and registration certificates for presentation configurations and the issuer. `registrar/` separates what differs per registrar from what EUDIPLO checks and stores for every registrar:
+
+- **Registrar-neutral storage** (`RegistrarStorageModule`). `AccessCertificateStorage` prepares a request (`prepare`: refuses anything but a standalone access key chain and creates its CSR), recognizes a certificate a registrar issued for the key although its answer was lost (`issuedFor`), and stores an issued certificate as the key chain's active certificate, with the issuing CA that `IssuingCaService` fetches from the certificate's Authority Information Access URL. `RegistrationCertificateStorage` reads what a certificate is requested for (`verifierRequest`: the DCQL query with `<TENANT_URL>` resolved, and the purpose and privacy policy of the request or of `registration_cert`; `issuerRequest`: the credential types) and stores the JWT (`storeVerifier`, `storeIssuer`) with the checks every registration certificate gets: the overasking check for a verifier, every credential type listed for an issuer. Adapters hand certificates over as `IssuedCertificate<T>`; when storing fails, its optional `revoke()` is called best-effort, so no unused certificate stays valid at the registrar.
+- **One adapter per registrar**, in its own folder and module; `eudi-hub/` is the example. It contains the registrar's HTTP client (through the outbound URL policy), its request DTOs and a controller under `/api/<registrar>`, secured with `registrar:manage` and additionally `presentation:manage` or `issuance:manage` with `match: "all"` for registration certificates. The adapter maps the DCQL query or the credential types to the registrar's API, maps its errors to HTTP responses and imports `RegistrarStorageModule`. `RegistrarModule` imports every adapter module.
+
+There is no common `/api/registrar` endpoint: registrars differ in how EUDIPLO authenticates (a pasted portal token at the EUDI Hub), in their organization model and in the fields a certificate needs, so a shared request body would either lose fields or carry registrar-specific options. The shared seam is the storage and its checks; a common API can follow once two adapters show what their requests have in common.
 
 ## Current boundary enforcement
 

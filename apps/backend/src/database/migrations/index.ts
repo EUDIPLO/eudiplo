@@ -76,3 +76,4 @@ export { AddTrustListSequenceNumber1786100000000 } from "./1786100000000-AddTrus
 export { NormalizeTrustListEntityInfo1786200000000 } from "./1786200000000-NormalizeTrustListEntityInfo.js";
 export { AddWalletUnitRevocation1786300000000 } from "./1786300000000-AddWalletUnitRevocation.js";
 export { AddOidcProvider1786400000000 } from "./1786400000000-AddOidcProvider.js";
+export { RemoveSandboxRegistrar1786500000000 } from "./1786500000000-RemoveSandboxRegistrar.js";

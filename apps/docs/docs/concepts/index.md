@@ -57,7 +57,6 @@ flowchart TB
 | **Trust list**                 | Signed LoTE list of trusted entities hosted by the tenant or published by others, or an ETSI TS 119 612 Trusted List of QTSPs read for QEAAs | `trusted_authorities` in DCQL                                    | [Trust lists](../trust/trust-lists.md)                             |
 | **Webhook endpoint**           | Reusable target for presentation results and issuance notifications                                                                        | Nothing                                                          | [Webhooks](../reference/webhooks.md)                               |
 | **Attribute provider**         | Your HTTP service that supplies claim values at issuance                                                                                   | Nothing                                                          | [Attribute provider](../issuance/attribute-provider.md)            |
-| **Registrar configuration**    | Connection to a registrar that issues access and registration certificates                                                                 | `verifier_info` and `issuer_info`                                | [Registrar](../trust/registrar.md)                                 |
 
 ## How entities relate
 
@@ -86,7 +85,6 @@ erDiagram
     PresentationConfig }o--o| WebhookEndpoint : "reports to"
     PresentationConfig }o--o{ TrustList : "trusts issuers of"
     TrustList }o--|| KeyChain : "signed with"
-    RegistrarConfig ||--o{ PresentationConfig : "certifies"
     Session }o--o| PresentationConfig : "created from"
     Session }o--o| WebhookEndpoint : notifies
 ```

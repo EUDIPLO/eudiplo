@@ -40,7 +40,6 @@ describe("TenantService updates", () => {
             {} as never,
             {} as never,
             {} as never,
-            {} as never,
             repository as never,
             {
                 getUpDownCounter: vi.fn(() => ({ add: vi.fn() })),
@@ -163,7 +162,6 @@ describe("TenantService setupTenant", () => {
             const service = new TenantService(
                 {} as never,
                 { getOrThrow: vi.fn(() => "/config") } as never,
-                {} as never,
                 {} as never,
                 repository as never,
                 {

@@ -1,4 +1,3 @@
-import { HttpErrorResponse } from '@angular/common/http';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormBuilder } from '@angular/forms';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -8,7 +7,6 @@ import { convertToParamMap, provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { RegistrarService } from '../../registrar/registrar.service';
 import { JwtService } from '../../services/jwt.service';
 import { KeyChainService } from '../key-chain.service';
 import { KeyCreateWizardComponent } from './key-create-wizard.component';
@@ -16,7 +14,6 @@ import { KeyCreateWizardComponent } from './key-create-wizard.component';
 describe('KeyCreateWizardComponent', () => {
   let fixture: ComponentFixture<KeyCreateWizardComponent>;
   let roles: string[];
-  let getConfig: ReturnType<typeof vi.fn>;
   let snackBar: { open: ReturnType<typeof vi.fn> };
   let keyChainImport: ReturnType<typeof vi.fn>;
 
@@ -33,7 +30,6 @@ describe('KeyCreateWizardComponent', () => {
             import: keyChainImport,
           },
         },
-        { provide: RegistrarService, useValue: { getConfig } },
         {
           provide: JwtService,
           useValue: {
@@ -51,122 +47,22 @@ describe('KeyCreateWizardComponent', () => {
 
   beforeEach(() => {
     keyChainImport = vi.fn();
-    getConfig = vi.fn().mockResolvedValue({ registrarUrl: 'https://registrar.example' });
     snackBar = { open: vi.fn().mockReturnValue({ onAction: () => of() }) };
   });
 
-  it('reads the registrar configuration with registrar:manage', async () => {
+  it('offers a self-signed or an external access certificate, no registrar enrollment', async () => {
     const component = await create(['keys:manage', 'registrar:manage']);
 
-    expect(component.canUseRegistrar).toBe(true);
-    expect(getConfig).toHaveBeenCalled();
+    expect(component.accessSourceOptions.map((option) => option.value)).toEqual([
+      'selfSigned',
+      'external',
+    ]);
   });
 
-  it('keeps a caller without registrar:manage from registrar enrollment and says why', async () => {
+  it('keeps the user in the wizard while the key is created', async () => {
     const component = await create(['keys:manage']);
-    expect(component.canUseRegistrar).toBe(false);
-    expect(getConfig).not.toHaveBeenCalled();
-
-    component.accessSourceForm.get('accessSource')?.setValue('registrar');
-    const next = vi.spyOn(component.stepper, 'next');
-    component.onAccessSourceNext();
-
-    expect(snackBar.open).toHaveBeenCalledWith(
-      'Enrolling through the registrar needs the registrar:manage role',
-      'Close',
-      expect.anything()
-    );
-    expect(next).not.toHaveBeenCalled();
-  });
-
-  it('does not claim that the registrar credentials work', async () => {
-    const component = await create(['keys:manage', 'registrar:manage']);
     component.usageForm.patchValue({ usage: 'access' });
-    fixture.detectChanges();
-
-    const text = fixture.nativeElement.textContent;
-    expect(text).toContain('Registrar configured. Its credentials are checked when you enroll.');
-    expect(text).not.toContain('Registrar credentials configured');
-  });
-
-  it('hints at a missing relying party contact and keeps the registrar option', async () => {
-    getConfig.mockResolvedValue({
-      registrarUrl: 'https://registrar.example',
-      relyingPartyContact: { supportUri: ' ', email: '' },
-    });
-    const component = await create(['keys:manage', 'registrar:manage']);
-    component.usageForm.patchValue({ usage: 'access' });
-    component.accessSourceForm.patchValue({ accessSource: 'registrar' });
-    fixture.detectChanges();
-
-    const hint: HTMLElement = fixture.nativeElement.querySelector('.status-hint');
-    expect(hint.textContent).toContain(
-      'No relying party contact set; the first enrollment needs one.'
-    );
-    expect(hint.querySelector('a')?.getAttribute('href')).toBe('/registrar#relying-party-contact');
-    expect(component.hasRegistrarConfig).toBe(true);
-  });
-
-  it.each([
-    { supportUri: 'https://verifier.example/support' },
-    { email: 'support@verifier.example' },
-    { phone: '+49 30 1234567' },
-  ])('shows no contact hint with a relying party contact %o', async (relyingPartyContact) => {
-    getConfig.mockResolvedValue({ registrarUrl: 'https://registrar.example', relyingPartyContact });
-    const component = await create(['keys:manage', 'registrar:manage']);
-    component.usageForm.patchValue({ usage: 'access' });
-    fixture.detectChanges();
-
-    expect(fixture.nativeElement.textContent).toContain('Registrar configured.');
-    expect(fixture.nativeElement.querySelector('.status-hint')).toBeNull();
-  });
-
-  it('shows no contact hint without a registrar configuration', async () => {
-    getConfig.mockResolvedValue(null);
-    const component = await create(['keys:manage', 'registrar:manage']);
-    component.usageForm.patchValue({ usage: 'access' });
-    fixture.detectChanges();
-
-    expect(fixture.nativeElement.textContent).toContain('Registrar credentials not configured.');
-    expect(fixture.nativeElement.querySelector('.status-hint')).toBeNull();
-  });
-
-  it('says that the registrar configuration could not be read, and retries', async () => {
-    getConfig.mockRejectedValueOnce(
-      new HttpErrorResponse({ status: 500, error: { message: 'Internal server error' } })
-    );
-    const component = await create(['keys:manage', 'registrar:manage']);
-    component.usageForm.patchValue({ usage: 'access' });
-    component.accessSourceForm.patchValue({ accessSource: 'registrar' });
-    fixture.detectChanges();
-    // Only the selected step can take focus.
-    component.stepper.next();
-    fixture.detectChanges();
-
-    const element: HTMLElement = fixture.nativeElement;
-    expect(element.textContent).toContain(
-      'Could not check the registrar configuration: Internal server error'
-    );
-    expect(element.textContent).not.toContain('Registrar credentials not configured');
-
-    const retry: HTMLButtonElement = element.querySelector('.registrar-retry button')!;
-    expect(retry.closest('label')).toBeNull();
-    retry.focus();
-    expect(document.activeElement).toBe(retry);
-    retry.click();
-    await fixture.whenStable();
-    fixture.detectChanges();
-
-    expect(getConfig).toHaveBeenCalledTimes(2);
-    expect(element.textContent).toContain('Registrar configured.');
-    expect(element.querySelector('.registrar-retry')).toBeNull();
-    expect((document.activeElement as HTMLInputElement).value).toBe('registrar');
-  });
-
-  it('keeps the user in the wizard while the key is created and enrolled', async () => {
-    const component = await create(['keys:manage', 'registrar:manage']);
-    component.usageForm.patchValue({ usage: 'access' });
-    component.accessSourceForm.patchValue({ accessSource: 'registrar' });
+    component.accessSourceForm.patchValue({ accessSource: 'selfSigned' });
     component.isSubmitting = true;
     fixture.detectChanges();
 
@@ -181,18 +77,18 @@ describe('KeyCreateWizardComponent', () => {
       false,
       true,
     ]);
-    // Create & Enroll stays focusable and says why it waits.
-    const enrolling = [...element.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
-      button.textContent?.includes('Enrolling...')
+    // Create stays focusable and says why it waits.
+    const creating = [...element.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
+      button.textContent?.includes('Creating...')
     )!;
-    expect(enrolling.disabled).toBe(false);
-    expect(enrolling.getAttribute('aria-disabled')).toBe('true');
+    expect(creating.disabled).toBe(false);
+    expect(creating.getAttribute('aria-disabled')).toBe('true');
     expect(
       fixture.debugElement
         .queryAll(By.directive(MatTooltip))
-        .find((tooltip) => tooltip.nativeElement === enrolling)!
+        .find((tooltip) => tooltip.nativeElement === creating)!
         .injector.get(MatTooltip).message
-    ).toBe('Creating the key and enrolling it with the registrar…');
+    ).toBe('Creating the key chain…');
   });
 
   it('says which fields keep a key from being imported, focuses the first one and sends nothing', async () => {
@@ -229,340 +125,6 @@ describe('KeyCreateWizardComponent', () => {
     );
     expect(keyChainImport).not.toHaveBeenCalled();
   });
-
-  it('moves focus from Create & Enroll to a refused enrollment, but not from elsewhere', async () => {
-    const component = await create(['keys:manage', 'registrar:manage']);
-    component.usageForm.patchValue({ usage: 'access' });
-    component.accessSourceForm.patchValue({ accessSource: 'registrar' });
-    fixture.detectChanges();
-    component.stepper.selectedIndex = component.stepper.steps.length - 1;
-    fixture.detectChanges();
-    const element: HTMLElement = fixture.nativeElement;
-    const createAndEnroll = [...element.querySelectorAll<HTMLButtonElement>('button')].find(
-      (button) => button.textContent?.includes('Create & Enroll')
-    )!;
-
-    createAndEnroll.focus();
-    component.enrollmentError = { message: 'Refused.', offerRegistrar: false };
-    fixture.detectChanges();
-    expect(document.activeElement).toBe(element.querySelector('.enrollment-error'));
-
-    component.enrollmentError = null;
-    fixture.detectChanges();
-    const description = element.querySelector<HTMLInputElement>(
-      'input[formcontrolname="description"]'
-    )!;
-    description.focus();
-    component.enrollmentError = { message: 'Refused again.', offerRegistrar: false };
-    fixture.detectChanges();
-    expect(document.activeElement).toBe(description);
-  });
-
-  it('shows a refused enrollment next to Create & Enroll', async () => {
-    const component = await create(['keys:manage', 'registrar:manage']);
-    component.usageForm.patchValue({ usage: 'access' });
-    component.accessSourceForm.patchValue({ accessSource: 'registrar' });
-    component.enrollmentError = {
-      message: 'Refused. The new key was deleted.',
-      offerRegistrar: true,
-    };
-    fixture.detectChanges();
-
-    const alert: HTMLElement = fixture.nativeElement.querySelector('.enrollment-error');
-    expect(alert.getAttribute('role')).toBe('alert');
-    expect(alert.textContent).toContain('Refused. The new key was deleted.');
-    expect(alert.querySelector('a')?.getAttribute('href')).toBe('/registrar');
-
-    component.enrollmentError = { message: 'Needs a role.', offerRegistrar: false };
-    fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.enrollment-error a')).toBeNull();
-  });
-});
-
-describe('KeyCreateWizardComponent registrar enrollment', () => {
-  let keyChainService: { create: ReturnType<typeof vi.fn> };
-  let registrarService: { createAccessKeyChain: ReturnType<typeof vi.fn> };
-  let router: { navigate: ReturnType<typeof vi.fn> };
-  let snackBar: { open: ReturnType<typeof vi.fn> };
-
-  const authenticationFailed = new HttpErrorResponse({
-    status: 400,
-    error: {
-      statusCode: 400,
-      message:
-        'Failed to authenticate with registrar: the OIDC provider answered with HTTP 401, invalid_grant',
-    },
-  });
-
-  /** A wizard on the last step of a registrar enrollment. */
-  function create(): KeyCreateWizardComponent {
-    const component = TestBed.runInInjectionContext(
-      () =>
-        new KeyCreateWizardComponent(
-          new FormBuilder(),
-          keyChainService as never,
-          registrarService as never,
-          {} as never,
-          router as never,
-          snackBar as never,
-          { hasRole: () => true } as never
-        )
-    );
-    component.usageForm.patchValue({ usage: 'access' });
-    component.accessSourceForm.patchValue({ accessSource: 'registrar' });
-    return component;
-  }
-
-  beforeEach(() => {
-    keyChainService = { create: vi.fn() };
-    registrarService = {
-      createAccessKeyChain: vi
-        .fn()
-        .mockResolvedValue({ id: 'registrar-cert', certId: 'key-1', crt: 'PEM' }),
-    };
-    router = { navigate: vi.fn() };
-    snackBar = { open: vi.fn().mockReturnValue({ onAction: () => of() }) };
-    vi.spyOn(console, 'error').mockImplementation(() => undefined);
-  });
-
-  it('creates and enrolls the key in one request and opens it', async () => {
-    const component = create();
-    component.configForm.patchValue({ description: '  Registrar key ', kmsProvider: 'vault' });
-
-    await component.createKey();
-
-    expect(keyChainService.create).not.toHaveBeenCalled();
-    expect(registrarService.createAccessKeyChain).toHaveBeenCalledWith({
-      description: 'Registrar key',
-      kmsProvider: 'vault',
-    });
-    expect(router.navigate).toHaveBeenCalledWith(['/keys', 'key-1']);
-  });
-
-  it('enrolls once when Create & Enroll is clicked again while it runs, and says why it waits', async () => {
-    let finish!: () => void;
-    registrarService.createAccessKeyChain.mockReturnValue(
-      new Promise((resolve) => (finish = () => resolve({ id: 'c', certId: 'key-1', crt: 'PEM' })))
-    );
-    const component = create();
-    expect(component.createTooltip).toBe('');
-
-    const first = component.createKey();
-    expect(component.createTooltip).toBe('Creating the key and enrolling it with the registrar…');
-    await component.createKey();
-    finish();
-    await first;
-
-    expect(registrarService.createAccessKeyChain).toHaveBeenCalledOnce();
-  });
-
-  it('says why next to Create & Enroll when the registrar authentication fails', async () => {
-    registrarService.createAccessKeyChain.mockRejectedValue(authenticationFailed);
-    const component = create();
-
-    await component.createKey();
-
-    expect(router.navigate).not.toHaveBeenCalled();
-    expect(snackBar.open).not.toHaveBeenCalled();
-    expect(component.isSubmitting).toBe(false);
-    expect(component.enrollmentError).toEqual({
-      message:
-        'Failed to authenticate with registrar: the OIDC provider answered with HTTP 401, invalid_grant. ' +
-        'No key was kept. Check the registrar configuration and try again.',
-      offerRegistrar: true,
-    });
-  });
-
-  it('offers the registrar configuration when it is gone', async () => {
-    registrarService.createAccessKeyChain.mockRejectedValue(
-      new HttpErrorResponse({
-        status: 404,
-        error: { statusCode: 404, message: 'No registrar configuration found for tenant t' },
-      })
-    );
-    const component = create();
-
-    await component.createKey();
-
-    expect(router.navigate).not.toHaveBeenCalled();
-    expect(component.enrollmentError?.offerRegistrar).toBe(true);
-  });
-
-  it('names the missing role on 403', async () => {
-    registrarService.createAccessKeyChain.mockRejectedValue(
-      new HttpErrorResponse({
-        status: 403,
-        error: { statusCode: 403, message: 'Forbidden resource' },
-      })
-    );
-    const component = create();
-
-    await component.createKey();
-
-    expect(router.navigate).not.toHaveBeenCalled();
-    expect(component.enrollmentError).toEqual({
-      message: 'Enrolling through the registrar needs the registrar:manage role. No key was kept.',
-      offerRegistrar: false,
-    });
-  });
-
-  it('clears the previous refusal when Create & Enroll is selected again', async () => {
-    registrarService.createAccessKeyChain.mockRejectedValueOnce(authenticationFailed);
-    const component = create();
-    await component.createKey();
-    expect(component.enrollmentError).not.toBeNull();
-
-    await component.createKey();
-
-    expect(component.enrollmentError).toBeNull();
-    expect(router.navigate).toHaveBeenCalledWith(['/keys', 'key-1']);
-  });
-
-  it('clears the refusal when the certificate source changes', async () => {
-    registrarService.createAccessKeyChain.mockRejectedValue(authenticationFailed);
-    const component = create();
-    await component.createKey();
-    expect(component.enrollmentError).not.toBeNull();
-
-    component.accessSourceForm.patchValue({ accessSource: 'selfSigned' });
-
-    expect(component.enrollmentError).toBeNull();
-  });
-
-  it('reports a refusal in a snackbar and stays put when the user left the wizard', async () => {
-    registrarService.createAccessKeyChain.mockRejectedValue(authenticationFailed);
-    const component = create();
-    const creating = component.createKey();
-    component.ngOnDestroy();
-
-    await creating;
-
-    expect(component.enrollmentError).toBeNull();
-    expect(router.navigate).not.toHaveBeenCalled();
-    expect(snackBar.open.mock.lastCall?.[0]).toContain('No key was kept.');
-  });
-
-  it('says how to recognize an enrolled or self-signed key when the backend did not answer', async () => {
-    registrarService.createAccessKeyChain.mockRejectedValue(
-      new HttpErrorResponse({ status: 0, statusText: 'Unknown Error' })
-    );
-    const component = create();
-
-    await component.createKey();
-
-    expect(router.navigate).not.toHaveBeenCalled();
-    expect(component.enrollmentError).toEqual({
-      message:
-        'Failed to enroll certificate from registrar: the backend could not be reached. Check the connection and try again. ' +
-        'EUDIPLO may still have created the key. If Keys lists a new access key, open it: ' +
-        'a different Issuer than Subject in its Active Certificate means it is enrolled; ' +
-        'the same Issuer as Subject means it is self-signed: select Enroll with Registrar ' +
-        'on that certificate, or delete the key.',
-      offerRegistrar: false,
-      offerKeys: true,
-    });
-  });
-
-  it.each([502, 503, 504])('treats a %s from a proxy as an unknown outcome', async (status) => {
-    registrarService.createAccessKeyChain.mockRejectedValue(
-      new HttpErrorResponse({ status, statusText: 'Gateway', error: 'Gateway' })
-    );
-    const component = create();
-
-    await component.createKey();
-
-    expect(component.enrollmentError?.message).toContain('EUDIPLO may still have created the key.');
-    expect(component.enrollmentError?.offerKeys).toBe(true);
-  });
-
-  it('says no key was kept after a server error of EUDIPLO', async () => {
-    registrarService.createAccessKeyChain.mockRejectedValue(
-      new HttpErrorResponse({
-        status: 500,
-        error: { statusCode: 500, message: 'Internal Server Error' },
-      })
-    );
-    const component = create();
-
-    await component.createKey();
-
-    expect(component.enrollmentError).toEqual({
-      message:
-        'Failed to enroll certificate from registrar: Internal Server Error. No key was kept.',
-      offerRegistrar: false,
-    });
-  });
-
-  it('does not blame the registrar for another refusal, such as an unknown KMS provider', async () => {
-    registrarService.createAccessKeyChain.mockRejectedValue(
-      new HttpErrorResponse({
-        status: 400,
-        error: { statusCode: 400, message: "Unknown KMS provider 'x'. Configured providers: db" },
-      })
-    );
-    const component = create();
-
-    await component.createKey();
-
-    expect(component.enrollmentError).toEqual({
-      message:
-        "Failed to enroll certificate from registrar: Unknown KMS provider 'x'. Configured providers: db. No key was kept.",
-      offerRegistrar: false,
-    });
-  });
-
-  it('offers the key EUDIPLO could not delete', async () => {
-    registrarService.createAccessKeyChain.mockRejectedValue(
-      new HttpErrorResponse({
-        status: 500,
-        error: {
-          statusCode: 500,
-          message:
-            'Failed to create access certificate. The new access key chain key-1 could not be deleted; delete it.',
-        },
-      })
-    );
-    const component = create();
-
-    await component.createKey();
-
-    expect(router.navigate).not.toHaveBeenCalled();
-    expect(component.enrollmentError).toEqual({
-      message:
-        'Failed to create access certificate. The new access key chain key-1 could not be deleted; delete it. ' +
-        'The new key has only its self-signed certificate: open it and ' +
-        'select Enroll with Registrar on its Active Certificate, or delete it.',
-      offerRegistrar: false,
-      keptKeyId: 'key-1',
-    });
-  });
-
-  it('reports an unknown outcome in a snackbar when the user left the wizard', async () => {
-    registrarService.createAccessKeyChain.mockRejectedValue(
-      new HttpErrorResponse({ status: 0, statusText: 'Unknown Error' })
-    );
-    const component = create();
-    const creating = component.createKey();
-    component.ngOnDestroy();
-
-    await creating;
-
-    expect(component.enrollmentError).toBeNull();
-    expect(router.navigate).not.toHaveBeenCalled();
-    expect(snackBar.open.mock.lastCall?.[0]).toContain('If Keys lists a new access key');
-  });
-
-  it('sends the default description when none is entered, and the default KMS provider', async () => {
-    const component = create();
-    // The KMS provider select is required; it starts at the default provider.
-    component.configForm.patchValue({ description: '' });
-
-    await component.createKey();
-
-    const [body] = registrarService.createAccessKeyChain.mock.lastCall!;
-    expect(body.description).toBeTruthy();
-    expect(body.kmsProvider).toBe('db');
-  });
 });
 
 describe('KeyCreateWizardComponent errors', () => {
@@ -577,10 +139,8 @@ describe('KeyCreateWizardComponent errors', () => {
           new FormBuilder(),
           keyChainService as never,
           {} as never,
-          {} as never,
           { navigate: vi.fn() } as never,
-          snackBar as never,
-          { hasRole: () => false } as never
+          snackBar as never
         )
     );
     component.usageForm.patchValue({ usage: 'access' });
@@ -649,10 +209,8 @@ describe('KeyCreateWizardComponent imports', () => {
           new FormBuilder(),
           keyChainService as never,
           {} as never,
-          {} as never,
           { navigate: vi.fn() } as never,
-          snackBar as never,
-          { hasRole: () => false } as never
+          snackBar as never
         )
     );
     component.configForm.patchValue({ externalPrivateKey: key, externalCertificate: certificate });
@@ -769,10 +327,8 @@ describe('KeyCreateWizardComponent certificate from a CSR', () => {
           new FormBuilder(),
           keyChainService as never,
           {} as never,
-          {} as never,
           router as never,
-          snackBar as never,
-          { hasRole: () => false } as never
+          snackBar as never
         )
     );
   }
@@ -855,10 +411,8 @@ describe('KeyCreateWizardComponent internal chains', () => {
           new FormBuilder(),
           keyChainService as never,
           {} as never,
-          {} as never,
           { navigate: vi.fn() } as never,
-          snackBar as never,
-          { hasRole: () => false } as never
+          snackBar as never
         )
     );
     component.usageForm.patchValue({ usage: 'attestation' });
@@ -947,10 +501,8 @@ describe('KeyCreateWizardComponent internal chains', () => {
           new FormBuilder(),
           keyChainService as never,
           {} as never,
-          {} as never,
           router as never,
-          snackBar as never,
-          { hasRole: () => false } as never
+          snackBar as never
         )
     );
     component.usageForm.patchValue({ usage: 'attestation' });
@@ -988,10 +540,8 @@ describe('KeyCreateWizardComponent internal chains', () => {
           new FormBuilder(),
           keyChainService as never,
           {} as never,
-          {} as never,
           { navigate: vi.fn() } as never,
-          snackBar as never,
-          { hasRole: () => false } as never
+          snackBar as never
         )
     );
     component.usageForm.patchValue({ usage: 'statusList' });
@@ -1091,11 +641,9 @@ describe('KeyCreateWizardComponent signing algorithm', () => {
         new KeyCreateWizardComponent(
           new FormBuilder(),
           keyChainService as never,
-          {} as never,
           { snapshot: { queryParamMap: new Map() } } as never,
           { navigate: vi.fn() } as never,
-          { open: vi.fn().mockReturnValue({ onAction: () => of() }) } as never,
-          { hasRole: () => false } as never
+          { open: vi.fn().mockReturnValue({ onAction: () => of() }) } as never
         )
     );
     await component.loadKmsProviders();
@@ -1148,19 +696,6 @@ describe('KeyCreateWizardComponent signing algorithm', () => {
     expect(component.configForm.value.alg).toBe('ES384');
   });
 
-  it('names the provider default for a registrar enrollment', async () => {
-    const component = await create();
-    component.usageForm.patchValue({ usage: 'access' });
-    component.accessSourceForm.patchValue({ accessSource: 'registrar' });
-    component.configForm.patchValue({ kmsProvider: 'hsm' });
-
-    expect(component.showAlgorithm).toBe(false);
-    expect(component.getSummary()).toContainEqual({
-      label: 'Algorithm',
-      value: 'ES384 (ECDSA P-384) (provider default)',
-    });
-  });
-
   it('does not ask for an algorithm when the key is imported', async () => {
     const component = await create();
     component.caSourceForm.patchValue({ keyChainType: 'externalCaChain' });
@@ -1186,11 +721,9 @@ describe('KeyCreateWizardComponent usage from the link', () => {
         new KeyCreateWizardComponent(
           new FormBuilder(),
           { getProviders: vi.fn().mockResolvedValue({ providers: [], default: 'db' }) } as never,
-          {} as never,
           { snapshot: { queryParamMap: new Map(usage ? [['usage', usage]] : []) } } as never,
           { navigate: vi.fn() } as never,
-          { open: vi.fn() } as never,
-          { hasRole: () => false } as never
+          { open: vi.fn() } as never
         )
     );
     component.ngOnInit();
@@ -1213,7 +746,6 @@ describe('KeyCreateWizardComponent opened from a form in another tab', () => {
     import: ReturnType<typeof vi.fn>;
     getProviders: ReturnType<typeof vi.fn>;
   };
-  let registrarService: { createAccessKeyChain: ReturnType<typeof vi.fn> };
   let router: { navigate: ReturnType<typeof vi.fn> };
   let snackBar: { open: ReturnType<typeof vi.fn> };
 
@@ -1224,13 +756,11 @@ describe('KeyCreateWizardComponent opened from a form in another tab', () => {
         new KeyCreateWizardComponent(
           new FormBuilder(),
           keyChainService as never,
-          registrarService as never,
           {
             snapshot: { queryParamMap: convertToParamMap(from ? { usage, from } : { usage }) },
           } as never,
           router as never,
-          snackBar as never,
-          { hasRole: () => true } as never
+          snackBar as never
         )
     );
     component.ngOnInit();
@@ -1242,9 +772,6 @@ describe('KeyCreateWizardComponent opened from a form in another tab', () => {
       create: vi.fn().mockResolvedValue({ id: 'created' }),
       import: vi.fn().mockResolvedValue({ id: 'imported' }),
       getProviders: vi.fn().mockResolvedValue({ providers: [], default: 'db' }),
-    };
-    registrarService = {
-      createAccessKeyChain: vi.fn().mockResolvedValue({ certId: 'enrolled' }),
     };
     router = { navigate: vi.fn() };
     snackBar = { open: vi.fn().mockReturnValue({ onAction: () => of(undefined) }) };
@@ -1303,19 +830,6 @@ describe('KeyCreateWizardComponent opened from a form in another tab', () => {
     expect(router.navigate).not.toHaveBeenCalled();
   });
 
-  it('says to return to the form after a registrar enrollment', async () => {
-    const component = openedFromForm('access');
-    component.accessSourceForm.patchValue({ accessSource: 'registrar' });
-
-    await component.createKey();
-
-    expect(component.createdForForm).toEqual({
-      id: 'enrolled',
-      heading: 'Key chain "Access Certificate" created and enrolled',
-    });
-    expect(router.navigate).not.toHaveBeenCalled();
-  });
-
   it('reports the key chain in a snackbar and stays put when the user left the wizard', async () => {
     const component = openedFromForm('trustList');
     component.configForm.patchValue({ description: 'Operator list' });
@@ -1329,21 +843,6 @@ describe('KeyCreateWizardComponent opened from a form in another tab', () => {
     expect(snackBar.open).toHaveBeenCalledWith('Key chain "Operator list" created.', 'Close', {
       duration: 5000,
     });
-  });
-
-  it('reports an enrollment in a snackbar and stays put when the user left the wizard', async () => {
-    const component = openedFromForm('access');
-    component.accessSourceForm.patchValue({ accessSource: 'registrar' });
-
-    const enrolling = component.createKey();
-    component.ngOnDestroy();
-    await enrolling;
-
-    expect(component.createdForForm).toBeNull();
-    expect(router.navigate).not.toHaveBeenCalled();
-    expect(snackBar.open.mock.lastCall?.[0]).toBe(
-      'Key chain "Access Certificate" created and enrolled.'
-    );
   });
 
   it('still opens the key page for a CSR, and says to return to the form afterwards', async () => {
@@ -1373,7 +872,6 @@ describe('KeyCreateWizardComponent opened from a form in another tab', () => {
           { path: 'keys/:id', children: [] },
         ]),
         { provide: KeyChainService, useValue: keyChainService },
-        { provide: RegistrarService, useValue: registrarService },
         { provide: JwtService, useValue: { hasRole: () => false } },
       ],
     });

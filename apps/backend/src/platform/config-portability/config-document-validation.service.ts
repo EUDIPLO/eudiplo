@@ -16,7 +16,6 @@ import { CreateWebhookEndpointSchema } from "../../issuer/configuration/webhook-
 import { StatusListImportSchema } from "../../issuer/status-list/dto/status-list.schema.js";
 import { TrustListCreateSchema } from "../../issuer/trust-list/schemas/trust-list.schema.js";
 import { checkRegistrationCertificate } from "../../registrar/domain/registration-certificate-check.js";
-import { CreateRegistrarConfigSchema } from "../../registrar/schemas/registrar.schema.js";
 import { CreateFederationTrustAnchorSchema } from "../../trust/federation-trust-anchor/schemas/federation-trust-anchor.schema.js";
 import { resolveDcqlTenantUrl } from "../../verifier/presentations/domain/dcql-tenant-url.js";
 import { uncheckableTransactionData } from "../../verifier/presentations/domain/transaction-data-references.js";
@@ -36,12 +35,6 @@ import {
 } from "./key-chain-document.js";
 
 import { UNRESOLVED_PLACEHOLDER } from "./unresolved-placeholder.js";
-
-/** The flat `registrationCertImportJwt` form field, trimmed, if it is a string. */
-function flatImportJwt(spec: Record<string, any>): string | undefined {
-    const value = spec.registrationCertImportJwt;
-    return typeof value === "string" ? value.trim() : undefined;
-}
 
 @Injectable()
 export class ConfigDocumentValidationService {
@@ -271,7 +264,7 @@ export class ConfigDocumentValidationService {
     }
 
     /**
-     * An imported `registration_cert.jwt` must be valid now and authorize the
+     * A `registration_cert.jwt` must be valid now and authorize the
      * DCQL query with `<TENANT_URL>` resolved for `tenantId`, the tenant the
      * bundle is applied to, as saving the presentation config checks. The
      * plan calls this only for documents apply writes: an unchanged or
@@ -284,12 +277,8 @@ export class ConfigDocumentValidationService {
     ): ConfigMigrationIssue[] {
         if (document.kind !== "PresentationConfig") return [];
         const spec = document.spec as Record<string, any>;
-        // The schema has not validated the document yet, so read only the
-        // JWT: `registration_cert.jwt`, or the flat form field the
-        // presentation config service turns into it.
-        const jwt = Object.hasOwn(spec, "registration_cert")
-            ? spec.registration_cert?.jwt
-            : flatImportJwt(spec);
+        // The schema has not validated the document yet, so read only the JWT.
+        const jwt = spec.registration_cert?.jwt;
         // An unresolved `${VAR}` placeholder is reported as SECRET_REQUIRED.
         if (
             typeof jwt !== "string" ||
@@ -358,8 +347,6 @@ export class ConfigDocumentValidationService {
             }
             case "KeyChainDefaults":
                 return DefaultKeyChainsSchema;
-            case "RegistrarConfig":
-                return CreateRegistrarConfigSchema;
             case "IssuanceConfig":
                 return IssuanceConfigSchema;
             case "CredentialConfig":

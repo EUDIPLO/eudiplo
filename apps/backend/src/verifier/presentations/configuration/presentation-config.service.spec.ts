@@ -16,7 +16,7 @@ function setup(
     options: {
         skipTrustAuthority?: boolean;
         stored?: unknown[];
-        validateImported?: ReturnType<typeof vi.fn>;
+        validate?: ReturnType<typeof vi.fn>;
         unregistered?: ReturnType<typeof vi.fn>;
     } = {},
 ) {
@@ -32,9 +32,7 @@ function setup(
     const configImportService = { importConfigsForTenant: vi.fn() };
     const auditLogService = { record: vi.fn() };
     const registrationCertificates = {
-        scheduleRefresh: vi.fn(),
-        validateImported:
-            options.validateImported ?? vi.fn().mockResolvedValue(undefined),
+        validate: options.validate ?? vi.fn(),
     };
     const federationTrustAnchors = {
         unregistered:
@@ -50,6 +48,7 @@ function setup(
         {
             publicUrl: "https://eudiplo.example",
             skipTrustAuthority: options.skipTrustAuthority ?? false,
+            skipOveraskingCheck: false,
         },
     );
     return {
@@ -160,17 +159,15 @@ describe("PresentationConfigService trusted authorities", () => {
 
 describe("PresentationConfigService imported registration certificate", () => {
     const overasking = () =>
-        vi
-            .fn()
-            .mockRejectedValue(
-                new BadRequestException(
-                    "Registration certificate does not authorize the requested DCQL credentials",
-                ),
+        vi.fn(() => {
+            throw new BadRequestException(
+                "Registration certificate does not authorize the requested DCQL credentials",
             );
+        });
 
     it("refuses to store a config whose imported certificate fails its checks", async () => {
-        const validateImported = overasking();
-        const { service, repository } = setup({ validateImported });
+        const validate = overasking();
+        const { service, repository } = setup({ validate });
 
         await expect(
             service.storePresentationConfig("tenant", {
@@ -181,7 +178,7 @@ describe("PresentationConfigService imported registration certificate", () => {
         ).rejects.toThrow(
             "Registration certificate does not authorize the requested DCQL credentials",
         );
-        expect(validateImported).toHaveBeenCalledWith(
+        expect(validate).toHaveBeenCalledWith(
             expect.objectContaining({
                 id: "pid",
                 tenantId: "tenant",
@@ -193,7 +190,7 @@ describe("PresentationConfigService imported registration certificate", () => {
 
     it("checks the certificate when an update changes it or the DCQL query", async () => {
         const { service, repository } = setup({
-            validateImported: overasking(),
+            validate: overasking(),
         });
 
         await expect(
@@ -205,8 +202,8 @@ describe("PresentationConfigService imported registration certificate", () => {
     });
 
     it("checks the stored certificate against a changed DCQL query", async () => {
-        const validateImported = overasking();
-        const { service, repository } = setup({ validateImported });
+        const validate = overasking();
+        const { service, repository } = setup({ validate });
         repository.findOneByOrFail.mockResolvedValue({
             id: "pid",
             tenantId: "tenant",
@@ -222,7 +219,7 @@ describe("PresentationConfigService imported registration certificate", () => {
                 dcql_query: widened,
             } as any),
         ).rejects.toThrow(BadRequestException);
-        expect(validateImported).toHaveBeenCalledWith(
+        expect(validate).toHaveBeenCalledWith(
             expect.objectContaining({
                 tenantId: "tenant",
                 registration_cert: { jwt: "stored" },
@@ -234,7 +231,7 @@ describe("PresentationConfigService imported registration certificate", () => {
 
     it("does not import a new file whose certificate is refused", async () => {
         const { service, repository, configImportService } = setup({
-            validateImported: overasking(),
+            validate: overasking(),
         });
         await (service as any).importForTenant("tenant");
         const { processItem } =
@@ -251,9 +248,9 @@ describe("PresentationConfigService imported registration certificate", () => {
     });
 
     it("keeps the stored config when an imported file has a refused certificate", async () => {
-        const validateImported = overasking();
+        const validate = overasking();
         const { service, repository, configImportService } = setup({
-            validateImported,
+            validate,
         });
         await (service as any).importForTenant("tenant");
         const { deleteExisting } =
@@ -266,7 +263,7 @@ describe("PresentationConfigService imported registration certificate", () => {
                 registration_cert: { jwt: "imported" },
             }),
         ).rejects.toThrow(BadRequestException);
-        expect(validateImported).toHaveBeenCalledWith(
+        expect(validate).toHaveBeenCalledWith(
             expect.objectContaining({
                 tenantId: "tenant",
                 registration_cert: { jwt: "imported" },
@@ -276,14 +273,14 @@ describe("PresentationConfigService imported registration certificate", () => {
     });
 
     it("does not check the certificate when an update leaves it and the DCQL query alone", async () => {
-        const validateImported = overasking();
-        const { service, repository } = setup({ validateImported });
+        const validate = overasking();
+        const { service, repository } = setup({ validate });
 
         await service.updatePresentationConfig("pid", "tenant", {
             description: "renamed",
         });
 
-        expect(validateImported).not.toHaveBeenCalled();
+        expect(validate).not.toHaveBeenCalled();
         expect(repository.save).toHaveBeenCalled();
     });
 });

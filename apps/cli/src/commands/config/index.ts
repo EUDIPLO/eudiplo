@@ -1,7 +1,7 @@
 import { Command } from "commander";
-import { runConfigPath, runConfigShow } from "./action.js";
 import type { CommandContext } from "../../types.js";
 import { loadCliState, type SetExitCode } from "../shared.js";
+import { runConfigPath, runConfigShow } from "./action.js";
 import { createEditorCommand } from "./editor/index.js";
 import { createPortabilityCommands } from "./portability/index.js";
 import { createTenantCommand } from "./tenant/index.js";

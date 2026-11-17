@@ -43,7 +43,6 @@ export class ConfigResourceRouteService {
                 "defaults",
             ],
             [/\/issuer\/config\/?$/, "IssuanceConfig", "issuance"],
-            [/\/registrar\/config\/?$/, "RegistrarConfig", "registrar"],
             [/\/session-config\/?$/, "Tenant", "tenant"],
             [/\/status-list-config\/?$/, "Tenant", "tenant"],
         ];

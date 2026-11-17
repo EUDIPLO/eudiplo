@@ -6,6 +6,16 @@ describe("ConfigMigrationService", () => {
     const registry = new ConfigResourceRegistry();
     const service = new ConfigMigrationService(registry);
 
+    it("refuses a registrar configuration document with the reason", () => {
+        expect(() =>
+            service.upgrade({
+                $schema:
+                    "https://eudiplo.dev/schemas/v1/RegistrarConfigFile.schema.json",
+                spec: { registrarUrl: "https://registrar.example" },
+            }),
+        ).toThrow(/no longer supports the registrar configuration/);
+    });
+
     it("upgrades a bare legacy configuration to the current version", () => {
         const input = service.wrapLegacy(
             "IssuanceConfig",
@@ -21,7 +31,7 @@ describe("ConfigMigrationService", () => {
         const result = service.upgrade(input);
 
         expect(result.document.$schema).toBe(
-            "https://eudiplo.dev/schemas/v6/IssuanceConfigFile.schema.json",
+            "https://eudiplo.dev/schemas/v7/IssuanceConfigFile.schema.json",
         );
         expect(result.document.spec.walletProviderTrustLists).toEqual([
             { url: "https://example.com/trust-list" },
@@ -32,6 +42,7 @@ describe("ConfigMigrationService", () => {
             "issuance-config-v4-wallet-attestation-status-check-mode",
             "issuance-config-v5-federation-entity",
             "issuance-config-v6-access-token-signing-key",
+            "issuance-config-v7-registration-certificate-import-only",
         ]);
         expect(result.issues).toEqual([]);
     });

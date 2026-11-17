@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import { AttributeProviderModule } from "../issuer/configuration/attribute-provider/attribute-provider.module.js";
 import { WEBHOOK_ENDPOINT_REPOSITORY } from "../issuer/configuration/webhook-endpoint/ports/webhook-endpoint.repository.js";
 import { WebhookEndpointModule } from "../issuer/configuration/webhook-endpoint/webhook-endpoint.module.js";
-import { SchemaMetadataModule } from "../registrar/schema-metadata/schema-metadata.module.js";
+import { EudiHubModule } from "../registrar/eudi-hub/eudi-hub.module.js";
+import { RegistrarStorageModule } from "../registrar/registrar-storage.module.js";
 import { OutboundUrlPolicyModule } from "./outbound-url-policy.module.js";
 import { WebhookModule } from "./webhook.module.js";
 
@@ -35,7 +36,8 @@ describe("WebhookModule wiring", () => {
     it.each([
         ["WebhookEndpointModule", WebhookEndpointModule],
         ["AttributeProviderModule", AttributeProviderModule],
-        ["SchemaMetadataModule", SchemaMetadataModule],
+        ["EudiHubModule", EudiHubModule],
+        ["RegistrarStorageModule", RegistrarStorageModule],
     ])(
         "lets %s use the outbound URL policy without the webhook delivery",
         (_, module) => {

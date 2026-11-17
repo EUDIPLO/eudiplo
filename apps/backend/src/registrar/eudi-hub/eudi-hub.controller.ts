@@ -136,7 +136,7 @@ export class EudiHubController {
         summary:
             "Request a verifier registration certificate from the EUDI Hub",
         description:
-            "Registers the DCQL query of a presentation configuration at the EUDI Hub as a credential request (or uses an existing one with the same credentials, purpose and privacy policy), requests a registration certificate for it and stores the JWT as the configuration's registration_cert.jwt, with the checks of an imported certificate. " +
+            "Registers the DCQL query of a presentation configuration (with <TENANT_URL> resolved) at the EUDI Hub as a credential request (or uses an existing one with the same credentials, purpose and privacy policy), requests a registration certificate for it and stores it as the configuration's registration_cert: the JWT with the purpose and privacy policy. A purpose or privacy policy the request leaves out is taken from registration_cert, so renewing needs neither again. Storing runs the checks of every registration certificate, such as the overasking check. " +
             "The pasted portal token is used for this request only, so the certificate is not renewed automatically. A certificate EUDIPLO cannot download or store is revoked at the EUDI Hub.",
     })
     @ApiResponse({
@@ -146,7 +146,7 @@ export class EudiHubController {
     })
     @ApiResponse({
         status: 400,
-        description: `${TOKEN_REFUSED}. Also returned when the DCQL query cannot be registered at the EUDI Hub (no credential queries, a format other than dc+sd-jwt or mso_mdoc, several vct values, meta other than vct_values or doctype_value, no claims, array indexes or wildcards in claim paths) or the certificate fails the checks of an imported certificate, such as the overasking check`,
+        description: `${TOKEN_REFUSED}. Also returned when neither the request nor registration_cert has a purpose or privacy policy, the purpose lacks a German or English text, the DCQL query cannot be registered at the EUDI Hub (no credential queries, a format other than dc+sd-jwt or mso_mdoc, several vct values, meta other than vct_values or doctype_value, no claims, array indexes or wildcards in claim paths) or the certificate fails the checks of a registration certificate, such as the overasking check`,
     })
     @ApiResponse({
         status: 403,
@@ -174,7 +174,7 @@ export class EudiHubController {
     @ApiOperation({
         summary: "Request an issuer registration certificate from the EUDI Hub",
         description:
-            "Registers each credential type of the tenant's credential configurations (vct or docType) at the EUDI Hub as a credential issuance, if it is not registered yet, requests a registration certificate for them and stores the JWT in the issuance configuration with mode import. " +
+            "Registers each credential type of the tenant's credential configurations (vct or docType) at the EUDI Hub as a credential issuance, if it is not registered yet, requests a registration certificate for them and stores the JWT and the support URI in the issuance configuration's registrationCertificate, which it enables. " +
             "The pasted portal token is used for this request only, so the certificate is not renewed automatically. A certificate that does not list every type, or that EUDIPLO cannot download or store, is revoked at the EUDI Hub.",
     })
     @ApiResponse({

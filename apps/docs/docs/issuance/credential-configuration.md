@@ -168,7 +168,7 @@ How the fingerprints and the revocation sequence work is described in [Issuance 
 }
 ```
 
-Registration certificates and TS11 schema metadata (`schemaMeta`) are covered in [Registration certificates](../trust/registration-certificates.md) and [Registrar](../trust/registrar.md).
+Issuer registration certificates are covered in [Registration certificates](../trust/registration-certificates.md#issuer-registration-certificate). TS11 schema metadata (`schemaMeta`) is stored with the configuration; EUDIPLO currently publishes it nowhere ([field reference](../reference/credential-configuration.md)).
 
 ## 8. Create the configuration
 

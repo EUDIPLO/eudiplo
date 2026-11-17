@@ -4,6 +4,7 @@ import {
     migrateDocument,
     normalizeDocument,
     resourceId,
+    retiredConfigIssue,
     schemaUrl,
 } from "@eudiplo/config-format/config-format.js";
 import { validateConfigDocument } from "@eudiplo/config-format/config-validator.js";
@@ -68,6 +69,8 @@ export class ConfigMigrationService {
     }
 
     upgrade(input: ConfigFile): ConfigMigrationResult {
+        const retired = retiredConfigIssue(input);
+        if (retired) throw new BadRequestException(retired.message);
         try {
             return migrateDocument(input, validateConfigDocument);
         } catch (error) {

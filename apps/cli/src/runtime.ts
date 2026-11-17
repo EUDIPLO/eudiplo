@@ -1,10 +1,10 @@
 import { isSea } from "node:sea";
 import { Command, CommanderError } from "commander";
+import { createCommandsCommand } from "./commands/commands/index.js";
 import {
     createCompletionCandidatesCommand,
     createCompletionCommand,
 } from "./commands/completion/index.js";
-import { createCommandsCommand } from "./commands/commands/index.js";
 import { createConfigCommand } from "./commands/config/index.js";
 import { createDemoCommand } from "./commands/demo/index.js";
 import { createDeploymentCommands } from "./commands/deployment/index.js";

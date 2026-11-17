@@ -237,8 +237,35 @@ describe('DashboardComponent', () => {
     expect(requests).toEqual([]);
   });
 
+  it('names the configuration in the accessible name of each registration certificate link', async () => {
+    roles = ['presentation:manage'];
+    responses['/api/key-chain'] = [];
+    responses['/api/trust-list'] = [{ id: 'list' }];
+    const part = (value: unknown) =>
+      btoa(JSON.stringify(value)).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
+    const expired = `${part({ alg: 'ES256' })}.${part({ exp: 1 })}.c2ln`;
+    responses['/api/verifier/config'] = [
+      { id: 'age-1', description: 'Age check', registration_cert: { jwt: expired } },
+      { id: 'age-2', description: 'Age check', registration_cert: { jwt: expired } },
+    ];
+
+    const page = await render();
+
+    const links = [...page.querySelectorAll<HTMLAnchorElement>('.warnings-card a')].filter((link) =>
+      link.textContent?.includes('Open Security Tab')
+    );
+    expect(links.map((link) => link.getAttribute('aria-label'))).toEqual([
+      'Open the Security tab of presentation configuration "Age check" (age-1)',
+      'Open the Security tab of presentation configuration "Age check" (age-2)',
+    ]);
+    expect(links.map((link) => link.getAttribute('href'))).toEqual([
+      '/presentation-config/age-1#security',
+      '/presentation-config/age-2#security',
+    ]);
+  });
+
   it('says which health signals could not be loaded instead of guessing', async () => {
-    roles = ['presentation:manage', 'registrar:manage'];
+    roles = ['presentation:manage'];
     responses['/api/key-chain'] = [];
     responses['/api/verifier/config'] = [{ id: 'pid' }];
     delete responses['/api/key-chain/providers/health'];
@@ -246,7 +273,7 @@ describe('DashboardComponent', () => {
     const page = await render();
 
     const health = text(page.querySelector('.health-card'));
-    expect(health).toContain('Registrar: Could not be loaded');
+    expect(health).not.toContain('Registrar');
     expect(health).toContain('KMS: Could not be loaded');
     expect(health).toContain('Access Certificate: Missing');
     expect(text(page.querySelector('.warnings-card'))).toContain('Could not load trust lists.');

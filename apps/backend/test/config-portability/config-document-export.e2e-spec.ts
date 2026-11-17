@@ -241,9 +241,7 @@ describe("single-resource configuration documents", () => {
                 "PresentationConfig",
                 withOrigins.id,
             ).expect(200);
-            expect(exported.body.$schema).toBe(
-                schemaUrl("PresentationConfig", 4),
-            );
+            expect(exported.body.$schema).toBe(schemaUrl("PresentationConfig"));
             expect(exported.body.spec.allowedOrigins).toEqual([
                 "https://shop.example",
             ]);

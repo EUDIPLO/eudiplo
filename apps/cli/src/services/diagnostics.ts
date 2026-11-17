@@ -1,10 +1,10 @@
+import packageJson from "../../package.json" with { type: "json" };
 import type {
     CheckStatus,
     CommandContext,
     DoctorCheck,
     InstanceConfig,
 } from "../types.js";
-import packageJson from "../../package.json" with { type: "json" };
 import {
     fetchAuthenticated,
     requestAccessToken,
@@ -17,12 +17,12 @@ import {
     readProviderHealth,
     summarizeProviderHealth,
 } from "./backend-checks.js";
-import { describeRequestError, redactUrl } from "./url.js";
 import {
     type CertificateReader,
     checkTlsCertificate,
     readPeerCertificate,
 } from "./tls-expiry.js";
+import { describeRequestError, redactUrl } from "./url.js";
 
 export type { DoctorCheck } from "../types.js";
 

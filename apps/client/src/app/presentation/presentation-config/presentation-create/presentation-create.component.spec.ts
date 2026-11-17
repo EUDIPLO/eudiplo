@@ -7,7 +7,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { client } from '@eudiplo/sdk-core';
 import { PresentationCreateComponent } from './presentation-create.component';
 import { PresentationManagementService } from '../presentation-management.service';
-import { RegistrarService } from '../../../registrar/registrar.service';
 import { EditorComponent } from '../../../utils/editor/editor.component';
 import { ThemeService } from '../../../services/theme.service';
 import { ConfigOwnershipService } from '../../../config-portability/config-ownership.service';
@@ -30,7 +29,6 @@ describe('Presentation configuration flow', () => {
   let service: {
     createConfiguration: ReturnType<typeof vi.fn>;
     getPresentationById: ReturnType<typeof vi.fn>;
-    reissueRegistrationCertificate: ReturnType<typeof vi.fn>;
   };
   let route: { snapshot: { params: Record<string, string>; url: { path: string }[] } };
 
@@ -51,7 +49,6 @@ describe('Presentation configuration flow', () => {
     service = {
       createConfiguration: vi.fn().mockResolvedValue({ id: 'test' }),
       getPresentationById: vi.fn(),
-      reissueRegistrationCertificate: vi.fn(),
     };
     route = { snapshot: { params: {}, url: [] } };
     await TestBed.configureTestingModule({
@@ -60,7 +57,6 @@ describe('Presentation configuration flow', () => {
         provideRouter([]),
         { provide: ActivatedRoute, useValue: route },
         { provide: PresentationManagementService, useValue: service },
-        { provide: RegistrarService, useValue: { getConfig: vi.fn().mockResolvedValue(null) } },
         { provide: MatSnackBar, useValue: { open: vi.fn() } },
         { provide: MatDialog, useValue: { open: vi.fn() } },
         { provide: ThemeService, useValue: { isDarkMode: false, themeChanges: new Subject() } },
@@ -134,12 +130,108 @@ describe('Presentation configuration flow', () => {
 
   it('sends a stored purpose language back unchanged, even one never listed', () => {
     (component as any).loadRegistrationCertIntoForm({
-      body: { purpose: [{ lang: 'pt-BR', content: 'Verificação de idade' }] },
+      purpose: [{ lang: 'pt-BR', content: 'Verificação de idade' }],
     });
 
-    expect((component as any).getRegistrationCertBodyFromForm()?.purpose).toEqual([
+    expect((component as any).buildRegistrationCertFromForm()?.purpose).toEqual([
       { lang: 'pt-BR', content: 'Verificação de idade' },
     ]);
+  });
+
+  it('keeps the JWT, purpose and privacy policy together in registration_cert', () => {
+    (component as any).loadRegistrationCertIntoForm({
+      jwt: 'ey.registration.cert',
+      purpose: [{ lang: 'en', content: 'Age check' }],
+      privacy_policy: 'https://verifier.example/privacy',
+    });
+
+    expect((component as any).buildRegistrationCertFromForm()).toEqual({
+      jwt: 'ey.registration.cert',
+      purpose: [{ lang: 'en', content: 'Age check' }],
+      privacy_policy: 'https://verifier.example/privacy',
+    });
+  });
+
+  it('reads the purpose and privacy policy of a file that kept them under body', () => {
+    (component as any).loadRegistrationCertIntoForm({
+      body: {
+        purpose: [{ lang: 'en', content: 'Age check' }],
+        privacy_policy: 'https://verifier.example/privacy',
+      },
+    });
+
+    expect((component as any).buildRegistrationCertFromForm()).toEqual({
+      purpose: [{ lang: 'en', content: 'Age check' }],
+      privacy_policy: 'https://verifier.example/privacy',
+    });
+  });
+
+  it('says "Purpose only, no certificate" until there is a JWT', () => {
+    expect(component.registrationCertSummary).toBe('Not configured');
+
+    (component as any).loadRegistrationCertIntoForm({
+      purpose: [{ lang: 'en', content: 'Age check' }],
+    });
+    expect(component.registrationCertSummary).toBe('Purpose only, no certificate');
+
+    component.form.patchValue({ registrationCertJwt: 'not-a-jwt' });
+    expect(component.registrationCertSummary).toContain('Not a valid JWT');
+
+    const part = (value: unknown) =>
+      btoa(JSON.stringify(value)).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
+    const exp = Math.floor(Date.now() / 1000) + 60 * 24 * 3600;
+    component.form.patchValue({
+      registrationCertJwt: `${part({ alg: 'ES256' })}.${part({ exp })}.c2ln`,
+    });
+    expect(component.registrationCertSummary).toMatch(/^Active — expires in \d+ days$/);
+  });
+
+  it('moves focus to the next purpose after a removal, and to Add Purpose after the last', async () => {
+    component.guided = false;
+    component.activeStep = 2;
+    component.addRegistrationCertPurpose('de', 'Altersprüfung');
+    component.addRegistrationCertPurpose('en', 'Age check');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const element = fixture.nativeElement as HTMLElement;
+    const contents = () => [
+      ...element.querySelectorAll<HTMLInputElement>('input[formcontrolname="content"]'),
+    ];
+    expect(contents()).toHaveLength(2);
+
+    contents()[0].focus();
+    component.removeRegistrationCertPurpose(0);
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(document.activeElement).toBe(contents()[0]));
+    expect(contents()[0].value).toBe('Age check');
+
+    component.removeRegistrationCertPurpose(0);
+    fixture.detectChanges();
+    await vi.waitFor(() =>
+      expect((document.activeElement as HTMLElement | null)?.textContent).toContain('Add Purpose')
+    );
+  });
+
+  it('says a changed DCQL query may need a new certificate only while a JWT is set', () => {
+    expect(component.dcqlChangedWithCertificate).toBe(false);
+    component.form.patchValue({ registrationCertJwt: 'ey.registration.cert' });
+    expect(component.dcqlChangedWithCertificate).toBe(false);
+    component.queryControl.markAsDirty();
+    expect(component.dcqlChangedWithCertificate).toBe(true);
+    component.form.patchValue({ registrationCertJwt: '' });
+    expect(component.dcqlChangedWithCertificate).toBe(false);
+  });
+
+  it('refuses a privacy policy that is no http(s) URL', () => {
+    const control = component.form.get('registrationCertPrivacyPolicy')!;
+    control.setValue('mailto:privacy@verifier.example');
+    expect(control.hasError('url')).toBe(true);
+    control.setValue('https://verifier.example/privacy');
+    expect(control.valid).toBe(true);
+  });
+
+  it('sends no registration_cert when all its fields are empty', () => {
+    expect((component as any).buildRegistrationCertFromForm()).toBeNull();
   });
 
   it('offers the next purpose in a language no purpose has yet', () => {
@@ -178,7 +270,7 @@ describe('Presentation configuration flow', () => {
       .patchValue({ format: 'dc+sd-jwt', data: 'signed-credential', credential_ids: ['pid'] });
     component.form.patchValue({
       webhookEndpointId: 'events',
-      registrationCertImportJwt: 'certificate',
+      registrationCertJwt: 'certificate',
       statusCheckMode: 'best_effort',
     });
     const before = component.form.getRawValue();
@@ -193,7 +285,7 @@ describe('Presentation configuration flow', () => {
     expect(payload.webhookEndpointId).toBe('events');
     expect(payload.registration_cert).toEqual({ jwt: 'certificate' });
     expect(payload.statusCheckMode).toBe('best_effort');
-    expect(payload).not.toHaveProperty('registrationCertImportJwt');
+    expect(payload).not.toHaveProperty('registrationCertJwt');
     await Promise.resolve();
   });
 
@@ -216,38 +308,6 @@ describe('Presentation configuration flow', () => {
 
     expect(service.createConfiguration).toHaveBeenCalledOnce();
     expectUnavailable(fixture, save, 'Saving the presentation configuration…');
-  });
-
-  it('keeps Reissue now focusable while it runs: a second click sends one request', async () => {
-    route.snapshot.params = { id: 'test' };
-    service.getPresentationById.mockResolvedValue({
-      id: 'test',
-      dcql_query: query,
-      registration_cert: { jwt: 'ey.registration.cert' },
-    });
-    service.reissueRegistrationCertificate.mockReturnValue(new Promise(() => undefined));
-    fixture.detectChanges();
-    await vi.waitFor(() => expect(component.loadingConfig).toBe(false));
-    component.guided = false;
-    component.activeStep = 2;
-    fixture.detectChanges();
-    const element = fixture.nativeElement as HTMLElement;
-    const reissue = await vi.waitFor(() => {
-      const button = [...element.querySelectorAll<HTMLButtonElement>('button')].find((b) =>
-        b.textContent?.includes('Reissue now')
-      );
-      expect(button).toBeDefined();
-      return button!;
-    });
-    expectAvailable(fixture, reissue);
-
-    reissue.click();
-    fixture.detectChanges();
-    reissue.click();
-    fixture.detectChanges();
-
-    expect(service.reissueRegistrationCertificate).toHaveBeenCalledExactlyOnceWith('test');
-    expectUnavailable(fixture, reissue, 'Reissuing the registration certificate…');
   });
 
   it('steps back while idle and keeps the guided Back focusable while the configuration is saved', async () => {

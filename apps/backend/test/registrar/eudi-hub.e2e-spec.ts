@@ -438,7 +438,15 @@ describe("Access certificate from the EUDI Hub (e2e)", () => {
             .get(`/verifier/config/${id}`)
             .set("Authorization", `Bearer ${registrarToken}`)
             .expect(200);
-        expect(stored.body.registration_cert).toEqual({ jwt });
+        // The purpose and privacy policy are kept for renewing.
+        expect(stored.body.registration_cert).toEqual({
+            jwt,
+            purpose: [
+                { lang: "de", content: "Altersprüfung" },
+                { lang: "en", content: "Age check" },
+            ],
+            privacy_policy: "https://verifier.example/privacy",
+        });
     });
 
     test("refuses a verifier registration certificate without the presentation:manage role", async () => {
@@ -462,7 +470,7 @@ describe("Access certificate from the EUDI Hub (e2e)", () => {
             .expect(403);
     });
 
-    test("stores an issuer registration certificate from the EUDI Hub in import mode", async () => {
+    test("stores an issuer registration certificate from the EUDI Hub", async () => {
         const keyChainId = (
             await request(app.getHttpServer())
                 .post("/key-chain")
@@ -525,10 +533,10 @@ describe("Access certificate from the EUDI Hub (e2e)", () => {
             .get("/issuer/config")
             .set("Authorization", `Bearer ${registrarToken}`)
             .expect(200);
-        expect(stored.body.registrationCertificate).toMatchObject({
+        expect(stored.body.registrationCertificate).toEqual({
             enabled: true,
-            mode: "import",
             jwt,
+            supportUri: certificateFields.supportUri,
         });
     });
 

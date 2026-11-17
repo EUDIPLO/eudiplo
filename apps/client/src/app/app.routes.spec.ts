@@ -70,3 +70,17 @@ describe('Configuration routes', () => {
     expect(guard.navigate).toHaveBeenCalledWith(['/']);
   });
 });
+
+describe('Pages of the removed sandbox registrar integration', () => {
+  it.each([
+    ['registrar', 'full'],
+    ['schema', 'prefix'],
+    ['schema-metadata', 'prefix'],
+  ])('redirects /%s to the dashboard', (path, pathMatch) => {
+    expect(routes.find((route) => route.path === path)).toEqual({
+      path,
+      redirectTo: '/dashboard',
+      pathMatch,
+    });
+  });
+});

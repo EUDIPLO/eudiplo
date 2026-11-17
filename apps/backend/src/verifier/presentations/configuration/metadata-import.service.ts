@@ -3,7 +3,6 @@ import { BadRequestException, Injectable } from "@nestjs/common";
 import * as eudiAttestationSchema from "@owf/eudi-attestation-schema";
 import { type AttestationFormat } from "@owf/eudi-attestation-schema";
 import { base64url, decodeJwt, decodeProtectedHeader } from "jose";
-import { RegistrarService } from "../../../registrar/registrar.service.js";
 import { MetadataFetchService } from "./metadata-fetch.service.js";
 
 type BuildDcqlFromSchemaMetaResult = {
@@ -110,10 +109,7 @@ type SchemaMetaSdkCompat = {
  */
 @Injectable()
 export class MetadataImportService {
-    constructor(
-        private readonly metadataFetchService: MetadataFetchService,
-        private readonly registrarService: RegistrarService,
-    ) {}
+    constructor(private readonly metadataFetchService: MetadataFetchService) {}
 
     /**
      * Resolve OID4VCI credential issuer metadata server-side.
@@ -133,19 +129,6 @@ export class MetadataImportService {
         }
 
         return metadata;
-    }
-
-    /**
-     * List schema metadata entries from the connected registrar catalog.
-     * Returns an empty array when the registrar is not enabled for the tenant.
-     */
-    async listSchemaMetadataCatalog(tenantId: string) {
-        const enabled =
-            await this.registrarService.isEnabledForTenant(tenantId);
-        if (!enabled) {
-            return [];
-        }
-        return this.registrarService.findAllSchemaMetadata(tenantId, {});
     }
 
     /**

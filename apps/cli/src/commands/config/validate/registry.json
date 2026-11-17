@@ -24,17 +24,6 @@
     },
     {
         "kind": "file",
-        "file": "registrar.json",
-        "resourceType": "registrar config",
-        "schemaFile": "RegistrarConfigFile.schema.json",
-        "required": false,
-        "fileMatch": [
-            "/assets/config/*/registrar*.json",
-            "/apps/backend/test/fixtures/*/registrar*.json"
-        ]
-    },
-    {
-        "kind": "file",
         "file": "kms.json",
         "resourceType": "tenant KMS config",
         "schemaFile": "KmsConfigFile.schema.json",

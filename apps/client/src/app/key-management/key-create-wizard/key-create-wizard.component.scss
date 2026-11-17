@@ -154,52 +154,6 @@
       }
     }
   }
-
-  .registrar-status {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 6px;
-    margin-top: 8px;
-    font-size: 0.85rem;
-
-    mat-spinner {
-      display: inline-block;
-    }
-
-    mat-icon {
-      font-size: 18px;
-      width: 18px;
-      height: 18px;
-    }
-
-    .status-ok {
-      color: var(--mat-sys-tertiary, #28a745);
-    }
-
-    .status-hint {
-      display: flex;
-      flex-basis: 100%;
-      align-items: center;
-      gap: 6px;
-      color: var(--mat-sys-on-surface-variant);
-
-      a {
-        color: var(--mat-sys-primary);
-        text-decoration: underline;
-      }
-    }
-
-    .status-warning {
-      color: var(--mat-sys-error);
-
-      a {
-        color: var(--mat-sys-primary);
-        text-decoration: underline;
-        cursor: pointer;
-      }
-    }
-  }
 }
 
 .step-actions {
@@ -281,30 +235,6 @@ mat-card-header {
   .mat-step-icon {
     background-color: var(--mat-sys-primary);
   }
-}
-
-.enrollment-error {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 12px;
-  padding: 12px;
-  border-radius: 8px;
-  background-color: var(--mat-sys-error-container);
-  color: var(--mat-sys-on-error-container);
-
-  mat-icon {
-    color: var(--mat-sys-error);
-    flex-shrink: 0;
-  }
-
-  span {
-    flex: 1 1 240px;
-  }
-}
-
-.registrar-retry {
-  padding: 0 16px 16px;
 }
 
 .certificate-source {

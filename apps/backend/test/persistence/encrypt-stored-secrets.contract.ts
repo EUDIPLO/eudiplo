@@ -3,19 +3,18 @@ import { afterEach, beforeAll, describe, expect, test } from "vitest";
 import { ClientEntity } from "../../src/auth/client/entities/client.entity.js";
 import { TenantEntity } from "../../src/auth/tenant/entities/tenant.entity.js";
 import { EncryptStoredSecrets1784500000000 } from "../../src/database/migrations/1784500000000-EncryptStoredSecrets.js";
+import { RemoveSandboxRegistrar1786500000000 } from "../../src/database/migrations/1786500000000-RemoveSandboxRegistrar.js";
 import { AttributeProviderEntity } from "../../src/issuer/configuration/attribute-provider/entities/attribute-provider.entity.js";
 import { IssuanceConfig } from "../../src/issuer/configuration/issuance/entities/issuance-config.entity.js";
 import { WebhookEndpointEntity } from "../../src/issuer/configuration/webhook-endpoint/entities/webhook-endpoint.entity.js";
 import { hashRefreshToken } from "../../src/issuer/issuance/oid4vci/authorization/domain/token-grant-rules.js";
 import { ChainedAsSessionEntity } from "../../src/issuer/issuance/oid4vci/authorization/shared/entities/chained-as-session.entity.js";
-import { RegistrarConfigEntity } from "../../src/registrar/entities/registrar-config.entity.js";
 import { Session } from "../../src/session/entities/session.entity.js";
 import { initializeTestEncryption } from "./test-encryption.js";
 
 export const encryptStoredSecretsEntities = [
     TenantEntity,
     ClientEntity,
-    RegistrarConfigEntity,
     WebhookEndpointEntity,
     AttributeProviderEntity,
     IssuanceConfig,
@@ -80,6 +79,16 @@ export function encryptStoredSecretsContract(
             await db.query(
                 `INSERT INTO "tenant_entity" ("id", "name") VALUES ('t', 't')`,
             );
+            // 9.x stored registrar credentials; the table is gone from the
+            // entities, so the later migration's down() creates it.
+            const queryRunner = db.createQueryRunner();
+            try {
+                await new RemoveSandboxRegistrar1786500000000().down(
+                    queryRunner,
+                );
+            } finally {
+                await queryRunner.release();
+            }
             await db.query(
                 `INSERT INTO "registrar_config_entity" ("tenantId", "registrarUrl", "oidcUrl", "clientId", "clientSecret", "username", "password") VALUES ('t', 'https://registrar.example', 'https://auth.example', 'c', 'client-secret', 'u', 'pass:word:1')`,
             );
@@ -137,17 +146,13 @@ export function encryptStoredSecretsContract(
             await migratedDatabase();
 
             // Looks like ciphertext (`a:b:c`), but is encrypted all the same.
-            expect(await raw("registrar_config_entity", "password")).not.toBe(
-                "pass:word:1",
-            );
-            expect(
-                await db
-                    .getRepository(RegistrarConfigEntity)
-                    .findOneByOrFail({ tenantId: "t" }),
-            ).toMatchObject({
-                password: "pass:word:1",
-                clientSecret: "client-secret",
-            });
+            for (const column of ["password", "clientSecret"]) {
+                const stored = await raw("registrar_config_entity", column);
+                expect(stored).not.toBe(
+                    column === "password" ? "pass:word:1" : "client-secret",
+                );
+                expect(stored).toEqual(expect.any(String));
+            }
 
             for (const entity of [
                 WebhookEndpointEntity,
@@ -229,6 +234,7 @@ export function encryptStoredSecretsContract(
             expect(await raw("registrar_config_entity", "password")).toBe(
                 password,
             );
+
             expect(await rawJson("webhook_endpoint_entity", "auth")).toEqual(
                 auth,
             );
@@ -242,6 +248,10 @@ export function encryptStoredSecretsContract(
             expect(await raw("registrar_config_entity", "password")).toBe(
                 "pass:word:1",
             );
+            expect(await raw("registrar_config_entity", "clientSecret")).toBe(
+                "client-secret",
+            );
+
             expect(await rawJson("webhook_endpoint_entity", "auth")).toEqual(
                 apiKeyAuth("api-key"),
             );

@@ -23,10 +23,17 @@ export type EudiHubRegistrationDialogData =
       presentationConfigId: string;
       /** Name the EUDI Hub shows when the user enters none. */
       defaultName: string;
-      /** An English purpose already configured, to start from. */
-      purposeEn?: string;
+      /** The purpose kept in the configuration's `registration_cert`, to start from. */
+      purpose?: { lang: string; content: string }[];
+      /** The privacy policy kept in the configuration's `registration_cert`, to start from. */
+      privacyPolicy?: string;
     }
-  | { kind: 'issuer'; defaultName: string };
+  | {
+      kind: 'issuer';
+      defaultName: string;
+      /** The support URI kept in the issuance configuration, to start from. */
+      supportUri?: string;
+    };
 
 /** Identifier scheme as the backend accepts it; a scheme it drops breaks this list's build. */
 type IdentifierType = EudiHubPresentationRegistrationCertificateRequestDto['identifier']['type'];
@@ -61,12 +68,14 @@ function text(maxLength = 2000): FormControl<string> {
 }
 
 /**
- * Requests a registration certificate from the German EUDI Hub and stores it
- * as an imported certificate: for a verifier in a presentation configuration,
- * whose DCQL query the backend registers as a credential request, for an
- * issuer in the issuance configuration. Once an organization is chosen, its
- * identifier, service description, contact and privacy policy URLs are read
- * from the EUDI Hub to fill empty fields.
+ * Requests a registration certificate from the German EUDI Hub and stores it:
+ * for a verifier in a presentation configuration, whose DCQL query the backend
+ * registers as a credential request, together with the purpose and privacy
+ * policy; for an issuer in the issuance configuration. The values kept from
+ * the last request start the form, so renewing needs only the token and the
+ * organization. Once an organization is chosen, its identifier, service
+ * description, contact and privacy policy URLs are read from the EUDI Hub to
+ * fill empty fields.
  */
 @Component({
   selector: 'app-eudi-hub-registration-dialog',
@@ -121,13 +130,22 @@ export class EudiHubRegistrationDialogComponent extends EudiHubTokenDialog<EudiH
 
   constructor() {
     super();
+    const controls = this.form.controls;
     if (this.data.kind === 'issuer') {
       // An issuer certificate names credential types, not a purpose.
-      this.form.controls.purposeDe.disable();
-      this.form.controls.purposeEn.disable();
-      this.form.controls.privacyPolicy.disable();
-    } else if (this.data.purposeEn) {
-      this.form.controls.purposeEn.setValue(this.data.purposeEn);
+      controls.purposeDe.disable();
+      controls.purposeEn.disable();
+      controls.privacyPolicy.disable();
+      controls.supportUri.setValue(this.data.supportUri ?? '');
+    } else {
+      const purpose = this.data.purpose ?? [];
+      const inLanguage = (lang: string) =>
+        purpose.find((entry) => entry.lang === lang)?.content ??
+        purpose.find((entry) => entry.lang.startsWith(`${lang}-`))?.content ??
+        '';
+      controls.purposeDe.setValue(inLanguage('de'));
+      controls.purposeEn.setValue(inLanguage('en'));
+      controls.privacyPolicy.setValue(this.data.privacyPolicy ?? '');
     }
     // Once both token and organization are valid, in either order.
     for (const control of [this.organizationId, this.token]) {
@@ -239,6 +257,7 @@ export class EudiHubRegistrationDialogComponent extends EudiHubTokenDialog<EudiH
               purpose: [
                 { lang: 'de', content: value.purposeDe.trim() },
                 { lang: 'en', content: value.purposeEn.trim() },
+                ...this.otherPurposes,
               ],
               privacyPolicy: value.privacyPolicy.trim(),
             })
@@ -246,5 +265,21 @@ export class EudiHubRegistrationDialogComponent extends EudiHubTokenDialog<EudiH
       'The EUDI Hub did not issue a registration certificate',
       'A certificate may have been stored anyway: close this dialog to see what the configuration holds before you request again.'
     );
+  }
+
+  /**
+   * Kept purposes in languages other than German and English. They are sent
+   * along unchanged, since the stored purpose is replaced by what the request
+   * carries. The EUDI Hub takes two-letter language codes and at most 24
+   * texts; entries with a region, such as pt-BR, cannot be sent.
+   */
+  private get otherPurposes(): { lang: string; content: string }[] {
+    if (this.data.kind !== 'presentation') return [];
+    const seen = new Set(['de', 'en']);
+    return (this.data.purpose ?? [])
+      .filter((entry) => /^[a-z]{2}$/.test(entry.lang) && entry.content.trim())
+      .filter((entry) => !seen.has(entry.lang) && seen.add(entry.lang))
+      .map(({ lang, content }) => ({ lang, content: content.trim() }))
+      .slice(0, 22);
   }
 }

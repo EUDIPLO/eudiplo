@@ -487,7 +487,6 @@ export class ConfigPortabilityComponent implements OnInit {
 
     const singletonRoutesByKind: Partial<Record<ConfigResourceMetadata['kind'], string>> = {
       IssuanceConfig: '/issuance-config',
-      RegistrarConfig: '/registrar',
       KmsConfig: '/kms',
       KeyChainDefaults: '/keys',
     };

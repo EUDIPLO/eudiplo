@@ -359,68 +359,6 @@ describe("EudiHubClient", () => {
         expect((error as EudiHubRequestError).invalidAnswer).toBe(true);
     });
 
-    describe("issuing CA", () => {
-        const URL = "http://ca.example/issuing.cer";
-        let cert: x509.X509Certificate;
-
-        beforeEach(async () => {
-            const keys = (await webcrypto.subtle.generateKey(
-                { name: "ECDSA", namedCurve: "P-256" },
-                true,
-                ["sign", "verify"],
-            )) as CryptoKeyPair;
-            cert = await x509.X509CertificateGenerator.createSelfSigned(
-                {
-                    serialNumber: "01",
-                    name: "CN=Hub Issuing",
-                    keys,
-                    signingAlgorithm: { name: "ECDSA", hash: "SHA-256" },
-                },
-                webcrypto as Crypto,
-            );
-        });
-
-        it.each([
-            ["DER", () => cert.rawData],
-            ["PEM", () => cert.toString("pem")],
-        ])(
-            "reads a %s certificate without sending the token",
-            async (_, body) => {
-                fetchMock.mockResolvedValue(
-                    new Response(body(), { status: 200 }),
-                );
-
-                const ca = await client().fetchCaCertificate(URL);
-
-                expect(ca.subject).toBe("CN=Hub Issuing");
-                const [url, init] = fetchMock.mock.calls[0];
-                expect(url).toBe(URL);
-                expect(JSON.stringify(init)).not.toContain("authorization");
-                expect(JSON.stringify(init)).not.toContain(TOKEN);
-            },
-        );
-
-        it("reports a refused fetch with its status", async () => {
-            fetchMock.mockResolvedValue(new Response("", { status: 404 }));
-
-            await expect(
-                client().fetchCaCertificate(URL),
-            ).rejects.toMatchObject({ status: 404 });
-        });
-
-        it("marks a fetch the outbound URL policy blocked", async () => {
-            fetchMock.mockRejectedValue(
-                new OutboundFetchError("blocked", { blocked: true }),
-            );
-
-            const error = await client()
-                .fetchCaCertificate(URL)
-                .catch((e: unknown) => e);
-
-            expect((error as EudiHubRequestError).blocked).toBe(true);
-        });
-    });
-
     it("skips list entries without an id", async () => {
         fetchMock.mockResolvedValue(
             json(200, { items: [{ id: "cr-1" }, { name: "broken" }] }),

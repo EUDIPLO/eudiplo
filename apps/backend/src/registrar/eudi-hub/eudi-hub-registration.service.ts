@@ -1,25 +1,17 @@
-import {
-    BadGatewayException,
-    BadRequestException,
-    Injectable,
-    Logger,
-} from "@nestjs/common";
-import { decodeJwt } from "jose";
+import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import type { TokenPayload } from "../../auth/token.decorator.js";
-import { IssuanceConfigurationNotFound } from "../../issuer/configuration/issuance/domain/issuance-configuration.js";
-import { IssuanceService } from "../../issuer/configuration/issuance/issuance.service.js";
-import {
-    NO_CREDENTIAL_TYPES_MESSAGE,
-    unlistedCredentialTypes,
-} from "../../issuer/issuance/oid4vci/domain/issuer-registration-certificate.js";
-import { PresentationConfigService } from "../../verifier/presentations/configuration/presentation-config.service.js";
+import type { IssuedCertificate } from "../issued-certificate.js";
+import { RegistrationCertificateStorage } from "../registration-certificate-storage.service.js";
+import { revokeUnstored } from "../revoke-unstored.js";
 import {
     hubCredentialsForDcql,
     sameCredentialRequest,
 } from "./domain/hub-credentials.js";
-import type {
-    EudiHubIssuerRegistrationCertificateRequest,
-    EudiHubPresentationRegistrationCertificateRequest,
+import {
+    BilingualTextSchema,
+    type EudiHubIssuerRegistrationCertificateRequest,
+    type EudiHubPresentationRegistrationCertificateRequest,
+    HttpUrlSchema,
 } from "./dto/eudi-hub-request.dto.js";
 import type {
     EudiHubOrganizationDetailsDto,
@@ -31,18 +23,19 @@ import {
     type EudiHubRegistrationCertificate,
     type EudiHubRegistrationCertificateBase,
 } from "./eudi-hub.client.js";
-import { eudiHubHttpException } from "./eudi-hub-errors.js";
+import { EUDI_HUB, eudiHubHttpException } from "./eudi-hub-errors.js";
 
 /** The organization and token of a request to the EUDI Hub. */
 type HubTarget = { token: string; organizationId: string };
 
 /**
  * Requests registration certificates from the German EUDI Hub with an access
- * token the caller copied from the portal, and stores them as imported
- * certificates: in a presentation configuration for a verifier, in the
- * issuance configuration for an issuer. The token is passed through for the
- * request and never stored or logged. The EUDI Hub cannot be reached without
- * a fresh token, so these certificates are not renewed automatically.
+ * token the caller copied from the portal, and stores them through
+ * {@link RegistrationCertificateStorage}: in a presentation configuration
+ * for a verifier, in the issuance configuration for an issuer. The token is
+ * passed through for the request and never stored or logged. The EUDI Hub
+ * cannot be reached without a fresh token, so these certificates are not
+ * renewed automatically.
  */
 @Injectable()
 export class EudiHubRegistrationService {
@@ -50,8 +43,7 @@ export class EudiHubRegistrationService {
 
     constructor(
         private readonly client: EudiHubClient,
-        private readonly presentationConfigs: PresentationConfigService,
-        private readonly issuance: IssuanceService,
+        private readonly storage: RegistrationCertificateStorage,
     ) {}
 
     /** Identifiers, service descriptions and contact data the dialog prefills. */
@@ -73,33 +65,48 @@ export class EudiHubRegistrationService {
 
     /**
      * Request a verifier registration certificate for the DCQL query of a
-     * presentation configuration and store it there as `registration_cert.jwt`.
-     * A credential request with the same credentials, purpose and privacy
-     * policy is used again; otherwise one is created. Storing runs the checks
-     * of an imported certificate, including the overasking check; a
-     * certificate that is not stored is revoked at the EUDI Hub.
+     * presentation configuration and store it there as `registration_cert`,
+     * with the purpose and privacy policy. Missing ones are taken from the
+     * configuration, so renewing needs neither again. A credential request
+     * with the same credentials, purpose and privacy policy is used again;
+     * otherwise one is created. Storing runs the checks of every stored
+     * certificate, including the overasking check; a certificate that is not
+     * stored is revoked at the EUDI Hub.
      */
     async requestPresentationCertificate(
         tenantId: string,
         dto: EudiHubPresentationRegistrationCertificateRequest,
         actor: TokenPayload,
     ): Promise<EudiHubRegistrationCertificateDto> {
-        const config = await this.presentationConfigs.getPresentationConfig(
-            dto.presentationConfigId,
+        const request = await this.storage.verifierRequest(
             tenantId,
+            dto.presentationConfigId,
+            { purpose: dto.purpose, privacyPolicy: dto.privacyPolicy },
         );
-        const mapping = hubCredentialsForDcql(config.dcql_query);
+        const purpose = BilingualTextSchema.safeParse(request.purpose);
+        if (!purpose.success) {
+            throw new BadRequestException(
+                `The purpose of presentation configuration ${request.presentationConfigId} does not suit the EUDI Hub: ${purpose.error.issues.map((issue) => issue.message).join(" ")}`,
+            );
+        }
+        // A kept privacy policy was not checked like one in the request.
+        if (!HttpUrlSchema.safeParse(request.privacyPolicy).success) {
+            throw new BadRequestException(
+                `The privacy policy of presentation configuration ${request.presentationConfigId} is not an http or https URL, which the EUDI Hub needs.`,
+            );
+        }
+        const mapping = hubCredentialsForDcql(request.dcqlQuery);
         if (mapping.problem !== undefined) {
             throw new BadRequestException(
-                `The DCQL query of presentation configuration ${config.id} cannot be registered at the EUDI Hub. ${mapping.problem}.`,
+                `The DCQL query of presentation configuration ${request.presentationConfigId} cannot be registered at the EUDI Hub. ${mapping.problem}.`,
             );
         }
         const wanted = {
             credentials: mapping.credentials,
-            purpose: dto.purpose,
-            privacyPolicy: dto.privacyPolicy,
+            purpose: purpose.data,
+            privacyPolicy: request.privacyPolicy,
         };
-        const name = (dto.name ?? config.description?.trim()) || config.id;
+        const name = dto.name ?? request.defaultName;
 
         let certificate: EudiHubRegistrationCertificate;
         let credentialRequestId: string;
@@ -111,7 +118,7 @@ export class EudiHubRegistrationService {
                     dto.organizationId,
                     dto.environment,
                 )
-            ).find((request) => sameCredentialRequest(request, wanted));
+            ).find((candidate) => sameCredentialRequest(candidate, wanted));
             reused = existing !== undefined;
             credentialRequestId = (
                 existing ??
@@ -143,26 +150,8 @@ export class EudiHubRegistrationService {
             );
         }
 
-        const jwt = await this.download(tenantId, dto, certificate.id);
-        try {
-            await this.presentationConfigs.updatePresentationConfig(
-                config.id,
-                tenantId,
-                {
-                    registration_cert: {
-                        ...config.registration_cert,
-                        jwt,
-                    },
-                },
-                actor,
-            );
-        } catch (error) {
-            await this.revoke(tenantId, dto, certificate.id);
-            throw error;
-        }
-        this.logger.log(
-            `[${tenantId}] Stored EUDI Hub registration certificate ${certificate.id} (${dto.environment}) in presentation configuration ${config.id}`,
-        );
+        const issued = await this.download(tenantId, dto, certificate.id);
+        await this.storage.storeVerifier(tenantId, request, issued, actor);
         return {
             id: certificate.id,
             environment: dto.environment,
@@ -175,20 +164,18 @@ export class EudiHubRegistrationService {
     /**
      * Request an issuer registration certificate for the credential types of
      * the tenant's credential configurations and store it in the issuance
-     * configuration in import mode. Each type needs a credential issuance at
-     * the EUDI Hub; missing ones are created. A certificate that does not
-     * list every type, or that is not stored, is revoked at the EUDI Hub.
+     * configuration. Each type needs a credential issuance at the EUDI Hub;
+     * missing ones are created. A certificate that does not list every type,
+     * or that is not stored, is revoked at the EUDI Hub.
      */
     async requestIssuerCertificate(
         tenantId: string,
         dto: EudiHubIssuerRegistrationCertificateRequest,
         actor: TokenPayload,
     ): Promise<EudiHubRegistrationCertificateDto> {
-        const material =
-            await this.issuance.registrationCertificateMaterial(tenantId);
-        if (material.providesAttestations.length === 0) {
-            throw new BadRequestException(NO_CREDENTIAL_TYPES_MESSAGE);
-        }
+        const request = await this.storage.issuerRequest(tenantId, {
+            supportUri: dto.supportUri,
+        });
         const name = dto.name ?? "Issuer registration certificate";
 
         let certificate: EudiHubRegistrationCertificate;
@@ -202,7 +189,7 @@ export class EudiHubRegistrationService {
             // Created in parallel. When one is refused, the others may stay
             // unused at the EUDI Hub; the next request finds and reuses them.
             credentialIssuanceIds = await Promise.all(
-                material.providesAttestations.map(
+                request.credentialTypes.providesAttestations.map(
                     async ({ format, type }): Promise<string> => {
                         const issuance: EudiHubCredentialIssuance =
                             existing.find(
@@ -241,59 +228,8 @@ export class EudiHubRegistrationService {
             );
         }
 
-        const jwt = await this.download(tenantId, dto, certificate.id);
-        const unlisted = unlistedCredentialTypes(
-            decodeJwt(jwt) as Record<string, unknown>,
-            material,
-        );
-        if (unlisted.length > 0) {
-            await this.revoke(tenantId, dto, certificate.id);
-            throw new BadGatewayException(
-                `The EUDI Hub issued a registration certificate that does not list ${unlisted.join(", ")}, so it was revoked.`,
-            );
-        }
-
-        try {
-            // Settings such as the privacy policy of a generated certificate
-            // are kept; a tenant without issuance configuration gets one.
-            const current = await this.issuance
-                .getIssuanceConfiguration(tenantId)
-                .catch((error: unknown) => {
-                    if (error instanceof IssuanceConfigurationNotFound) {
-                        return undefined;
-                    }
-                    throw error;
-                });
-            await this.issuance.storeIssuanceConfiguration(
-                tenantId,
-                {
-                    registrationCertificate: {
-                        ...current?.registrationCertificate,
-                        enabled: true,
-                        mode: "import",
-                        jwt,
-                    },
-                },
-                actor,
-            );
-        } catch (error) {
-            await this.revoke(tenantId, dto, certificate.id);
-            throw error;
-        }
-        // A certificate generated earlier is not served in import mode; a
-        // later switch back to generate mode requests a new one.
-        await this.issuance
-            .updateRegistrationCertificateCache(tenantId, null)
-            .catch((error: unknown) =>
-                // The certificate is stored, and import mode does not serve
-                // the cache, so the request still succeeds.
-                this.logger.warn(
-                    `[${tenantId}] Could not clear the generated issuer registration certificate cache: ${error instanceof Error ? error.message : String(error)}`,
-                ),
-            );
-        this.logger.log(
-            `[${tenantId}] Stored EUDI Hub registration certificate ${certificate.id} (${dto.environment}) in the issuance configuration`,
-        );
+        const issued = await this.download(tenantId, dto, certificate.id);
+        await this.storage.storeIssuer(tenantId, request, issued, actor);
         return {
             id: certificate.id,
             environment: dto.environment,
@@ -316,47 +252,46 @@ export class EudiHubRegistrationService {
         };
     }
 
-    /** The certificate's JWT; a certificate that cannot be downloaded is revoked. */
+    /**
+     * The issued certificate with its JWT; a certificate that cannot be
+     * downloaded is revoked.
+     */
     private async download(
         tenantId: string,
         target: HubTarget,
         certificateId: string,
-    ): Promise<string> {
-        try {
-            return await this.client.downloadRegistrationCertificate(
+    ): Promise<IssuedCertificate> {
+        const revoke = () =>
+            this.client.revokeRegistrationCertificate(
                 target.token,
                 target.organizationId,
                 certificateId,
             );
+        try {
+            const value = await this.client.downloadRegistrationCertificate(
+                target.token,
+                target.organizationId,
+                certificateId,
+            );
+            return { registrar: EUDI_HUB, id: certificateId, value, revoke };
         } catch (error) {
-            await this.revoke(tenantId, target, certificateId);
+            await revokeUnstored(
+                this.logger,
+                tenantId,
+                {
+                    registrar: EUDI_HUB,
+                    id: certificateId,
+                    value: undefined,
+                    revoke,
+                },
+                "registration",
+                "Could not download",
+            );
             throw eudiHubHttpException(
                 this.logger,
                 tenantId,
                 error,
                 `The EUDI Hub issued registration certificate ${certificateId}, but it could not be downloaded, so it was revoked`,
-            );
-        }
-    }
-
-    /** Best-effort revocation of a certificate EUDIPLO did not store. */
-    private async revoke(
-        tenantId: string,
-        target: HubTarget,
-        certificateId: string,
-    ): Promise<void> {
-        try {
-            await this.client.revokeRegistrationCertificate(
-                target.token,
-                target.organizationId,
-                certificateId,
-            );
-            this.logger.warn(
-                `[${tenantId}] Did not store EUDI Hub registration certificate ${certificateId}; revoked it at the EUDI Hub`,
-            );
-        } catch (error) {
-            this.logger.error(
-                `[${tenantId}] Did not store EUDI Hub registration certificate ${certificateId} and could not revoke it at the EUDI Hub; revoke it in the portal: ${error instanceof Error ? error.message : String(error)}`,
             );
         }
     }

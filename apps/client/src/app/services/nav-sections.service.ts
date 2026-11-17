@@ -6,7 +6,6 @@ export type NavSection =
   | 'crypto'
   | 'integrations'
   | 'issuance'
-  | 'registrar'
   | 'verification'
   | 'sessions';
 
@@ -24,7 +23,6 @@ export const NAV_SECTION_ROUTES: Record<NavSection, string[]> = {
     '/status-list-config',
     '/attribute-providers',
   ],
-  registrar: ['/registrar', '/schema'],
   verification: ['/offer/presentation', '/presentation-config', '/oidc-clients'],
   sessions: ['/session-management'],
 };

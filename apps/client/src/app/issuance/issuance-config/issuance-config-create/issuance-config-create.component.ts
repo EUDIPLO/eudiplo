@@ -60,17 +60,17 @@ import { MatSlideToggle, MatSlideToggleModule } from '@angular/material/slide-to
 import { ImageFieldComponent } from '../../../utils/image-field/image-field.component';
 import { MatCardModule } from '@angular/material/card';
 import { PresentationManagementService } from '../../../presentation/presentation-config/presentation-management.service';
-import { RegistrarService } from '../../../registrar/registrar.service';
 import { ConfigOwnershipDirective } from '../../../config-portability/config-ownership.directive';
 import { ConfigOwnershipNoticeComponent } from '../../../config-portability/config-ownership-notice.component';
-import { asSentence, getApiErrorMessage, getHttpErrorMessage } from '../../../utils/error-message';
-import { errorSnackBarDuration, openErrorSnackBar } from '../../../utils/error-snackbar';
+import { asSentence, getApiErrorMessage } from '../../../utils/error-message';
+import { openErrorSnackBar } from '../../../utils/error-snackbar';
 import { certificateBase64, certificateValidator } from '../../../utils/certificate-validator';
 import { KeyChainService } from '../../../key-management/key-chain.service';
 import { FrontendConfigService } from '../../../services/frontend-config.service';
 import { JwtService } from '../../../services/jwt.service';
 import { ApiService } from '../../../core';
 import { entityIdUrl } from '../../../utils/public-url';
+import { httpUrlValidator } from '../../../utils/http-url-validator';
 import { focusAfterRenderIfLost, focusRowAfterRemoval } from '../../../common/focus-if-lost.util';
 import { LoadErrorComponent } from '../../../common/load-error.component';
 import { fromFormQueryParams } from '../../../common/return-to-form';
@@ -362,10 +362,10 @@ export class IssuanceConfigCreateComponent implements OnInit {
         error = `Register ${this.newUnregisteredTrustAnchors.join(', ')} as a federation trust anchor first, or choose a registered one.`;
       if (
         this.registrationCertificateEnabled &&
-        this.registrationCertificateMode === 'import' &&
         !this.registrationCertificate.get('jwt')?.value?.trim()
       )
-        error = 'Paste a registration certificate JWT or choose automatic generation.';
+        error =
+          'Paste a registration certificate JWT, or turn the registration certificate off and, after saving, request one on the Registration Certificate tab of Issuer Settings (needs the registrar:manage role).';
     }
     const invalid = controls.filter((name) => this.form.get(name)?.invalid);
     if (!error && !invalid.length) {
@@ -424,7 +424,7 @@ export class IssuanceConfigCreateComponent implements OnInit {
   }
 
   get trustSummary(): string {
-    return `Wallet attestation default: ${this.form.get('walletAttestationRequired')?.value ? 'Required' : 'Optional'} · Attestation status check: ${this.issuerStatusCheckModeLabel}${this.form.get('walletAttestationStatusCheckMode')?.value === 'disabled' ? ' (revoked attestations accepted)' : ''} · Wallet provider trust lists: ${this.walletProviderTrustLists.length} · Federation: ${this.federationEnabled ? 'On' : 'Off'} · Registration certificate: ${this.registrationCertificateEnabled ? this.registrationCertificateMode : 'Off'} · PIN attempt limit: ${this.form.get('txCodeMaxAttempts')?.value ?? 5}`;
+    return `Wallet attestation default: ${this.form.get('walletAttestationRequired')?.value ? 'Required' : 'Optional'} · Attestation status check: ${this.issuerStatusCheckModeLabel}${this.form.get('walletAttestationStatusCheckMode')?.value === 'disabled' ? ' (revoked attestations accepted)' : ''} · Wallet provider trust lists: ${this.walletProviderTrustLists.length} · Federation: ${this.federationEnabled ? 'On' : 'Off'} · Registration certificate: ${this.registrationCertificateEnabled ? 'On' : 'Off'} · PIN attempt limit: ${this.form.get('txCodeMaxAttempts')?.value ?? 5}`;
   }
 
   public form: FormGroup;
@@ -504,7 +504,6 @@ export class IssuanceConfigCreateComponent implements OnInit {
   private readonly pageHeading?: ElementRef<HTMLElement>;
   /** Trust anchors of the stored configuration, which the backend keeps even when unregistered. */
   private storedTrustAnchorIds = new Set<string>();
-  private registrarRegistrationCertificateDefaults: Record<string, unknown> | null = null;
 
   private asRecord(value: unknown): Record<string, unknown> {
     return value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
@@ -524,7 +523,6 @@ export class IssuanceConfigCreateComponent implements OnInit {
     private readonly dialog: MatDialog,
     private readonly fb: FormBuilder,
     private readonly presentationManagementService: PresentationManagementService,
-    private readonly registrarService: RegistrarService,
     private readonly keyChainService: KeyChainService,
     private readonly frontendConfigService: FrontendConfigService,
     private readonly jwtService: JwtService,
@@ -558,11 +556,9 @@ export class IssuanceConfigCreateComponent implements OnInit {
       }),
       registrationCertificate: this.fb.group({
         enabled: [false],
-        mode: ['generate'],
         jwt: [''],
-        privacyPolicy: [''],
-        supportUri: [''],
-        renewal: ['onCredentialConfigChange'],
+        privacyPolicy: ['', [Validators.maxLength(2048), httpUrlValidator]],
+        supportUri: ['', [Validators.maxLength(2048), httpUrlValidator]],
       }),
     } as any);
     // Hidden federation fields must not block saving.
@@ -574,6 +570,19 @@ export class IssuanceConfigCreateComponent implements OnInit {
     };
     this.federation.get('enabled')!.valueChanges.subscribe(updateFederationValidation);
     updateFederationValidation();
+    // The hidden registration certificate fields keep their values but must
+    // not block saving, for example a stored URI that is not http(s).
+    const updateRegistrationCertificateValidation = () => {
+      for (const name of ['jwt', 'privacyPolicy', 'supportUri']) {
+        const control = this.registrationCertificate.get(name)!;
+        if (this.registrationCertificateEnabled) control.enable({ emitEvent: false });
+        else control.disable({ emitEvent: false });
+      }
+    };
+    this.registrationCertificate
+      .get('enabled')!
+      .valueChanges.subscribe(updateRegistrationCertificateValidation);
+    updateRegistrationCertificateValidation();
   }
 
   ngOnInit(): void {
@@ -581,7 +590,6 @@ export class IssuanceConfigCreateComponent implements OnInit {
     setTimeout(() => {
       this.loadPresentationConfigs();
       void this.loadConfigForEdit();
-      void this.loadRegistrarDefaults();
       void this.loadTrustLists();
       void this.loadFederationSetup();
     }, 0);
@@ -696,79 +704,6 @@ export class IssuanceConfigCreateComponent implements OnInit {
     const control = this.federation.get('entityId')!;
     control.setValue(this.expectedEntityId);
     control.markAsDirty();
-  }
-
-  private async loadRegistrarDefaults(): Promise<void> {
-    try {
-      const config = await this.registrarService.getConfig();
-      const defaults = config?.registrationCertificateDefaults;
-      if (!defaults || typeof defaults !== 'object') {
-        this.registrarRegistrationCertificateDefaults = null;
-        return;
-      }
-
-      this.registrarRegistrationCertificateDefaults = defaults as Record<string, unknown>;
-      this.applyRegistrationCertificateDefaultsIfMissing(defaults as Record<string, unknown>);
-    } catch {
-      // Keep form editable even if registrar settings are unavailable.
-    }
-  }
-
-  async applyRegistrarDefaultsFromRegistrar(): Promise<void> {
-    try {
-      const config = await this.registrarService.getConfig();
-      const defaults = config?.registrationCertificateDefaults;
-
-      if (!defaults || typeof defaults !== 'object') {
-        this.snackBar.open(
-          'No registration certificate defaults configured in registrar',
-          'Close',
-          {
-            duration: 3000,
-          }
-        );
-        return;
-      }
-
-      this.registrarRegistrationCertificateDefaults = defaults as Record<string, unknown>;
-      this.applyRegistrationCertificateDefaults(defaults as Record<string, unknown>, true);
-      this.snackBar.open('Loaded privacy policy and support URI from registrar defaults', 'Close', {
-        duration: 2500,
-      });
-    } catch (error) {
-      openErrorSnackBar(
-        this.snackBar,
-        getHttpErrorMessage(error, 'Failed to load registrar defaults')
-      );
-    }
-  }
-
-  private applyRegistrationCertificateDefaultsIfMissing(defaults: Record<string, unknown>): void {
-    this.applyRegistrationCertificateDefaults(defaults, false);
-  }
-
-  private applyRegistrationCertificateDefaults(
-    defaults: Record<string, unknown>,
-    overwriteExisting: boolean
-  ): void {
-    const privacy =
-      typeof defaults['privacy_policy'] === 'string' ? defaults['privacy_policy'].trim() : '';
-    const support =
-      typeof defaults['support_uri'] === 'string' ? defaults['support_uri'].trim() : '';
-
-    const registrationCertificate = this.registrationCertificate;
-    const privacyCtrl = registrationCertificate.get('privacyPolicy');
-    const supportCtrl = registrationCertificate.get('supportUri');
-
-    const currentPrivacy = `${privacyCtrl?.value ?? ''}`.trim();
-    const currentSupport = `${supportCtrl?.value ?? ''}`.trim();
-
-    if ((overwriteExisting || !currentPrivacy) && privacy) {
-      privacyCtrl?.setValue(privacy);
-    }
-    if ((overwriteExisting || !currentSupport) && support) {
-      supportCtrl?.setValue(support);
-    }
   }
 
   async loadConfigForEdit(): Promise<void> {
@@ -935,11 +870,9 @@ export class IssuanceConfigCreateComponent implements OnInit {
       txCodeMaxAttempts: config.txCodeMaxAttempts ?? null,
       registrationCertificate: {
         enabled: registrationCertificate?.enabled ?? false,
-        mode: registrationCertificate?.mode ?? 'generate',
         jwt: registrationCertificate?.jwt ?? '',
         privacyPolicy: registrationCertificate?.privacyPolicy ?? '',
         supportUri: registrationCertificate?.supportUri ?? '',
-        renewal: registrationCertificate?.renewal ?? 'onCredentialConfigChange',
       },
     });
 
@@ -997,12 +930,6 @@ export class IssuanceConfigCreateComponent implements OnInit {
     }
 
     await this.yieldToUi();
-
-    if (this.registrarRegistrationCertificateDefaults) {
-      this.applyRegistrationCertificateDefaultsIfMissing(
-        this.registrarRegistrationCertificateDefaults
-      );
-    }
 
     if (this.federationEnabled) this.expandedSections.add('federation');
     if (this.registrationCertificateEnabled) this.expandedSections.add('registration');
@@ -1138,41 +1065,22 @@ export class IssuanceConfigCreateComponent implements OnInit {
     return authorizationServers;
   }
 
-  /** Whether saving starts a background renewal of the registration certificate. */
-  private renewsInBackground(issuanceDto: UpdateIssuanceDto): boolean {
-    const certificate = issuanceDto.registrationCertificate;
-    return (
-      !!certificate?.enabled &&
-      (certificate.mode ?? 'generate') === 'generate' &&
-      (certificate.renewal ?? 'onCredentialConfigChange') === 'onCredentialConfigChange'
-    );
-  }
-
+  /**
+   * The registration certificate settings to store. A turned-off certificate
+   * keeps its JWT, privacy policy and support URI, so it can be turned on again
+   * or a new one requested with the same values; with none of them, it is removed.
+   */
   private buildRegistrationCertificatePayload(registrationCertificateFormValue: any): any {
-    if (!registrationCertificateFormValue?.enabled) {
+    const text = (value: unknown) =>
+      typeof value === 'string' && value.trim() ? value.trim() : undefined;
+    const jwt = text(registrationCertificateFormValue?.jwt);
+    const privacyPolicy = text(registrationCertificateFormValue?.privacyPolicy);
+    const supportUri = text(registrationCertificateFormValue?.supportUri);
+    const enabled = !!registrationCertificateFormValue?.enabled;
+    if (!enabled && !jwt && !privacyPolicy && !supportUri) {
       return null;
     }
-
-    if (registrationCertificateFormValue.mode === 'import') {
-      return {
-        enabled: true,
-        mode: 'import',
-        jwt: registrationCertificateFormValue.jwt || undefined,
-      };
-    }
-
-    return {
-      enabled: true,
-      mode: 'generate',
-      privacyPolicy: registrationCertificateFormValue.privacyPolicy || undefined,
-      supportUri: registrationCertificateFormValue.supportUri || undefined,
-      // The default is left out, so stored and exported settings only carry a choice.
-      renewal:
-        registrationCertificateFormValue.renewal &&
-        registrationCertificateFormValue.renewal !== 'onCredentialConfigChange'
-          ? registrationCertificateFormValue.renewal
-          : undefined,
-    };
+    return { enabled, jwt, privacyPolicy, supportUri };
   }
 
   private buildConfigurationPayload(): UpdateIssuanceDto {
@@ -1180,7 +1088,8 @@ export class IssuanceConfigCreateComponent implements OnInit {
 
     const unifiedAuthorizationServers = this.buildUnifiedAuthorizationServers(formValue);
     const registrationCertificate = this.buildRegistrationCertificatePayload(
-      formValue.registrationCertificate
+      // Raw, so a turned-off certificate keeps its disabled fields.
+      (this.form.get('registrationCertificate') as FormGroup | null)?.getRawValue()
     );
 
     return {
@@ -1229,13 +1138,7 @@ export class IssuanceConfigCreateComponent implements OnInit {
       .saveConfiguration(issuanceDto)
       .then(
         () => {
-          if (this.renewsInBackground(issuanceDto)) {
-            const message =
-              'Configuration saved. If the registration certificate inputs changed, a new certificate is requested in the background and shown on the Registration Certificate tab after the page is reloaded.';
-            this.snackBar.open(message, 'Close', { duration: errorSnackBarDuration(message) });
-          } else {
-            this.snackBar.open('Configuration saved successfully', 'Close', { duration: 3000 });
-          }
+          this.snackBar.open('Configuration saved successfully', 'Close', { duration: 3000 });
           this.router.navigate(['../'], { relativeTo: this.route });
         },
         (error: unknown) => {
@@ -1554,10 +1457,6 @@ export class IssuanceConfigCreateComponent implements OnInit {
 
   get registrationCertificateEnabled(): boolean {
     return this.registrationCertificate.get('enabled')?.value ?? false;
-  }
-
-  get registrationCertificateMode(): 'import' | 'generate' {
-    return this.registrationCertificate.get('mode')?.value ?? 'generate';
   }
 
   /** Names of the entity configuration settings carried over unchanged. */

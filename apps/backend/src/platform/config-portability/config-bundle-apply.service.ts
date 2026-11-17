@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { withoutRetiredResources } from "@eudiplo/config-format/config-bundle.js";
 import {
     normalizeDocument,
     resourceId,
@@ -11,7 +12,6 @@ import {
     InternalServerErrorException,
     Logger,
 } from "@nestjs/common";
-import { EventEmitter2 } from "@nestjs/event-emitter";
 import { AUTH_SETTINGS, type AuthSettings } from "../../auth/auth-settings.js";
 import {
     CLIENTS_PROVIDER,
@@ -29,14 +29,9 @@ import { KmsTenantConfigService } from "../../crypto/key/kms/kms-tenant-config.s
 import { AttributeProviderService } from "../../issuer/configuration/attribute-provider/attribute-provider.service.js";
 import { CredentialConfigService } from "../../issuer/configuration/credentials/credential-config/credential-config.service.js";
 import { IssuanceService } from "../../issuer/configuration/issuance/issuance.service.js";
-import {
-    ISSUER_REGISTRATION_CERTIFICATE_INPUTS_CHANGED,
-    type IssuerRegistrationCertificateInputsChangedEvent,
-} from "../../issuer/configuration/issuer-registration-certificate-inputs-changed.js";
 import { WebhookEndpointService } from "../../issuer/configuration/webhook-endpoint/webhook-endpoint.service.js";
 import { StatusListService } from "../../issuer/status-list/status-list.service.js";
 import { TrustListService } from "../../issuer/trust-list/trustlist.service.js";
-import { RegistrarConfigService } from "../../registrar/registrar-config.service.js";
 import { FilesService } from "../../storage/files.service.js";
 import { FederationTrustAnchorService } from "../../trust/federation-trust-anchor/federation-trust-anchor.service.js";
 import { PresentationConfigService } from "../../verifier/presentations/configuration/presentation-config.service.js";
@@ -100,7 +95,6 @@ export class ConfigBundleApplyService {
         private readonly kmsReferenceService: ConfigKmsReferenceService,
         private readonly resourceRegistry: ConfigResourceRegistry,
         private readonly kmsTenantConfigService: KmsTenantConfigService,
-        private readonly registrarConfigService: RegistrarConfigService,
         private readonly issuanceService: IssuanceService,
         private readonly credentialConfigService: CredentialConfigService,
         private readonly presentationConfigService: PresentationConfigService,
@@ -115,7 +109,6 @@ export class ConfigBundleApplyService {
         private readonly clientAccess: ClientAccessService,
         @Inject(AUTH_SETTINGS)
         private readonly authSettings: AuthSettings,
-        private readonly events: EventEmitter2,
     ) {}
 
     /**
@@ -182,9 +175,6 @@ export class ConfigBundleApplyService {
     private get keyChains() {
         return this.repos.keyChains;
     }
-    private get registrarConfigs() {
-        return this.repos.registrarConfigs;
-    }
     private get issuanceConfigs() {
         return this.repos.issuanceConfigs;
     }
@@ -209,12 +199,15 @@ export class ConfigBundleApplyService {
 
     async apply(
         tenantId: string,
-        bundle: ConfigBundle,
+        received: ConfigBundle,
         mode: ConfigImportMode,
-        ownershipSource = `bundle:${bundle.manifest.tenant}`,
+        ownershipSource = `bundle:${received.manifest.tenant}`,
         expectedFingerprint?: string,
         options: ConfigPlanOptions = {},
     ): Promise<ConfigImportPlan> {
+        // Skipped with a warning by the plan; the plan of the filtered
+        // bundle is the same, so its fingerprint still matches.
+        const bundle = withoutRetiredResources(received);
         const plan = await this.journal.run(
             tenantId,
             options.reattach ? "reattach" : mode,
@@ -229,11 +222,6 @@ export class ConfigBundleApplyService {
                     options,
                 ),
         );
-        // Bundle writes bypass the services; listeners compare fingerprints,
-        // so publishing after every apply is cheap.
-        this.events.emit(ISSUER_REGISTRATION_CERTIFICATE_INPUTS_CHANGED, {
-            tenantId,
-        } satisfies IssuerRegistrationCertificateInputsChangedEvent);
         return plan;
     }
 
@@ -511,9 +499,6 @@ export class ConfigBundleApplyService {
                 // configuration names, as for trust lists below.
                 await this.keyChainService.delete(tenantId, id);
                 return;
-            case "RegistrarConfig":
-                await this.registrarConfigService.deleteConfig(tenantId);
-                return;
             case "IssuanceConfig":
                 await this.issuanceConfigs.delete({ tenantId });
                 return;
@@ -651,12 +636,6 @@ export class ConfigBundleApplyService {
                 return;
             case "KeyChain":
                 await this.applyKeyChain(tenantId, document);
-                return;
-            case "RegistrarConfig":
-                await this.registrarConfigService.replaceConfig(
-                    tenantId,
-                    spec as any,
-                );
                 return;
             case "IssuanceConfig":
                 await this.issuanceService.storeIssuanceConfiguration(

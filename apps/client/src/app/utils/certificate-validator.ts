@@ -1,8 +1,7 @@
 import { AbstractControl, ValidationErrors } from '@angular/forms';
 
-// The backend applies the same rule to x509 trusted authorities
-// (apps/backend/src/registrar/schema-metadata/x509-certificates.ts). Change
-// both together. The backend also parses the certificate in full.
+// A quick shape check before the request; the backend parses the certificate
+// in full where it uses it and reports what is wrong with it.
 
 const PEM_BEGIN = '-----BEGIN CERTIFICATE-----';
 const PEM_END = '-----END CERTIFICATE-----';
@@ -117,9 +116,9 @@ function readCertificates(value: string): { first: string; count: number } | und
 }
 
 /**
- * The base64 DER of a certificate in base64 DER or PEM, as the backend sends
- * an x509 trusted authority to the registrar. Send this instead of the raw
- * value of a field that `certificateValidator` accepted.
+ * The base64 DER of a certificate in base64 DER or PEM, the form the backend
+ * stores. Send this instead of the raw value of a field that
+ * `certificateValidator` accepted.
  */
 export function certificateBase64(value: string): string {
   return readCertificates(value)?.first ?? value;

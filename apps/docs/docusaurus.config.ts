@@ -111,13 +111,14 @@ const config: Config = {
           // Issuance.
           {from: '/issuance/authorization', to: '/issuance/authorization-servers'},
           {from: '/issuance/status-management', to: '/issuance/revocation'},
-          {from: '/issuance/schema-metadata', to: '/trust/registrar'},
+          {from: '/issuance/schema-metadata', to: '/issuance/credential-configuration'},
           // Presentation.
           {from: '/presentation/presentation-configuration', to: '/presentation/configure-verification'},
           {from: '/presentation/presentation-requests', to: '/presentation/requests'},
           {from: '/presentation/handling-results', to: '/presentation/receive-results'},
           // Trust.
           {from: '/trust/key-chains', to: '/trust/keys-and-certificates'},
+          {from: '/trust/registrar', to: '/trust/eudi-hub'},
           {from: '/trust/certificates', to: '/trust/keys-and-certificates'},
           // Administration and Deployment -> Operate.
           {from: '/deployment', to: '/operate'},
@@ -184,7 +185,7 @@ const config: Config = {
           {from: '/getting-started/web-client', to: '/cookbooks/foundation'},
           {from: '/getting-started/keycloak', to: '/operate/keycloak'},
           {from: '/getting-started/monitor', to: '/operate/monitoring'},
-          {from: '/getting-started/registrar', to: '/trust/registrar'},
+          {from: '/getting-started/registrar', to: '/trust/eudi-hub'},
           {from: '/getting-started/cli', to: '/operate/cli'},
           {from: '/getting-started/cli/command-reference', to: '/reference/cli'},
           {from: '/getting-started/cli/configuration-validation', to: '/operate/configuration-as-code'},
@@ -194,7 +195,7 @@ const config: Config = {
           {from: '/getting-started/issuance/credential-offers', to: '/issuance/credential-offers'},
           {from: '/getting-started/issuance/credential-configuration', to: '/issuance/credential-configuration'},
           {from: '/getting-started/issuance/attribute-provider', to: '/issuance/attribute-provider'},
-          {from: '/getting-started/issuance/schema-metadata', to: '/trust/registrar'},
+          {from: '/getting-started/issuance/schema-metadata', to: '/issuance/credential-configuration'},
           {from: '/getting-started/issuance/issuance-configuration', to: '/issuance/issuance-configuration'},
           {from: '/getting-started/presentation', to: '/presentation'},
           {from: '/getting-started/presentation/presentation-requests', to: '/presentation/requests'},

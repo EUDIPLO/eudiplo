@@ -129,6 +129,9 @@ export async function runPortabilityCommand(
                 `${issue.file} ${issue.path}: ${issue.message}${reason ? ` (${reason})` : ""}; the plan blocks this resource with SECRET_REQUIRED\n`,
             );
         }
+        for (const warning of validation.warnings) {
+            context.stderr.write(`${warning.file}: ${warning.message}\n`);
+        }
         if (!validation.valid) {
             if (format === "json")
                 context.stdout.write(

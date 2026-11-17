@@ -313,17 +313,11 @@ export class Oid4vpService {
                     undefined,
             });
 
-            // The registration certificate links the access certificate that
-            // signs this request.
-            if (presentationConfig.registration_cert) {
-                regCert =
-                    await this.registrationCertificateService.getOrIssueRegistrationCertificate(
-                        presentationConfig,
-                        dcql_query,
-                        session.requestId!,
-                        cert,
-                    );
-            }
+            regCert = this.registrationCertificateService.forRequest(
+                presentationConfig,
+                dcql_query,
+                session.requestId!,
+            );
             const nonce = randomUUID();
             await this.sessionStore.updateForTenant(
                 session.tenantId,

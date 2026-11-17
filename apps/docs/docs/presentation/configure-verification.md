@@ -16,7 +16,7 @@ A presentation configuration is the reusable definition of a verification: which
 Open **Credential Verification → Verification Configs → Create**. The guided setup has four steps:
 
 1. **Name**: a unique ID (the `requestId` you use later) and an internal description.
-2. **Credentials**: **Import from Issuer** reads credential types and claims from an issuer's metadata, **Import from Schema** starts from registrar schema metadata, and **Add credential** lets you enter the type and claims yourself.
+2. **Credentials**: **Import from Issuer** reads credential types and claims from an issuer's metadata, **Import from Schema** starts from TS11 schema metadata at a URL, and **Add credential** lets you enter the type and claims yourself.
 3. **Settings**: review the request lifetime (default 300 seconds), the status check mode (default strict) and the access key chain (default: the tenant's access key chain). Expand the panels for redirect URI, [allowed origins](#allowed-origins-digital-credentials-api) for the Digital Credentials API (**Request and verification options**), registration certificate, webhook endpoint (**Application integration**) or transaction data.
 4. **Review**: check the request and create the configuration. Use **Create offer** on the saved configuration to test it with a wallet.
 
@@ -62,7 +62,7 @@ curl -X POST "$EUDIPLO_URL/api/verifier/config" \
   --data @membership-check.json
 ```
 
-The schema is strict: unknown fields, such as an inline `webhook` or `registrationCert`, are rejected with `400`. The response contains the stored configuration plus the read-only fields `registrationCertCache`, `createdAt` and `updatedAt`; remove them before sending a configuration back.
+The schema is strict: unknown fields, such as an inline `webhook` or `registrationCert`, are rejected with `400`. The response contains the stored configuration plus the read-only fields `createdAt` and `updatedAt`; remove them before sending a configuration back.
 
 | Task                  | Endpoint                                                                                       |
 | --------------------- | ---------------------------------------------------------------------------------------------- |
@@ -70,7 +70,6 @@ The schema is strict: unknown fields, such as an inline `webhook` or `registrati
 | Read one              | `GET /api/verifier/config/{id}`                                                                |
 | Change fields         | `PATCH /api/verifier/config/{id}`: omitted fields keep their value, `null` clears a field       |
 | Delete                | `DELETE /api/verifier/config/{id}`                                                             |
-| Reissue the registration certificate | `POST /api/verifier/config/{id}/registration-cert/reissue`                      |
 
 To manage configurations as files, place them in `config/<tenant>/presentation/<id>.json`; the file name becomes the ID. See [Configuration as Code](../operate/configuration-as-code.md).
 
@@ -94,19 +93,22 @@ A single request can override the endpoint with an inline `webhook` object. When
 
 ## Registration certificate
 
-If the wallet ecosystem requires a registration certificate, set `registration_cert`. The `purpose` belongs to the presentation configuration; shared values such as the privacy policy come from the registrar defaults:
+If the wallet ecosystem requires a registration certificate, request one from the registrar: in the Web Client, **Request from EUDI Hub** on the configuration's **Security** tab ([EUDI Hub](../trust/eudi-hub.md#request-a-registration-certificate)). EUDIPLO stores it in `registration_cert`, together with the purpose and privacy policy it was requested with, which the next request can reuse:
 
 ```json
 {
     "registration_cert": {
-        "body": {
-            "purpose": [{ "lang": "en", "content": "Check your club membership" }]
-        }
+        "jwt": "eyJ...",
+        "purpose": [
+            { "lang": "de", "content": "Prüfung Ihrer Vereinsmitgliedschaft" },
+            { "lang": "en", "content": "Check your club membership" }
+        ],
+        "privacy_policy": "https://shop.example.com/privacy"
     }
 }
 ```
 
-An imported `jwt` is used without a registrar call, after the time and overasking checks. For `id` and `body`, EUDIPLO needs a registrar configuration for the tenant and attaches no certificate without one. Resolution, caching and the overasking check are described in [Registration Certificates](../trust/registration-certificates.md).
+A certificate from another registrar goes into `registration_cert.jwt` the same way. It must be valid and cover the DCQL query exactly; request a new one after you change the query. The checks are described in [Registration Certificates](../trust/registration-certificates.md).
 
 ## Allowed origins (Digital Credentials API)
 

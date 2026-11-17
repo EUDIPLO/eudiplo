@@ -48,18 +48,20 @@
       <td mat-cell *matCellDef="let config">
         @let status = registrationCertStatus(config);
         <mat-icon
+          aria-hidden="true"
           [matTooltip]="registrationCertTooltip(config)"
           [color]="
             status === 'active'
               ? 'primary'
-              : status === 'expired'
+              : status === 'expired' || status === 'invalid' || status === 'notYetValid'
                 ? 'warn'
-                : status === 'expiring' || status === 'pending'
+                : status === 'expiring' || status === 'missing'
                   ? 'accent'
                   : ''
           "
           >{{ registrationCertIcon(status) }}</mat-icon
         >
+        <span class="visually-hidden">{{ registrationCertTooltip(config) }}</span>
       </td>
     </ng-container>
 

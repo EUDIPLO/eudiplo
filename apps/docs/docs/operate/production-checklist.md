@@ -53,8 +53,8 @@ again after major upgrades. Each item links to the guide that explains it.
       ([Web application firewall](waf.md)).
 - [ ] `OUTBOUND_URL_ALLOW_HTTP` and `OUTBOUND_URL_ALLOW_PRIVATE_NETWORK` stay
       `false` (the default since 9.0). Webhooks, attribute providers, metadata,
-      trust lists, status lists, federation entities, the registrar and its
-      OIDC provider, the EUDI Hub, external authorization servers and the upstream provider
+      trust lists, status lists, federation entities, the EUDI Hub, external
+      authorization servers and the upstream provider
       of a chained authorization server then need public HTTPS targets; CRLs
       may use HTTP.
       `OUTBOUND_URL_ALLOWED_HOSTS` additionally limits them to the listed
@@ -84,8 +84,9 @@ again after major upgrades. Each item links to the guide that explains it.
 - [ ] Signing keys live in the KMS your security model requires
       ([KMS](kms.md)); the `db` provider stores them encrypted in the database.
 - [ ] Access and registration certificates come from your registrar instead of
-      self-signed certificates ([Registrar](../trust/registrar.md),
-      [Registration certificates](../trust/registration-certificates.md)).
+      self-signed certificates ([EUDI Hub](../trust/eudi-hub.md),
+      [Registration certificates](../trust/registration-certificates.md)), and
+      you know when they expire: EUDIPLO does not renew them.
 - [ ] No `SKIP_*` flag is set; the startup log lists active ones
       ([Skip flags](../reference/environment-variables.md#skip-flags)).
 - [ ] Outside the container image, for example with `node dist/main.js` from a

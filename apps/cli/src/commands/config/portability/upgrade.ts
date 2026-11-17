@@ -22,14 +22,18 @@ import {
     assertConfigBundle,
     type ConfigBundle,
     ConfigBundleCodec,
+    withoutRetiredResources,
 } from "@eudiplo/config-format/config-bundle.js";
 import {
     bareFileVersion,
     CONFIG_SINGLETON_IDS,
     type ConfigResourceKind,
     isConfigDocument,
+    isRetiredConfigIssue,
     normalizeDocument,
+    RETIRED_TENANT_FOLDER_FILES,
     resourceId,
+    retiredConfigIssue,
     schemaUrl,
 } from "@eudiplo/config-format/config-format.js";
 import { atomicWriteFile } from "@eudiplo/config-format/config-io.js";
@@ -53,9 +57,27 @@ function parse(text: string, path: string): any {
         throw new Error(`Invalid JSON in ${path}`);
     }
 }
-function upgradeJson(input: any, file: string, context: CommandContext): any {
-    const bundle = Array.isArray(input?.documents);
-    if (bundle) assertConfigBundle(input);
+function upgradeJson(
+    received: any,
+    file: string,
+    context: CommandContext,
+): any {
+    const bundle = Array.isArray(received?.documents);
+    if (!bundle) {
+        const retired = retiredConfigIssue(received, file);
+        if (retired) throw new Error(retired.message);
+    }
+    // Resources of retired kinds are dropped from a bundle with a warning.
+    const input = bundle ? withoutRetiredResources(received) : received;
+    if (bundle) {
+        for (const issue of (input.manifest.warnings ?? []).filter(
+            isRetiredConfigIssue,
+        ))
+            context.stderr.write(
+                `${file}: ${issue.severity} ${issue.code}: ${issue.message}\n`,
+            );
+        assertConfigBundle(input);
+    }
     const results = (bundle ? input.documents : [input]).map(
         (document: unknown) => upgradeDocument(document),
     );
@@ -171,6 +193,7 @@ async function upgradeFolder(
     context: CommandContext,
 ): Promise<number> {
     const outputs = new Map<string, string>();
+    const removed: string[] = [];
     let changed = 0;
     for (const file of await folderFiles(source)) {
         if (
@@ -179,6 +202,24 @@ async function upgradeFolder(
         )
             continue;
         const input = parse(await readFile(file, "utf8"), file);
+        // A file of a retired kind, such as registrar.json, is left out of
+        // the upgraded folder.
+        // Matched like the singleton files of inferredKind: in a tenant
+        // folder, or in a tenant folder below a configuration folder.
+        const path = relative(source, file).split(sep).join("/");
+        const retired =
+            RETIRED_TENANT_FOLDER_FILES.find(
+                (entry) =>
+                    path === entry.file || path.endsWith(`/${entry.file}`),
+            )?.issue ?? retiredConfigIssue(input, relative(source, file));
+        if (retired) {
+            context.stderr.write(
+                `${relative(source, file)}: ${retired.severity} ${retired.code}: ${retired.message}\n`,
+            );
+            removed.push(relative(source, file));
+            changed++;
+            continue;
+        }
         const kind = inferredKind(relative(source, file));
         if (!kind && !isConfigDocument(input)) continue;
         const candidate = isConfigDocument(input)
@@ -197,7 +238,7 @@ async function upgradeFolder(
     if (!outputs.size)
         throw new Error(`No configuration documents found in ${source}`);
     context.stdout.write(
-        `${outputs.size - changed} current, ${changed} require upgrading\n`,
+        `${outputs.size + removed.length - changed} current, ${changed} require upgrading\n`,
     );
     if (parsed.flags.check === true) return changed ? 1 : 0;
     if (parsed.flags["dry-run"] === true) return 0;
@@ -236,6 +277,7 @@ async function upgradeFolder(
         });
         for (const [path, contents] of outputs)
             await atomicWriteFile(join(staging, path), contents);
+        for (const path of removed) await rm(join(staging, path));
         await rename(staging, destination);
         context.stdout.write(
             `Wrote upgraded configuration folder to ${destination}\n`,

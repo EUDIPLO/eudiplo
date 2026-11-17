@@ -25,7 +25,7 @@ Notes on fields whose generated description is incomplete:
 | `activeCredentials` | Rejected unless `statusManagement` is `true`. See [Single active credential](../issuance/credential-configuration.md#keep-one-active-credential-per-subject). |
 | `revokeWithWalletUnit` | Rejected unless `statusManagement` is `true` and `config.keyAttestationsRequired` is set. Exports include it only when it is `true`. See [Revoke credentials with their wallet unit](../trust/attestation.md#revoke-credentials-with-their-wallet-unit). |
 | `sdJwtTrustFormat` | `x5c` (default) or `federation`. See [OpenID Federation](../trust/federation.md). |
-| `schemaMeta` | See [Schema metadata](../trust/registrar.md). |
+| `schemaMeta` | TS11 schema metadata of the credential type (version, rulebook, level of security, binding, schema URIs, trusted authorities). Stored and exported with the configuration; EUDIPLO currently publishes it nowhere. |
 
 ## Claim field (`fields[]`)
 

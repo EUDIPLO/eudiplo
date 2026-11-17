@@ -6,291 +6,92 @@
 </h2>
 
 <mat-dialog-content fxLayout="column" fxLayoutGap="16px">
-  <mat-tab-group animationDuration="0" (selectedIndexChange)="$event === 1 && loadCatalog()">
-    <!-- ── Tab 1: Enter URL manually ─────────────────────────────── -->
-    <mat-tab label="Enter URL">
-      <div fxLayout="column" fxLayoutGap="16px" class="tab-pane-padding">
-        <div fxLayout="column" fxLayoutGap="8px">
-          <mat-form-field appearance="outline" fxFlex>
-            <mat-label>Schema URL</mat-label>
-            <input
-              id="schema-url"
-              matInput
-              [formControl]="urlControl"
-              aria-label="Schema URL"
-              placeholder="https://registrar.example.com/schema-metadata/{id}"
-              (keyup.enter)="fetchSchemaMetadata()"
-            />
-            <mat-hint>Enter a URL that returns a schema object with signedJwt</mat-hint>
-            @if (urlControl.hasError('required')) {
-              <mat-error>URL is required</mat-error>
-            }
-            @if (urlControl.hasError('pattern')) {
-              <mat-error>Enter a valid URL</mat-error>
-            }
-          </mat-form-field>
+  <div fxLayout="column" fxLayoutGap="16px">
+    <div fxLayout="column" fxLayoutGap="8px">
+      <mat-form-field appearance="outline" fxFlex>
+        <mat-label>Schema URL</mat-label>
+        <input
+          id="schema-url"
+          matInput
+          [formControl]="urlControl"
+          aria-label="Schema URL"
+          placeholder="https://catalog.example/schema-metadata/{id}"
+          (keyup.enter)="fetchSchemaMetadata()"
+        />
+        <mat-hint>Enter a URL that returns a schema object with signedJwt</mat-hint>
+        @if (urlControl.hasError('required')) {
+          <mat-error>URL is required</mat-error>
+        }
+        @if (urlControl.hasError('pattern')) {
+          <mat-error>Enter a valid URL</mat-error>
+        }
+      </mat-form-field>
 
-          <button
-            mat-flat-button
-            color="primary"
-            (click)="fetchSchemaMetadata()"
-            [disabled]="loading || urlControl.invalid"
+      <button
+        mat-flat-button
+        color="primary"
+        (click)="fetchSchemaMetadata()"
+        [disabled]="loading || urlControl.invalid"
+      >
+        @if (loading) {
+          <mat-spinner diameter="20"></mat-spinner>
+        } @else {
+          <ng-container>
+            <mat-icon>search</mat-icon>
+            Fetch Schema
+          </ng-container>
+        }
+      </button>
+    </div>
+
+    @if (error) {
+      <mat-card class="error-card">
+        <mat-card-content fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px">
+          <mat-icon color="warn">error</mat-icon>
+          <span>{{ error }}</span>
+        </mat-card-content>
+      </mat-card>
+    }
+
+    @if (resolved) {
+      <mat-card>
+        <mat-card-content fxLayout="column" fxLayoutGap="8px">
+          @if (resolved.schema.name) {
+            <div><strong>Name:</strong> {{ resolved.schema.name }}</div>
+          }
+          <div>
+            <strong>Schema ID:</strong> <code>{{ resolved.schema.id }}</code>
+          </div>
+          @if (resolved.schema.version) {
+            <div><strong>Version:</strong> {{ resolved.schema.version }}</div>
+          }
+          @if (resolved.schema.description) {
+            <div><strong>Description:</strong> {{ resolved.schema.description }}</div>
+          }
+        </mat-card-content>
+      </mat-card>
+
+      <div fxLayout="column" fxLayoutGap="8px">
+        <h3>Supported Credential Formats</h3>
+        @for (format of resolved.schema.supportedFormats; track format) {
+          <mat-checkbox
+            [checked]="selectedFormats.get(format) || false"
+            (change)="toggleFormat(format, $event.checked)"
           >
-            @if (loading) {
-              <mat-spinner diameter="20"></mat-spinner>
-            } @else {
-              <ng-container>
-                <mat-icon>search</mat-icon>
-                Fetch Schema
-              </ng-container>
-            }
-          </button>
-        </div>
-
-        @if (error) {
-          <mat-card class="error-card">
-            <mat-card-content fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px">
-              <mat-icon color="warn">error</mat-icon>
-              <span>{{ error }}</span>
-            </mat-card-content>
-          </mat-card>
-        }
-
-        @if (resolved) {
-          <mat-card>
-            <mat-card-content fxLayout="column" fxLayoutGap="8px">
-              @if (resolved.schema.name) {
-                <div><strong>Name:</strong> {{ resolved.schema.name }}</div>
-              }
-              <div>
-                <strong>Schema ID:</strong> <code>{{ resolved.schema.id }}</code>
-              </div>
-              @if (resolved.schema.version) {
-                <div><strong>Version:</strong> {{ resolved.schema.version }}</div>
-              }
-              @if (resolved.schema.description) {
-                <div><strong>Description:</strong> {{ resolved.schema.description }}</div>
-              }
-            </mat-card-content>
-          </mat-card>
-
-          <div fxLayout="column" fxLayoutGap="8px">
-            <h3>Supported Credential Formats</h3>
-            @for (format of resolved.schema.supportedFormats; track format) {
-              <mat-checkbox
-                [checked]="selectedFormats.get(format) || false"
-                (change)="toggleFormat(format, $event.checked)"
-              >
-                {{ format }}
-              </mat-checkbox>
-            }
-          </div>
-        }
-
-        @if (resolved && hasSelections()) {
-          <mat-divider></mat-divider>
-          <div fxLayout="column" fxLayoutGap="8px">
-            <h3>Generated DCQL Query</h3>
-            <pre class="dcql-preview">{{ getGeneratedDcql() | json }}</pre>
-          </div>
+            {{ format }}
+          </mat-checkbox>
         }
       </div>
-    </mat-tab>
+    }
 
-    <!-- ── Tab 2: Browse catalog ──────────────────────────────────── -->
-    <mat-tab label="Browse Catalog">
-      <div fxLayout="column" fxLayoutGap="16px" class="tab-pane-padding">
-        @if (catalogLoading) {
-          <div fxLayout="row" fxLayoutAlign="center center" fxLayoutGap="8px">
-            <mat-spinner diameter="24"></mat-spinner>
-            <span>Loading catalog…</span>
-          </div>
-        }
-
-        @if (catalogError) {
-          <mat-card class="error-card">
-            <mat-card-content fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px">
-              <mat-icon color="warn">error</mat-icon>
-              <span>{{ catalogError }}</span>
-            </mat-card-content>
-          </mat-card>
-        }
-
-        @if (!catalogLoading && catalogLoaded && catalogEntries.length === 0 && !catalogError) {
-          <mat-card>
-            <mat-card-content fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px">
-              <mat-icon>info</mat-icon>
-              <span
-                >No schema found in the catalog. Make sure a registrar is configured for this
-                tenant.</span
-              >
-            </mat-card-content>
-          </mat-card>
-        }
-
-        @if (catalogLoaded && catalogEntries.length > 0) {
-          <div class="catalog-toolbar" fxLayout="row" fxLayoutGap="8px" fxLayout.lt-md="column">
-            <mat-form-field appearance="outline" fxFlex>
-              <mat-label>Filter</mat-label>
-              <mat-icon matPrefix>search</mat-icon>
-              <input
-                id="schema-catalog-filter"
-                matInput
-                [(ngModel)]="catalogFilter"
-                aria-label="Filter catalog"
-                placeholder="Name, ID, issuer or tag"
-              />
-            </mat-form-field>
-
-            <mat-form-field appearance="outline" class="catalog-filter-field">
-              <mat-label>Category</mat-label>
-              <mat-select [(ngModel)]="catalogCategoryFilter">
-                <mat-option value="">All</mat-option>
-                @for (category of catalogCategories; track category) {
-                  <mat-option [value]="category">{{ category }}</mat-option>
-                }
-              </mat-select>
-            </mat-form-field>
-
-            <mat-form-field appearance="outline" class="catalog-filter-field">
-              <mat-label>Format</mat-label>
-              <mat-select [(ngModel)]="catalogFormatFilter">
-                <mat-option value="">All</mat-option>
-                @for (format of catalogFormats; track format) {
-                  <mat-option [value]="format">{{ format }}</mat-option>
-                }
-              </mat-select>
-            </mat-form-field>
-
-            <button
-              mat-icon-button
-              type="button"
-              (click)="refreshCatalog()"
-              [disabled]="catalogLoading"
-              matTooltip="Refresh catalog"
-              aria-label="Refresh catalog"
-            >
-              <mat-icon>refresh</mat-icon>
-            </button>
-          </div>
-
-          <mat-checkbox [(ngModel)]="catalogIncludeDeprecated"
-            >Show deprecated versions</mat-checkbox
-          >
-
-          @if (filteredCatalogGroups.length === 0) {
-            <mat-card>
-              <mat-card-content fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px">
-                <mat-icon>filter_alt</mat-icon>
-                <span>No schema entries match the current filters.</span>
-              </mat-card-content>
-            </mat-card>
-          }
-
-          <mat-list>
-            @for (group of filteredCatalogGroups; track group.id) {
-              <mat-list-item class="catalog-list-item">
-                <div fxLayout="column" fxLayoutGap="4px" class="full-width">
-                  <div fxLayout="row" fxLayoutAlign="space-between center">
-                    <div fxLayout="column" fxLayoutGap="2px">
-                      <strong>{{ catalogTitle(group.selectedEntry) }}</strong>
-                      <div class="catalog-meta">{{ catalogMeta(group.selectedEntry) }}</div>
-                    </div>
-                    <button
-                      mat-stroked-button
-                      color="primary"
-                      (click)="selectFromCatalog(group.selectedEntry)"
-                      matTooltip="Preview this schema"
-                    >
-                      <mat-icon>visibility</mat-icon>
-                      Preview
-                    </button>
-                  </div>
-
-                  <div fxLayout="row" fxLayoutGap="8px" fxLayoutAlign="start center" fxLayoutWrap>
-                    <code>{{ group.selectedEntry.id }}</code>
-                    <mat-form-field appearance="outline" class="version-select">
-                      <mat-label>Version</mat-label>
-                      <mat-select
-                        [ngModel]="group.selectedEntry.version"
-                        (ngModelChange)="selectCatalogVersion(group, $event)"
-                      >
-                        @for (entry of group.entries; track entry.version) {
-                          <mat-option [value]="entry.version">
-                            v{{ entry.version }}{{ entry.deprecated ? ' · deprecated' : '' }}
-                          </mat-option>
-                        }
-                      </mat-select>
-                    </mat-form-field>
-                    @if (group.selectedEntry.deprecated) {
-                      <mat-chip class="chip-small" color="warn">Deprecated</mat-chip>
-                    }
-                    @if (group.selectedEntry.supersededByVersion) {
-                      <mat-chip class="chip-small"
-                        >Superseded by v{{ group.selectedEntry.supersededByVersion }}</mat-chip
-                      >
-                    }
-                  </div>
-
-                  @if (catalogDescription(group.selectedEntry); as description) {
-                    <div class="catalog-description">{{ description }}</div>
-                  }
-                  @if (group.selectedEntry.deprecated && group.selectedEntry.deprecationMessage) {
-                    <div class="catalog-deprecation">
-                      {{ group.selectedEntry.deprecationMessage }}
-                    </div>
-                  }
-                  <div fxLayout="row" fxLayoutGap="4px" class="chip-row">
-                    @for (format of group.selectedEntry.supportedFormats; track format) {
-                      <mat-chip class="chip-small">{{ format }}</mat-chip>
-                    }
-                    @for (tag of group.selectedEntry.tags ?? []; track tag) {
-                      <mat-chip class="chip-small" color="accent">{{ tag }}</mat-chip>
-                    }
-                  </div>
-                </div>
-              </mat-list-item>
-              <mat-divider></mat-divider>
-            }
-          </mat-list>
-        }
-
-        <!-- Format selection + DCQL preview shown when a catalog entry is selected -->
-        @if (resolved) {
-          <mat-card>
-            <mat-card-header>
-              <mat-card-title
-                >Selected: {{ resolved.schema.name || resolved.schema.id }}</mat-card-title
-              >
-              @if (resolved.schema.version) {
-                <mat-card-subtitle>v{{ resolved.schema.version }}</mat-card-subtitle>
-              }
-            </mat-card-header>
-          </mat-card>
-
-          <div fxLayout="column" fxLayoutGap="8px">
-            <h3>Supported Credential Formats</h3>
-            @for (format of resolved.schema.supportedFormats; track format) {
-              <mat-checkbox
-                [checked]="selectedFormats.get(format) || false"
-                (change)="toggleFormat(format, $event.checked)"
-              >
-                {{ format }}
-              </mat-checkbox>
-            }
-          </div>
-
-          @if (hasSelections()) {
-            <mat-divider></mat-divider>
-            <div fxLayout="column" fxLayoutGap="8px">
-              <h3>Generated DCQL Query</h3>
-              <pre class="dcql-preview">{{ getGeneratedDcql() | json }}</pre>
-            </div>
-          }
-        }
+    @if (resolved && hasSelections()) {
+      <mat-divider></mat-divider>
+      <div fxLayout="column" fxLayoutGap="8px">
+        <h3>Generated DCQL Query</h3>
+        <pre class="dcql-preview">{{ getGeneratedDcql() | json }}</pre>
       </div>
-    </mat-tab>
-  </mat-tab-group>
+    }
+  </div>
 </mat-dialog-content>
 
 <mat-dialog-actions align="end">

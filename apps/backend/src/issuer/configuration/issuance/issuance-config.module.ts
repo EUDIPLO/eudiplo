@@ -3,7 +3,6 @@ import { getRepositoryToken, TypeOrmModule } from "@nestjs/typeorm";
 import type { Repository } from "typeorm";
 import { AuditLogModule } from "../../../audit-log/audit-log.module.js";
 import { provideKeyChainReferenceSource } from "../../../crypto/key/key-chain-reference-source.provider.js";
-import { RegistrarModule } from "../../../registrar/registrar.module.js";
 import { provideFederationTrustAnchorReferenceSource } from "../../../trust/federation-trust-anchor/adapters/federation-trust-anchor-reference-source.provider.js";
 import { FederationTrustAnchorModule } from "../../../trust/federation-trust-anchor/federation-trust-anchor.module.js";
 import { OutboundUrlPolicyModule } from "../../../webhook/outbound-url-policy.module.js";
@@ -17,7 +16,6 @@ import { TypeOrmIssuanceConfigTrustListReferences } from "./adapters/typeorm-iss
 import { IssuanceConfig } from "./entities/issuance-config.entity.js";
 import { IssuanceService } from "./issuance.service.js";
 import { IssuanceConfigController } from "./issuance-config.controller.js";
-import { IssuerRegistrationCertificateLock } from "./issuer-registration-certificate-lock.js";
 import { ISSUANCE_CONFIG_REPOSITORY } from "./ports/issuance-config.repository.js";
 
 @Module({
@@ -25,7 +23,6 @@ import { ISSUANCE_CONFIG_REPOSITORY } from "./ports/issuance-config.repository.j
         TypeOrmModule.forFeature([IssuanceConfig]),
         AuditLogModule,
         CredentialConfigModule,
-        RegistrarModule,
         TrustListModule,
         FederationTrustAnchorModule,
         OutboundUrlPolicyModule,
@@ -33,7 +30,6 @@ import { ISSUANCE_CONFIG_REPOSITORY } from "./ports/issuance-config.repository.j
     controllers: [IssuanceConfigController],
     providers: [
         IssuanceService,
-        IssuerRegistrationCertificateLock,
         {
             provide: ISSUANCE_CONFIG_REPOSITORY,
             inject: [getRepositoryToken(IssuanceConfig)],
@@ -53,6 +49,6 @@ import { ISSUANCE_CONFIG_REPOSITORY } from "./ports/issuance-config.repository.j
             IssuanceConfig,
         ),
     ],
-    exports: [IssuanceService, IssuerRegistrationCertificateLock],
+    exports: [IssuanceService],
 })
 export class IssuanceConfigModule {}

@@ -11,7 +11,6 @@ import { BaseAsyncListComponent } from '../../../common/base-async-list.componen
 import { CredentialConfigService } from '../credential-config.service';
 import { DisplayFormValue } from '../credential-config.types';
 import { ConfigOwnershipDirective } from '../../../config-portability/config-ownership.directive';
-import { JwtService } from '../../../services/jwt.service';
 import { LoadErrorComponent } from '../../../common/load-error.component';
 
 @Component({
@@ -38,10 +37,9 @@ export class CredentialConfigListComponent extends BaseAsyncListComponent<Creden
     return this.items;
   }
 
-  displayedColumns: (keyof CredentialConfig | 'description' | 'schemaMetadata' | 'actions')[] = [
+  displayedColumns: (keyof CredentialConfig | 'description' | 'actions')[] = [
     'id',
     'description',
-    'schemaMetadata',
     'keyBinding',
     'lifeTime',
     'embeddedDisclosurePolicy',
@@ -49,16 +47,8 @@ export class CredentialConfigListComponent extends BaseAsyncListComponent<Creden
     'actions',
   ];
 
-  constructor(
-    private readonly credentialConfigService: CredentialConfigService,
-    private readonly jwtService: JwtService
-  ) {
+  constructor(private readonly credentialConfigService: CredentialConfigService) {
     super();
-  }
-
-  /** The schema pages need `registrar:manage`; without it the badge link would end in "Access denied". */
-  get canOpenSchemas(): boolean {
-    return this.jwtService.hasRole('registrar:manage');
   }
 
   protected fetchItems(): Promise<CredentialConfig[]> {
@@ -72,10 +62,5 @@ export class CredentialConfigListComponent extends BaseAsyncListComponent<Creden
       config.description ||
       'No description available'
     );
-  }
-
-  getSchemaMetadataId(config: CredentialConfig): string | null {
-    const id = (config as any)?.schemaMeta?.id;
-    return typeof id === 'string' && id.trim().length > 0 ? id.trim() : null;
   }
 }

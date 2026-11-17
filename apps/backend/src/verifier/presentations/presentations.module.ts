@@ -6,7 +6,6 @@ import { AuditLogModule } from "../../audit-log/audit-log.module.js";
 import { provideKeyChainReferenceSource } from "../../crypto/key/key-chain-reference-source.provider.js";
 import { provideTrustListReferenceSource } from "../../issuer/trust-list/trust-list-reference-source.provider.js";
 import { TrustListModule } from "../../issuer/trust-list/trustlist.module.js";
-import { RegistrarModule } from "../../registrar/registrar.module.js";
 import { provideFederationTrustAnchorReferenceSource } from "../../trust/federation-trust-anchor/adapters/federation-trust-anchor-reference-source.provider.js";
 import { FederationTrustAnchorModule } from "../../trust/federation-trust-anchor/federation-trust-anchor.module.js";
 import { TrustModule } from "../../trust/trust.module.js";
@@ -57,7 +56,6 @@ export const verifyPresentationResponseProvider: Provider = {
         TrustListModule,
         TrustModule,
         FederationTrustAnchorModule,
-        RegistrarModule,
         WebhookModule,
     ],
     controllers: [PresentationManagementController],
@@ -85,6 +83,8 @@ export const verifyPresentationResponseProvider: Provider = {
                 publicUrl: config.getOrThrow<string>("PUBLIC_URL"),
                 skipTrustAuthority:
                     config.get<boolean>("SKIP_TRUST_AUTHORITY") ?? false,
+                skipOveraskingCheck:
+                    config.get<boolean>("SKIP_OVERASKING_CHECK") ?? false,
             }),
         },
         SdjwtvcverifierService,
@@ -113,6 +113,7 @@ export const verifyPresentationResponseProvider: Provider = {
         PresentationRegistrationCertificateService,
         TrustedAuthoritiesService,
         CredentialChainValidationService,
+        PRESENTATION_SETTINGS,
     ],
 })
 export class PresentationsModule {}

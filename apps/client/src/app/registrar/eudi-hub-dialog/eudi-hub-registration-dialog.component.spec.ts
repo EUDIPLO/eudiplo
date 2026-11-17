@@ -37,7 +37,7 @@ function createDialog(
     kind: 'presentation',
     presentationConfigId: 'age',
     defaultName: 'Age check',
-    purposeEn: 'Age check',
+    purpose: [{ lang: 'en', content: 'Age check' }],
   }
 ) {
   const eudiHub = {
@@ -137,6 +137,67 @@ describe('EudiHubRegistrationDialogComponent', () => {
       privacyPolicy: 'https://example.com/privacy',
     });
     expect(dialogRef.close).toHaveBeenCalledWith({ id: 'rc-1' });
+  });
+
+  it('starts from the purpose and privacy policy kept in the configuration', async () => {
+    const { dialog, eudiHub } = createDialog({
+      kind: 'presentation',
+      presentationConfigId: 'age',
+      defaultName: 'Age check',
+      purpose: [
+        { lang: 'de-DE', content: 'Altersprüfung' },
+        { lang: 'en', content: 'Age check' },
+      ],
+      privacyPolicy: 'https://verifier.example/privacy',
+    });
+    dialog.token.setValue('abc');
+    dialog.organizationId.setValue(ORG);
+    await vi.waitFor(() => expect(dialog.loadingDetails()).toBe(false));
+
+    expect(eudiHub.organizationDetails).toHaveBeenCalled();
+    // The organization's privacy policy does not replace the kept one.
+    expect(dialog.form.getRawValue()).toMatchObject({
+      purposeDe: 'Altersprüfung',
+      purposeEn: 'Age check',
+      privacyPolicy: 'https://verifier.example/privacy',
+    });
+  });
+
+  it('starts an issuer request from the kept support URI', () => {
+    const { dialog } = createDialog({
+      kind: 'issuer',
+      defaultName: 'Issuer registration certificate',
+      supportUri: 'https://issuer.example/support',
+    });
+
+    expect(dialog.form.controls.supportUri.value).toBe('https://issuer.example/support');
+  });
+
+  it('sends kept purposes in other languages along, so renewing keeps them', async () => {
+    const { dialog, eudiHub } = createDialog({
+      kind: 'presentation',
+      presentationConfigId: 'age',
+      defaultName: 'Age check',
+      purpose: [
+        { lang: 'de', content: 'Altersprüfung' },
+        { lang: 'en', content: 'Age check' },
+        { lang: 'fr', content: "Contrôle d'âge" },
+        { lang: 'pt-BR', content: 'Verificação de idade' },
+      ],
+      privacyPolicy: 'https://verifier.example/privacy',
+    });
+    eudiHub.requestPresentationRegistrationCertificate.mockResolvedValue({ id: 'rc-1' });
+    dialog.token.setValue('abc');
+    dialog.organizationId.setValue(ORG);
+    await vi.waitFor(() => expect(dialog.loadingDetails()).toBe(false));
+
+    await dialog.submit();
+
+    expect(eudiHub.requestPresentationRegistrationCertificate.mock.lastCall?.[0].purpose).toEqual([
+      { lang: 'de', content: 'Altersprüfung' },
+      { lang: 'en', content: 'Age check' },
+      { lang: 'fr', content: "Contrôle d'âge" },
+    ]);
   });
 
   it('does not send a verifier request without a German purpose', async () => {

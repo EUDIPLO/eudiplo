@@ -299,7 +299,7 @@ describe("config upgrade", () => {
             ),
         );
         expect(result.$schema).toBe(
-            "https://eudiplo.dev/schemas/v4/PresentationConfigFile.schema.json",
+            "https://eudiplo.dev/schemas/v5/PresentationConfigFile.schema.json",
         );
         expect(result.spec).toEqual(spec);
     });
@@ -346,7 +346,7 @@ describe("config upgrade", () => {
         const result = JSON.parse(
             await readFile(`${source}.upgraded.json`, "utf8"),
         );
-        expect(result.$schema).toBe(schemaUrl("IssuanceConfig", 6));
+        expect(result.$schema).toBe(schemaUrl("IssuanceConfig", 7));
         expect(result.spec).toEqual(valid);
     });
 
@@ -576,48 +576,248 @@ describe("config upgrade", () => {
     });
     it.each([
         ["a v1 registrar configuration file", 1],
-        ["a bare registrar configuration file with a contact", undefined],
-    ])("upgrades %s to v2 with the spec unchanged", async (_name, version) => {
-        const { cwd, context } = await setup();
-        const source = join(cwd, "registrar-folder");
-        await mkdir(source, { recursive: true });
+        ["a bare registrar configuration file", undefined],
+    ])(
+        "leaves %s out of the upgraded folder with a warning",
+        async (_name, version) => {
+            const { cwd, context, output } = await setup();
+            const source = join(cwd, "registrar-folder");
+            await mkdir(source, { recursive: true });
+            await writeFile(
+                join(source, "info.json"),
+                JSON.stringify({
+                    $schema: schemaUrl("Tenant"),
+                    metadata: { generation: 1 },
+                    spec: { name: "Example" },
+                }),
+            );
+            const spec = {
+                registrarUrl: "https://registrar.example/api",
+                oidcUrl: "https://auth.example/realms/registrar",
+                clientId: "registrar-client",
+                username: "verifier",
+                password: "secret",
+            };
+            await writeFile(
+                join(source, "registrar.json"),
+                JSON.stringify(
+                    version === undefined
+                        ? spec
+                        : {
+                              $schema: `https://eudiplo.dev/schemas/v${version}/RegistrarConfigFile.schema.json`,
+                              spec,
+                          },
+                ),
+            );
+
+            expect(
+                await runCli(["config", "upgrade", source, "--check"], context),
+            ).toBe(1);
+            expect(await runCli(["config", "upgrade", source], context)).toBe(
+                0,
+            );
+            expect(output.stderr).toContain(
+                "registrar.json: warning REGISTRAR_CONFIG_REMOVED",
+            );
+            await expect(
+                readFile(join(`${source}.upgraded`, "registrar.json"), "utf8"),
+            ).rejects.toThrow("ENOENT");
+            await expect(
+                readFile(join(`${source}.upgraded`, "info.json"), "utf8"),
+            ).resolves.toContain("Example");
+        },
+    );
+    it("leaves a bare registrar.json of a tenant out when upgrading a configuration folder", async () => {
+        const { cwd, context, output } = await setup();
+        const source = join(cwd, "config");
+        const tenant = join(source, "acme");
+        await mkdir(tenant, { recursive: true });
         await writeFile(
-            join(source, "info.json"),
+            join(tenant, "info.json"),
             JSON.stringify({
                 $schema: schemaUrl("Tenant"),
                 metadata: { generation: 1 },
-                spec: { name: "Example" },
+                spec: { name: "Acme" },
             }),
         );
-        const spec: Record<string, unknown> = {
-            registrarUrl: "https://registrar.example/api",
-            oidcUrl: "https://auth.example/realms/registrar",
-            clientId: "registrar-client",
-            username: "verifier",
-            password: "secret",
-        };
-        if (version === undefined)
-            spec.relyingPartyContact = { email: "support@verifier.example" };
         await writeFile(
-            join(source, "registrar.json"),
-            JSON.stringify(
-                version === undefined
-                    ? spec
-                    : { $schema: schemaUrl("RegistrarConfig", version), spec },
-            ),
+            join(tenant, "registrar.json"),
+            JSON.stringify({ registrarUrl: "https://registrar.example/api" }),
         );
 
         expect(await runCli(["config", "upgrade", source], context)).toBe(0);
-        const result = JSON.parse(
-            await readFile(
-                join(`${source}.upgraded`, "registrar.json"),
+        expect(output.stderr).toContain(
+            `${join("acme", "registrar.json")}: warning REGISTRAR_CONFIG_REMOVED`,
+        );
+        await expect(
+            readFile(
+                join(`${source}.upgraded`, "acme", "registrar.json"),
                 "utf8",
             ),
+        ).rejects.toThrow("ENOENT");
+    });
+    it("refuses a single registrar configuration file with the reason", async () => {
+        const { cwd, context, output } = await setup();
+        const file = join(cwd, "registrar.json");
+        await writeFile(
+            file,
+            JSON.stringify({
+                $schema:
+                    "https://eudiplo.dev/schemas/v1/RegistrarConfigFile.schema.json",
+                spec: { registrarUrl: "https://registrar.example/api" },
+            }),
         );
-        expect(result.$schema).toBe(
-            "https://eudiplo.dev/schemas/v2/RegistrarConfigFile.schema.json",
+
+        expect(await runCli(["config", "upgrade", file], context)).toBe(1);
+        expect(output.stderr).toContain(
+            "no longer supports the registrar configuration",
         );
-        expect(result.spec).toEqual(spec);
+        await expect(access(`${file}.upgraded.json`)).rejects.toThrow();
+    });
+    it("drops the registrar configuration of a JSON bundle with a warning", async () => {
+        const { cwd, context, output } = await setup();
+        const tenant = {
+            $schema: schemaUrl("Tenant"),
+            metadata: { generation: 1 },
+            spec: { name: "Example" },
+        };
+        const registrar = {
+            $schema:
+                "https://eudiplo.dev/schemas/v1/RegistrarConfigFile.schema.json",
+            metadata: { generation: 1 },
+            spec: { registrarUrl: "https://registrar.example/api" },
+        };
+        const hash = (value: unknown) =>
+            createHash("sha256").update(JSON.stringify(value)).digest("hex");
+        const resource = (
+            kind: string,
+            id: string,
+            document: { $schema: string },
+            path: string,
+        ) => ({
+            kind,
+            id,
+            $schema: document.$schema,
+            path,
+            sha256: hash(document),
+            ownership: "unmanaged",
+            generation: 1,
+        });
+        const file = join(cwd, "bundle.json");
+        await writeFile(
+            file,
+            JSON.stringify({
+                manifest: {
+                    format: "eudiplo.config-bundle",
+                    formatVersion: 2,
+                    sourceVersion: "9.1.0",
+                    exportedAt: new Date(0).toISOString(),
+                    tenant: "acme",
+                    resources: [
+                        resource("Tenant", "tenant", tenant, "info.json"),
+                        resource(
+                            "RegistrarConfig",
+                            "registrar",
+                            registrar,
+                            "registrar.json",
+                        ),
+                    ],
+                    assets: [],
+                    requirements: [],
+                    warnings: [],
+                },
+                documents: [tenant, registrar],
+                assets: [],
+            }),
+        );
+
+        expect(await runCli(["config", "upgrade", file], context)).toBe(0);
+        expect(output.stderr).toContain("warning REGISTRAR_CONFIG_REMOVED");
+        const result = JSON.parse(
+            await readFile(join(cwd, "bundle.json.upgraded.json"), "utf8"),
+        );
+        expect(result.documents).toEqual([tenant]);
+        expect(
+            result.manifest.resources.map((r: { path: string }) => r.path),
+        ).toEqual(["info.json"]);
+    });
+    it("moves the purpose of a v4 presentation configuration up and warns about registrar-only fields", async () => {
+        const { cwd, context, output } = await setup();
+        const purpose = [{ lang: "en", content: "Age check" }];
+        const file = join(cwd, "age.json");
+        await writeFile(
+            file,
+            JSON.stringify({
+                $schema: schemaUrl("PresentationConfig", 4),
+                spec: {
+                    id: "age",
+                    dcql_query: {
+                        credentials: [
+                            {
+                                id: "pid",
+                                format: "dc+sd-jwt",
+                                meta: { vct_values: ["urn:eudi:pid:de:1"] },
+                            },
+                        ],
+                    },
+                    registration_cert: {
+                        id: "cert-1",
+                        body: {
+                            purpose,
+                            privacy_policy: "https://verifier.example/privacy",
+                            support_uri: "https://verifier.example/support",
+                        },
+                    },
+                },
+            }),
+        );
+
+        expect(await runCli(["config", "upgrade", file], context)).toBe(0);
+        const result = JSON.parse(
+            await readFile(join(cwd, "age.json.upgraded.json"), "utf8"),
+        );
+        expect(result.$schema).toBe(schemaUrl("PresentationConfig", 5));
+        expect(result.spec.registration_cert).toEqual({
+            purpose,
+            privacy_policy: "https://verifier.example/privacy",
+        });
+        expect(output.stderr).toContain(
+            "/spec/registration_cert/id: warning REGISTRATION_CERT_FIELD_REMOVED",
+        );
+        expect(output.stderr).toContain(
+            "/spec/registration_cert/body/support_uri: warning REGISTRATION_CERT_FIELD_REMOVED",
+        );
+        expect(output.stderr).toContain(
+            "warning REGISTRATION_CERT_NOT_REQUESTED",
+        );
+    });
+    it("warns that a v6 issuance configuration in generate mode gets no certificate", async () => {
+        const { cwd, context, output } = await setup();
+        const file = join(cwd, "issuance.json");
+        await writeFile(
+            file,
+            JSON.stringify({
+                $schema: schemaUrl("IssuanceConfig", 6),
+                spec: {
+                    authorizationServers: [{ id: "issuer", type: "built-in" }],
+                    registrationCertificate: {
+                        enabled: true,
+                        mode: "generate",
+                        renewal: "manual",
+                    },
+                },
+            }),
+        );
+
+        expect(await runCli(["config", "upgrade", file], context)).toBe(0);
+        const result = JSON.parse(
+            await readFile(join(cwd, "issuance.json.upgraded.json"), "utf8"),
+        );
+        expect(result.$schema).toBe(schemaUrl("IssuanceConfig", 7));
+        expect(result.spec.registrationCertificate).toEqual({ enabled: true });
+        expect(output.stderr).toContain(
+            "warning ISSUER_REGISTRATION_CERTIFICATE_NOT_GENERATED",
+        );
     });
     it("upgrades a v1 tenant file to v4 with the spec unchanged", async () => {
         const { cwd, context } = await setup();
@@ -811,7 +1011,7 @@ describe("config upgrade", () => {
         const result = JSON.parse(
             await readFile(`${source}.upgraded.json`, "utf8"),
         );
-        expect(result.$schema).toBe(schemaUrl("IssuanceConfig", 6));
+        expect(result.$schema).toBe(schemaUrl("IssuanceConfig", 7));
         expect(result.spec).toEqual({ authorizationServers });
     });
     it("reads a bare authorization server key chain export as KeyChain v4", async () => {

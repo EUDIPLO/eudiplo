@@ -1,55 +1,51 @@
 import { describe, expect, it } from "vitest";
 import {
-    renewsOnConfigChange,
+    deriveRegistrationCertificateMaterial,
+    isJwtActive,
     unlistedCredentialTypes,
-    usableCachedCertificate,
 } from "./issuer-registration-certificate.js";
 
 const now = () => Math.floor(Date.now() / 1000);
 const jwt = (payload: Record<string, unknown>) =>
     `e30.${Buffer.from(JSON.stringify(payload)).toString("base64url")}.sig`;
-const active = jwt({ exp: now() + 3600 });
-const expired = jwt({ exp: now() - 3600 });
 
-describe("usableCachedCertificate", () => {
-    it("serves an active certificate with the current fingerprint in every mode", () => {
-        for (const renewal of [
-            "onCredentialConfigChange",
-            "onMetadataRequest",
-            "manual",
-        ] as const) {
-            expect(
-                usableCachedCertificate(
-                    { jwt: active, fingerprint: "f" },
-                    "f",
-                    renewal,
-                ),
-            ).toBe(active);
-        }
-    });
-
-    it("serves an outdated active certificate only in manual mode", () => {
-        const cache = { jwt: active, fingerprint: "old" };
-        expect(usableCachedCertificate(cache, "new", "manual")).toBe(active);
-        expect(
-            usableCachedCertificate(cache, "new", "onMetadataRequest"),
-        ).toBeUndefined();
-        expect(
-            usableCachedCertificate(cache, "new", "onCredentialConfigChange"),
-        ).toBeUndefined();
-    });
-
-    it("never serves an expired or missing certificate, also in manual mode", () => {
-        expect(
-            usableCachedCertificate(
-                { jwt: expired, fingerprint: "f" },
-                "f",
-                "manual",
-            ),
-        ).toBeUndefined();
-        expect(usableCachedCertificate(null, "f", "manual")).toBeUndefined();
-    });
-});
+const publicUrl = "https://issuer.example";
+const configs = [
+    {
+        id: "mdl",
+        config: { format: "mso_mdoc", docType: "org.iso.18013.5.1.mDL" },
+    },
+    {
+        id: "pid",
+        config: { format: "dc+sd-jwt" },
+        vct: "urn:eudi:pid:de:1",
+        schemaMeta: { id: "https://schemas.example/pid", version: "1.0" },
+    },
+    {
+        id: "pid-copy",
+        config: { format: "dc+sd-jwt" },
+        vct: "urn:eudi:pid:de:1",
+    },
+    {
+        id: "hosted",
+        config: { format: "dc+sd-jwt" },
+        vct: { name: "Hosted" },
+    },
+    { id: "other", config: { format: "jwt_vc" }, vct: "urn:other" },
+    { id: "none", config: { format: "dc+sd-jwt" }, vct: null },
+    { id: "blank-vct", config: { format: "dc+sd-jwt" }, vct: " " },
+    { id: "blank", config: { format: "mso_mdoc", docType: " " } },
+    { id: "padded", config: { format: "dc+sd-jwt" }, vct: " urn:padded " },
+];
+const types = [
+    { format: "dc+sd-jwt", type: " urn:padded " },
+    {
+        format: "dc+sd-jwt",
+        type: "https://issuer.example/issuers/t/credentials-metadata/vct/hosted",
+    },
+    { format: "mso_mdoc", type: "org.iso.18013.5.1.mDL" },
+    { format: "dc+sd-jwt", type: "urn:eudi:pid:de:1" },
+];
 
 describe("unlistedCredentialTypes", () => {
     const material = {
@@ -120,32 +116,49 @@ describe("unlistedCredentialTypes", () => {
     });
 });
 
-describe("renewsOnConfigChange", () => {
-    it("renews generated certificates with the default renewal", () => {
-        expect(renewsOnConfigChange({ enabled: true })).toBe(true);
+describe("issuer registration certificate material", () => {
+    it("derives the sorted vct and docType values as stored, not schema metadata", () => {
         expect(
-            renewsOnConfigChange({
-                enabled: true,
-                mode: "generate",
-                renewal: "onCredentialConfigChange",
-            }),
-        ).toBe(true);
+            deriveRegistrationCertificateMaterial(configs, publicUrl, "t"),
+        ).toEqual({ providesAttestations: types });
     });
 
-    it("does not renew otherwise", () => {
-        expect(renewsOnConfigChange(undefined)).toBe(false);
-        expect(renewsOnConfigChange({ enabled: false })).toBe(false);
-        expect(renewsOnConfigChange({ enabled: true, mode: "import" })).toBe(
-            false,
-        );
-        expect(renewsOnConfigChange({ enabled: true, renewal: "manual" })).toBe(
-            false,
-        );
+    it("keeps a type listed in both formats once per format", () => {
         expect(
-            renewsOnConfigChange({
-                enabled: true,
-                renewal: "onMetadataRequest",
-            }),
-        ).toBe(false);
+            deriveRegistrationCertificateMaterial(
+                [
+                    { id: "a", config: { format: "mso_mdoc", docType: "x" } },
+                    { id: "b", config: { format: "dc+sd-jwt" }, vct: "x" },
+                    { id: "c", config: { format: "mso_mdoc", docType: "x" } },
+                ],
+                publicUrl,
+                "t",
+            ),
+        ).toEqual({
+            providesAttestations: [
+                { format: "dc+sd-jwt", type: "x" },
+                { format: "mso_mdoc", type: "x" },
+            ],
+        });
+    });
+
+    it("finds nothing without a vct or docType", () => {
+        expect(
+            deriveRegistrationCertificateMaterial(
+                configs.filter((config) =>
+                    ["other", "none", "blank-vct", "blank"].includes(config.id),
+                ),
+                publicUrl,
+                "t",
+            ),
+        ).toEqual({ providesAttestations: [] });
+    });
+
+    it("checks the validity window with clock skew", () => {
+        expect(isJwtActive(jwt({ exp: now() + 3600 }))).toBe(true);
+        expect(isJwtActive(jwt({ exp: now() - 3600 }))).toBe(false);
+        expect(isJwtActive(jwt({ exp: now() - 10 }))).toBe(true);
+        expect(isJwtActive(jwt({ nbf: now() + 3600 }))).toBe(false);
+        expect(isJwtActive("not-a-jwt")).toBe(false);
     });
 });

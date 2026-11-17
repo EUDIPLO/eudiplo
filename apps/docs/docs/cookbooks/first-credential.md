@@ -47,7 +47,7 @@ Keep KMS provider `db` and the other defaults, then choose **Create Key Chain**.
 
 - **Self-Signed Certificate** for wallet test setups that accept it, such as Paradym.
 - **External Certificate** to import a key and certificate chain issued elsewhere, such as the EU Reference Implementation's ecosystem operator. Paste the key into **External Private Key (JWK or PKCS#8 PEM)** and the chain into **Certificate Chain (PEM)**, then choose **Import Key & Certificate**.
-- **Registrar Enrollment** for the German ecosystem. It needs a saved registrar configuration under **Registrar → Registrar Config** with at least one **Relying Party Contact** value, set before the first enrollment ([Registrar](../trust/registrar.md#relying-party)), and the `registrar:manage` role.
+- For the German ecosystem, create it as **Self-Signed Certificate**, then request its certificate from the EUDI Hub on the key chain page ([EUDI Hub](../trust/eudi-hub.md#request-an-access-certificate)); this needs the `registrar:manage` role.
 
 **Checkpoint:** both key chains appear under **Keys**, each with an active key and certificate. The wizard generates their IDs; the next steps select them by description. Other provisioning options are in [Keys and certificates](../trust/keys-and-certificates.md).
 

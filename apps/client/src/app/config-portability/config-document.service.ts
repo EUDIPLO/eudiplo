@@ -29,7 +29,6 @@ const CONFIG_DOCUMENT_ROLES: Record<ConfigResourceKind, Role[]> = {
     'presentation:manage',
     'keys:manage',
   ],
-  RegistrarConfig: [...TENANT_ADMIN_ROLES, 'registrar:manage'],
   IssuanceConfig: [...TENANT_ADMIN_ROLES, 'issuance:manage'],
   CredentialConfig: [...TENANT_ADMIN_ROLES, 'issuance:manage'],
   PresentationConfig: [...TENANT_ADMIN_ROLES, 'presentation:manage'],

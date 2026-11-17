@@ -9,7 +9,6 @@ import { issuanceEditorSchemaBundle } from "../issuer/configuration/issuance/sch
 import { webhookEndpointEditorSchemaBundle } from "../issuer/configuration/webhook-endpoint/schemas/webhook-endpoint-editor-schema.bundle.js";
 import { statusListEditorSchemaBundle } from "../issuer/status-list/dto/status-list-editor-schema.bundle.js";
 import { trustListEditorSchemaBundle } from "../issuer/trust-list/schemas/trust-list-editor-schema.bundle.js";
-import { registrarEditorSchemaBundle } from "../registrar/schemas/registrar-editor-schema.bundle.js";
 import type { EditorSchemaBundle } from "../shared/common/zod/editor-schema.js";
 import { federationTrustAnchorEditorSchemaBundle } from "../trust/federation-trust-anchor/schemas/federation-trust-anchor-editor-schema.bundle.js";
 import { presentationEditorSchemaBundle } from "../verifier/presentations/schemas/presentation-editor-schema.bundle.js";
@@ -24,7 +23,6 @@ export const editorSchemaBundles: readonly EditorSchemaBundle[] = [
     kmsEditorSchemaBundle,
     certEditorSchemaBundle,
     statusListEditorSchemaBundle,
-    registrarEditorSchemaBundle,
     issuanceEditorSchemaBundle,
     credentialEditorSchemaBundle,
     presentationEditorSchemaBundle,

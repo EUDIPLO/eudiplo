@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import type { Stats } from "node:fs";
 import {
     chmod,
     lstat,
@@ -11,15 +12,14 @@ import {
     stat,
     writeFile,
 } from "node:fs/promises";
-import type { Stats } from "node:fs";
-import { dirname, isAbsolute, join, resolve } from "node:path";
 import { homedir } from "node:os";
+import { dirname, isAbsolute, join, resolve } from "node:path";
+import type { CliConfig, InstanceConfig } from "../types.js";
 import {
     assertContextName,
     assertNamespace,
     assertWorkloadReference,
 } from "./kubectl.js";
-import type { CliConfig, InstanceConfig } from "../types.js";
 import { validateHttpUrl } from "./url.js";
 
 const emptyConfig = (): CliConfig => ({ instances: {} });

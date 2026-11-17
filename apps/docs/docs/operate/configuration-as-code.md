@@ -13,7 +13,7 @@ walks through a tenant folder from creation to CI.
 ## Configuration model
 
 A tenant's configuration (credential, issuance and presentation configs, key
-chains, clients, trust lists, KMS and registrar settings, …) consists of JSON
+chains, clients, trust lists, KMS settings, …) consists of JSON
 documents with a `$schema`, optional `metadata` and the `spec`. The backend
 stores them in the database. They get there in three ways:
 
@@ -175,12 +175,17 @@ eudiplo config upgrade ./config --check                  # exit 1 if a file need
 
 The commands exit non-zero on any invalid document, which is enough for a CI
 gate. The backend runs a few checks on top that the schemas cannot express,
-such as the rule that registrar URLs have no query, fragment or credentials,
+such as the check of a presentation configuration's registration certificate,
 so an import can still fail on a folder that passed validation. Like the
 backend, the validator resolves `${VAR}` placeholders from its environment and
 fails on one without a value or default, so give the CI job a dummy value for
-each; the real secrets stay on the instance. A workflow that validates every
-tenant folder and checks for pending upgrades:
+each; the real secrets stay on the instance. A file the backend skips does not
+fail validation: a `registrar.json` left from the removed sandbox registrar
+integration prints `warning registrar.json: …` under its tenant, and the JSON
+report lists it in the tenant's `warnings[]` (`file`, `message`).
+`eudiplo config upgrade --check` counts such a file as needing an upgrade and
+exits `1` until it is deleted. A workflow
+that validates every tenant folder and checks for pending upgrades:
 
 ```yaml title=".github/workflows/config.yml"
 jobs:
