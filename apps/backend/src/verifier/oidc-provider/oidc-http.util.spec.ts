@@ -20,6 +20,21 @@ describe("clientCredentials", () => {
         );
     });
 
+    test("parses a whitespace-padded header in linear time", () => {
+        const started = performance.now();
+        expect(() =>
+            clientCredentials(`Basic\t${"\t".repeat(50_000)}\n`, {}),
+        ).toThrow(OidcError);
+        // The backtracking regex took seconds here; linear parsing takes well under one.
+        expect(performance.now() - started).toBeLessThan(1000);
+        expect(
+            clientCredentials(
+                `basic   ${Buffer.from("c:s").toString("base64")}  `,
+                {},
+            ),
+        ).toMatchObject({ clientId: "c", clientSecret: "s" });
+    });
+
     test("reads client_secret_post", () => {
         expect(
             clientCredentials(undefined, {
