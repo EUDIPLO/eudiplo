@@ -4,6 +4,7 @@ import { CRYPTO_VALIDATION_SCHEMA } from "../../crypto/key/crypto-implementation
 import { DB_VALIDATION_SCHEMA } from "../../database/database-validation.schema.js";
 import { ISSUER_VALIDATION_SCHEMA } from "../../issuer/issuer-validation.schema.js";
 import { STATUS_LIST_VALIDATION_SCHEMA } from "../../issuer/status-list/status-list-validation.schema.js";
+import { EUDI_HUB_VALIDATION_SCHEMA } from "../../registrar/eudi-hub/eudi-hub-validation.schema.js";
 import { SESSION_VALIDATION_SCHEMA } from "../../session/session-validation.schema.js";
 import { STORAGE_VALIDATION_SCHEMA } from "../../storage/storage-validation.schema.js";
 import { FEDERATION_VALIDATION_SCHEMA } from "../../trust/federation-validation.schema.js";
@@ -37,5 +38,6 @@ export const VALIDATION_SCHEMA = BASE_VALIDATION_SCHEMA.concat(
     .concat(VERIFIER_VALIDATION_SCHEMA)
     .concat(FEDERATION_VALIDATION_SCHEMA)
     .concat(WEBHOOK_VALIDATION_SCHEMA)
+    .concat(EUDI_HUB_VALIDATION_SCHEMA)
     .concat(TLS_VALIDATION_SCHEMA)
     .concat(SKIP_VALIDATION_SCHEMA);

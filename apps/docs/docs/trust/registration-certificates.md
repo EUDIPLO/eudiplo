@@ -2,7 +2,7 @@
 title: Registration Certificates
 ---
 
-A registration certificate is a JWT, issued by a registrar, that states what a relying party is registered for: a verifier the data it may request and why, an issuer the attestations it provides. EUDIPLO presents it to wallets, which can warn about or refuse requests that go beyond it; wallets do not present registration certificates. Creating certificates needs a [registrar configuration](registrar.md).
+A registration certificate is a JWT, issued by a registrar, that states what a relying party is registered for: a verifier the data it may request and why, an issuer the attestations it provides. EUDIPLO presents it to wallets, which can warn about or refuse requests that go beyond it; wallets do not present registration certificates. Creating certificates needs a [registrar configuration](registrar.md). Certificates from the German EUDI Hub are requested once from the Web Client and stored as imported certificates ([EUDI Hub](eudi-hub.md#request-a-registration-certificate)).
 
 ## Verifier registration certificate
 

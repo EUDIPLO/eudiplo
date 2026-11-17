@@ -2,6 +2,7 @@ import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { of } from 'rxjs';
 
 import { PresentationShowComponent } from './presentation-show.component';
 import { renderDownloadButton } from '../../../config-portability/config-document.testing';
@@ -39,6 +40,8 @@ describe('PresentationShowComponent loading', () => {
       { snapshot: { paramMap: { get: () => 'age-check' } } } as never,
       { open: vi.fn() } as never,
       { navigate: vi.fn() } as never,
+      {} as never,
+      {} as never,
       {} as never
     );
 
@@ -59,7 +62,9 @@ describe('PresentationShowComponent download', () => {
       {} as never,
       {} as never,
       {} as never,
-      { downloadWithFeedback } as never
+      { downloadWithFeedback } as never,
+      {} as never,
+      {} as never
     );
     component.config = { id: 'age-check' } as never;
 
@@ -213,5 +218,97 @@ describe('PresentationShowComponent registration certificate', () => {
 
     expect(reissueRequest).toHaveBeenCalledExactlyOnceWith('age-check');
     expectUnavailable(fixture, reissue, 'Reissuing the registration certificate…');
+  });
+});
+
+describe('PresentationShowComponent EUDI Hub', () => {
+  function create(roles: string[], open = vi.fn()) {
+    const getPresentationById = vi.fn().mockResolvedValue({ id: 'age-check' });
+    const snackBar = { open: vi.fn() };
+    const component = new PresentationShowComponent(
+      { getPresentationById } as never,
+      { snapshot: { paramMap: { get: () => 'age-check' } } } as never,
+      snackBar as never,
+      {} as never,
+      {} as never,
+      { open } as never,
+      { hasRole: (role: string) => roles.includes(role) } as never
+    );
+    return { component, getPresentationById, snackBar, open };
+  }
+
+  it('offers the request only with registrar:manage and presentation:manage', () => {
+    expect(
+      create(['registrar:manage', 'presentation:manage']).component.canRequestFromEudiHub
+    ).toBe(true);
+    expect(create(['registrar:manage']).component.canRequestFromEudiHub).toBe(false);
+    expect(create(['presentation:manage']).component.canRequestFromEudiHub).toBe(false);
+  });
+
+  it('opens the dialog for the configuration with its English purpose and reloads it', async () => {
+    const open = vi.fn().mockReturnValue({
+      afterClosed: () => of({ id: 'rc-1', environment: 'sandbox' }),
+    });
+    const { component, getPresentationById, snackBar } = create(
+      ['registrar:manage', 'presentation:manage'],
+      open
+    );
+    component.config = {
+      id: 'age-check',
+      description: 'Age check',
+      registration_cert: {
+        body: {
+          purpose: [
+            { lang: 'de', content: 'Alter' },
+            { lang: 'en', content: 'Age' },
+          ],
+        },
+      },
+    } as never;
+
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    component.requestFromEudiHub();
+
+    expect(confirm.mock.lastCall?.[0]).toContain(
+      'takes precedence over the current registration certificate settings'
+    );
+    confirm.mockRestore();
+    expect(open.mock.lastCall?.[1]).toMatchObject({
+      disableClose: true,
+      data: {
+        kind: 'presentation',
+        presentationConfigId: 'age-check',
+        defaultName: 'Age check',
+        purposeEn: 'Age',
+      },
+    });
+    await vi.waitFor(() => expect(getPresentationById).toHaveBeenCalledWith('age-check'));
+    expect(snackBar.open.mock.lastCall?.[0]).toContain('EUDI Hub (sandbox)');
+  });
+
+  it('does not open the dialog when replacing the certificate is declined', () => {
+    const open = vi.fn();
+    const { component } = create(['registrar:manage', 'presentation:manage'], open);
+    component.config = { id: 'age-check', registration_cert: { jwt: 'a.b.c' } } as never;
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    component.requestFromEudiHub();
+
+    expect(open).not.toHaveBeenCalled();
+    confirm.mockRestore();
+  });
+
+  it('shows an imported certificate as active before it was cached, not as pending', () => {
+    const { component } = create([]);
+    const part = (value: unknown) =>
+      btoa(JSON.stringify(value)).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
+    const exp = Math.floor(Date.now() / 1000) + 30 * 24 * 3600;
+    const jwt = `${part({ alg: 'ES256' })}.${part({ iat: 1, exp })}.c2ln`;
+    component.config = { id: 'age-check', registration_cert: { jwt } } as never;
+
+    expect(component.registrationCertStatus).toBe('active');
+    expect(component.registrationCertSource).toBe('imported');
+    expect(component.registrationCertCache?.expiresAt).toBe(exp);
   });
 });

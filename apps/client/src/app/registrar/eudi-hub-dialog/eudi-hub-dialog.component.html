@@ -1,0 +1,156 @@
+<h2 mat-dialog-title>Request Access Certificate from the EUDI Hub</h2>
+<form [formGroup]="form" (ngSubmit)="submit()" novalidate>
+  <mat-dialog-content class="content">
+    <p>
+      Sign in to the
+      <a [href]="portalUrl" target="_blank" rel="noopener noreferrer">EUDI Hub portal</a>, open your
+      browser's developer tools, select a request to <code>api.eudi-hub.gov.de</code> in the Network
+      tab and copy the value of its <code>Authorization</code> header. The token expires after a few
+      minutes. EUDIPLO uses it for this request only and does not store it.
+    </p>
+
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Access token</mat-label>
+      <textarea
+        matInput
+        formControlName="token"
+        rows="3"
+        cdkFocusInitial
+        autocomplete="off"
+        spellcheck="false"
+        class="token"
+      ></textarea>
+      <mat-hint>With or without "Bearer ".</mat-hint>
+      @if (form.controls.token.hasError('required')) {
+        <mat-error>Paste the access token from the portal.</mat-error>
+      } @else if (form.controls.token.hasError('maxlength')) {
+        <mat-error>This is too long for an access token.</mat-error>
+      } @else if (form.controls.token.hasError('pattern')) {
+        <mat-error>
+          Copy only the value of the Authorization header: the token, with or without "Bearer ".
+        </mat-error>
+      }
+    </mat-form-field>
+
+    <div class="organization">
+      @if (organizations()?.length) {
+        <mat-form-field appearance="outline" class="grow">
+          <mat-label>Organization</mat-label>
+          <mat-select formControlName="organizationId">
+            @for (organization of organizations(); track organization.id) {
+              <mat-option [value]="organization.id">{{ organization.name }}</mat-option>
+            }
+          </mat-select>
+          @if (form.controls.organizationId.hasError('required')) {
+            <mat-error>Select the organization.</mat-error>
+          }
+        </mat-form-field>
+      } @else {
+        <mat-form-field appearance="outline" class="grow">
+          <mat-label>Organization ID</mat-label>
+          <input matInput formControlName="organizationId" autocomplete="off" />
+          <mat-hint>
+            @if (organizations()?.length === 0) {
+              The token's user belongs to no organization. Enter its ID by hand.
+            } @else {
+              Load the organizations of the token, or enter the ID by hand.
+            }
+          </mat-hint>
+          @if (form.controls.organizationId.hasError('required')) {
+            <mat-error>Enter the organization ID.</mat-error>
+          } @else if (form.controls.organizationId.hasError('pattern')) {
+            <mat-error>The organization ID is a UUID.</mat-error>
+          }
+        </mat-form-field>
+      }
+      <button
+        mat-stroked-button
+        type="button"
+        (click)="loadOrganizations()"
+        [disabled]="loadingOrganizations()"
+        disabledInteractive
+      >
+        <mat-icon>sync</mat-icon>
+        {{ loadingOrganizations() ? 'Loading...' : 'Load Organizations' }}
+      </button>
+    </div>
+    @if (organizationsError(); as message) {
+      <p class="live-hint organizations-error" role="alert">
+        <mat-icon>error</mat-icon>
+        <span>{{ message }}</span>
+      </p>
+    }
+
+    <div class="environment">
+      <span id="eudi-hub-environment-label" class="environment-label">Environment</span>
+      <mat-radio-group formControlName="environment" aria-labelledby="eudi-hub-environment-label">
+        <mat-radio-button value="sandbox">Sandbox</mat-radio-button>
+        <mat-radio-button value="live">Live</mat-radio-button>
+      </mat-radio-group>
+    </div>
+    @if (form.controls.environment.value === 'live') {
+      <p class="live-hint" role="note">
+        <mat-icon>info</mat-icon>
+        <span>Live issues a production access certificate that wallets accept.</span>
+      </p>
+    }
+
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Support URI</mat-label>
+      <input
+        matInput
+        formControlName="supportUri"
+        type="url"
+        placeholder="https://example.com/support"
+      />
+      <mat-hint>Where people can reach your organization about this certificate.</mat-hint>
+      @if (form.controls.supportUri.hasError('required')) {
+        <mat-error>Enter a support URI.</mat-error>
+      } @else if (form.controls.supportUri.hasError('maxlength')) {
+        <mat-error>Use at most 2048 characters.</mat-error>
+      } @else if (form.controls.supportUri.hasError('pattern')) {
+        <mat-error>Enter an http or https URL.</mat-error>
+      }
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Certificate name</mat-label>
+      <input matInput formControlName="name" maxlength="200" [placeholder]="defaultName" />
+      <mat-hint>Shown in the portal. Empty uses {{ defaultName }}.</mat-hint>
+    </mat-form-field>
+
+    @if (error(); as message) {
+      <p class="error" role="alert">
+        <mat-icon>error</mat-icon>
+        <span>{{ message }}</span>
+      </p>
+    }
+  </mat-dialog-content>
+  <mat-dialog-actions align="end">
+    <button
+      mat-button
+      type="button"
+      (click)="cancel()"
+      [disabled]="requesting()"
+      disabledInteractive
+    >
+      Cancel
+    </button>
+    <button
+      mat-flat-button
+      color="primary"
+      type="submit"
+      [disabled]="requesting()"
+      disabledInteractive
+    >
+      <mat-icon>verified</mat-icon>
+      {{
+        requesting()
+          ? 'Requesting...'
+          : form.controls.environment.value === 'live'
+            ? 'Request Live Certificate'
+            : 'Request Certificate'
+      }}
+    </button>
+  </mat-dialog-actions>
+</form>

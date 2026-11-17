@@ -405,3 +405,10 @@ mat-chip {
   font-size: 13px;
   margin: 12px 0 0;
 }
+
+// Copy PEM, the enrollment actions and the registrar link share one row; on a
+// narrow card they wrap instead of overflowing it.
+.cert-actions {
+  flex-wrap: wrap;
+  row-gap: 8px;
+}

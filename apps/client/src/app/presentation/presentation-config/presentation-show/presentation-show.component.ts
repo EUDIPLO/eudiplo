@@ -26,6 +26,13 @@ import { ConfigOwnershipNoticeComponent } from '../../../config-portability/conf
 import { getApiErrorMessage } from '../../../utils/error-message';
 import { openErrorSnackBar } from '../../../utils/error-snackbar';
 import { LoadErrorComponent } from '../../../common/load-error.component';
+import { MatDialog } from '@angular/material/dialog';
+import { JwtService } from '../../../services/jwt.service';
+import {
+  EudiHubRegistrationDialogComponent,
+  type EudiHubRegistrationDialogData,
+} from '../../../registrar/eudi-hub-dialog/eudi-hub-registration-dialog.component';
+import type { EudiHubRegistrationCertificate } from '../../../registrar/eudi-hub.service';
 
 @Component({
   selector: 'app-presentation-show',
@@ -67,8 +74,67 @@ export class PresentationShowComponent implements OnInit {
     private readonly route: ActivatedRoute,
     private readonly snackBar: MatSnackBar,
     private readonly router: Router,
-    private readonly configDocuments: ConfigDocumentService
+    private readonly configDocuments: ConfigDocumentService,
+    private readonly dialog: MatDialog,
+    private readonly jwtService: JwtService
   ) {}
+
+  /** Requesting a registration certificate from the EUDI Hub needs both roles. */
+  get canRequestFromEudiHub(): boolean {
+    return (
+      this.jwtService.hasRole('registrar:manage') && this.jwtService.hasRole('presentation:manage')
+    );
+  }
+
+  /**
+   * Opens the EUDI Hub dialog, which registers the DCQL query, requests a
+   * registration certificate and stores it in this configuration.
+   */
+  requestFromEudiHub(): void {
+    const config = this.config;
+    if (!config) return;
+    if (
+      config.registration_cert &&
+      !confirm(
+        'This stores a registration certificate from the EUDI Hub in this configuration; it takes precedence over the current registration certificate settings, which are kept. It is not reissued automatically; request a new one before it expires and after the DCQL query changes.\n\nRequest a registration certificate from the EUDI Hub?'
+      )
+    ) {
+      return;
+    }
+    const purposeEn = (
+      config.registration_cert?.body as
+        { purpose?: { lang?: string; content?: string }[] } | undefined
+    )?.purpose?.find((entry) => entry.lang?.startsWith('en'))?.content;
+    this.dialog
+      .open<
+        EudiHubRegistrationDialogComponent,
+        EudiHubRegistrationDialogData,
+        EudiHubRegistrationCertificate | undefined
+      >(EudiHubRegistrationDialogComponent, {
+        data: {
+          kind: 'presentation',
+          presentationConfigId: config.id,
+          defaultName: config.description?.trim() || config.id,
+          purposeEn,
+        },
+        width: '720px',
+        maxWidth: '95vw',
+        // Escape or a backdrop click must not drop a request that is still running.
+        disableClose: true,
+      })
+      .afterClosed()
+      .subscribe((certificate) => {
+        if (certificate) {
+          this.snackBar.open(
+            `Registration certificate from the EUDI Hub (${certificate.environment}) stored`,
+            'Close',
+            { duration: 4000 }
+          );
+        }
+        // A failed request may still have stored a certificate.
+        void this.loadPresentation();
+      });
+  }
 
   ngOnInit(): void {
     this.loadPresentation();
@@ -101,11 +167,15 @@ export class PresentationShowComponent implements OnInit {
   }
 
   get registrationCertStatus(): RegistrationCertStatus {
-    return getRegistrationCertStatus(this.config);
+    if (!this.config) return 'none';
+    return getRegistrationCertStatus({
+      registration_cert: this.config.registration_cert,
+      registrationCertCache: this.registrationCertCache as never,
+    });
   }
 
   get registrationCertExpiresIn(): string | null {
-    return formatRegistrationCertExpiresIn(this.config?.registrationCertCache as any);
+    return formatRegistrationCertExpiresIn(this.registrationCertCache);
   }
 
   get registrationCertCache(): {
@@ -114,7 +184,18 @@ export class PresentationShowComponent implements OnInit {
     issuedAt?: number;
     expiresAt?: number;
   } | null {
-    return (this.config?.registrationCertCache as any) ?? null;
+    const cache = (this.config?.registrationCertCache as any) ?? null;
+    if (cache) return cache;
+    // An imported JWT is cached in the background after it was saved, for
+    // example from the EUDI Hub; until then its own times are shown.
+    const jwt = this.config?.registration_cert?.jwt;
+    if (typeof jwt !== 'string' || jwt.length === 0) return null;
+    try {
+      const { iat, exp } = decodeJwt(jwt);
+      return { jwt, source: 'imported', issuedAt: iat, expiresAt: exp };
+    } catch {
+      return { jwt, source: 'imported' };
+    }
   }
 
   get registrationCertJwt(): string | null {

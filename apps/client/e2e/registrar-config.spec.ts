@@ -392,7 +392,7 @@ test('links to the registrar configuration instead of the enrollment without one
   expect((await configRead).status()).toBe(404);
   await expect(page.getByRole('button', { name: 'Copy PEM' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Enroll with Registrar' })).toHaveCount(0);
-  await page.getByRole('link', { name: 'Configure the registrar to enroll this key' }).click();
+  await page.getByRole('link', { name: 'Or configure a registrar to enroll this key' }).click();
   await expect(page.getByRole('heading', { name: 'Registrar Configuration' })).toBeVisible();
 });
 
