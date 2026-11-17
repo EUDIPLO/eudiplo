@@ -941,6 +941,12 @@ export const AuditLogResponseDtoSchema = {
                 'webhook_endpoint_created',
                 'webhook_endpoint_updated',
                 'webhook_endpoint_deleted',
+                'oidc_client_created',
+                'oidc_client_updated',
+                'oidc_client_deleted',
+                'oidc_client_secret_added',
+                'oidc_client_secret_updated',
+                'oidc_client_secret_deleted',
                 'attribute_provider_created',
                 'attribute_provider_updated',
                 'attribute_provider_deleted',
@@ -13915,6 +13921,593 @@ export const PresentationRequestSchema = {
         'requestId'
     ],
     additionalProperties: false
+} as const;
+
+export const OidcClientScopeDtoSchema = {
+    type: 'object',
+    properties: {
+        scope: {
+            type: 'string',
+            description: 'Scope the client requests next to openid'
+        },
+        presentationConfigId: {
+            type: 'string',
+            description: 'Presentation config behind the scope'
+        }
+    },
+    required: [
+        'scope',
+        'presentationConfigId'
+    ]
+} as const;
+
+export const OidcClientSecretDtoSchema = {
+    type: 'object',
+    properties: {
+        id: {
+            type: 'string'
+        },
+        createdAt: {
+            type: 'string',
+            format: 'date-time'
+        },
+        expiresAt: {
+            type: [
+                'string',
+                'null'
+            ],
+            format: 'date-time'
+        },
+        lastUsedAt: {
+            type: [
+                'string',
+                'null'
+            ],
+            format: 'date-time',
+            description: 'Last successful use, accurate to five minutes'
+        }
+    },
+    required: [
+        'id',
+        'createdAt'
+    ]
+} as const;
+
+export const OidcClientResponseDtoSchema = {
+    type: 'object',
+    properties: {
+        id: {
+            type: 'string',
+            description: 'The client_id'
+        },
+        name: {
+            type: 'string'
+        },
+        redirectUris: {
+            type: 'array',
+            items: {
+                type: 'string'
+            }
+        },
+        profile: {
+            enum: [
+                'secure',
+                'basic'
+            ],
+            type: 'string'
+        },
+        scopes: {
+            type: 'array',
+            items: {
+                $ref: '#/components/schemas/OidcClientScopeDto'
+            }
+        },
+        secrets: {
+            type: 'array',
+            items: {
+                $ref: '#/components/schemas/OidcClientSecretDto'
+            }
+        },
+        issuer: {
+            type: 'string',
+            description: 'Issuer of the tenant\'s OpenID Provider; discovery is at <issuer>/.well-known/openid-configuration'
+        },
+        createdAt: {
+            type: 'string',
+            format: 'date-time'
+        },
+        updatedAt: {
+            type: 'string',
+            format: 'date-time'
+        }
+    },
+    required: [
+        'id',
+        'name',
+        'redirectUris',
+        'profile',
+        'scopes',
+        'secrets',
+        'issuer'
+    ]
+} as const;
+
+export const CreateOidcClientDtoSchema = {
+    type: 'object',
+    properties: {
+        name: {
+            type: 'string',
+            minLength: 1,
+            maxLength: 200,
+            description: 'Display name of the client.'
+        },
+        redirectUris: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 20,
+            items: {
+                type: 'string',
+                minLength: 1
+            },
+            description: 'Redirect URIs, matched exactly. HTTPS is required; HTTP only for localhost.'
+        },
+        profile: {
+            type: 'string',
+            default: 'secure',
+            enum: [
+                'secure',
+                'basic'
+            ],
+            description: '`secure` requires a pushed authorization request (PAR); `basic` also accepts the parameters at the authorization endpoint directly.'
+        },
+        scopes: {
+            type: 'array',
+            default: [],
+            maxItems: 20,
+            items: {
+                type: 'object',
+                properties: {
+                    scope: {
+                        type: 'string',
+                        minLength: 1,
+                        description: 'Scope the client requests next to `openid`. Letters, digits and `_.:-`, at most 64 characters; `openid` is reserved.'
+                    },
+                    presentationConfigId: {
+                        type: 'string',
+                        minLength: 1,
+                        description: 'Presentation config that verifies a sign-in with this scope. It must not define transaction data.'
+                    }
+                },
+                required: [
+                    'scope',
+                    'presentationConfigId'
+                ],
+                additionalProperties: false,
+                description: 'A scope of the client and the presentation config behind it.'
+            },
+            description: 'Scopes the client may request, each with one presentation config.'
+        }
+    },
+    required: [
+        'name',
+        'redirectUris'
+    ],
+    description: 'Payload for creating an OpenID Connect client.',
+    additionalProperties: false
+} as const;
+
+export const CreatedOidcClientResponseDtoSchema = {
+    type: 'object',
+    properties: {
+        id: {
+            type: 'string',
+            description: 'The client_id'
+        },
+        name: {
+            type: 'string'
+        },
+        redirectUris: {
+            type: 'array',
+            items: {
+                type: 'string'
+            }
+        },
+        profile: {
+            enum: [
+                'secure',
+                'basic'
+            ],
+            type: 'string'
+        },
+        scopes: {
+            type: 'array',
+            items: {
+                $ref: '#/components/schemas/OidcClientScopeDto'
+            }
+        },
+        secrets: {
+            type: 'array',
+            items: {
+                $ref: '#/components/schemas/OidcClientSecretDto'
+            }
+        },
+        issuer: {
+            type: 'string',
+            description: 'Issuer of the tenant\'s OpenID Provider; discovery is at <issuer>/.well-known/openid-configuration'
+        },
+        createdAt: {
+            type: 'string',
+            format: 'date-time'
+        },
+        updatedAt: {
+            type: 'string',
+            format: 'date-time'
+        },
+        clientSecret: {
+            type: 'string',
+            description: 'The client secret. It is returned only now and stored as a hash.'
+        }
+    },
+    required: [
+        'id',
+        'name',
+        'redirectUris',
+        'profile',
+        'scopes',
+        'secrets',
+        'issuer',
+        'clientSecret'
+    ]
+} as const;
+
+export const UpdateOidcClientDtoSchema = {
+    type: 'object',
+    properties: {
+        name: {
+            type: 'string',
+            minLength: 1,
+            maxLength: 200,
+            description: 'Display name of the client.'
+        },
+        redirectUris: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 20,
+            items: {
+                type: 'string',
+                minLength: 1
+            },
+            description: 'Redirect URIs, matched exactly. HTTPS is required; HTTP only for localhost.'
+        },
+        profile: {
+            type: 'string',
+            enum: [
+                'secure',
+                'basic'
+            ],
+            description: '`secure` requires a pushed authorization request (PAR); `basic` also accepts the parameters at the authorization endpoint directly.'
+        },
+        scopes: {
+            type: 'array',
+            maxItems: 20,
+            items: {
+                type: 'object',
+                properties: {
+                    scope: {
+                        type: 'string',
+                        minLength: 1,
+                        description: 'Scope the client requests next to `openid`. Letters, digits and `_.:-`, at most 64 characters; `openid` is reserved.'
+                    },
+                    presentationConfigId: {
+                        type: 'string',
+                        minLength: 1,
+                        description: 'Presentation config that verifies a sign-in with this scope. It must not define transaction data.'
+                    }
+                },
+                required: [
+                    'scope',
+                    'presentationConfigId'
+                ],
+                additionalProperties: false,
+                description: 'A scope of the client and the presentation config behind it.'
+            },
+            description: 'Scopes the client may request, each with one presentation config.'
+        }
+    },
+    description: 'Payload for changing an OpenID Connect client. Scopes are replaced as a whole.',
+    additionalProperties: false
+} as const;
+
+export const CreatedOidcClientSecretResponseDtoSchema = {
+    type: 'object',
+    properties: {
+        id: {
+            type: 'string'
+        },
+        createdAt: {
+            type: 'string',
+            format: 'date-time'
+        },
+        expiresAt: {
+            type: [
+                'string',
+                'null'
+            ],
+            format: 'date-time'
+        },
+        lastUsedAt: {
+            type: [
+                'string',
+                'null'
+            ],
+            format: 'date-time',
+            description: 'Last successful use, accurate to five minutes'
+        },
+        clientSecret: {
+            type: 'string',
+            description: 'The client secret. It is returned only now and stored as a hash.'
+        }
+    },
+    required: [
+        'id',
+        'createdAt',
+        'clientSecret'
+    ]
+} as const;
+
+export const UpdateOidcClientSecretDtoSchema = {
+    type: 'object',
+    properties: {
+        expiresAt: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date-time',
+                    pattern: '^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            description: 'Moment from which the secret is refused, or null to keep it valid.'
+        }
+    },
+    required: [
+        'expiresAt'
+    ],
+    description: 'Payload for changing a client secret.',
+    additionalProperties: false
+} as const;
+
+export const OidcPushedAuthorizationRequestDtoSchema = {
+    type: 'object',
+    properties: {
+        response_type: {
+            type: 'string',
+            description: 'Must be `code`.'
+        },
+        client_id: {
+            type: 'string',
+            description: 'The client_id, with client_secret_post.'
+        },
+        redirect_uri: {
+            type: 'string',
+            description: 'A registered redirect URI.'
+        },
+        scope: {
+            type: 'string',
+            description: '`openid` and exactly one scope of the client.'
+        },
+        state: {
+            type: 'string',
+            description: 'Opaque value returned to the client.'
+        },
+        nonce: {
+            type: 'string',
+            description: 'Value returned in the ID token.'
+        },
+        code_challenge: {
+            type: 'string',
+            description: 'PKCE code challenge (S256).'
+        },
+        code_challenge_method: {
+            type: 'string',
+            description: 'Must be `S256`.'
+        },
+        response_mode: {
+            type: 'string',
+            description: 'Only `query`.'
+        },
+        prompt: {
+            type: 'string',
+            description: '`login`, `consent` and `select_account` are always met; `none` fails with `login_required`.'
+        },
+        acr_values: {
+            type: 'string',
+            description: 'Name only the same-device value to accept only a same-device sign-in.'
+        },
+        request: {
+            type: 'string',
+            description: 'Request objects are not supported.'
+        },
+        request_uri: {
+            type: 'string',
+            description: 'The request_uri from the pushed request.'
+        },
+        client_secret: {
+            type: 'string',
+            description: 'The client secret, with client_secret_post.'
+        }
+    }
+} as const;
+
+export const OidcPushedAuthorizationResponseDtoSchema = {
+    type: 'object',
+    properties: {
+        request_uri: {
+            type: 'string'
+        },
+        expires_in: {
+            type: 'number'
+        }
+    },
+    required: [
+        'request_uri',
+        'expires_in'
+    ]
+} as const;
+
+export const OidcErrorResponseDtoSchema = {
+    type: 'object',
+    properties: {
+        error: {
+            type: 'string'
+        },
+        error_description: {
+            type: 'string'
+        }
+    },
+    required: [
+        'error'
+    ]
+} as const;
+
+export const OidcAuthorizationRequestDtoSchema = {
+    type: 'object',
+    properties: {
+        response_type: {
+            description: 'Must be `code`.',
+            type: 'string'
+        },
+        client_id: {
+            description: 'The client_id.',
+            type: 'string'
+        },
+        redirect_uri: {
+            description: 'A registered redirect URI.',
+            type: 'string'
+        },
+        scope: {
+            description: '`openid` and exactly one scope of the client.',
+            type: 'string'
+        },
+        state: {
+            description: 'Opaque value returned to the client.',
+            type: 'string'
+        },
+        nonce: {
+            description: 'Value returned in the ID token.',
+            type: 'string'
+        },
+        code_challenge: {
+            description: 'PKCE code challenge (S256).',
+            type: 'string'
+        },
+        code_challenge_method: {
+            description: 'Must be `S256`.',
+            type: 'string'
+        },
+        response_mode: {
+            description: 'Only `query`.',
+            type: 'string'
+        },
+        prompt: {
+            description: '`login`, `consent` and `select_account` are always met; `none` fails with `login_required`.',
+            type: 'string'
+        },
+        acr_values: {
+            description: 'Name only the same-device value to accept only a same-device sign-in.',
+            type: 'string'
+        },
+        request: {
+            description: 'Request objects are not supported.',
+            type: 'string'
+        },
+        request_uri: {
+            description: 'The request_uri from the pushed request.',
+            type: 'string'
+        }
+    }
+} as const;
+
+export const OidcSignInStatusDtoSchema = {
+    type: 'object',
+    properties: {
+        state: {
+            enum: [
+                'waiting',
+                'ready'
+            ],
+            type: 'string',
+            description: '`ready`: continue to the completion endpoint'
+        }
+    },
+    required: [
+        'state'
+    ]
+} as const;
+
+export const OidcTokenRequestDtoSchema = {
+    type: 'object',
+    properties: {
+        client_id: {
+            type: 'string',
+            description: 'The client_id, with client_secret_post.'
+        },
+        client_secret: {
+            type: 'string',
+            description: 'The client secret, with client_secret_post.'
+        },
+        grant_type: {
+            type: 'string',
+            description: 'Must be `authorization_code`.'
+        },
+        code: {
+            type: 'string',
+            description: 'The authorization code.'
+        },
+        redirect_uri: {
+            type: 'string',
+            description: 'The redirect URI of the authorization request.'
+        },
+        code_verifier: {
+            type: 'string',
+            description: 'The PKCE code verifier.'
+        }
+    }
+} as const;
+
+export const OidcTokenResponseDtoSchema = {
+    type: 'object',
+    properties: {
+        access_token: {
+            type: 'string',
+            description: 'Opaque; no endpoint accepts it'
+        },
+        token_type: {
+            enum: [
+                'Bearer'
+            ],
+            type: 'string'
+        },
+        expires_in: {
+            type: 'number'
+        },
+        id_token: {
+            type: 'string',
+            description: 'Signed ID token with the verified claims under `credentials`'
+        },
+        scope: {
+            type: 'string'
+        }
+    },
+    required: [
+        'access_token',
+        'token_type',
+        'expires_in',
+        'id_token',
+        'scope'
+    ]
 } as const;
 
 export const FileUploadDtoSchema = {

@@ -62,6 +62,7 @@ const sidebars: SidebarsConfig = {
         'presentation/dcql',
         'presentation/transaction-data',
         'presentation/receive-results',
+        'presentation/openid-connect',
       ],
     },
     {
