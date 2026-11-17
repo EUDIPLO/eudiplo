@@ -28,6 +28,7 @@ const sidebars: SidebarsConfig = {
         },
         'cookbooks/integrate-backend',
         'cookbooks/issue-after-login',
+        'cookbooks/sign-in-with-wallet',
         'cookbooks/revocable-credentials',
         'cookbooks/trusted-issuers',
         'cookbooks/production-vm',
@@ -62,6 +63,7 @@ const sidebars: SidebarsConfig = {
         'presentation/dcql',
         'presentation/transaction-data',
         'presentation/receive-results',
+        'presentation/openid-connect',
       ],
     },
     {

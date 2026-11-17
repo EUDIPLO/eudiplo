@@ -90,7 +90,7 @@ export class AdminActivityLogsComponent implements OnInit {
     let filtered = this.activityLogs;
 
     if (this.selectedObjectType) {
-      filtered = filtered.filter((log) => log.actionType?.includes(this.selectedObjectType!));
+      filtered = filtered.filter((log) => objectTypeOf(log.actionType) === this.selectedObjectType);
     }
 
     this.filteredLogs = filtered;
@@ -103,13 +103,9 @@ export class AdminActivityLogsComponent implements OnInit {
     const objectTypes = new Set<string>();
 
     for (const log of this.activityLogs) {
-      if (log.actionType) {
-        const match = log.actionType.match(
-          /^(.+?)(?:_created|_updated|_deleted|_reset|_cancelled)$/
-        );
-        if (match) {
-          objectTypes.add(match[1]);
-        }
+      const objectType = objectTypeOf(log.actionType);
+      if (objectType) {
+        objectTypes.add(objectType);
       }
     }
 
@@ -122,6 +118,8 @@ export class AdminActivityLogsComponent implements OnInit {
       status_list_config: 'Status List Config',
       webhook_endpoint: 'Webhook Endpoint',
       federation_trust_anchor: 'Federation Trust Anchor',
+      oidc_client: 'OpenID Connect Client',
+      oidc_client_secret: 'OpenID Connect Client Secret',
       session: 'Session',
     };
 
@@ -158,6 +156,12 @@ export class AdminActivityLogsComponent implements OnInit {
       webhook_endpoint_created: 'Webhook Endpoint Created',
       webhook_endpoint_updated: 'Webhook Endpoint Updated',
       webhook_endpoint_deleted: 'Webhook Endpoint Deleted',
+      oidc_client_created: 'OpenID Connect Client Created',
+      oidc_client_updated: 'OpenID Connect Client Updated',
+      oidc_client_deleted: 'OpenID Connect Client Deleted',
+      oidc_client_secret_added: 'OpenID Connect Client Secret Added',
+      oidc_client_secret_updated: 'OpenID Connect Client Secret Updated',
+      oidc_client_secret_deleted: 'OpenID Connect Client Secret Deleted',
       federation_trust_anchor_created: 'Federation Trust Anchor Created',
       federation_trust_anchor_updated: 'Federation Trust Anchor Updated',
       federation_trust_anchor_deleted: 'Federation Trust Anchor Deleted',
@@ -186,4 +190,13 @@ export class AdminActivityLogsComponent implements OnInit {
     this.pageIndex = 0;
     this.loadActivityLogs();
   }
+}
+
+/**
+ * The object an action is about, such as `oidc_client` for
+ * `oidc_client_created`. Exact, so `oidc_client` does not also match
+ * `oidc_client_secret_added`.
+ */
+function objectTypeOf(actionType: string | undefined): string | undefined {
+  return actionType?.match(/^(.+?)(?:_created|_updated|_deleted|_reset|_cancelled|_added)$/)?.[1];
 }

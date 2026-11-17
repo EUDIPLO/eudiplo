@@ -5,6 +5,7 @@ import { RegistrarModule } from "../registrar/registrar.module.js";
 import { SessionModule } from "../session/session.module.js";
 import { Iso18013Module } from "./iso18013/iso18013.module.js";
 import { Oid4vpModule } from "./oid4vp/oid4vp.module.js";
+import { OidcProviderModule } from "./oidc-provider/oidc-provider.module.js";
 import { PresentationsModule } from "./presentations/presentations.module.js";
 import { VerifierOfferController } from "./verifier-offer/verifier-offer.controller.js";
 
@@ -17,6 +18,7 @@ import { VerifierOfferController } from "./verifier-offer/verifier-offer.control
         PresentationsModule,
         Oid4vpModule,
         Iso18013Module,
+        OidcProviderModule,
     ],
     controllers: [VerifierOfferController],
 })

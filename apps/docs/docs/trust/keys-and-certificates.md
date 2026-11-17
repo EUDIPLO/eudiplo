@@ -11,7 +11,7 @@ A key chain is a signing key together with its certificate chain. Each tenant ne
 | `usageType`   | Signs                                                                                          | Web Client option                 |
 | ------------- | ---------------------------------------------------------------------------------------------- | --------------------------------- |
 | `access`      | Presentation requests (it determines the `client_id`), signed issuer metadata, ISO 18013-7 `readerAuth` | Access Certificate                |
-| `authorizationServer` | The access tokens of EUDIPLO's [authorization servers](../issuance/authorization-servers.md) ([details](#authorization-server-key-chain)) | Authorization Server              |
+| `authorizationServer` | The access tokens of EUDIPLO's [authorization servers](../issuance/authorization-servers.md) and the ID tokens of the [OpenID Provider](../presentation/openid-connect.md) ([details](#authorization-server-key-chain)) | Authorization Server              |
 | `attestation` | Issued credentials (SD-JWT VC and mDOC)                                                        | Credential Signing (Attestation)  |
 | `statusList`  | Status lists for [revocation](../issuance/revocation.md)                                       | Status List Signing               |
 | `trustList`   | [Trust lists](trust-lists.md) you publish                                                      | Trust List Signing                |
@@ -114,7 +114,7 @@ Rotating a standalone or imported key chain replaces its certificate with a self
 
 ## Authorization server key chain
 
-The hosted [authorization servers](../issuance/authorization-servers.md) (built-in, chained and OID4VP) sign their access tokens only with a key chain of usage type `authorizationServer`, never with the access certificate or a credential signing key. Only EUDIPLO verifies these tokens, with the keys in the authorization server's JWKS (`/.well-known/jwks.json/issuers/{tenant}` for the built-in server), so the key chain needs no certificate from a CA.
+The hosted [authorization servers](../issuance/authorization-servers.md) (built-in, chained and OID4VP) sign their access tokens only with a key chain of usage type `authorizationServer`, never with the access certificate or a credential signing key. Only EUDIPLO verifies these tokens, with the keys in the authorization server's JWKS (`/.well-known/jwks.json/issuers/{tenant}` for the built-in server), so the key chain needs no certificate from a CA. The tenant's [OpenID Provider](../presentation/openid-connect.md) signs its ID tokens with the tenant's authorization server key chain too; relying parties verify them with `/verifiers/{tenant}/oidc/jwks`, so a rotation reaches them through that JWKS.
 
 An authorization server uses, in this order:
 

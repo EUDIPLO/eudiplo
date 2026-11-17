@@ -69,6 +69,8 @@ export const GLOBAL_PREFIX_EXCLUSIONS: {
         path: "presentations/:sessionId/oid4vp/{*path}",
         method: RequestMethod.ALL,
     },
+    // OpenID Provider (sign-in with a presentation)
+    { path: "verifiers/:tenantId/oidc/{*path}", method: RequestMethod.ALL },
     // ISO 18013-7 Annex C Protocol (org-iso-mdoc via DC API)
     {
         path: "presentations/:walletNonce/iso-18013-7",

@@ -472,7 +472,7 @@ export type UpdateDefaultAccessKeyChainDto = {
 export type AuditLogResponseDto = {
     id: string;
     tenantId: string;
-    actionType: 'tenant_created' | 'tenant_updated' | 'tenant_deleted' | 'presentation_config_created' | 'presentation_config_updated' | 'presentation_config_deleted' | 'issuance_config_updated' | 'credential_config_created' | 'credential_config_updated' | 'credential_config_deleted' | 'status_list_config_updated' | 'status_list_config_reset' | 'webhook_endpoint_created' | 'webhook_endpoint_updated' | 'webhook_endpoint_deleted' | 'attribute_provider_created' | 'attribute_provider_updated' | 'attribute_provider_deleted' | 'federation_trust_anchor_created' | 'federation_trust_anchor_updated' | 'federation_trust_anchor_deleted' | 'config_bundle_exported' | 'config_bundle_imported' | 'config_client_secret_generated' | 'config_resource_detached' | 'config_resource_reattached' | 'config_resource_exported' | 'session_cancelled';
+    actionType: 'tenant_created' | 'tenant_updated' | 'tenant_deleted' | 'presentation_config_created' | 'presentation_config_updated' | 'presentation_config_deleted' | 'issuance_config_updated' | 'credential_config_created' | 'credential_config_updated' | 'credential_config_deleted' | 'status_list_config_updated' | 'status_list_config_reset' | 'webhook_endpoint_created' | 'webhook_endpoint_updated' | 'webhook_endpoint_deleted' | 'oidc_client_created' | 'oidc_client_updated' | 'oidc_client_deleted' | 'oidc_client_secret_added' | 'oidc_client_secret_updated' | 'oidc_client_secret_deleted' | 'attribute_provider_created' | 'attribute_provider_updated' | 'attribute_provider_deleted' | 'federation_trust_anchor_created' | 'federation_trust_anchor_updated' | 'federation_trust_anchor_deleted' | 'config_bundle_exported' | 'config_bundle_imported' | 'config_client_secret_generated' | 'config_resource_detached' | 'config_resource_reattached' | 'config_resource_exported' | 'session_cancelled';
     actorType: 'user' | 'client' | 'system';
     actorId?: string;
     actorDisplay?: string;
@@ -4228,7 +4228,7 @@ export type FederationTrustAnchorInUseDto = {
 
 export type VerificationProvenanceDto = {
     /**
-     * Matched trusted entity ID, or the issuance certificate subject.
+     * Name of the matched trust list entry, else the issuance certificate subject; under OpenID Federation the issuer's entity ID.
      */
     matchedIssuer?: string;
     /**
@@ -4236,7 +4236,7 @@ export type VerificationProvenanceDto = {
      */
     issuanceThumbprint?: string;
     /**
-     * How the chain matched a trusted entity, e.g. `ca` or `leaf-pinned`.
+     * How the chain matched a trusted entity: `ca`, `leaf-pinned` or `pathEnd-pinned`, or `federation` for an OpenID Federation issuer.
      */
     matchMode?: string;
     /**
@@ -6605,6 +6605,386 @@ export type PresentationRequest = {
      * Stored in plaintext and kept on anonymization: never put personal data here.
      */
     reference?: string;
+};
+
+export type OidcClientScopeDto = {
+    /**
+     * Scope the client requests next to openid
+     */
+    scope: string;
+    /**
+     * Presentation config behind the scope
+     */
+    presentationConfigId: string;
+};
+
+export type OidcClientSecretDto = {
+    id: string;
+    createdAt: string;
+    expiresAt?: string | null;
+    /**
+     * Last successful use, accurate to five minutes
+     */
+    lastUsedAt?: string | null;
+};
+
+export type OidcSubjectClaimDto = {
+    /**
+     * Credential query (DCQL) ID
+     */
+    credentialId: string;
+    /**
+     * Dot-separated path to the claim
+     */
+    claim: string;
+};
+
+export type OidcClientResponseDto = {
+    /**
+     * The client_id
+     */
+    id: string;
+    name: string;
+    redirectUris: Array<string>;
+    profile: 'secure' | 'basic';
+    scopes: Array<OidcClientScopeDto>;
+    secrets: Array<OidcClientSecretDto>;
+    /**
+     * Claim whose hash becomes `sub`; null for a new `sub` per sign-in
+     */
+    subject?: OidcSubjectClaimDto | null;
+    /**
+     * Credential query whose claims are also at the ID token's top level
+     */
+    claimsFrom?: string | null;
+    /**
+     * Issuer of the tenant's OpenID Provider; discovery is at <issuer>/.well-known/openid-configuration
+     */
+    issuer: string;
+    createdAt?: string;
+    updatedAt?: string;
+};
+
+/**
+ * Payload for creating an OpenID Connect client.
+ */
+export type CreateOidcClientDto = {
+    /**
+     * Display name of the client.
+     */
+    name: string;
+    /**
+     * Redirect URIs, matched exactly. HTTPS is required; HTTP only for localhost.
+     */
+    redirectUris: Array<string>;
+    /**
+     * `secure` requires a pushed authorization request (PAR); `basic` also accepts the parameters at the authorization endpoint directly.
+     */
+    profile?: 'secure' | 'basic';
+    /**
+     * Scopes the client may request, each with one presentation config.
+     */
+    scopes?: Array<{
+        /**
+         * Scope the client requests next to `openid`. Letters, digits and `_.:-`, at most 64 characters; `openid` is reserved.
+         */
+        scope: string;
+        /**
+         * Presentation config that verifies a sign-in with this scope. It must not define transaction data.
+         */
+        presentationConfigId: string;
+    }>;
+    /**
+     * Claim that identifies a user across sign-ins. `sub` becomes a hash of it, the same for each sign-in of that user with this client; a sign-in whose presentation lacks it fails. Without it, `sub` is new for every sign-in.
+     */
+    subject?: {
+        /**
+         * ID of the credential query (DCQL) that holds the claim.
+         */
+        credentialId: string;
+        /**
+         * Dot-separated path to the claim, e.g. `personal_administrative_number`. A string or number.
+         */
+        claim: string;
+    } | null;
+    /**
+     * ID of a credential query (DCQL) whose claims are also put at the top level of the ID token, next to `credentials`, so a relying party can map `given_name` directly. The token's own claims (`iss`, `sub`, `aud` and so on) are never replaced. A query that was not presented adds nothing.
+     */
+    claimsFrom?: string | null;
+};
+
+export type CreatedOidcClientResponseDto = {
+    /**
+     * The client_id
+     */
+    id: string;
+    name: string;
+    redirectUris: Array<string>;
+    profile: 'secure' | 'basic';
+    scopes: Array<OidcClientScopeDto>;
+    secrets: Array<OidcClientSecretDto>;
+    /**
+     * Claim whose hash becomes `sub`; null for a new `sub` per sign-in
+     */
+    subject?: OidcSubjectClaimDto | null;
+    /**
+     * Credential query whose claims are also at the ID token's top level
+     */
+    claimsFrom?: string | null;
+    /**
+     * Issuer of the tenant's OpenID Provider; discovery is at <issuer>/.well-known/openid-configuration
+     */
+    issuer: string;
+    createdAt?: string;
+    updatedAt?: string;
+    /**
+     * The client secret. It is returned only now and stored as a hash.
+     */
+    clientSecret: string;
+};
+
+/**
+ * Payload for changing an OpenID Connect client. Scopes are replaced as a whole.
+ */
+export type UpdateOidcClientDto = {
+    /**
+     * Display name of the client.
+     */
+    name?: string;
+    /**
+     * Redirect URIs, matched exactly. HTTPS is required; HTTP only for localhost.
+     */
+    redirectUris?: Array<string>;
+    /**
+     * `secure` requires a pushed authorization request (PAR); `basic` also accepts the parameters at the authorization endpoint directly.
+     */
+    profile?: 'secure' | 'basic';
+    /**
+     * Scopes the client may request, each with one presentation config.
+     */
+    scopes?: Array<{
+        /**
+         * Scope the client requests next to `openid`. Letters, digits and `_.:-`, at most 64 characters; `openid` is reserved.
+         */
+        scope: string;
+        /**
+         * Presentation config that verifies a sign-in with this scope. It must not define transaction data.
+         */
+        presentationConfigId: string;
+    }>;
+    /**
+     * Claim that identifies a user across sign-ins. `sub` becomes a hash of it, the same for each sign-in of that user with this client; a sign-in whose presentation lacks it fails. Without it, `sub` is new for every sign-in.
+     */
+    subject?: {
+        /**
+         * ID of the credential query (DCQL) that holds the claim.
+         */
+        credentialId: string;
+        /**
+         * Dot-separated path to the claim, e.g. `personal_administrative_number`. A string or number.
+         */
+        claim: string;
+    } | null;
+    /**
+     * ID of a credential query (DCQL) whose claims are also put at the top level of the ID token, next to `credentials`, so a relying party can map `given_name` directly. The token's own claims (`iss`, `sub`, `aud` and so on) are never replaced. A query that was not presented adds nothing.
+     */
+    claimsFrom?: string | null;
+};
+
+export type CreatedOidcClientSecretResponseDto = {
+    id: string;
+    createdAt: string;
+    expiresAt?: string | null;
+    /**
+     * Last successful use, accurate to five minutes
+     */
+    lastUsedAt?: string | null;
+    /**
+     * The client secret. It is returned only now and stored as a hash.
+     */
+    clientSecret: string;
+};
+
+/**
+ * Payload for changing a client secret.
+ */
+export type UpdateOidcClientSecretDto = {
+    /**
+     * Moment from which the secret is refused, or null to keep it valid.
+     */
+    expiresAt: string | null;
+};
+
+export type OidcPushedAuthorizationRequestDto = {
+    /**
+     * Must be `code`.
+     */
+    response_type?: string;
+    /**
+     * The client_id, with client_secret_post.
+     */
+    client_id?: string;
+    /**
+     * A registered redirect URI.
+     */
+    redirect_uri?: string;
+    /**
+     * `openid` and exactly one scope of the client.
+     */
+    scope?: string;
+    /**
+     * Opaque value returned to the client.
+     */
+    state?: string;
+    /**
+     * Value returned in the ID token.
+     */
+    nonce?: string;
+    /**
+     * PKCE code challenge (S256).
+     */
+    code_challenge?: string;
+    /**
+     * Must be `S256`.
+     */
+    code_challenge_method?: string;
+    /**
+     * Only `query`.
+     */
+    response_mode?: string;
+    /**
+     * `login`, `consent` and `select_account` are always met; `none` fails with `login_required`.
+     */
+    prompt?: string;
+    /**
+     * Name only the same-device value to accept only a same-device sign-in.
+     */
+    acr_values?: string;
+    /**
+     * Request objects are not supported.
+     */
+    request?: string;
+    /**
+     * The request_uri from the pushed request.
+     */
+    request_uri?: string;
+    /**
+     * The client secret, with client_secret_post.
+     */
+    client_secret?: string;
+};
+
+export type OidcPushedAuthorizationResponseDto = {
+    request_uri: string;
+    expires_in: number;
+};
+
+export type OidcErrorResponseDto = {
+    error: string;
+    error_description?: string;
+};
+
+export type OidcAuthorizationRequestDto = {
+    /**
+     * Must be `code`.
+     */
+    response_type?: string;
+    /**
+     * The client_id.
+     */
+    client_id?: string;
+    /**
+     * A registered redirect URI.
+     */
+    redirect_uri?: string;
+    /**
+     * `openid` and exactly one scope of the client.
+     */
+    scope?: string;
+    /**
+     * Opaque value returned to the client.
+     */
+    state?: string;
+    /**
+     * Value returned in the ID token.
+     */
+    nonce?: string;
+    /**
+     * PKCE code challenge (S256).
+     */
+    code_challenge?: string;
+    /**
+     * Must be `S256`.
+     */
+    code_challenge_method?: string;
+    /**
+     * Only `query`.
+     */
+    response_mode?: string;
+    /**
+     * `login`, `consent` and `select_account` are always met; `none` fails with `login_required`.
+     */
+    prompt?: string;
+    /**
+     * Name only the same-device value to accept only a same-device sign-in.
+     */
+    acr_values?: string;
+    /**
+     * Request objects are not supported.
+     */
+    request?: string;
+    /**
+     * The request_uri from the pushed request.
+     */
+    request_uri?: string;
+};
+
+export type OidcSignInStatusDto = {
+    /**
+     * `ready`: continue to the completion endpoint
+     */
+    state: 'waiting' | 'ready';
+};
+
+export type OidcTokenRequestDto = {
+    /**
+     * The client_id, with client_secret_post.
+     */
+    client_id?: string;
+    /**
+     * The client secret, with client_secret_post.
+     */
+    client_secret?: string;
+    /**
+     * Must be `authorization_code`.
+     */
+    grant_type?: string;
+    /**
+     * The authorization code.
+     */
+    code?: string;
+    /**
+     * The redirect URI of the authorization request.
+     */
+    redirect_uri?: string;
+    /**
+     * The PKCE code verifier.
+     */
+    code_verifier?: string;
+};
+
+export type OidcTokenResponseDto = {
+    /**
+     * Opaque; no endpoint accepts it
+     */
+    access_token: string;
+    token_type: 'Bearer';
+    expires_in: number;
+    /**
+     * Signed ID token with the verified claims under `credentials`
+     */
+    id_token: string;
+    scope: string;
 };
 
 export type EudiHubOrganizationsRequestDto = {
@@ -9926,6 +10306,183 @@ export type VerifierOfferControllerGetOfferResponses = {
 };
 
 export type VerifierOfferControllerGetOfferResponse = VerifierOfferControllerGetOfferResponses[keyof VerifierOfferControllerGetOfferResponses];
+
+export type OidcClientControllerListData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/verifier/oidc-clients';
+};
+
+export type OidcClientControllerListResponses = {
+    200: Array<OidcClientResponseDto>;
+};
+
+export type OidcClientControllerListResponse = OidcClientControllerListResponses[keyof OidcClientControllerListResponses];
+
+export type OidcClientControllerCreateData = {
+    body: CreateOidcClientDto;
+    path?: never;
+    query?: never;
+    url: '/api/verifier/oidc-clients';
+};
+
+export type OidcClientControllerCreateErrors = {
+    /**
+     * A redirect URI or scope is invalid, or a presentation config is missing or defines transaction data
+     */
+    400: unknown;
+};
+
+export type OidcClientControllerCreateResponses = {
+    201: CreatedOidcClientResponseDto;
+};
+
+export type OidcClientControllerCreateResponse = OidcClientControllerCreateResponses[keyof OidcClientControllerCreateResponses];
+
+export type OidcClientControllerDeleteData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/verifier/oidc-clients/{id}';
+};
+
+export type OidcClientControllerDeleteErrors = {
+    /**
+     * Client not found
+     */
+    404: unknown;
+};
+
+export type OidcClientControllerDeleteResponses = {
+    /**
+     * Client deleted
+     */
+    204: void;
+};
+
+export type OidcClientControllerDeleteResponse = OidcClientControllerDeleteResponses[keyof OidcClientControllerDeleteResponses];
+
+export type OidcClientControllerGetData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/verifier/oidc-clients/{id}';
+};
+
+export type OidcClientControllerGetErrors = {
+    /**
+     * Client not found
+     */
+    404: unknown;
+};
+
+export type OidcClientControllerGetResponses = {
+    200: OidcClientResponseDto;
+};
+
+export type OidcClientControllerGetResponse = OidcClientControllerGetResponses[keyof OidcClientControllerGetResponses];
+
+export type OidcClientControllerUpdateData = {
+    body: UpdateOidcClientDto;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/verifier/oidc-clients/{id}';
+};
+
+export type OidcClientControllerUpdateErrors = {
+    /**
+     * Client not found
+     */
+    404: unknown;
+};
+
+export type OidcClientControllerUpdateResponses = {
+    200: OidcClientResponseDto;
+};
+
+export type OidcClientControllerUpdateResponse = OidcClientControllerUpdateResponses[keyof OidcClientControllerUpdateResponses];
+
+export type OidcClientControllerAddSecretData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/verifier/oidc-clients/{id}/secrets';
+};
+
+export type OidcClientControllerAddSecretErrors = {
+    /**
+     * The client has two secrets
+     */
+    409: unknown;
+};
+
+export type OidcClientControllerAddSecretResponses = {
+    201: CreatedOidcClientSecretResponseDto;
+};
+
+export type OidcClientControllerAddSecretResponse = OidcClientControllerAddSecretResponses[keyof OidcClientControllerAddSecretResponses];
+
+export type OidcClientControllerDeleteSecretData = {
+    body?: never;
+    path: {
+        id: string;
+        secretId: string;
+    };
+    query?: never;
+    url: '/api/verifier/oidc-clients/{id}/secrets/{secretId}';
+};
+
+export type OidcClientControllerDeleteSecretErrors = {
+    /**
+     * Client or secret not found
+     */
+    404: unknown;
+    /**
+     * The client's last secret cannot be deleted
+     */
+    409: unknown;
+};
+
+export type OidcClientControllerDeleteSecretResponses = {
+    /**
+     * Secret deleted
+     */
+    204: void;
+};
+
+export type OidcClientControllerDeleteSecretResponse = OidcClientControllerDeleteSecretResponses[keyof OidcClientControllerDeleteSecretResponses];
+
+export type OidcClientControllerUpdateSecretData = {
+    body: UpdateOidcClientSecretDto;
+    path: {
+        id: string;
+        secretId: string;
+    };
+    query?: never;
+    url: '/api/verifier/oidc-clients/{id}/secrets/{secretId}';
+};
+
+export type OidcClientControllerUpdateSecretErrors = {
+    /**
+     * Client or secret not found
+     */
+    404: unknown;
+};
+
+export type OidcClientControllerUpdateSecretResponses = {
+    200: OidcClientSecretDto;
+};
+
+export type OidcClientControllerUpdateSecretResponse = OidcClientControllerUpdateSecretResponses[keyof OidcClientControllerUpdateSecretResponses];
 
 export type EudiHubControllerListOrganizationsData = {
     body: EudiHubOrganizationsRequestDto;

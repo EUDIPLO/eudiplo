@@ -64,7 +64,7 @@ Refreshing never extends the authorization: the built-in server keeps the refres
 
 ### PKCE
 
-Every authorization code requires PKCE with `S256`: a PAR request without `code_challenge`, or with any other method, is rejected, and the token request must send the matching `code_verifier`. This applies to the built-in, chained and OID4VP-based servers and to interactive authorization. The chained server also uses `S256` towards the upstream provider.
+Every authorization code requires PKCE with `S256`: a PAR request without `code_challenge`, or with any other method, is rejected, and the token request must send the matching `code_verifier`. This applies to the built-in, chained and OID4VP-based servers, to interactive authorization and to the [OpenID Provider](../presentation/openid-connect.md). The chained server also uses `S256` towards the upstream provider.
 
 ### DPoP
 
@@ -98,6 +98,7 @@ Each signing key chain uses one ECDSA algorithm, fixed by its curve: ES256 (P-25
 | Operation                                                   | Key                                                                                         | Algorithm                       |
 | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------- |
 | Access tokens of hosted authorization servers               | `authorizationServer` key chain (`token.signingKeyId` of the authorization server, otherwise the tenant's [authorization server key chain](../trust/keys-and-certificates.md#authorization-server-key-chain)); never an `access` or `attestation` key chain | ES256, ES384 or ES512 (the key chain's) |
+| ID tokens of the [OpenID Provider](../presentation/openid-connect.md) | The tenant's [authorization server key chain](../trust/keys-and-certificates.md#authorization-server-key-chain) | ES256, ES384 or ES512 (the key chain's) |
 | SD-JWT VC credentials, mdoc MSO                             | `attestation` key chain (`keyChainId` of the credential configuration)                      | ES256, ES384 or ES512 (the key chain's) |
 | Status lists                                                | `statusList` key chain                                                                      | ES256, ES384 or ES512 (the key chain's) |
 | Trust lists hosted by EUDIPLO                               | `trustList` key chain                                                                       | ES256, ES384 or ES512 (the key chain's) |

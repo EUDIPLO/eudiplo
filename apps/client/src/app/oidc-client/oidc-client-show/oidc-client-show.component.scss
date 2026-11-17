@@ -1,0 +1,66 @@
+.config-list {
+  padding: 0;
+
+  mat-list-item {
+    height: auto !important;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--mat-sys-outline-variant);
+
+    &:last-child {
+      border-bottom: none;
+    }
+  }
+}
+
+mat-card-header {
+  mat-card-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    mat-icon {
+      color: var(--mat-sys-on-surface-variant);
+    }
+  }
+}
+
+.settings {
+  margin: 0;
+
+  .setting {
+    padding: 8px 0;
+  }
+
+  dt {
+    font-size: 12px;
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  dd {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    word-break: break-all;
+  }
+}
+
+.secret {
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+  padding-bottom: 16px;
+
+  h3 {
+    margin: 0 0 4px;
+    font-size: 16px;
+  }
+
+  p {
+    margin: 0 0 12px;
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  .expired {
+    color: var(--eudiplo-danger);
+    font-weight: normal;
+  }
+}

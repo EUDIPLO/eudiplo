@@ -12,6 +12,7 @@ import {
     Pkcs11KmsConfigSchema,
     VaultKmsConfigSchema,
 } from "../../../backend/src/crypto/key/schemas/kms-config.schema.js";
+import { CreateOidcClientSchema } from "../../../backend/src/verifier/oidc-provider/schemas/oidc-client.schema.js";
 import { PresentationRequestSchema } from "../../../backend/src/verifier/oid4vp/dto/presentation-request.schema.js";
 import { PresentationConfigCreateSchema } from "../../../backend/src/verifier/presentations/schemas/presentation-config.schema.js";
 import { TrustListCreateSchema } from "../../../backend/src/issuer/trust-list/schemas/trust-list.schema.js";
@@ -62,6 +63,7 @@ export const schemaDocs: SchemaDoc[] = [
                 "Access key chain that signs the request, determines the `client_id` and signs `readerAuth`; without it, an access key chain of the tenant is used.",
         },
     },
+    { name: "oidc-client", schema: CreateOidcClientSchema },
     { name: "trust-list", schema: TrustListCreateSchema },
     { name: "schema-metadata-publish", schema: SignSchemaMetaConfigSchema },
     { name: "kms-config", schema: KmsConfigSchema },

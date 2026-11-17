@@ -3,7 +3,7 @@
  * the role descriptions of the generated docs (apps/docs/scripts/generate-roles-docs.ts).
  */
 export enum Role {
-    // to manage verifier resources: presentation configurations, trust lists, federation trust anchors, key chains, webhook endpoints and session settings, and, together with registrar:manage, to request a verifier registration certificate from the EUDI Hub
+    // to manage verifier resources: presentation configurations, OpenID Connect clients, trust lists, federation trust anchors, key chains, webhook endpoints and session settings, and, together with registrar:manage, to request a verifier registration certificate from the EUDI Hub
     Presentations = "presentation:manage",
     // to create presentation requests, read presentation configurations and read, cancel or delete presentation sessions
     PresentationRequest = "presentation:request",
