@@ -304,14 +304,14 @@
                   </mat-hint>
 
                   @if (dcqlChangedWithCertificate) {
-                    <p class="reg-cert-dcql-changed" role="status">
+                    <output class="reg-cert-dcql-changed">
                       <mat-icon aria-hidden="true">info</mat-icon>
                       <span>
                         The DCQL query changed. If the certificate does not cover the new query,
                         saving fails: remove the JWT, save, and request a new certificate on the
                         Security tab.
                       </span>
-                    </p>
+                    </output>
                   }
                   @if (registrationCertStatus !== 'none') {
                     <div

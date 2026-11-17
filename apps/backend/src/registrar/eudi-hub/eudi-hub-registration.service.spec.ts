@@ -193,6 +193,35 @@ describe("EudiHubRegistrationService", () => {
             });
         });
 
+        it("reuses a credential request when the purposes differ only in texts that are not sent", async () => {
+            client.listCredentialRequests.mockResolvedValue([
+                {
+                    id: "cr-same",
+                    credentials: hubCredentials,
+                    purpose: presentationRequest.purpose,
+                    privacyPolicy: presentationRequest.privacyPolicy,
+                },
+            ]);
+
+            const result = await service.requestPresentationCertificate(
+                "t1",
+                {
+                    ...presentationRequest,
+                    purpose: [
+                        ...presentationRequest.purpose,
+                        { lang: "pt-BR", content: "Verificação de idade" },
+                    ],
+                },
+                actor,
+            );
+
+            expect(client.createCredentialRequest).not.toHaveBeenCalled();
+            expect(result).toMatchObject({
+                credentialRequestId: "cr-same",
+                reusedCredentialRequest: true,
+            });
+        });
+
         it("uses a credential request with the same credentials, purpose and privacy policy again", async () => {
             client.listCredentialRequests.mockResolvedValue([
                 {
@@ -304,6 +333,51 @@ describe("EudiHubRegistrationService", () => {
                 ),
             ).rejects.toThrow(/not an http or https URL/);
             expect(client.listCredentialRequests).not.toHaveBeenCalled();
+        });
+
+        it("stores every purpose text but sends the EUDI Hub only those with two-letter codes", async () => {
+            const purpose = [
+                ...presentationRequest.purpose,
+                { lang: "pt-BR", content: "Verificação de idade" },
+            ];
+
+            await service.requestPresentationCertificate(
+                "t1",
+                { ...presentationRequest, purpose },
+                actor,
+            );
+
+            expect(
+                client.createCredentialRequest.mock.lastCall?.[2].purpose,
+            ).toEqual(presentationRequest.purpose);
+            expect(
+                presentationConfigs.updatePresentationConfig.mock.lastCall?.[2]
+                    .registration_cert.purpose,
+            ).toEqual(purpose);
+        });
+
+        it("keeps a stored regional purpose when renewing without a purpose", async () => {
+            const purpose = [
+                ...presentationRequest.purpose,
+                { lang: "pt-BR", content: "Verificação de idade" },
+            ];
+            presentationConfigs.getPresentationConfig.mockResolvedValue({
+                id: "age",
+                dcql_query: dcql,
+                registration_cert: {
+                    jwt: "old",
+                    purpose,
+                    privacy_policy: presentationRequest.privacyPolicy,
+                },
+            });
+            const { purpose: _, ...renewal } = presentationRequest;
+
+            await service.requestPresentationCertificate("t1", renewal, actor);
+
+            expect(
+                presentationConfigs.updatePresentationConfig.mock.lastCall?.[2]
+                    .registration_cert.purpose,
+            ).toEqual(purpose);
         });
 
         it("registers the DCQL query with <TENANT_URL> resolved", async () => {

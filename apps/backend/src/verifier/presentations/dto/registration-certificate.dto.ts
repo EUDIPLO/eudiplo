@@ -6,7 +6,9 @@ const RegistrationCertificatePurposeSchema = z
         lang: z
             .string()
             .min(1)
-            .describe("Language of the text, an ISO 639-1 code such as en."),
+            .describe(
+                "Language tag of the text, such as en or pt-BR. The EUDI Hub takes two-letter codes only.",
+            ),
         content: z.string().min(1).describe("The purpose in that language."),
     })
     .strict();

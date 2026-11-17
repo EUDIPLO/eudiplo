@@ -623,7 +623,7 @@
                   "lang": {
                     "type": "string",
                     "minLength": 1,
-                    "description": "Language of the text, an ISO 639-1 code such as en."
+                    "description": "Language tag of the text, such as en or pt-BR. The EUDI Hub takes two-letter codes only."
                   },
                   "content": {
                     "type": "string",

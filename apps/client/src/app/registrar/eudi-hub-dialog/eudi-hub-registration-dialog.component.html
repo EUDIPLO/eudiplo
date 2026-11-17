@@ -98,6 +98,43 @@
           <mat-error>Use at most 2000 characters.</mat-error>
         }
       </mat-form-field>
+      @if (otherPurposes.length > 0) {
+        <div class="purpose-other-languages">
+          @if (purposesInCertificate.length > 0) {
+            <p>
+              Also sent to the EUDI Hub and stored again: the purpose in
+              {{ languageLabels(purposesInCertificate) }}.
+            </p>
+          }
+          @if (purposesNotSentToHub.length > 0) {
+            <p>
+              Stored again, but not part of the certificate, since the EUDI Hub accepts at most 24
+              texts with two-letter language codes: {{ languageLabels(purposesNotSentToHub) }}.
+            </p>
+          }
+          <p>
+            Change these texts in the presentation configuration: Edit, then Registration
+            certificate, then Purpose.
+          </p>
+        </div>
+      }
+      @if (purposesDropped.length > 0) {
+        <div class="live-hint purpose-dropped" role="note">
+          <mat-icon aria-hidden="true">warning</mat-icon>
+          <div>
+            <p>This request removes these kept purpose texts from the configuration:</p>
+            <ul>
+              @for (dropped of purposesDropped; track $index) {
+                <li>{{ languageLabels([dropped.lang]) }}: {{ dropped.reason }}</li>
+              }
+            </ul>
+            <p>
+              To keep them, cancel and fix them first under Edit, then Registration certificate,
+              then Purpose: one text per language, with a tag such as de, en or pt-BR.
+            </p>
+          </div>
+        </div>
+      }
       <mat-form-field appearance="outline" class="full-width">
         <mat-label>Privacy policy</mat-label>
         <input

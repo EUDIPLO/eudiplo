@@ -37,7 +37,7 @@ export class CredentialConfigListComponent extends BaseAsyncListComponent<Creden
     return this.items;
   }
 
-  displayedColumns: (keyof CredentialConfig | 'description' | 'actions')[] = [
+  displayedColumns: (keyof CredentialConfig | 'actions')[] = [
     'id',
     'description',
     'keyBinding',

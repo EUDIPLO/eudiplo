@@ -55,3 +55,22 @@
 .organizations-error {
   color: var(--mat-sys-error);
 }
+
+.purpose-other-languages {
+  margin: 0 0 16px;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+}
+
+.purpose-dropped {
+  margin: 0 0 16px;
+
+  mat-icon {
+    color: var(--mat-sys-error);
+  }
+
+  p,
+  ul {
+    margin: 0 0 4px;
+  }
+}

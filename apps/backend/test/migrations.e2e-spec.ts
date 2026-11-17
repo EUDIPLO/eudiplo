@@ -1874,9 +1874,9 @@ describe("Migration tests", () => {
             await migration.up(queryRunner);
             await migration.up(queryRunner);
 
-            expect(await queryRunner.getTable("registrar_config_entity")).toBe(
-                undefined,
-            );
+            expect(
+                await queryRunner.getTable("registrar_config_entity"),
+            ).toBeUndefined();
             expect(
                 (
                     await queryRunner.getTable("presentation_config")

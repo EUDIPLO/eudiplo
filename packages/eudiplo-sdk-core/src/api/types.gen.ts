@@ -2501,7 +2501,7 @@ export type TransactionData = {
 
 export type RegistrationCertificatePurpose = {
     /**
-     * Language of the text, an ISO 639-1 code such as en.
+     * Language tag of the text, such as en or pt-BR. The EUDI Hub takes two-letter codes only.
      */
     lang: string;
     /**
@@ -2522,7 +2522,7 @@ export type PresentationRegistrationCertificate = {
      */
     purpose?: Array<{
         /**
-         * Language of the text, an ISO 639-1 code such as en.
+         * Language tag of the text, such as en or pt-BR. The EUDI Hub takes two-letter codes only.
          */
         lang: string;
         /**
@@ -3094,7 +3094,7 @@ export type PresentationConfigCreateDto = {
          */
         purpose?: Array<{
             /**
-             * Language of the text, an ISO 639-1 code such as en.
+             * Language tag of the text, such as en or pt-BR. The EUDI Hub takes two-letter codes only.
              */
             lang: string;
             /**
@@ -3428,7 +3428,7 @@ export type PresentationConfigUpdateDto = {
          */
         purpose?: Array<{
             /**
-             * Language of the text, an ISO 639-1 code such as en.
+             * Language tag of the text, such as en or pt-BR. The EUDI Hub takes two-letter codes only.
              */
             lang: string;
             /**
@@ -6344,11 +6344,11 @@ export type EudiHubPresentationRegistrationCertificateRequestDto = {
      */
     presentationConfigId: string;
     /**
-     * Why the data is requested, in German and English (GDPR purpose). Defaults to registration_cert.purpose of the presentation configuration; stored there with the certificate.
+     * Why the data is requested (GDPR purpose), in German and English and optionally more languages. Defaults to registration_cert.purpose of the presentation configuration; stored there with the certificate. The EUDI Hub takes two-letter language codes only: texts with another tag, such as pt-BR, are stored but not sent.
      */
     purpose?: Array<{
         /**
-         * ISO 639-1 language code, such as de or en.
+         * Language tag, such as de, en or pt-BR.
          */
         lang: string;
         content: string;

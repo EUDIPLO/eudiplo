@@ -1004,11 +1004,13 @@ export class PresentationCreateComponent implements OnInit {
       registrationCert?.purpose?.length ||
       registrationCert?.body
     );
-    const purposes = Array.isArray(registrationCert?.purpose)
-      ? registrationCert.purpose
-      : Array.isArray(registrationCert?.body?.purpose)
-        ? registrationCert.body.purpose
-        : [];
+    // Files saved before the body was removed keep the purpose under it.
+    let purposes: { lang?: string; content?: string }[] = [];
+    if (Array.isArray(registrationCert?.purpose)) {
+      purposes = registrationCert.purpose;
+    } else if (Array.isArray(registrationCert?.body?.purpose)) {
+      purposes = registrationCert.body.purpose;
+    }
     for (const purpose of purposes) {
       this.addRegistrationCertPurpose(purpose?.lang || '', purpose?.content || '');
     }

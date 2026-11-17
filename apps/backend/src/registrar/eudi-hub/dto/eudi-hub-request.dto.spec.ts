@@ -130,11 +130,22 @@ describe("EUDI Hub registration certificate requests", () => {
             },
         ],
         [
-            "a language code that is not ISO 639-1",
+            "a purpose language that is no language tag",
             {
                 purpose: [
-                    { lang: "eng", content: "a" },
+                    { lang: "en", content: "a" },
                     { lang: "de", content: "c" },
+                    { lang: "Portuguese", content: "d" },
+                ],
+            },
+        ],
+        [
+            "a service description language that is not ISO 639-1",
+            {
+                serviceDescription: [
+                    { lang: "en", content: "Service" },
+                    { lang: "de", content: "Dienst" },
+                    { lang: "pt-BR", content: "Serviço" },
                 ],
             },
         ],
@@ -150,6 +161,67 @@ describe("EUDI Hub registration certificate requests", () => {
                 ...change,
             }).success,
         ).toBe(false);
+    });
+
+    it("accepts purposes in regional languages, which are stored but not sent", () => {
+        expect(
+            EudiHubPresentationRegistrationCertificateRequestSchema.safeParse({
+                ...presentation,
+                purpose: [
+                    ...presentation.purpose,
+                    { lang: "pt-BR", content: "Verificação de idade" },
+                ],
+            }).success,
+        ).toBe(true);
+    });
+
+    it("accepts up to 50 purpose texts, also with three-letter codes, and refuses more", () => {
+        const codes = Array.from(
+            { length: 26 * 26 },
+            (_, index) =>
+                `${String.fromCharCode(97 + Math.floor(index / 26))}${String.fromCharCode(97 + (index % 26))}`,
+        ).filter((code) => code !== "de" && code !== "en");
+        const purpose = (count: number) => [
+            { lang: "de", content: "Altersprüfung" },
+            { lang: "en", content: "Age check" },
+            ...codes
+                .slice(0, count - 2)
+                .map((lang) => ({ lang, content: `text ${lang}` })),
+        ];
+        const parse = (value: unknown) =>
+            EudiHubPresentationRegistrationCertificateRequestSchema.safeParse({
+                ...presentation,
+                purpose: value,
+            }).success;
+
+        expect(parse(purpose(50))).toBe(true);
+        expect(parse(purpose(51))).toBe(false);
+        expect(
+            parse([...purpose(2), { lang: "eng", content: "Age check" }]),
+        ).toBe(true);
+    });
+
+    it("accepts a service description of up to 24 texts and refuses more", () => {
+        const codes = Array.from(
+            { length: 26 * 26 },
+            (_, index) =>
+                `${String.fromCharCode(97 + Math.floor(index / 26))}${String.fromCharCode(97 + (index % 26))}`,
+        ).filter((code) => code !== "de" && code !== "en");
+        const description = (count: number) => [
+            { lang: "de", content: "Dienst" },
+            { lang: "en", content: "Service" },
+            ...codes
+                .slice(0, count - 2)
+                .map((lang) => ({ lang, content: `text ${lang}` })),
+        ];
+        const parse = (serviceDescription: unknown) =>
+            EudiHubIssuerRegistrationCertificateRequestSchema.safeParse({
+                ...issuer,
+                serviceDescription,
+            }).success;
+
+        expect(parse(description(24))).toBe(true);
+        expect(parse(description(25))).toBe(false);
     });
 
     it("refuses verifier fields in an issuer request", () => {

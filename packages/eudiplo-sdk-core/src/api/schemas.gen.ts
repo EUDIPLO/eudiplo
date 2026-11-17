@@ -5873,7 +5873,7 @@ export const RegistrationCertificatePurposeSchema = {
         lang: {
             type: 'string',
             minLength: 1,
-            description: 'Language of the text, an ISO 639-1 code such as en.'
+            description: 'Language tag of the text, such as en or pt-BR. The EUDI Hub takes two-letter codes only.'
         },
         content: {
             type: 'string',
@@ -5904,7 +5904,7 @@ export const PresentationRegistrationCertificateSchema = {
                     lang: {
                         type: 'string',
                         minLength: 1,
-                        description: 'Language of the text, an ISO 639-1 code such as en.'
+                        description: 'Language tag of the text, such as en or pt-BR. The EUDI Hub takes two-letter codes only.'
                     },
                     content: {
                         type: 'string',
@@ -7008,7 +7008,7 @@ export const PresentationConfigCreateDtoSchema = {
                                     lang: {
                                         type: 'string',
                                         minLength: 1,
-                                        description: 'Language of the text, an ISO 639-1 code such as en.'
+                                        description: 'Language tag of the text, such as en or pt-BR. The EUDI Hub takes two-letter codes only.'
                                     },
                                     content: {
                                         type: 'string',
@@ -7747,7 +7747,7 @@ export const PresentationConfigUpdateDtoSchema = {
                                     lang: {
                                         type: 'string',
                                         minLength: 1,
-                                        description: 'Language of the text, an ISO 639-1 code such as en.'
+                                        description: 'Language tag of the text, such as en or pt-BR. The EUDI Hub takes two-letter codes only.'
                                     },
                                     content: {
                                         type: 'string',
@@ -13408,16 +13408,16 @@ export const EudiHubPresentationRegistrationCertificateRequestDtoSchema = {
         },
         purpose: {
             type: 'array',
-            description: 'Why the data is requested, in German and English (GDPR purpose). Defaults to registration_cert.purpose of the presentation configuration; stored there with the certificate.',
+            description: 'Why the data is requested (GDPR purpose), in German and English and optionally more languages. Defaults to registration_cert.purpose of the presentation configuration; stored there with the certificate. The EUDI Hub takes two-letter language codes only: texts with another tag, such as pt-BR, are stored but not sent.',
             minItems: 2,
-            maxItems: 24,
+            maxItems: 50,
             items: {
                 type: 'object',
                 properties: {
                     lang: {
                         type: 'string',
-                        pattern: '^[a-z]{2}$',
-                        description: 'ISO 639-1 language code, such as de or en.'
+                        pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$',
+                        description: 'Language tag, such as de, en or pt-BR.'
                     },
                     content: {
                         type: 'string',

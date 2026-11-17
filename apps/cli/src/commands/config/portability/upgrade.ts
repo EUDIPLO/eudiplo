@@ -57,30 +57,38 @@ function parse(text: string, path: string): any {
         throw new Error(`Invalid JSON in ${path}`);
     }
 }
-function upgradeJson(
+/**
+ * The input to upgrade. A single document of a retired kind is refused; a
+ * bundle loses its resources of retired kinds, with a warning for each.
+ */
+function withoutRetired(
     received: any,
+    bundle: boolean,
     file: string,
     context: CommandContext,
 ): any {
-    const bundle = Array.isArray(received?.documents);
     if (!bundle) {
         const retired = retiredConfigIssue(received, file);
         if (retired) throw new Error(retired.message);
+        return received;
     }
-    // Resources of retired kinds are dropped from a bundle with a warning.
-    const input = bundle ? withoutRetiredResources(received) : received;
-    if (bundle) {
-        for (const issue of (input.manifest.warnings ?? []).filter(
-            isRetiredConfigIssue,
-        ))
-            context.stderr.write(
-                `${file}: ${issue.severity} ${issue.code}: ${issue.message}\n`,
-            );
-        assertConfigBundle(input);
-    }
-    const results = (bundle ? input.documents : [input]).map(
-        (document: unknown) => upgradeDocument(document),
-    );
+    const input = withoutRetiredResources(received);
+    for (const issue of (input.manifest.warnings ?? []).filter(
+        isRetiredConfigIssue,
+    ))
+        context.stderr.write(
+            `${file}: ${issue.severity} ${issue.code}: ${issue.message}\n`,
+        );
+    assertConfigBundle(input);
+    return input;
+}
+
+/** Print the issues and migrations of each result; throws when one blocks. */
+function reportUpgrades(
+    results: ReturnType<typeof upgradeDocument>[],
+    file: string,
+    context: CommandContext,
+): void {
     let blocked = false;
     for (const result of results) {
         for (const issue of result.issues) {
@@ -93,6 +101,19 @@ function upgradeJson(
             context.stdout.write(`${file}: migration ${migration}\n`);
     }
     if (blocked) throw new Error(`${file}: upgrade blocked; no output written`);
+}
+
+function upgradeJson(
+    received: any,
+    file: string,
+    context: CommandContext,
+): any {
+    const bundle = Array.isArray(received?.documents);
+    const input = withoutRetired(received, bundle, file, context);
+    const results = (bundle ? input.documents : [input]).map(
+        (document: unknown) => upgradeDocument(document),
+    );
+    reportUpgrades(results, file, context);
     if (!bundle) return results[0].document;
     const documents = results.map(
         (result: ReturnType<typeof upgradeDocument>) => result.document,
@@ -277,7 +298,7 @@ async function upgradeFolder(
         });
         for (const [path, contents] of outputs)
             await atomicWriteFile(join(staging, path), contents);
-        for (const path of removed) await rm(join(staging, path));
+        await Promise.all(removed.map((path) => rm(join(staging, path))));
         await rename(staging, destination);
         context.stdout.write(
             `Wrote upgraded configuration folder to ${destination}\n`,
