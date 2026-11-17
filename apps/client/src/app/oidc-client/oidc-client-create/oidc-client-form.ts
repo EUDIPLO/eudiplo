@@ -93,7 +93,7 @@ export function uniqueValuesValidator(field: string | null, message: string): Va
 }
 
 /** The IDs of a presentation config's credential queries. */
-export function credentialQueryIds(config: PresentationConfig | undefined): string[] {
+function credentialQueryIds(config: PresentationConfig | undefined): string[] {
   return (config?.dcql_query?.credentials ?? [])
     .map((query) => query.id)
     .filter((id): id is string => typeof id === 'string' && id.length > 0);
