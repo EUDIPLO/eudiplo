@@ -192,31 +192,37 @@ export class EudiHubRegistrationService {
         const name = dto.name ?? "Issuer registration certificate";
 
         let certificate: EudiHubRegistrationCertificate;
-        const credentialIssuanceIds: string[] = [];
+        let credentialIssuanceIds: string[];
         try {
             const existing = await this.client.listCredentialIssuances(
                 dto.token,
                 dto.organizationId,
                 dto.environment,
             );
-            for (const { format, type } of material.providesAttestations) {
-                const issuance: EudiHubCredentialIssuance =
-                    existing.find(
-                        ({ credential }) =>
-                            credential?.format === format &&
-                            credential?.type === type,
-                    ) ??
-                    (await this.client.createCredentialIssuance(
-                        dto.token,
-                        dto.organizationId,
-                        {
-                            name: type,
-                            credential: { format, type },
-                            environments: [dto.environment],
-                        },
-                    ));
-                credentialIssuanceIds.push(issuance.id);
-            }
+            // Created in parallel. When one is refused, the others may stay
+            // unused at the EUDI Hub; the next request finds and reuses them.
+            credentialIssuanceIds = await Promise.all(
+                material.providesAttestations.map(
+                    async ({ format, type }): Promise<string> => {
+                        const issuance: EudiHubCredentialIssuance =
+                            existing.find(
+                                ({ credential }) =>
+                                    credential?.format === format &&
+                                    credential?.type === type,
+                            ) ??
+                            (await this.client.createCredentialIssuance(
+                                dto.token,
+                                dto.organizationId,
+                                {
+                                    name: type,
+                                    credential: { format, type },
+                                    environments: [dto.environment],
+                                },
+                            ));
+                        return issuance.id;
+                    },
+                ),
+            );
             certificate = await this.client.createRegistrationCertificate(
                 dto.token,
                 dto.organizationId,

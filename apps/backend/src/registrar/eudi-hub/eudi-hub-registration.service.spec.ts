@@ -386,6 +386,48 @@ describe("EudiHubRegistrationService", () => {
             ]);
         });
 
+        it("keeps the order of the types when the creations finish out of order", async () => {
+            client.createCredentialIssuance.mockImplementation(
+                (_t, _o, body) =>
+                    new Promise((resolve) =>
+                        setTimeout(
+                            () => resolve({ id: `ci-${body.credential.type}` }),
+                            body.credential.type === "urn:a" ? 20 : 0,
+                        ),
+                    ),
+            );
+            client.downloadRegistrationCertificate.mockResolvedValue(listing);
+
+            const result = await service.requestIssuerCertificate(
+                "t1",
+                base,
+                actor,
+            );
+
+            expect(result.credentialIssuanceIds).toEqual([
+                "ci-urn:a",
+                "ci-org.b",
+            ]);
+        });
+
+        it("requests no certificate when the EUDI Hub refuses to register a type", async () => {
+            client.createCredentialIssuance.mockImplementation(
+                (_t, _o, body) =>
+                    body.credential.type === "org.b"
+                        ? Promise.reject(
+                              new EudiHubRequestError("down", { status: 503 }),
+                          )
+                        : Promise.resolve({ id: "ci-urn:a" }),
+            );
+
+            await expect(
+                service.requestIssuerCertificate("t1", base, actor),
+            ).rejects.toBeInstanceOf(BadGatewayException);
+            expect(client.createRegistrationCertificate).not.toHaveBeenCalled();
+            expect(client.revokeRegistrationCertificate).not.toHaveBeenCalled();
+            expect(issuance.storeIssuanceConfiguration).not.toHaveBeenCalled();
+        });
+
         it("refuses without credential types", async () => {
             issuance.registrationCertificateMaterial.mockResolvedValue({
                 providesAttestations: [],
