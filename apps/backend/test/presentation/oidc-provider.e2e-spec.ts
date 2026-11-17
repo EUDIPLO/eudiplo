@@ -8,8 +8,15 @@ import {
 import { type CryptoKey, createLocalJWKSet, jwtVerify } from "jose";
 import request from "supertest";
 import type { App } from "supertest/types";
+import {
+    GenericContainer,
+    type StartedTestContainer,
+    TestContainers,
+    Wait,
+} from "testcontainers";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import type { StatusListService } from "../../src/issuer/status-list/status-list.service.js";
+import { describeWithContainers } from "../container-runtime.js";
 import {
     callbacks,
     createTestFetch,
@@ -628,5 +635,302 @@ describe("OpenID Provider", () => {
         await request(app.getHttpServer())
             .get(`/verifier/oidc-clients/${clientId}`)
             .expect(401);
+    });
+
+    /**
+     * Keycloak 26 as identity broker, with the client and identity provider
+     * settings of the Keycloak cookbook and a PID instead of a membership.
+     * The browser signs in at Keycloak, which sends it to EUDIPLO; Keycloak
+     * itself reaches EUDIPLO's token endpoint and JWKS through
+     * host.testcontainers.internal.
+     */
+    describeWithContainers("with Keycloak as identity broker", () => {
+        const REALM = "demo";
+        const ALIAS = "eudiplo";
+        const APP_REDIRECT = "http://localhost:9999/callback";
+        let keycloak: StartedTestContainer;
+        let keycloakUrl: string;
+        let adminToken: string;
+
+        /** Cookies per origin, as a browser keeps them. */
+        const jar = new Map<string, Map<string, string>>();
+        async function browse(url: string, init: RequestInit = {}) {
+            const origin = new URL(url).origin;
+            const cookies = jar.get(origin) ?? new Map<string, string>();
+            const response = await fetch(url, {
+                ...init,
+                redirect: "manual",
+                headers: {
+                    ...(init.headers as Record<string, string>),
+                    ...(cookies.size > 0 && {
+                        Cookie: [...cookies]
+                            .map(([name, value]) => `${name}=${value}`)
+                            .join("; "),
+                    }),
+                },
+            });
+            for (const header of response.headers.getSetCookie()) {
+                const [pair] = header.split(";");
+                const separator = pair.indexOf("=");
+                cookies.set(
+                    pair.slice(0, separator).trim(),
+                    pair.slice(separator + 1).trim(),
+                );
+            }
+            jar.set(origin, cookies);
+            return response;
+        }
+
+        /** Follow redirects until a page or a URL with the prefix. */
+        async function follow(url: string, stopAt: string) {
+            let current = url;
+            for (let hop = 0; hop < 20; hop++) {
+                if (current.startsWith(stopAt)) return { url: current };
+                const response = await browse(current);
+                const location = response.headers.get("location");
+                if (
+                    response.status >= 300 &&
+                    response.status < 400 &&
+                    location
+                ) {
+                    current = new URL(location, current).toString();
+                    continue;
+                }
+                return { url: current, response, body: await response.text() };
+            }
+            throw new Error(`Too many redirects from ${url}`);
+        }
+
+        async function admin(path: string, init: RequestInit = {}) {
+            const response = await fetch(`${keycloakUrl}/admin/realms${path}`, {
+                ...init,
+                headers: {
+                    Authorization: `Bearer ${adminToken}`,
+                    "Content-Type": "application/json",
+                },
+            });
+            if (!response.ok) {
+                throw new Error(
+                    `Keycloak admin ${path}: ${response.status} ${await response.text()}`,
+                );
+            }
+            const text = await response.text();
+            return text ? JSON.parse(text) : undefined;
+        }
+
+        /** One sign-in through Keycloak; returns the app's ID token claims. */
+        async function signInThroughKeycloak() {
+            jar.clear();
+            const start = new URL(
+                `${keycloakUrl}/realms/${REALM}/protocol/openid-connect/auth`,
+            );
+            start.search = new URLSearchParams({
+                client_id: "demo-app",
+                redirect_uri: APP_REDIRECT,
+                response_type: "code",
+                scope: "openid",
+                kc_idp_hint: ALIAS,
+            }).toString();
+
+            // Keycloak sends the browser to EUDIPLO's sign-in page.
+            const page = await follow(start.toString(), APP_REDIRECT);
+            expect(page.url).toContain(`${base()}/sign-in/`);
+            const sameDevice = [...page.body!.matchAll(/href="([^"]+)"/g)]
+                .map((match) => match[1].replaceAll("&amp;", "&"))
+                .find((link) => link.startsWith("openid4vp://"))!;
+
+            // The wallet presents and returns the holder to the callback.
+            const { redirect_uri } = await present(sameDevice);
+            const done = await follow(redirect_uri!, APP_REDIRECT);
+            if (!done.url.startsWith(APP_REDIRECT)) {
+                throw new Error(
+                    `Sign-in stopped at ${done.url} (${done.response?.status}): ${done.body?.slice(0, 500)}`,
+                );
+            }
+            const code = new URL(done.url).searchParams.get("code");
+            expect(code).toBeTruthy();
+
+            const tokens = await fetch(
+                `${keycloakUrl}/realms/${REALM}/protocol/openid-connect/token`,
+                {
+                    method: "POST",
+                    body: new URLSearchParams({
+                        grant_type: "authorization_code",
+                        client_id: "demo-app",
+                        code: code!,
+                        redirect_uri: APP_REDIRECT,
+                    }),
+                },
+            ).then((response) => response.json());
+            expect(tokens.id_token).toBeTruthy();
+            return JSON.parse(
+                Buffer.from(
+                    tokens.id_token.split(".")[1],
+                    "base64url",
+                ).toString(),
+            ) as Record<string, unknown>;
+        }
+
+        beforeAll(async () => {
+            await TestContainers.exposeHostPorts(3000);
+            keycloak = await new GenericContainer(
+                "quay.io/keycloak/keycloak:26.8.2",
+            )
+                .withEnvironment({
+                    KC_BOOTSTRAP_ADMIN_USERNAME: "admin",
+                    KC_BOOTSTRAP_ADMIN_PASSWORD: "admin",
+                })
+                .withCommand(["start-dev", "--http-port=8080"])
+                .withExposedPorts(8080)
+                .withWaitStrategy(
+                    Wait.forHttp("/realms/master", 8080).withStartupTimeout(
+                        180_000,
+                    ),
+                )
+                .start();
+            keycloakUrl = `http://localhost:${keycloak.getMappedPort(8080)}`;
+            adminToken = (
+                await fetch(
+                    `${keycloakUrl}/realms/master/protocol/openid-connect/token`,
+                    {
+                        method: "POST",
+                        body: new URLSearchParams({
+                            grant_type: "password",
+                            client_id: "admin-cli",
+                            username: "admin",
+                            password: "admin",
+                        }),
+                    },
+                ).then((response) => response.json())
+            ).access_token;
+
+            // The application behind Keycloak.
+            await admin("", {
+                method: "POST",
+                body: JSON.stringify({ realm: REALM, enabled: true }),
+            });
+            await admin(`/${REALM}/clients`, {
+                method: "POST",
+                body: JSON.stringify({
+                    clientId: "demo-app",
+                    publicClient: true,
+                    standardFlowEnabled: true,
+                    redirectUris: [APP_REDIRECT],
+                }),
+            });
+            // A PID carries no email or name: they are optional here, so
+            // the first login creates the account without a profile form.
+            const profile = await admin(`/${REALM}/users/profile`);
+            for (const attribute of profile.attributes) {
+                if (
+                    ["email", "firstName", "lastName"].includes(attribute.name)
+                ) {
+                    delete attribute.required;
+                }
+            }
+            await admin(`/${REALM}/users/profile`, {
+                method: "PUT",
+                body: JSON.stringify(profile),
+            });
+
+            // EUDIPLO side: the client for Keycloak's broker endpoint.
+            const brokerEndpoint = `${keycloakUrl}/realms/${REALM}/broker/${ALIAS}/endpoint`;
+            const created = await request(app.getHttpServer())
+                .post("/verifier/oidc-clients")
+                .set("Authorization", `Bearer ${authToken}`)
+                .send({
+                    name: "Keycloak",
+                    redirectUris: [brokerEndpoint],
+                    profile: "basic",
+                    scopes: [
+                        { scope: "pid", presentationConfigId: "pid-no-hook" },
+                    ],
+                    subject: { credentialId: "pid", claim: "birthdate" },
+                    claimsFrom: "pid",
+                })
+                .expect(201);
+
+            // Keycloak side: EUDIPLO as OpenID Connect identity provider.
+            const backend = `http://host.testcontainers.internal:3000${base()}`;
+            await admin(`/${REALM}/identity-provider/instances`, {
+                method: "POST",
+                body: JSON.stringify({
+                    alias: ALIAS,
+                    displayName: "EUDI Wallet",
+                    providerId: "oidc",
+                    enabled: true,
+                    config: {
+                        issuer: issuer(),
+                        authorizationUrl: `${issuer()}/authorize`,
+                        tokenUrl: `${backend}/token`,
+                        jwksUrl: `${backend}/jwks`,
+                        useJwksUrl: "true",
+                        validateSignature: "true",
+                        disableUserInfo: "true",
+                        clientId: created.body.id,
+                        clientSecret: created.body.clientSecret,
+                        clientAuthMethod: "client_secret_basic",
+                        pkceEnabled: "true",
+                        pkceMethod: "S256",
+                        defaultScope: "openid pid",
+                        syncMode: "FORCE",
+                    },
+                }),
+            });
+            for (const mapper of [
+                {
+                    name: "username",
+                    identityProviderMapper: "oidc-username-idp-mapper",
+                    config: {
+                        template: "${ALIAS}.${CLAIM.birthdate}",
+                        target: "LOCAL",
+                        syncMode: "INHERIT",
+                    },
+                },
+                {
+                    name: "first name",
+                    identityProviderMapper: "oidc-user-attribute-idp-mapper",
+                    config: {
+                        claim: "address.locality",
+                        "user.attribute": "firstName",
+                        syncMode: "INHERIT",
+                    },
+                },
+            ]) {
+                await admin(
+                    `/${REALM}/identity-provider/instances/${ALIAS}/mappers`,
+                    {
+                        method: "POST",
+                        body: JSON.stringify({
+                            ...mapper,
+                            identityProviderAlias: ALIAS,
+                        }),
+                    },
+                );
+            }
+        }, 240_000);
+
+        afterAll(async () => {
+            await keycloak?.stop();
+        });
+
+        test("signs in through Keycloak and returns to the same account", async () => {
+            const first = await signInThroughKeycloak();
+            const second = await signInThroughKeycloak();
+            expect(second.sub).toBe(first.sub);
+            expect(first.preferred_username).toBe(`${ALIAS}.1990-01-01`);
+            expect(first.given_name).toBe("Berlin");
+
+            const users = await admin(`/${REALM}/users`);
+            expect(users).toHaveLength(1);
+            const links = await admin(
+                `/${REALM}/users/${users[0].id}/federated-identity`,
+            );
+            expect(links).toEqual([
+                expect.objectContaining({ identityProvider: ALIAS }),
+            ]);
+            // Keycloak links by EUDIPLO's pairwise sub, not the raw claim.
+            expect(links[0].userId).not.toContain("1990");
+        }, 120_000);
     });
 });
