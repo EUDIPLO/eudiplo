@@ -83,6 +83,19 @@ describe("Oid4vpSignInPresentation", () => {
                 id: "open",
                 dcql_query: { credentials: [{ id: "pid" }] },
             },
+            {
+                id: "empty",
+                dcql_query: {
+                    credentials: [
+                        {
+                            id: "pid",
+                            trusted_authorities: [
+                                { type: "etsi_tl", values: [] },
+                            ],
+                        },
+                    ],
+                },
+            },
         ];
         expect(
             await adapter({ configs }).unusableReason("t", "trusted", "pid"),
@@ -92,6 +105,9 @@ describe("Oid4vpSignInPresentation", () => {
         ).toContain("no credential query 'other'");
         expect(
             await adapter({ configs }).unusableReason("t", "open", "pid"),
+        ).toContain("trusted_authorities");
+        expect(
+            await adapter({ configs }).unusableReason("t", "empty", "pid"),
         ).toContain("trusted_authorities");
         expect(
             await adapter({ configs }).unusableReason("t", "open"),
@@ -113,12 +129,44 @@ describe("Oid4vpSignInPresentation", () => {
             redirectUri: null,
             responseCode: "rc",
             credentials: [{ id: "pid" }],
+            outcome: {
+                result: "success",
+                credentials: [
+                    {
+                        id: "pid",
+                        verified: true,
+                        trust: {
+                            matchedIssuer: "PID Provider",
+                            issuanceThumbprint: "abc",
+                            matchMode: "ca",
+                        },
+                    },
+                    {
+                        id: "fed",
+                        verified: true,
+                        trust: {
+                            matchedIssuer: "https://issuer.example",
+                            matchMode: "federation",
+                        },
+                    },
+                    {
+                        id: "named-only",
+                        verified: true,
+                        trust: { matchedIssuer: "PID Provider" },
+                    },
+                    { id: "other", verified: true },
+                ],
+            },
         };
         expect(await adapter({ session }).result("t", "s")).toEqual({
             status: "completed",
             crossDevice: true,
             responseCode: "rc",
             credentials: [{ id: "pid" }],
+            issuers: {
+                pid: "x509:abc",
+                fed: "federation:https://issuer.example",
+            },
         });
         expect(
             (

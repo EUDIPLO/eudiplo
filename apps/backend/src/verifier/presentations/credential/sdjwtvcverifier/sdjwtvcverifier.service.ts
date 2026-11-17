@@ -10,6 +10,7 @@ import { decodeJwt, decodeProtectedHeader, JWK } from "jose";
 import { Span } from "nestjs-otel";
 import { PinoLogger } from "nestjs-pino";
 import { CryptoImplementationService } from "../../../../crypto/key/crypto-implementation/crypto-implementation.service.js";
+import type { VerificationProvenance } from "../../../../session/domain/session-outcome.js";
 import {
     CREDENTIAL_ISSUER_METADATA_TYPE,
     findFederationProtocolKey,
@@ -38,6 +39,7 @@ import {
     shortVerificationMessage,
     type VerificationFailureType,
 } from "../verification-failure.js";
+import { toProvenance } from "../verification-provenance.js";
 
 /**
  * SD-JWT-VC verification failure carrying the shared, machine-readable failure
@@ -87,7 +89,7 @@ export class SdjwtvcverifierService {
     async verify(
         cred: string,
         options: VerifierOptions,
-    ): Promise<VerificationResult> {
+    ): Promise<VerificationResult & { provenance?: VerificationProvenance }> {
         const revocationPolicy = resolveRevocationPolicy(options);
 
         let failure:
@@ -187,7 +189,22 @@ export class SdjwtvcverifierService {
             );
         }
 
-        return result;
+        // The issuer the credential was trusted as: the matched trusted
+        // entity, or under OpenID Federation the resolved issuer entity.
+        const resolvedIssuer = federationIssuer as
+            | FederationResolution
+            | undefined;
+        const provenance = options.federationTrustSource
+            ? resolvedIssuer && {
+                  matchedIssuer: resolvedIssuer.entityId,
+                  matchMode: "federation",
+              }
+            : toProvenance(
+                  (matchedEntity as MatchedTrustedEntity | null)?.entity
+                      ? matchedEntity
+                      : null,
+              );
+        return provenance ? { ...result, provenance } : result;
     }
 
     /**

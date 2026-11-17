@@ -7,6 +7,7 @@ import {
 } from "./presented-claims.js";
 
 const KEY = new Uint8Array(32).fill(1);
+const ISSUERS = { pid: "https://issuer.example" };
 
 const credentials = [
     { id: "other", values: [{ given_name: "Eve" }] },
@@ -36,6 +37,8 @@ describe("presented claims", () => {
         expect(claimAt(claims, "address.country")).toBe("DE");
         expect(claimAt(claims, "address.city")).toBeUndefined();
         expect(claimAt(claims, "given_name.x")).toBeUndefined();
+        expect(claimAt(claims, "__proto__")).toBeUndefined();
+        expect(claimAt(claims, "constructor.name")).toBeUndefined();
     });
 
     test("derives a subject that is stable per client and differs between clients", () => {
@@ -49,6 +52,7 @@ describe("presented claims", () => {
             "c1",
             subject,
             credentials,
+            ISSUERS,
         );
         expect(first).toMatch(/^[A-Za-z0-9_-]{43}$/);
         expect(
@@ -58,10 +62,18 @@ describe("presented claims", () => {
                 "c1",
                 subject,
                 structuredClone(credentials),
+                ISSUERS,
             ),
         ).toBe(first);
         expect(
-            subjectFromPresentation(KEY, "t", "c2", subject, credentials),
+            subjectFromPresentation(
+                KEY,
+                "t",
+                "c2",
+                subject,
+                credentials,
+                ISSUERS,
+            ),
         ).not.toBe(first);
         expect(first).not.toContain("AB-123");
     });
@@ -75,6 +87,7 @@ describe("presented claims", () => {
                     "c",
                     { credentialId: "pid", claim },
                     credentials,
+                    ISSUERS,
                 ),
             ).toBeUndefined();
         }
@@ -91,9 +104,17 @@ describe("presented claims", () => {
             "c",
             subject,
             withValue("x"),
+            ISSUERS,
         );
         expect(
-            subjectFromPresentation(KEY, "t2", "c", subject, withValue("x")),
+            subjectFromPresentation(
+                KEY,
+                "t2",
+                "c",
+                subject,
+                withValue("x"),
+                ISSUERS,
+            ),
         ).not.toBe(base);
         expect(
             subjectFromPresentation(
@@ -102,10 +123,18 @@ describe("presented claims", () => {
                 "c",
                 subject,
                 withValue("x"),
+                ISSUERS,
             ),
         ).not.toBe(base);
         expect(
-            subjectFromPresentation(KEY, "t", "c", subject, withValue(42)),
+            subjectFromPresentation(
+                KEY,
+                "t",
+                "c",
+                subject,
+                withValue(42),
+                ISSUERS,
+            ),
         ).toMatch(/^[A-Za-z0-9_-]{43}$/);
         for (const value of ["", Number.NaN, Number.POSITIVE_INFINITY, true]) {
             expect(
@@ -115,9 +144,40 @@ describe("presented claims", () => {
                     "c",
                     subject,
                     withValue(value),
+                    ISSUERS,
                 ),
             ).toBeUndefined();
         }
+    });
+
+    test("the issuer is part of the subject, and an unknown issuer gives none", () => {
+        const subject = {
+            credentialId: "pid",
+            claim: "personal_administrative_number",
+        };
+        const one = subjectFromPresentation(
+            KEY,
+            "t",
+            "c",
+            subject,
+            credentials,
+            {
+                pid: "issuer-a",
+            },
+        );
+        const other = subjectFromPresentation(
+            KEY,
+            "t",
+            "c",
+            subject,
+            credentials,
+            { pid: "issuer-b" },
+        );
+        expect(one).toBeDefined();
+        expect(other).not.toBe(one);
+        expect(
+            subjectFromPresentation(KEY, "t", "c", subject, credentials, {}),
+        ).toBeUndefined();
     });
 
     test("puts claims at the top level without reserved names", () => {

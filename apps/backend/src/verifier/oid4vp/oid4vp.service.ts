@@ -888,10 +888,21 @@ export class Oid4vpService {
 
         try {
             //TODO: load required fields from the config
-            const credentials = await this.verifyPresentation(
+            const verified = await this.verifyPresentation(
                 res,
                 presentationConfig,
                 session,
+            );
+            // Stored and published claims keep their shape; the trusted
+            // issuers go to the session outcome only.
+            const credentials = verified.map(({ id, values }) => ({
+                id,
+                values,
+            }));
+            const trust = Object.fromEntries(
+                verified.flatMap((entry) =>
+                    entry.trust ? [[entry.id, entry.trust]] : [],
+                ),
             );
 
             this.logger.debug(
@@ -917,6 +928,7 @@ export class Oid4vpService {
                 response: res,
                 session,
                 credentials,
+                trust,
                 responseCode,
                 webhook,
                 rawPresentationPayload: decrypted,

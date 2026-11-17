@@ -20,6 +20,12 @@ export interface SignInPresentationResult {
     responseCode?: string;
     /** Disclosed claims per credential query, once completed. */
     credentials?: unknown[];
+    /**
+     * A unique identity of the trusted issuer each credential query matched
+     * (`x509:<certificate thumbprint>` or `federation:<entity ID>`), once
+     * completed.
+     */
+    issuers?: Record<string, string>;
     /** Short, safe reason of a failure. */
     failureReason?: string;
 }

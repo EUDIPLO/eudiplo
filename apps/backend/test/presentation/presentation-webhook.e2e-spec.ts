@@ -153,11 +153,26 @@ describe("Presentation - Webhook Integration", () => {
                 expect(body.outcome).toEqual({
                     result: "success",
                     source: "verifier",
-                    credentials: [{ id: "pid", verified: true }],
+                    credentials: [
+                        {
+                            id: "pid",
+                            verified: true,
+                            // The trusted issuer the credential matched.
+                            trust: expect.objectContaining({
+                                matchedIssuer: expect.any(String),
+                                matchMode: expect.any(String),
+                            }),
+                        },
+                    ],
                 });
                 expect(body.credentials).toBeDefined();
                 expect(body.credentials[0].id).toBe("pid");
                 expect(body.credentials[0].values).toBeDefined();
+                // The trusted issuer is only in the outcome.
+                expect(Object.keys(body.credentials[0]).sort()).toEqual([
+                    "id",
+                    "values",
+                ]);
                 return true;
             })
             .reply(200);

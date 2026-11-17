@@ -133,6 +133,42 @@ describe("TypeORM OIDC repositories (SQLite)", () => {
         expect(saved.secrets[0].lastUsedAt).toEqual(now);
     });
 
+    test("stores the subject options of a client and of a sign-in", async () => {
+        const base = {
+            id: "c",
+            tenantId: "a",
+            name: "Portal",
+            redirectUris: ["https://rp/cb"],
+            profile: "secure" as const,
+            scopes: [],
+            secrets: [],
+        };
+        const saved = await clients.save({
+            ...base,
+            subject: { credentialId: "pid", claim: "a.b" },
+            claimsFrom: "pid",
+        });
+        expect(saved).toMatchObject({
+            subject: { credentialId: "pid", claim: "a.b" },
+            claimsFrom: "pid",
+        });
+        const cleared = await clients.save({
+            ...saved,
+            subject: null,
+            claimsFrom: null,
+        });
+        expect(cleared.subject).toBeNull();
+        expect(cleared.claimsFrom).toBeNull();
+
+        await signIns.insert(signIn({ status: OidcSignInStatus.Pending }));
+        await signIns.transition("a", "s1", OidcSignInStatus.Pending, {
+            subject: "pairwise",
+        });
+        expect((await signIns.findForTenant("a", "s1"))?.subject).toBe(
+            "pairwise",
+        );
+    });
+
     test("recording a use writes only the last-use column", async () => {
         const repository = dataSource.getRepository(OidcClientEntity);
         const updates: unknown[] = [];

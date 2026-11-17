@@ -1,5 +1,6 @@
 import { SessionNotFound } from "../../../session/application/session-errors.js";
 import type { SessionStore } from "../../../session/application/session-store.js";
+import type { VerificationProvenance } from "../../../session/domain/session-outcome.js";
 import { SessionStatus } from "../../../session/domain/session-state.js";
 import type { Oid4vpService } from "../../oid4vp/oid4vp.service.js";
 import type { PresentationConfigService } from "../../presentations/configuration/presentation-config.service.js";
@@ -46,7 +47,12 @@ export class Oid4vpSignInPresentation implements SignInPresentation {
             if (!query) {
                 return `Presentation config '${presentationConfigId}' has no credential query '${subjectCredentialId}' for the subject`;
             }
-            if ((query.trusted_authorities?.length ?? 0) === 0) {
+            // The same rule the verification applies: at least one
+            // authority that names something.
+            const trusted = (query.trusted_authorities ?? []).some(
+                (authority) => (authority.values?.length ?? 0) > 0,
+            );
+            if (!trusted) {
                 return `Credential query '${subjectCredentialId}' of presentation config '${presentationConfigId}' must name trusted_authorities to identify users by one of its claims`;
             }
         }
@@ -100,6 +106,16 @@ export class Oid4vpSignInPresentation implements SignInPresentation {
                     crossDevice,
                     responseCode: session.responseCode,
                     credentials: session.credentials ?? [],
+                    issuers: Object.fromEntries(
+                        (session.outcome?.credentials ?? []).flatMap(
+                            (credential) => {
+                                const issuer = issuerIdentity(credential.trust);
+                                return credential.id && issuer
+                                    ? [[credential.id, issuer]]
+                                    : [];
+                            },
+                        ),
+                    ),
                 };
             case SessionStatus.Failed:
             case SessionStatus.Cancelled:
@@ -124,4 +140,21 @@ export class Oid4vpSignInPresentation implements SignInPresentation {
                 return { status: "open", crossDevice };
         }
     }
+}
+
+/**
+ * A unique identity of the issuer a credential was trusted as: the entity
+ * ID under OpenID Federation, else the thumbprint of the matched trust list
+ * certificate. The trust list entry's name is not unique, so it is not used.
+ */
+function issuerIdentity(
+    trust: VerificationProvenance | undefined,
+): string | undefined {
+    if (!trust) return undefined;
+    if (trust.matchMode === "federation" && trust.matchedIssuer) {
+        return `federation:${trust.matchedIssuer}`;
+    }
+    return trust.issuanceThumbprint
+        ? `x509:${trust.issuanceThumbprint}`
+        : undefined;
 }

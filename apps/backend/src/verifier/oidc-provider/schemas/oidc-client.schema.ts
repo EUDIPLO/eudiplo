@@ -66,7 +66,7 @@ const claimsFrom = z
     .max(200)
     .nullable()
     .describe(
-        "ID of a credential query (DCQL) whose claims are also put at the top level of the ID token, next to `credentials`, so a relying party can map `given_name` directly. The token's own claims (`iss`, `sub`, `aud` and so on) are never replaced.",
+        "ID of a credential query (DCQL) whose claims are also put at the top level of the ID token, next to `credentials`, so a relying party can map `given_name` directly. The token's own claims (`iss`, `sub`, `aud` and so on) are never replaced. A query that was not presented adds nothing.",
     );
 
 export const CreateOidcClientSchema = z

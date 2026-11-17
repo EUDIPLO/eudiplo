@@ -234,11 +234,12 @@ export class FinishSignIn {
                     client.id,
                     client.subject,
                     result.credentials,
+                    result.issuers,
                 ) ?? null;
             if (!subject) {
                 return this.fail(
                     signIn,
-                    `The presentation has no '${client.subject.claim}' in credential '${client.subject.credentialId}' to identify the user`,
+                    `The presentation has no '${client.subject.claim}' from a known issuer in credential '${client.subject.credentialId}' to identify the user`,
                 );
             }
         }

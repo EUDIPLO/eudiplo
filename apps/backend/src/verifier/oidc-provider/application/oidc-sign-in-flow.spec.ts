@@ -87,7 +87,13 @@ class FakePresentation implements SignInPresentation {
     result_: SignInPresentationResult = { status: "open", crossDevice: false };
     callbackUrl?: string;
     unusable?: string;
-    async unusableReason() {
+    subjectChecks: (string | undefined)[] = [];
+    async unusableReason(
+        _tenantId: string,
+        _configId: string,
+        subjectCredentialId?: string,
+    ) {
+        this.subjectChecks.push(subjectCredentialId);
         return this.unusable;
     }
     startFails = false;
@@ -114,6 +120,7 @@ class FakePresentation implements SignInPresentation {
                     values: [{ given_name: "Ada", iss: "https://issuer" }],
                 },
             ],
+            issuers: { pid: "https://issuer" },
         };
     }
 }
@@ -540,12 +547,29 @@ describe("OpenID Provider sign-in", () => {
             return { step, claims: claimsOf(tokens.id_token) };
         }
 
+        test("PAR and a basic authorize check the subject's credential query", async () => {
+            client.subject = { credentialId: "pid", claim: "given_name" };
+            await push.execute(client, request);
+            client.profile = "basic";
+            await start.execute("tenant", {
+                client_id: client.id,
+                ...request,
+            });
+            expect(presentation.subjectChecks).toEqual(["pid", "pid"]);
+        });
+
         test("a subject claim gives the same sub on every sign-in", async () => {
             client.subject = { credentialId: "pid", claim: "given_name" };
             const first = await tokenClaims();
             const second = await tokenClaims();
             expect(first.claims?.sub).toBe(
-                pairwiseSubject(SUBJECT_KEY, "tenant", "client-1", "Ada"),
+                pairwiseSubject(
+                    SUBJECT_KEY,
+                    "tenant",
+                    "client-1",
+                    "https://issuer",
+                    "Ada",
+                ),
             );
             expect(second.claims?.sub).toBe(first.claims?.sub);
         });
@@ -594,6 +618,38 @@ describe("OpenID Provider sign-in", () => {
             expect(signIns.rows.get(signInId)?.status).toBe(
                 OidcSignInStatus.Failed,
             );
+        });
+
+        test("a presentation from an unknown issuer gets no subject", async () => {
+            client.subject = { credentialId: "pid", claim: "given_name" };
+            const { signInId, browserSecret } = await pushedSignIn();
+            presentation.completed(true);
+            presentation.result_.issuers = {};
+            const step = await finish.fromBrowser(
+                "tenant",
+                signInId,
+                browserSecret,
+            );
+            const url = new URL((step as { url: string }).url);
+            expect(url.searchParams.get("error")).toBe("access_denied");
+            expect(url.searchParams.get("error_description")).toContain(
+                "known issuer",
+            );
+        });
+
+        test("PAR and authorize refuse a scope whose config no longer fits the subject", async () => {
+            client.subject = { credentialId: "pid", claim: "given_name" };
+            presentation.unusable = "no trusted_authorities";
+            await expect(push.execute(client, request)).rejects.toMatchObject({
+                code: "invalid_scope",
+            });
+            client.profile = "basic";
+            await expect(
+                start.execute("tenant", { client_id: client.id, ...request }),
+            ).rejects.toMatchObject({
+                code: "invalid_scope",
+                redirect: { redirectUri: REDIRECT, state: "state-1" },
+            });
         });
 
         test("claimsFrom copies the claims to the top level", async () => {

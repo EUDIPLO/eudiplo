@@ -257,4 +257,6 @@ The variables and the setup are described in [Keycloak SSO](keycloak.md) or, for
 another provider, in [Other OIDC providers](oidc-provider.md).
 `MASTER_SECRET` is optional in OIDC mode, but the default encryption key is
 derived from it; set it, or use another
-[encryption key source](encryption-keys.md).
+[encryption key source](encryption-keys.md). OpenID Provider clients with a
+[`subject`](../presentation/openid-connect.md#stable-subject-and-top-level-claims)
+need it too.

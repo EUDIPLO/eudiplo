@@ -70,7 +70,17 @@ EUDIPLO sends one `POST` per presentation after the session reached its final st
     "outcome": {
         "result": "success",
         "source": "verifier",
-        "credentials": [{ "id": "membership", "verified": true }]
+        "credentials": [
+            {
+                "id": "membership",
+                "verified": true,
+                "trust": {
+                    "matchedIssuer": "Membership Issuer",
+                    "issuanceThumbprint": "3f…",
+                    "matchMode": "ca"
+                }
+            }
+        ]
     },
     "credentials": [
         {

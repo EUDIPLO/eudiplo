@@ -52,6 +52,42 @@ describe("CompletePresentationResponse", () => {
         expect(outcome).toEqual(update.mock.calls[0][2].outcome);
     });
 
+    it("records the trusted issuer of each credential query in the outcome", async () => {
+        const update = vi.fn().mockResolvedValue(true);
+        const response = new CompletePresentationResponse(
+            { updateIfUnconsumed: update },
+            { announce: vi.fn() },
+        );
+        const outcome = await response.execute({
+            tenantId: "tenant-1",
+            sessionId: "session-1",
+            credentials: [
+                { id: "credential-1" },
+                { id: "credential-2" },
+                { value: "no id" },
+            ],
+            trust: {
+                "credential-1": { matchedIssuer: "CN=I", matchMode: "ca" },
+            },
+            responseCode: "response-code",
+        });
+        expect(outcome.credentials).toEqual([
+            {
+                id: "credential-1",
+                verified: true,
+                trust: { matchedIssuer: "CN=I", matchMode: "ca" },
+            },
+            { id: "credential-2", verified: true },
+            { id: undefined, verified: true },
+        ]);
+        // The stored claims keep their shape.
+        expect(update.mock.calls[0][2].credentials).toEqual([
+            { id: "credential-1" },
+            { id: "credential-2" },
+            { value: "no id" },
+        ]);
+    });
+
     it("rejects a response that lost the race without announcing it", async () => {
         const announce = vi.fn();
         const response = new CompletePresentationResponse(
