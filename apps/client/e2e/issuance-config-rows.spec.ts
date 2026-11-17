@@ -39,9 +39,9 @@ test.beforeAll(async () => {
 test.beforeEach(async ({ page }) => {
   const stored = await apiRequest('POST', '/issuer/config', {
     display: [
-      { name: 'Issuer EN', locale: 'en-US' },
-      { name: 'Issuer DE', locale: 'de-DE' },
-      { name: 'Issuer FR', locale: 'fr-FR' },
+      { name: 'Issuer EN', locale: 'en' },
+      { name: 'Issuer DE', locale: 'de' },
+      { name: 'Issuer FR', locale: 'fr' },
     ],
     authorizationServers: ['one', 'two', 'three'].map((name) => ({
       type: 'external',
@@ -95,8 +95,8 @@ test('removing a language leaves the next one in its place with its own values',
 
   const saved = await saveAndLoad(page);
   expect(saved.display.map(({ name, locale }: any) => ({ name, locale }))).toEqual([
-    { name: 'Issuer EN', locale: 'en-US' },
-    { name: 'Émetteur', locale: 'fr-FR' },
+    { name: 'Issuer EN', locale: 'en' },
+    { name: 'Émetteur', locale: 'fr' },
   ]);
 });
 

@@ -59,7 +59,7 @@ The HTTPS certificate of your tunnel and the credential and access certificates 
 
 Open **Credential Issuance → Issuer Settings** and choose **Use guided setup**.
 
-1. **Identity:** enter name `Membership Demo` and locale `en-US`. A logo is optional.
+1. **Identity:** enter name `Membership Demo` and locale **English**. A logo is optional.
 2. **Wallet access:** keep the enabled built-in authorization server and batch size `1`. Leave request and response encryption off. Under **Issuance behavior (advanced)**, check that your wallet supports the DPoP setting.
 3. **Trust:** leave wallet attestation optional and federation off. Leave the registration certificate off unless your wallet requires one.
 4. **Review:** choose **Save settings**.
@@ -95,7 +95,7 @@ Choose **Continue**.
 
 ### Appearance
 
-Enter **Display Name** `Membership`, **Description** `Example membership card` and **Locale** `en-US`. Choose **Continue**.
+Enter **Display Name** `Membership`, **Description** `Example membership card` and **Locale** **English**. Choose **Continue**.
 
 ### Settings
 

@@ -163,10 +163,10 @@ test('keeps optional display fields as loaded and refuses colors and locales wal
   const headers = { Authorization: `Bearer ${await tenantToken(request)}` };
   // Only name and locale are required; colors are CSS Color Level 3 numerical values.
   const display = [
-    { name: 'Membership', locale: 'en-US' },
+    { name: 'Membership', locale: 'en' },
     {
       name: 'Mitgliedschaft',
-      locale: 'de-DE',
+      locale: 'de',
       background_color: 'rgb(18, 16, 124)',
       text_color: '#fff',
     },
@@ -214,8 +214,8 @@ test('keeps optional display fields as loaded and refuses colors and locales wal
     // A locale the other entry uses cannot be chosen: wallets accept one entry per language.
     await expect(second.getByRole('combobox', { name: 'Locale' })).toHaveText(/German/);
     await first.getByRole('combobox', { name: 'Locale' }).click();
-    await expect(page.getByRole('option', { name: 'German (Germany)' })).toBeDisabled();
-    await expect(page.getByRole('option', { name: 'French (France)' })).toBeEnabled();
+    await expect(page.getByRole('option', { name: 'German' })).toBeDisabled();
+    await expect(page.getByRole('option', { name: 'French' })).toBeEnabled();
     await page.keyboard.press('Escape');
 
     await page.getByRole('button', { name: 'Save Configuration' }).click();
@@ -255,7 +255,7 @@ test('creates a configuration whose display has only a name', async ({ page, req
   await page.getByRole('button', { name: 'Continue' }).click();
   // Review: no dash after the configuration or an entry without description
   await expect(page.getByRole('definition').first()).toHaveText(id);
-  await expect(page.getByText('Membership (en-US)', { exact: true })).toBeVisible();
+  await expect(page.getByText('Membership (en)', { exact: true })).toBeVisible();
 
   try {
     await page.getByRole('button', { name: 'Create Configuration' }).click();
@@ -267,7 +267,7 @@ test('creates a configuration whose display has only a name', async ({ page, req
       description?: string | null;
       config: { display: unknown[] };
     };
-    expect(saved.config.display).toEqual([{ name: 'Membership', locale: 'en-US' }]);
+    expect(saved.config.display).toEqual([{ name: 'Membership', locale: 'en' }]);
     expect(saved.description ?? null).toBeNull();
   } finally {
     await writeConfig(() => request.delete(`${url}/${id}`, { headers }), `delete ${id}`);

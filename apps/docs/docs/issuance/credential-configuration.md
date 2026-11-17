@@ -29,8 +29,8 @@ Each entry of `fields[]` describes one claim: its `path`, `type`, whether it is 
             "mandatory": true,
             "disclosable": true,
             "display": [
-                { "locale": "en-US", "name": "Name" },
-                { "locale": "de-DE", "name": "Name" }
+                { "locale": "en", "name": "Name" },
+                { "locale": "de", "name": "Name" }
             ]
         },
         {
@@ -66,7 +66,7 @@ Each entry of `fields[]` describes one claim: its `path`, `type`, whether it is 
         "display": [
             {
                 "name": "Membership",
-                "locale": "en-US",
+                "locale": "en",
                 "description": "Example membership card",
                 "background_color": "#12107c",
                 "text_color": "#FFFFFF",

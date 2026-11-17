@@ -92,7 +92,7 @@ Create these four files in `config/membership-files/`.
   "spec": {
     "authorizationServers": [{ "id": "issuer-built-in", "type": "built-in" }],
     "batchSize": 1,
-    "display": [{ "locale": "en-US", "name": "Membership Files" }]
+    "display": [{ "locale": "en", "name": "Membership Files" }]
   }
 }
 ```
@@ -108,7 +108,7 @@ Create these four files in `config/membership-files/`.
     "description": "Membership credential",
     "config": {
       "format": "dc+sd-jwt",
-      "display": [{ "name": "Membership", "locale": "en-US" }]
+      "display": [{ "name": "Membership", "locale": "en" }]
     },
     "vct": "urn:example:membership:1",
     "keyBinding": true,
