@@ -5,13 +5,15 @@ import { RegistrationCertificateStorage } from "../registration-certificate-stor
 import { revokeUnstored } from "../revoke-unstored.js";
 import {
     hubCredentialsForDcql,
+    hubPurpose,
+    MAX_HUB_TEXTS,
     sameCredentialRequest,
 } from "./domain/hub-credentials.js";
 import {
-    BilingualTextSchema,
     type EudiHubIssuerRegistrationCertificateRequest,
     type EudiHubPresentationRegistrationCertificateRequest,
     HttpUrlSchema,
+    PurposeTextSchema,
 } from "./dto/eudi-hub-request.dto.js";
 import type {
     EudiHubOrganizationDetailsDto,
@@ -68,7 +70,7 @@ export class EudiHubRegistrationService {
      * presentation configuration and store it there as `registration_cert`,
      * with the purpose and privacy policy. Missing ones are taken from the
      * configuration, so renewing needs neither again. A credential request
-     * with the same credentials, purpose and privacy policy is used again;
+     * with the same credentials, privacy policy and sent purpose texts is used again;
      * otherwise one is created. Storing runs the checks of every stored
      * certificate, including the overasking check; a certificate that is not
      * stored is revoked at the EUDI Hub.
@@ -83,10 +85,18 @@ export class EudiHubRegistrationService {
             dto.presentationConfigId,
             { purpose: dto.purpose, privacyPolicy: dto.privacyPolicy },
         );
-        const purpose = BilingualTextSchema.safeParse(request.purpose);
+        const purpose = PurposeTextSchema.safeParse(request.purpose);
         if (!purpose.success) {
             throw new BadRequestException(
                 `The purpose of presentation configuration ${request.presentationConfigId} does not suit the EUDI Hub: ${purpose.error.issues.map((issue) => issue.message).join(" ")}`,
+            );
+        }
+        // Every text is stored with the certificate; the EUDI Hub gets those
+        // it accepts.
+        const { sent, notSent } = hubPurpose(purpose.data);
+        if (notSent.length > 0) {
+            this.logger.log(
+                `[${tenantId}] Purpose texts in ${notSent.join(", ")} of presentation configuration ${request.presentationConfigId} are kept but not sent: the EUDI Hub accepts at most ${MAX_HUB_TEXTS} texts with two-letter language codes`,
             );
         }
         // A kept privacy policy was not checked like one in the request.
@@ -103,7 +113,7 @@ export class EudiHubRegistrationService {
         }
         const wanted = {
             credentials: mapping.credentials,
-            purpose: purpose.data,
+            purpose: sent,
             privacyPolicy: request.privacyPolicy,
         };
         const name = dto.name ?? request.defaultName;

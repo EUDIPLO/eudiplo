@@ -9,6 +9,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import type { EudiHubPresentationRegistrationCertificateRequestDto } from '@eudiplo/sdk-core';
 import { hasHttpStatus } from '../../utils/error-message';
+import { labelOf, languageOf } from '../../utils/language-options';
 import type {
   EudiHubOrganizationDetails,
   EudiHubRegistrationCertificate,
@@ -66,6 +67,24 @@ function text(maxLength = 2000): FormControl<string> {
     validators: [Validators.required, Validators.maxLength(maxLength)],
   });
 }
+
+interface PurposeText {
+  lang: string;
+  content: string;
+}
+
+// These rules mirror the backend: PurposeTextSchema (eudi-hub-request.dto.ts)
+// and hubPurpose (registrar/eudi-hub/domain/hub-credentials.ts). Change them
+// together.
+
+/** A language tag as the backend accepts it, such as de, en or pt-BR. */
+const LANGUAGE_TAG = /^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$/;
+
+/** The backend takes at most 50 purpose texts, German and English included. */
+const MAX_OTHER_PURPOSES = 48;
+
+/** The EUDI Hub takes at most 24 purpose texts, German and English included. */
+const MAX_HUB_PURPOSES = 24;
 
 /**
  * Requests a registration certificate from the German EUDI Hub and stores it:
@@ -138,13 +157,8 @@ export class EudiHubRegistrationDialogComponent extends EudiHubTokenDialog<EudiH
       controls.privacyPolicy.disable();
       controls.supportUri.setValue(this.data.supportUri ?? '');
     } else {
-      const purpose = this.data.purpose ?? [];
-      const inLanguage = (lang: string) =>
-        purpose.find((entry) => entry.lang === lang)?.content ??
-        purpose.find((entry) => entry.lang.startsWith(`${lang}-`))?.content ??
-        '';
-      controls.purposeDe.setValue(inLanguage('de'));
-      controls.purposeEn.setValue(inLanguage('en'));
+      controls.purposeDe.setValue(this.keptPurposeIn('de')?.content ?? '');
+      controls.purposeEn.setValue(this.keptPurposeIn('en')?.content ?? '');
       controls.privacyPolicy.setValue(this.data.privacyPolicy ?? '');
     }
     // Once both token and organization are valid, in either order.
@@ -268,18 +282,96 @@ export class EudiHubRegistrationDialogComponent extends EudiHubTokenDialog<EudiH
   }
 
   /**
-   * Kept purposes in languages other than German and English. They are sent
-   * along unchanged, since the stored purpose is replaced by what the request
-   * carries. The EUDI Hub takes two-letter language codes and at most 24
-   * texts; entries with a region, such as pt-BR, cannot be sent.
+   * The kept purpose that fills the German or English field: the text tagged
+   * exactly so, else the first one of that language in any case or region,
+   * such as DE or de-DE.
    */
-  private get otherPurposes(): { lang: string; content: string }[] {
+  private keptPurposeIn(lang: string): PurposeText | undefined {
+    if (this.data.kind !== 'presentation') return undefined;
+    const purpose = this.data.purpose ?? [];
+    return (
+      purpose.find((entry) => entry.lang === lang) ??
+      purpose.find((entry) => languageOf(entry.lang) === lang)
+    );
+  }
+
+  /** The kept texts that fill the German and English fields. */
+  private get prefillSources(): Set<PurposeText> {
+    return new Set(
+      [this.keptPurposeIn('de'), this.keptPurposeIn('en')].filter(
+        (entry): entry is PurposeText => !!entry
+      )
+    );
+  }
+
+  /**
+   * Kept texts in other languages the request carries along: a valid tag, a
+   * text, each language once, at most 48. Since the stored purpose is
+   * replaced by what the request carries, every other kept text is removed.
+   */
+  private get sentOtherTexts(): PurposeText[] {
     if (this.data.kind !== 'presentation') return [];
+    const sources = this.prefillSources;
     const seen = new Set(['de', 'en']);
     return (this.data.purpose ?? [])
-      .filter((entry) => /^[a-z]{2}$/.test(entry.lang) && entry.content.trim())
+      .filter((entry) => !sources.has(entry))
+      .filter((entry) => entry.content.trim() && LANGUAGE_TAG.test(entry.lang))
       .filter((entry) => !seen.has(entry.lang) && seen.add(entry.lang))
-      .map(({ lang, content }) => ({ lang, content: content.trim() }))
-      .slice(0, 22);
+      .slice(0, MAX_OTHER_PURPOSES);
+  }
+
+  /**
+   * Kept purposes in other languages, sent along unchanged. The backend
+   * stores them all and passes the EUDI Hub those with two-letter codes.
+   */
+  get otherPurposes(): PurposeText[] {
+    return this.sentOtherTexts.map(({ lang, content }) => ({ lang, content: content.trim() }));
+  }
+
+  /** Kept texts this request removes from the configuration, each with the reason. */
+  get purposesDropped(): { lang: string; reason: string }[] {
+    if (this.data.kind !== 'presentation') return [];
+    const kept = new Set<PurposeText>([...this.prefillSources, ...this.sentOtherTexts]);
+    const seen = new Set<string>();
+    const dropped: { lang: string; reason: string }[] = [];
+    for (const entry of this.data.purpose ?? []) {
+      if (kept.has(entry)) {
+        seen.add(entry.lang);
+        continue;
+      }
+      let reason = 'more than 50 texts';
+      if (!entry.content.trim()) reason = 'empty text';
+      else if (!LANGUAGE_TAG.test(entry.lang)) reason = 'no valid language tag';
+      else if (seen.has(entry.lang) || entry.lang === 'de' || entry.lang === 'en') {
+        reason = 'language given twice';
+      }
+      seen.add(entry.lang);
+      dropped.push({ lang: entry.lang, reason });
+    }
+    return dropped;
+  }
+
+  /**
+   * Kept purpose languages stored again but not sent to the EUDI Hub, by the
+   * backend's rule: two-letter codes only, at most 24 texts with German and
+   * English first.
+   */
+  get purposesNotSentToHub(): string[] {
+    const twoLetter = this.otherPurposes
+      .map(({ lang }) => lang)
+      .filter((lang) => /^[a-z]{2}$/.test(lang));
+    const sent = new Set(twoLetter.slice(0, MAX_HUB_PURPOSES - 2));
+    return this.otherPurposes.map(({ lang }) => lang).filter((lang) => !sent.has(lang));
+  }
+
+  /** Kept purpose languages that go into the certificate. */
+  get purposesInCertificate(): string[] {
+    const notSent = new Set(this.purposesNotSentToHub);
+    return this.otherPurposes.map(({ lang }) => lang).filter((lang) => !notSent.has(lang));
+  }
+
+  /** Language names for the note, such as "French (fr), Portuguese (pt-BR)". */
+  languageLabels(tags: string[]): string {
+    return tags.map((tag) => labelOf(tag)).join(', ');
   }
 }

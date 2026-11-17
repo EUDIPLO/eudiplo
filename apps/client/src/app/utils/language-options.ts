@@ -52,7 +52,7 @@ export function languageOf(tag: unknown): string {
 let displayNames: Intl.DisplayNames | undefined;
 
 /** "German (de-DE)" for a tag that is not in the list, else the tag itself. */
-function labelOf(tag: string): string {
+export function labelOf(tag: string): string {
   try {
     displayNames ??= new Intl.DisplayNames(['en'], { type: 'language' });
     const name = displayNames.of(languageOf(tag));
