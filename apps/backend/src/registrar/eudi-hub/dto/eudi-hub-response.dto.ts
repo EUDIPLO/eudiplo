@@ -57,7 +57,7 @@ class EudiHubTextDto {
 }
 
 class EudiHubIdentifierDto {
-    @ApiProperty({ example: "http://data.europa.eu/eudi/id/EUID" })
+    @ApiProperty({ example: "http://data.europa.eu/eudi/id/EUID" }) // NOSONAR: scheme name, never fetched
     type!: string;
 
     @ApiProperty({ example: "DE/HRB123456B" })

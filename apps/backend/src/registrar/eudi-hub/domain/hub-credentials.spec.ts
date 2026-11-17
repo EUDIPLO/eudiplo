@@ -67,6 +67,25 @@ describe("hubCredentialsForDcql", () => {
             /doctype_value/,
         ],
         [
+            "more meta than the doctype_value",
+            {
+                credentials: [
+                    { ...mdl, meta: { doctype_value: "x", extra: 1 } },
+                ],
+            },
+            /doctype_value/,
+        ],
+        [
+            "a claim that is no object",
+            { credentials: [{ ...pid, claims: [null] }] },
+            /array indexes or wildcards/,
+        ],
+        [
+            "an empty claim path",
+            { credentials: [{ ...pid, claims: [{ path: [] }] }] },
+            /array indexes or wildcards/,
+        ],
+        [
             "another format",
             { credentials: [{ ...pid, format: "jwt_vc_json" }] },
             /dc\+sd-jwt and mso_mdoc only/,

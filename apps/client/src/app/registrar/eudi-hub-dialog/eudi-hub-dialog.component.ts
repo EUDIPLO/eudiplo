@@ -5,9 +5,8 @@ import { MAT_DIALOG_DATA, MatDialogModule } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
-import { MatRadioModule } from '@angular/material/radio';
-import { MatSelectModule } from '@angular/material/select';
 import { EudiHubAccessCertificate } from '../eudi-hub.service';
+import { EudiHubAccountFieldsComponent } from './eudi-hub-account-fields.component';
 import { EudiHubTokenDialog, httpUrlControl } from './eudi-hub-token-dialog';
 
 /** The key chain a certificate is requested for. */
@@ -26,14 +25,13 @@ export interface EudiHubDialogData {
   selector: 'app-eudi-hub-dialog',
   standalone: true,
   imports: [
+    EudiHubAccountFieldsComponent,
     ReactiveFormsModule,
     MatButtonModule,
     MatDialogModule,
     MatFormFieldModule,
     MatIconModule,
     MatInputModule,
-    MatRadioModule,
-    MatSelectModule,
   ],
   templateUrl: './eudi-hub-dialog.component.html',
   styleUrl: './eudi-hub-dialog.component.scss',

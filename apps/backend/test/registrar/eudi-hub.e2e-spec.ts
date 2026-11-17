@@ -188,7 +188,9 @@ describe("Access certificate from the EUDI Hub (e2e)", () => {
     });
 
     test("answers 404 for an unknown key chain", async () => {
-        await requestCertificate("does-not-exist").expect(404);
+        const response = await requestCertificate("does-not-exist");
+
+        expect(response.status).toBe(404);
     });
 
     test("refuses a key chain that is not an access key chain", async () => {

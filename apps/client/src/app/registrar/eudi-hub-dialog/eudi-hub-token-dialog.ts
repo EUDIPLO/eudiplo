@@ -3,7 +3,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { type AbstractControl, FormControl, Validators } from '@angular/forms';
 import { MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { showFieldsToFix } from '../../common/field-to-fix.util';
+import { firstFieldWithError, showFieldsToFix } from '../../common/field-to-fix.util';
 import {
   apiErrorDetail,
   asSentence,
@@ -13,7 +13,7 @@ import {
 import { EUDI_HUB_PORTAL_URL, EudiHubOrganization, EudiHubService } from '../eudi-hub.service';
 
 /** What the backend accepts: an RFC 6750 bearer token, with or without `Bearer `. */
-const TOKEN = /^\s*(Bearer\s+)?[A-Za-z0-9\-._~+/]+=*\s*$/i;
+const TOKEN = /^\s*([Bb][Ee][Aa][Rr][Ee][Rr]\s+)?[\w.~+/-]+=*\s*$/;
 
 const UUID = /^\s*[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\s*$/i;
 
@@ -33,7 +33,8 @@ export function httpUrlControl(required = true): FormControl<string> {
  * What every EUDI Hub dialog shares: the pasted portal token, which lives in
  * the dialog's form only, the organization it acts for, the environment, and
  * running one request that closes the dialog with its result. The dialog
- * cannot be cancelled while the request runs.
+ * cannot be cancelled while the request runs. `EudiHubAccountFieldsComponent`
+ * renders these controls and signals, so they are its template contract.
  */
 export abstract class EudiHubTokenDialog<R> {
   protected readonly eudiHub = inject(EudiHubService);
@@ -141,6 +142,8 @@ export abstract class EudiHubTokenDialog<R> {
       snackBar: this.snackBar,
       injector: this.injector,
       container: () => this.host.nativeElement,
+      // The shared account fields bind [formControl], not formControlName.
+      field: () => firstFieldWithError(this.host.nativeElement),
     });
   }
 

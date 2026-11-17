@@ -6,7 +6,6 @@ import { MAT_DIALOG_DATA, MatDialogModule } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
-import { MatRadioModule } from '@angular/material/radio';
 import { MatSelectModule } from '@angular/material/select';
 import type { EudiHubPresentationRegistrationCertificateRequestDto } from '@eudiplo/sdk-core';
 import { hasHttpStatus } from '../../utils/error-message';
@@ -14,6 +13,7 @@ import type {
   EudiHubOrganizationDetails,
   EudiHubRegistrationCertificate,
 } from '../eudi-hub.service';
+import { EudiHubAccountFieldsComponent } from './eudi-hub-account-fields.component';
 import { EudiHubTokenDialog, httpUrlControl } from './eudi-hub-token-dialog';
 
 /** Where the certificate goes: a presentation configuration, or the issuance configuration. */
@@ -31,20 +31,24 @@ export type EudiHubRegistrationDialogData =
 /** Identifier scheme as the backend accepts it; a scheme it drops breaks this list's build. */
 type IdentifierType = EudiHubPresentationRegistrationCertificateRequestDto['identifier']['type'];
 
+// Identifier scheme names (URIs), never fetched.
+const EU_ID = 'http://data.europa.eu/eudi/id/'; // NOSONAR: scheme name
+const HUB_ID = 'http://data.eudi-hub.de/eudi/id/'; // NOSONAR: scheme name
+
 /** Identifier schemes the EUDI Hub accepts, with the label shown. */
 const IDENTIFIER_TYPES: { value: IdentifierType; label: string }[] = [
-  { value: 'http://data.europa.eu/eudi/id/EUID', label: 'EUID' },
-  { value: 'http://data.europa.eu/eudi/id/LEI', label: 'LEI' },
-  { value: 'http://data.europa.eu/eudi/id/VATIN', label: 'VAT number' },
-  { value: 'http://data.europa.eu/eudi/id/TIN', label: 'Tax number' },
-  { value: 'http://data.europa.eu/eudi/id/EORI-No', label: 'EORI number' },
-  { value: 'http://data.europa.eu/eudi/id/Excise', label: 'Excise number' },
+  { value: `${EU_ID}EUID`, label: 'EUID' },
+  { value: `${EU_ID}LEI`, label: 'LEI' },
+  { value: `${EU_ID}VATIN`, label: 'VAT number' },
+  { value: `${EU_ID}TIN`, label: 'Tax number' },
+  { value: `${EU_ID}EORI-No`, label: 'EORI number' },
+  { value: `${EU_ID}Excise`, label: 'Excise number' },
   {
-    value: 'http://data.eudi-hub.de/eudi/id/Handelsregisternummer',
+    value: `${HUB_ID}Handelsregisternummer`,
     label: 'Handelsregisternummer',
   },
   {
-    value: 'http://data.eudi-hub.de/eudi/id/DatenuebermittlerPseudonymId',
+    value: `${HUB_ID}DatenuebermittlerPseudonymId`,
     label: 'ELSTER pseudonym',
   },
 ];
@@ -68,13 +72,13 @@ function text(maxLength = 2000): FormControl<string> {
   selector: 'app-eudi-hub-registration-dialog',
   standalone: true,
   imports: [
+    EudiHubAccountFieldsComponent,
     ReactiveFormsModule,
     MatButtonModule,
     MatDialogModule,
     MatFormFieldModule,
     MatIconModule,
     MatInputModule,
-    MatRadioModule,
     MatSelectModule,
   ],
   templateUrl: './eudi-hub-registration-dialog.component.html',

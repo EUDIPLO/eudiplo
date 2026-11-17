@@ -40,61 +40,77 @@ export function hubCredentialsForDcql(
     const credentials: EudiHubCredential[] = [];
     for (const query of queries as Record<string, any>[]) {
         const name = `Credential query ${JSON.stringify(query?.id ?? "")}`;
-        const meta =
-            query?.meta && typeof query.meta === "object" ? query.meta : {};
-        const metaKeys = Object.keys(meta);
-        let type: string;
-        if (query?.format === "dc+sd-jwt") {
-            const vcts = meta.vct_values;
-            if (
-                metaKeys.length !== 1 ||
-                !Array.isArray(vcts) ||
-                vcts.length !== 1 ||
-                typeof vcts[0] !== "string"
-            ) {
-                return {
-                    problem: `${name}: the EUDI Hub registers one vct per credential, so meta must be exactly { "vct_values": ["<vct>"] }`,
-                };
-            }
-            type = vcts[0];
-        } else if (query?.format === "mso_mdoc") {
-            if (
-                metaKeys.length !== 1 ||
-                typeof meta.doctype_value !== "string"
-            ) {
-                return {
-                    problem: `${name}: meta must be exactly { "doctype_value": "<docType>" }`,
-                };
-            }
-            type = meta.doctype_value;
-        } else {
-            return {
-                problem: `${name}: the EUDI Hub supports the formats dc+sd-jwt and mso_mdoc only`,
-            };
-        }
-        const claims = Array.isArray(query.claims) ? query.claims : [];
-        if (claims.length === 0) {
-            return {
-                problem: `${name}: the EUDI Hub needs the requested claims listed`,
-            };
-        }
-        const paths: { path: string[] }[] = [];
-        for (const claim of claims) {
-            const path = claim?.path;
-            if (
-                !Array.isArray(path) ||
-                path.length === 0 ||
-                !path.every((segment: unknown) => typeof segment === "string")
-            ) {
-                return {
-                    problem: `${name}: the claim path ${JSON.stringify(path)} has array indexes or wildcards, which the EUDI Hub does not accept`,
-                };
-            }
-            paths.push({ path });
-        }
-        credentials.push({ format: query.format, type, claims: paths });
+        const type = hubType(query, name);
+        if (type.problem !== undefined) return type;
+        const claims = hubClaims(query, name);
+        if (claims.problem !== undefined) return claims;
+        credentials.push({
+            format: query.format,
+            type: type.value,
+            claims: claims.value,
+        });
     }
     return { credentials };
+}
+
+type Checked<T> =
+    | { value: T; problem?: undefined }
+    | { value?: undefined; problem: string };
+
+/** The `vct` or `docType` of a credential query, the only meta it may have. */
+function hubType(query: Record<string, any>, name: string): Checked<string> {
+    const meta =
+        query?.meta && typeof query.meta === "object" ? query.meta : {};
+    const onlyKey = Object.keys(meta).length === 1;
+    if (query?.format === "dc+sd-jwt") {
+        const vcts = meta.vct_values;
+        return onlyKey &&
+            Array.isArray(vcts) &&
+            vcts.length === 1 &&
+            typeof vcts[0] === "string"
+            ? { value: vcts[0] }
+            : {
+                  problem: `${name}: the EUDI Hub registers one vct per credential, so meta must be exactly { "vct_values": ["<vct>"] }`,
+              };
+    }
+    if (query?.format === "mso_mdoc") {
+        return onlyKey && typeof meta.doctype_value === "string"
+            ? { value: meta.doctype_value }
+            : {
+                  problem: `${name}: meta must be exactly { "doctype_value": "<docType>" }`,
+              };
+    }
+    return {
+        problem: `${name}: the EUDI Hub supports the formats dc+sd-jwt and mso_mdoc only`,
+    };
+}
+
+/** The claim paths of a credential query, which must be strings only. */
+function hubClaims(
+    query: Record<string, any>,
+    name: string,
+): Checked<{ path: string[] }[]> {
+    const claims: unknown[] = Array.isArray(query.claims) ? query.claims : [];
+    if (claims.length === 0) {
+        return {
+            problem: `${name}: the EUDI Hub needs the requested claims listed`,
+        };
+    }
+    const paths: { path: string[] }[] = [];
+    for (const claim of claims) {
+        const path = (claim as { path?: unknown } | null)?.path;
+        if (
+            !Array.isArray(path) ||
+            path.length === 0 ||
+            !path.every((segment: unknown) => typeof segment === "string")
+        ) {
+            return {
+                problem: `${name}: the claim path ${JSON.stringify(path)} has array indexes or wildcards, which the EUDI Hub does not accept`,
+            };
+        }
+        paths.push({ path });
+    }
+    return { value: paths };
 }
 
 /** Whether an existing credential request asks for the same data for the same reason. */
@@ -127,11 +143,19 @@ function credentialKey(entry: any): string {
     const claims = Array.isArray(entry?.claims)
         ? entry.claims
               .map((claim: any) => canonicalJson(claim?.path ?? null))
-              .sort()
+              .sort(byCodeUnits)
         : [];
     return canonicalJson({ format: entry?.format, type: entry?.type, claims });
 }
 
 function sortedJson(value: unknown, key: (entry: unknown) => string): string {
-    return Array.isArray(value) ? JSON.stringify(value.map(key).sort()) : "";
+    return Array.isArray(value)
+        ? JSON.stringify(value.map(key).sort(byCodeUnits))
+        : "";
+}
+
+/** The default sort order, spelled out as Sonar asks for a comparator. */
+function byCodeUnits(a: string, b: string): number {
+    if (a < b) return -1;
+    return a > b ? 1 : 0;
 }

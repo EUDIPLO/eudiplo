@@ -150,7 +150,7 @@ export class EudiHubRegistrationService {
                 tenantId,
                 {
                     registration_cert: {
-                        ...(config.registration_cert ?? {}),
+                        ...config.registration_cert,
                         jwt,
                     },
                 },
@@ -262,7 +262,7 @@ export class EudiHubRegistrationService {
                 tenantId,
                 {
                     registrationCertificate: {
-                        ...(current?.registrationCertificate ?? {}),
+                        ...current?.registrationCertificate,
                         enabled: true,
                         mode: "import",
                         jwt,

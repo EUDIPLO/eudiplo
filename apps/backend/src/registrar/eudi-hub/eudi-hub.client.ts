@@ -155,9 +155,9 @@ export class EudiHubClient {
             EUDI_HUB_REQUEST_LIMITS,
         );
         // The validation schema sets the default.
-        this.baseUrl = configService
-            .getOrThrow<string>("EUDI_HUB_API_URL")
-            .replace(/\/+$/, "");
+        let baseUrl = configService.getOrThrow<string>("EUDI_HUB_API_URL");
+        while (baseUrl.endsWith("/")) baseUrl = baseUrl.slice(0, -1);
+        this.baseUrl = baseUrl;
     }
 
     /** The organizations the user of the token is assigned to. */

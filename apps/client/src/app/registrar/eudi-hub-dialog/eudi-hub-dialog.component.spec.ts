@@ -202,9 +202,9 @@ describe('EudiHubDialogComponent', () => {
     expect(eudiHub.listOrganizations).not.toHaveBeenCalled();
   });
 
-  it('accepts a token with the Bearer prefix', () => {
+  it.each(['Bearer', 'bearer', 'BEARER'])('accepts a token with the %s prefix', (prefix) => {
     const { dialog } = createDialog();
-    dialog.form.controls.token.setValue('  Bearer abc.def-_~+/=  ');
+    dialog.form.controls.token.setValue(`  ${prefix} abc.def-_~+/=  `);
 
     expect(dialog.form.controls.token.valid).toBe(true);
   });

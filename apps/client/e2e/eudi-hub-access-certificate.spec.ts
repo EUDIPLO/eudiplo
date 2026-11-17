@@ -114,6 +114,22 @@ test('shows why the EUDI Hub refused and keeps the dialog open', async ({ page }
   await expect(page.getByLabel('Organization ID')).toBeVisible();
 });
 
+test('marks the empty token and focuses it on Request', async ({ page }) => {
+  const tenant = await createTenant('eudi-hub-e2e', 'EUDI Hub E2E', [
+    'registrar:manage',
+    'keys:manage',
+  ]);
+  const keyId = await createAccessKey(tenant);
+
+  await openDialog(page, tenant, keyId);
+  await page.getByLabel('Support URI').fill('https://support.example');
+  await page.getByRole('button', { name: 'Request Certificate', exact: true }).click();
+
+  await expect(page.getByText('Paste the access token from the portal.')).toBeVisible();
+  await expect(page.getByText('Enter the organization ID.')).toBeVisible();
+  await expect(page.getByLabel('Access token')).toBeFocused();
+});
+
 test('does not offer the request without the registrar:manage role', async ({ page }) => {
   const tenant = await createTenant('eudi-hub-e2e', 'EUDI Hub E2E', ['keys:manage']);
   const keyId = await createAccessKey(tenant);

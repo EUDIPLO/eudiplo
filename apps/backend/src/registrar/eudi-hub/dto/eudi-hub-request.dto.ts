@@ -16,7 +16,7 @@ const EudiHubTokenSchema = z
             .min(1, "Paste the access token from the EUDI Hub portal.")
             .max(16_384)
             .regex(
-                /^[A-Za-z0-9\-._~+/]+=*$/,
+                /^[\w.~+/-]+=*$/,
                 "This is not an access token. Copy the value after 'Bearer ' from the Authorization header of a request the portal sends to the EUDI Hub API.",
             ),
     )
@@ -107,16 +107,20 @@ const BilingualTextSchema = z
         "The EUDI Hub needs a German (de) and an English (en) text.",
     );
 
+// Identifier scheme names (URIs), never fetched.
+const EU_ID = "http://data.europa.eu/eudi/id/"; // NOSONAR: scheme name
+const HUB_ID = "http://data.eudi-hub.de/eudi/id/"; // NOSONAR: scheme name
+
 /** Identifier schemes the EUDI Hub accepts for a legal person. */
 const IDENTIFIER_TYPES = [
-    "http://data.europa.eu/eudi/id/EUID",
-    "http://data.europa.eu/eudi/id/LEI",
-    "http://data.europa.eu/eudi/id/EORI-No",
-    "http://data.europa.eu/eudi/id/VATIN",
-    "http://data.europa.eu/eudi/id/TIN",
-    "http://data.europa.eu/eudi/id/Excise",
-    "http://data.eudi-hub.de/eudi/id/DatenuebermittlerPseudonymId",
-    "http://data.eudi-hub.de/eudi/id/Handelsregisternummer",
+    `${EU_ID}EUID`,
+    `${EU_ID}LEI`,
+    `${EU_ID}EORI-No`,
+    `${EU_ID}VATIN`,
+    `${EU_ID}TIN`,
+    `${EU_ID}Excise`,
+    `${HUB_ID}DatenuebermittlerPseudonymId`,
+    `${HUB_ID}Handelsregisternummer`,
 ] as const;
 
 const RegistrationCertificateBaseSchema = z.object({
