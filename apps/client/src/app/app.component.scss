@@ -10,6 +10,14 @@
   width: 100%;
 }
 
+// With the toolbar and side navigation shown, the shell is exactly as tall as the window, so
+// both stay in place and only the content panel scrolls. Pages without the shell, such as the
+// login page, keep growing with their content.
+:host(.app-shell) {
+  height: 100vh;
+  height: 100dvh; // Follows the browser bar on phones
+}
+
 // Skip link: hidden until it receives keyboard focus, then shown above the toolbar
 .skip-link {
   position: absolute;
@@ -142,8 +150,9 @@
     )
   );
 
-  flex: 1;
-  height: calc(100vh - 64px); // Account for toolbar height
+  // Takes the height the toolbar leaves; min-height: 0 lets it shrink below its content
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
 }
 
@@ -240,10 +249,6 @@
   .app-toolbar {
     padding: 0 8px; // Reduced padding on mobile
     min-height: 56px; // Mobile toolbar height
-  }
-
-  .sidenav-container {
-    height: calc(100vh - 56px); // Account for mobile toolbar height
   }
 
   .app-sidenav {

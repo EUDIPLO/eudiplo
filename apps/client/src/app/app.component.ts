@@ -56,6 +56,7 @@ import { KEY_CHAIN_ROLES } from './key-management/key-chain.service';
   templateUrl: './app.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './app.component.scss',
+  host: { '[class.app-shell]': 'shouldShowToolbar' },
 })
 export class AppComponent implements OnInit, OnDestroy {
   logout() {

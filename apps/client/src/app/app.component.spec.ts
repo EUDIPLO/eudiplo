@@ -35,6 +35,34 @@ describe('AppComponent', () => {
 @Component({ template: '' })
 class EmptyPageComponent {}
 
+// The app-shell class gives the shell the window's height, so the toolbar and the side
+// navigation stay in place and only the content panel scrolls
+describe('AppComponent shell height', () => {
+  it('marks the host as the app shell on pages with the toolbar, not on the login page', async () => {
+    TestBed.configureTestingModule({
+      imports: [AppComponent],
+      providers: [
+        provideRouter([
+          { path: 'login', component: EmptyPageComponent },
+          { path: 'dashboard', component: EmptyPageComponent },
+        ]),
+      ],
+    });
+    const fixture = TestBed.createComponent(AppComponent);
+    const host = fixture.nativeElement as HTMLElement;
+    const router = TestBed.inject(Router);
+    fixture.detectChanges();
+
+    await router.navigateByUrl('/dashboard');
+    fixture.detectChanges();
+    expect(host.classList).toContain('app-shell');
+
+    await router.navigateByUrl('/login');
+    fixture.detectChanges();
+    expect(host.classList).not.toContain('app-shell');
+  });
+});
+
 describe('AppComponent navigation', () => {
   let fixture: ComponentFixture<AppComponent>;
 
