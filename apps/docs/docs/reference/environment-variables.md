@@ -55,6 +55,12 @@ See [OpenID Federation](../trust/federation.md).
 
 <ConfigTable group="observability" />
 
+## Registrar
+
+Connection to the German EUDI Hub ([EUDI Hub](../trust/eudi-hub.md)).
+
+<ConfigTable group="registrar" />
+
 ## Session
 
 <ConfigTable group="session" />

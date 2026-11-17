@@ -72,6 +72,7 @@ const sidebars: SidebarsConfig = {
       link: {type: 'doc', id: 'trust/index'},
       items: [
         'trust/keys-and-certificates',
+        'trust/eudi-hub',
         'trust/registrar',
         'trust/registration-certificates',
         'trust/trust-lists',

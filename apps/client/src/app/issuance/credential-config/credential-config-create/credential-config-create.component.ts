@@ -1,4 +1,10 @@
 import {
+  DEFAULT_LANGUAGE,
+  firstUnusedLanguage,
+  languageOf,
+  languageOptionsWith,
+} from '../../../utils/language-options';
+import {
   Component,
   type OnInit,
   ChangeDetectionStrategy,
@@ -291,14 +297,7 @@ export class CredentialConfigCreateComponent implements OnInit {
   vctSchema = vctSchema;
   embeddedDisclosurePolicySchema = embeddedDisclosurePolicySchema;
 
-  readonly localeOptions = [
-    { value: 'en-US', label: 'English (United States)' },
-    { value: 'en-GB', label: 'English (United Kingdom)' },
-    { value: 'de-DE', label: 'German (Germany)' },
-    { value: 'fr-FR', label: 'French (France)' },
-    { value: 'it-IT', label: 'Italian (Italy)' },
-    { value: 'es-ES', label: 'Spanish (Spain)' },
-  ];
+  readonly languageOptionsWith = languageOptionsWith;
 
   readonly fieldTypes: ClaimFieldDefinitionDto['type'][] = [
     'string',
@@ -957,7 +956,10 @@ export class CredentialConfigCreateComponent implements OnInit {
     return new FormGroup({
       name: new FormControl('', [Validators.required]),
       description: new FormControl(''),
-      locale: new FormControl('en-US', [Validators.required, uniqueDisplayLocaleValidator]),
+      locale: new FormControl(DEFAULT_LANGUAGE, [
+        Validators.required,
+        uniqueDisplayLocaleValidator,
+      ]),
       background_color: new FormControl('', displayColorValidator),
       text_color: new FormControl('', displayColorValidator),
       // Handle both nested (from API/JSON) and flattened (from form) formats
@@ -1015,12 +1017,9 @@ export class CredentialConfigCreateComponent implements OnInit {
 
   /** The first listed locale no display entry uses yet; Add is disabled without one. */
   get unusedDisplayLocale(): string | undefined {
-    const used = new Set(
-      this.displayConfigs.controls.map((entry) =>
-        String(entry.get('locale')?.value ?? '').toLowerCase()
-      )
+    return firstUnusedLanguage(
+      this.displayConfigs.controls.map((entry) => entry.get('locale')?.value)
     );
-    return this.localeOptions.find((option) => !used.has(option.value.toLowerCase()))?.value;
   }
 
   /** Adds an entry for the first listed locale no entry uses yet. */
@@ -1044,17 +1043,12 @@ export class CredentialConfigCreateComponent implements OnInit {
     const usedElsewhere = new Set(
       this.displayConfigs.controls
         .filter((other) => other !== entry)
-        .map((other) => String(other.get('locale')?.value ?? '').toLowerCase())
+        .map((other) => languageOf(other.get('locale')?.value))
     );
-    const options =
-      typeof locale === 'string' &&
-      locale !== '' &&
-      !this.localeOptions.some((option) => option.value === locale)
-        ? [...this.localeOptions, { value: locale, label: locale }]
-        : this.localeOptions;
+    const options = languageOptionsWith(locale);
     return options.map((option) => ({
       ...option,
-      disabled: option.value !== locale && usedElsewhere.has(option.value.toLowerCase()),
+      disabled: option.value !== locale && usedElsewhere.has(languageOf(option.value)),
     }));
   }
 
@@ -1080,7 +1074,7 @@ export class CredentialConfigCreateComponent implements OnInit {
     const displayEntry = display as FieldDisplayDto;
 
     return new FormGroup({
-      locale: new FormControl(displayEntry?.locale || 'en-US', [Validators.required]),
+      locale: new FormControl(displayEntry?.locale || DEFAULT_LANGUAGE, [Validators.required]),
       name: new FormControl(displayEntry?.name || '', [Validators.required]),
       description: new FormControl(display?.description || ''),
     });
@@ -1211,8 +1205,13 @@ export class CredentialConfigCreateComponent implements OnInit {
     );
   }
 
+  /** Adds a label for the claim in the first language it has no label in yet. */
   addFieldDisplay(fieldIndex: number): void {
-    this.getFieldDisplayArray(fieldIndex).push(this.createFieldDisplayGroup());
+    const labels = this.getFieldDisplayArray(fieldIndex);
+    const group = this.createFieldDisplayGroup();
+    const locale = firstUnusedLanguage(labels.controls.map((label) => label.get('locale')?.value));
+    if (locale) group.get('locale')?.setValue(locale);
+    labels.push(group);
   }
 
   removeFieldDisplay(fieldIndex: number, displayIndex: number): void {

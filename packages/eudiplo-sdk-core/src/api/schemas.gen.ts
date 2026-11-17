@@ -11622,6 +11622,42 @@ export const UpstreamOidcConfigSchema = {
     additionalProperties: false
 } as const;
 
+export const UpstreamOidcConfigSchema = {
+    type: 'object',
+    properties: {
+        issuer: {
+            type: 'string',
+            description: 'The OIDC issuer URL of the upstream provider',
+            example: 'https://auth.example.com/realms/myrealm'
+        },
+        clientId: {
+            type: 'string',
+            description: 'The client ID registered with the upstream provider',
+            example: 'eudiplo-chained-as'
+        },
+        clientSecret: {
+            type: 'string',
+            description: 'The client secret for confidential clients'
+        },
+        scopes: {
+            items: {
+                type: 'string'
+            },
+            description: 'Scopes to request from the upstream provider',
+            default: [
+                'openid',
+                'profile'
+            ],
+            type: 'array'
+        }
+    },
+    required: [
+        'issuer',
+        'clientId'
+    ],
+    additionalProperties: false
+} as const;
+
 export const ChainedAuthorizationServerConfigSchema = {
     type: 'object',
     properties: {
@@ -14646,6 +14682,555 @@ export const OidcTokenResponseDtoSchema = {
         'id_token',
         'scope'
     ]
+} as const;
+
+export const EudiHubOrganizationsRequestDtoSchema = {
+    type: 'object',
+    properties: {
+        token: {
+            type: 'string',
+            description: 'Access token of the EUDI Hub portal (the value of the Authorization header the portal sends, with or without \'Bearer \'). EUDIPLO uses it for this request only and does not store it.'
+        }
+    },
+    required: [
+        'token'
+    ],
+    additionalProperties: false
+} as const;
+
+export const EudiHubOrganizationDtoSchema = {
+    type: 'object',
+    properties: {
+        id: {
+            type: 'string',
+            description: 'ID of the organization at the EUDI Hub',
+            example: '01932c5a-9abc-7000-8000-000000000010'
+        },
+        name: {
+            type: 'string',
+            description: 'Name of the organization',
+            example: 'Example Org'
+        }
+    },
+    required: [
+        'id',
+        'name'
+    ]
+} as const;
+
+export const EudiHubAccessCertificateRequestDtoSchema = {
+    type: 'object',
+    properties: {
+        token: {
+            type: 'string',
+            description: 'Access token of the EUDI Hub portal (the value of the Authorization header the portal sends, with or without \'Bearer \'). EUDIPLO uses it for this request only and does not store it.'
+        },
+        organizationId: {
+            type: 'string',
+            format: 'uuid',
+            pattern: '^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$',
+            description: 'ID of the organization at the EUDI Hub.'
+        },
+        keyId: {
+            type: 'string',
+            minLength: 1,
+            description: 'Standalone access key chain the certificate is requested for.'
+        },
+        environment: {
+            type: 'string',
+            enum: [
+                'sandbox',
+                'live'
+            ],
+            description: 'EUDI Hub environment that issues the certificate.'
+        },
+        supportUri: {
+            type: 'string',
+            maxLength: 2048,
+            format: 'uri',
+            description: 'Where interested parties can reach the organization for support regarding this certificate.'
+        },
+        name: {
+            type: 'string',
+            description: 'Display name of the certificate at the EUDI Hub. Defaults to the key chain\'s description or ID.',
+            minLength: 1,
+            maxLength: 200
+        }
+    },
+    required: [
+        'token',
+        'organizationId',
+        'keyId',
+        'environment',
+        'supportUri'
+    ],
+    additionalProperties: false
+} as const;
+
+export const EudiHubAccessCertificateDtoSchema = {
+    type: 'object',
+    properties: {
+        id: {
+            type: 'string',
+            description: 'ID of the certificate at the EUDI Hub'
+        },
+        certId: {
+            type: 'string',
+            description: 'ID of the key chain that now holds the certificate'
+        },
+        crt: {
+            type: 'string',
+            description: 'The certificate in PEM format'
+        },
+        environment: {
+            enum: [
+                'sandbox',
+                'live'
+            ],
+            type: 'string',
+            description: 'EUDI Hub environment that issued the certificate'
+        },
+        clientId: {
+            type: 'string',
+            description: 'Client identifier the EUDI Hub derived from the certificate',
+            example: 'X509_hash:K7_l5RcjzCZ7eGL0DPcf'
+        },
+        expirationDate: {
+            type: 'string',
+            description: 'When the certificate expires, as the EUDI Hub reports it',
+            example: '2027-06-17T23:59:59Z'
+        }
+    },
+    required: [
+        'id',
+        'certId',
+        'crt',
+        'environment'
+    ]
+} as const;
+
+export const EudiHubOrganizationDetailsRequestDtoSchema = {
+    type: 'object',
+    properties: {
+        token: {
+            type: 'string',
+            description: 'Access token of the EUDI Hub portal (the value of the Authorization header the portal sends, with or without \'Bearer \'). EUDIPLO uses it for this request only and does not store it.'
+        },
+        organizationId: {
+            type: 'string',
+            format: 'uuid',
+            pattern: '^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$',
+            description: 'ID of the organization at the EUDI Hub.'
+        }
+    },
+    required: [
+        'token',
+        'organizationId'
+    ],
+    additionalProperties: false
+} as const;
+
+export const EudiHubIdentifierDtoSchema = {
+    type: 'object',
+    properties: {
+        type: {
+            type: 'string',
+            example: 'http://data.europa.eu/eudi/id/EUID'
+        },
+        value: {
+            type: 'string',
+            example: 'DE/HRB123456B'
+        }
+    },
+    required: [
+        'type',
+        'value'
+    ]
+} as const;
+
+export const EudiHubTextDtoSchema = {
+    type: 'object',
+    properties: {
+        lang: {
+            type: 'string',
+            example: 'en'
+        },
+        content: {
+            type: 'string'
+        }
+    },
+    required: [
+        'lang',
+        'content'
+    ]
+} as const;
+
+export const EudiHubServiceDescriptionDtoSchema = {
+    type: 'object',
+    properties: {
+        name: {
+            type: 'string',
+            description: 'Technical name of the service description'
+        },
+        descriptions: {
+            type: 'array',
+            items: {
+                $ref: '#/components/schemas/EudiHubTextDto'
+            }
+        }
+    },
+    required: [
+        'name',
+        'descriptions'
+    ]
+} as const;
+
+export const EudiHubOrganizationDetailsDtoSchema = {
+    type: 'object',
+    properties: {
+        id: {
+            type: 'string',
+            description: 'ID of the organization at the EUDI Hub'
+        },
+        name: {
+            type: 'string',
+            description: 'Trade name, else legal name'
+        },
+        identifiers: {
+            description: 'Official identifiers of the organization',
+            type: 'array',
+            items: {
+                $ref: '#/components/schemas/EudiHubIdentifierDto'
+            }
+        },
+        serviceDescriptions: {
+            type: 'array',
+            items: {
+                $ref: '#/components/schemas/EudiHubServiceDescriptionDto'
+            }
+        },
+        privacyPolicyUris: {
+            type: 'array',
+            items: {
+                type: 'string'
+            }
+        },
+        supportUris: {
+            type: 'array',
+            items: {
+                type: 'string'
+            }
+        },
+        infoUris: {
+            type: 'array',
+            items: {
+                type: 'string'
+            }
+        }
+    },
+    required: [
+        'id',
+        'name',
+        'identifiers',
+        'serviceDescriptions',
+        'privacyPolicyUris',
+        'supportUris',
+        'infoUris'
+    ]
+} as const;
+
+export const EudiHubPresentationRegistrationCertificateRequestDtoSchema = {
+    type: 'object',
+    properties: {
+        token: {
+            type: 'string',
+            description: 'Access token of the EUDI Hub portal (the value of the Authorization header the portal sends, with or without \'Bearer \'). EUDIPLO uses it for this request only and does not store it.'
+        },
+        organizationId: {
+            type: 'string',
+            format: 'uuid',
+            pattern: '^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$',
+            description: 'ID of the organization at the EUDI Hub.'
+        },
+        environment: {
+            type: 'string',
+            enum: [
+                'sandbox',
+                'live'
+            ],
+            description: 'EUDI Hub environment that issues the certificate.'
+        },
+        identifier: {
+            type: 'object',
+            properties: {
+                type: {
+                    type: 'string',
+                    enum: [
+                        'http://data.europa.eu/eudi/id/EUID',
+                        'http://data.europa.eu/eudi/id/LEI',
+                        'http://data.europa.eu/eudi/id/EORI-No',
+                        'http://data.europa.eu/eudi/id/VATIN',
+                        'http://data.europa.eu/eudi/id/TIN',
+                        'http://data.europa.eu/eudi/id/Excise',
+                        'http://data.eudi-hub.de/eudi/id/DatenuebermittlerPseudonymId',
+                        'http://data.eudi-hub.de/eudi/id/Handelsregisternummer'
+                    ]
+                },
+                value: {
+                    type: 'string',
+                    minLength: 1,
+                    maxLength: 200
+                }
+            },
+            required: [
+                'type',
+                'value'
+            ],
+            additionalProperties: false,
+            description: 'Official identifier of the organization to put in the certificate, one of those the EUDI Hub has for it.'
+        },
+        serviceDescription: {
+            type: 'array',
+            minItems: 2,
+            maxItems: 24,
+            items: {
+                type: 'object',
+                properties: {
+                    lang: {
+                        type: 'string',
+                        pattern: '^[a-z]{2}$',
+                        description: 'ISO 639-1 language code, such as de or en.'
+                    },
+                    content: {
+                        type: 'string',
+                        minLength: 1,
+                        maxLength: 2000
+                    }
+                },
+                required: [
+                    'lang',
+                    'content'
+                ],
+                additionalProperties: false
+            },
+            description: 'Description of the service in German and English, shown to wallet users.'
+        },
+        supportUri: {
+            type: 'string',
+            maxLength: 2048,
+            format: 'uri',
+            description: 'Where people can reach the organization about this certificate.'
+        },
+        infoUri: {
+            type: 'string',
+            maxLength: 2048,
+            format: 'uri',
+            description: 'General web address of the organization.'
+        },
+        name: {
+            type: 'string',
+            description: 'Display name of the certificate at the EUDI Hub.',
+            minLength: 1,
+            maxLength: 200
+        },
+        presentationConfigId: {
+            type: 'string',
+            minLength: 1,
+            description: 'Presentation configuration whose DCQL query the certificate covers and that stores it.'
+        },
+        purpose: {
+            type: 'array',
+            minItems: 2,
+            maxItems: 24,
+            items: {
+                type: 'object',
+                properties: {
+                    lang: {
+                        type: 'string',
+                        pattern: '^[a-z]{2}$',
+                        description: 'ISO 639-1 language code, such as de or en.'
+                    },
+                    content: {
+                        type: 'string',
+                        minLength: 1,
+                        maxLength: 2000
+                    }
+                },
+                required: [
+                    'lang',
+                    'content'
+                ],
+                additionalProperties: false
+            },
+            description: 'Why the data is requested, in German and English (GDPR purpose).'
+        },
+        privacyPolicy: {
+            type: 'string',
+            maxLength: 2048,
+            format: 'uri',
+            description: 'Privacy policy URL.'
+        }
+    },
+    required: [
+        'token',
+        'organizationId',
+        'environment',
+        'identifier',
+        'serviceDescription',
+        'supportUri',
+        'infoUri',
+        'presentationConfigId',
+        'purpose',
+        'privacyPolicy'
+    ],
+    additionalProperties: false
+} as const;
+
+export const EudiHubRegistrationCertificateDtoSchema = {
+    type: 'object',
+    properties: {
+        id: {
+            type: 'string',
+            description: 'ID of the certificate at the EUDI Hub'
+        },
+        environment: {
+            enum: [
+                'sandbox',
+                'live'
+            ],
+            type: 'string'
+        },
+        expirationDate: {
+            type: 'string',
+            description: 'When the certificate expires, as the EUDI Hub reports it'
+        },
+        credentialRequestId: {
+            type: 'string',
+            description: 'Credential request the certificate was issued for (verifier)'
+        },
+        reusedCredentialRequest: {
+            type: 'boolean',
+            description: 'Whether an existing credential request with the same credentials, purpose and privacy policy was used'
+        },
+        credentialIssuanceIds: {
+            description: 'Credential issuances the certificate was issued for (issuer)',
+            type: 'array',
+            items: {
+                type: 'string'
+            }
+        }
+    },
+    required: [
+        'id',
+        'environment'
+    ]
+} as const;
+
+export const EudiHubIssuerRegistrationCertificateRequestDtoSchema = {
+    type: 'object',
+    properties: {
+        token: {
+            type: 'string',
+            description: 'Access token of the EUDI Hub portal (the value of the Authorization header the portal sends, with or without \'Bearer \'). EUDIPLO uses it for this request only and does not store it.'
+        },
+        organizationId: {
+            type: 'string',
+            format: 'uuid',
+            pattern: '^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$',
+            description: 'ID of the organization at the EUDI Hub.'
+        },
+        environment: {
+            type: 'string',
+            enum: [
+                'sandbox',
+                'live'
+            ],
+            description: 'EUDI Hub environment that issues the certificate.'
+        },
+        identifier: {
+            type: 'object',
+            properties: {
+                type: {
+                    type: 'string',
+                    enum: [
+                        'http://data.europa.eu/eudi/id/EUID',
+                        'http://data.europa.eu/eudi/id/LEI',
+                        'http://data.europa.eu/eudi/id/EORI-No',
+                        'http://data.europa.eu/eudi/id/VATIN',
+                        'http://data.europa.eu/eudi/id/TIN',
+                        'http://data.europa.eu/eudi/id/Excise',
+                        'http://data.eudi-hub.de/eudi/id/DatenuebermittlerPseudonymId',
+                        'http://data.eudi-hub.de/eudi/id/Handelsregisternummer'
+                    ]
+                },
+                value: {
+                    type: 'string',
+                    minLength: 1,
+                    maxLength: 200
+                }
+            },
+            required: [
+                'type',
+                'value'
+            ],
+            additionalProperties: false,
+            description: 'Official identifier of the organization to put in the certificate, one of those the EUDI Hub has for it.'
+        },
+        serviceDescription: {
+            type: 'array',
+            minItems: 2,
+            maxItems: 24,
+            items: {
+                type: 'object',
+                properties: {
+                    lang: {
+                        type: 'string',
+                        pattern: '^[a-z]{2}$',
+                        description: 'ISO 639-1 language code, such as de or en.'
+                    },
+                    content: {
+                        type: 'string',
+                        minLength: 1,
+                        maxLength: 2000
+                    }
+                },
+                required: [
+                    'lang',
+                    'content'
+                ],
+                additionalProperties: false
+            },
+            description: 'Description of the service in German and English, shown to wallet users.'
+        },
+        supportUri: {
+            type: 'string',
+            maxLength: 2048,
+            format: 'uri',
+            description: 'Where people can reach the organization about this certificate.'
+        },
+        infoUri: {
+            type: 'string',
+            maxLength: 2048,
+            format: 'uri',
+            description: 'General web address of the organization.'
+        },
+        name: {
+            type: 'string',
+            description: 'Display name of the certificate at the EUDI Hub.',
+            minLength: 1,
+            maxLength: 200
+        }
+    },
+    required: [
+        'token',
+        'organizationId',
+        'environment',
+        'identifier',
+        'serviceDescription',
+        'supportUri',
+        'infoUri'
+    ],
+    additionalProperties: false
 } as const;
 
 export const FileUploadDtoSchema = {

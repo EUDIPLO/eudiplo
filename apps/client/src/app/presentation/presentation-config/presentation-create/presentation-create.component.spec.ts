@@ -122,6 +122,32 @@ describe('Presentation configuration flow', () => {
     });
   });
 
+  it('keeps a stored purpose language the list lacks and starts new ones in English', () => {
+    component.addRegistrationCertPurpose('de-DE', 'Altersprüfung');
+    component.addRegistrationCertPurpose();
+
+    expect(component.registrationCertPurposeArray.value).toEqual([
+      { lang: 'de-DE', content: 'Altersprüfung' },
+      { lang: 'en', content: '' },
+    ]);
+  });
+
+  it('sends a stored purpose language back unchanged, even one never listed', () => {
+    (component as any).loadRegistrationCertIntoForm({
+      body: { purpose: [{ lang: 'pt-BR', content: 'Verificação de idade' }] },
+    });
+
+    expect((component as any).getRegistrationCertBodyFromForm()?.purpose).toEqual([
+      { lang: 'pt-BR', content: 'Verificação de idade' },
+    ]);
+  });
+
+  it('offers the next purpose in a language no purpose has yet', () => {
+    component.addRegistrationCertPurpose('en-US', 'Age check');
+
+    expect(component.unusedPurposeLanguage).toBe('de');
+  });
+
   it('renders the guided creation flow and validates each step', async () => {
     fixture.detectChanges();
     await fixture.whenStable();

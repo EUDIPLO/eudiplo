@@ -429,7 +429,11 @@
 
                         <div fxLayout="row" fxLayoutAlign="space-between center">
                           <h5>Purposes</h5>
-                          <button mat-button type="button" (click)="addRegistrationCertPurpose()">
+                          <button
+                            mat-button
+                            type="button"
+                            (click)="addRegistrationCertPurpose(unusedPurposeLanguage)"
+                          >
                             <mat-icon>add</mat-icon>
                             Add Purpose
                           </button>
@@ -455,10 +459,15 @@
                               <mat-form-field fxFlex="30">
                                 <mat-label>Language</mat-label>
                                 <mat-select formControlName="lang">
-                                  @for (option of purposeLanguageOptions; track option.value) {
-                                    <mat-option [value]="option.value"
-                                      >{{ option.label }} ({{ option.value }})</mat-option
-                                    >
+                                  @for (
+                                    option of languageOptionsWith(purposeCtrl.get('lang')?.value);
+                                    track option.value
+                                  ) {
+                                    <mat-option [value]="option.value">{{
+                                      option.label.includes(option.value)
+                                        ? option.label
+                                        : option.label + ' (' + option.value + ')'
+                                    }}</mat-option>
                                   }
                                 </mat-select>
                               </mat-form-field>

@@ -372,10 +372,6 @@
               <mat-icon>content_copy</mat-icon>
               Copy PEM
             </button>
-            <button mat-stroked-button (click)="copyPublicKeyToClipboard(keyChain.activePublicKey)">
-              <mat-icon>content_copy</mat-icon>
-              Copy Public Key (JWK)
-            </button>
             @if (canEnrollWithRegistrar) {
               <button
                 mat-stroked-button
@@ -394,10 +390,30 @@
                 <mat-icon>how_to_reg</mat-icon>
                 {{ isEnrolling ? 'Enrolling...' : 'Enroll with Registrar' }}
               </button>
-            } @else if (needsRegistrarConfig) {
+            }
+            @if (canRequestFromEudiHub) {
+              <button
+                mat-stroked-button
+                (click)="requestFromEudiHub()"
+                [disabled]="isEnrolling"
+                disabledInteractive
+                [matTooltip]="
+                  isEnrolling
+                    ? 'Wait until the registrar enrollment of this key finishes'
+                    : 'Request a certificate for this key from the German EUDI Hub with a token from its portal'
+                "
+                appConfigManaged
+                managedKind="KeyChain"
+                [managedResourceId]="keyId"
+              >
+                <mat-icon>verified</mat-icon>
+                Request from EUDI Hub
+              </button>
+            }
+            @if (needsRegistrarConfig) {
               <a mat-button routerLink="/registrar">
                 <mat-icon>settings</mat-icon>
-                Configure the registrar to enroll this key
+                Or configure a registrar to enroll this key
               </a>
             }
           </div>
@@ -469,15 +485,6 @@
               <mat-icon>content_copy</mat-icon>
               Copy PEM
             </button>
-            @if (keyChain.previousPublicKey) {
-              <button
-                mat-stroked-button
-                (click)="copyPublicKeyToClipboard(keyChain.previousPublicKey)"
-              >
-                <mat-icon>content_copy</mat-icon>
-                Copy Public Key (JWK)
-              </button>
-            }
           </div>
         </mat-card-content>
       </mat-card>

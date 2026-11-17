@@ -6,6 +6,12 @@ import SchemaReference from "@site/src/components/SchemaReference";
 
 EUDIPLO can talk to the German EUDI wallet registrar to obtain access certificates, issue registration certificates and publish schema metadata. Each tenant uses its own registrar account. Other ecosystems are not supported by this integration: import their certificates instead ([Wallet and Registrar Requirements](wallet-registrars.md)).
 
+:::note
+
+The German registrar is moving to the EUDI Hub (`portal.eudi-hub.gov.de`). EUDIPLO gets access and registration certificates from the EUDI Hub with a token from its portal: see [EUDI Hub](eudi-hub.md).
+
+:::
+
 ## Prerequisites
 
 - The `registrar:manage` role; without it the **Registrar** menu is hidden.

@@ -8,6 +8,7 @@ Wallets and verifiers only accept EUDIPLO if they trust its certificates, and EU
 | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
 | Create or import the keys that sign credentials, status lists, trust lists and requests        | [Keys and Certificates](keys-and-certificates.md)                 |
 | Know which certificates a specific wallet needs                                                 | [Wallet and Registrar Requirements](wallet-registrars.md)         |
+| Get access and registration certificates from the German EUDI Hub                               | [EUDI Hub](eudi-hub.md)                                           |
 | Get access and registration certificates from the German registrar, publish schema metadata    | [Registrar](registrar.md)                                         |
 | Tell wallets what my verifier may request or which credentials my issuer provides               | [Registration Certificates](registration-certificates.md)         |
 | Accept credentials only from specific issuers, or publish a list of my own issuers             | [Trust Lists](trust-lists.md)                                     |

@@ -119,7 +119,7 @@ test('issue and verify cookbook', async ({ page }) => {
     await page.getByRole('link', { name: 'Use guided setup' }).click();
     await expect(page.getByText('Step 1 of 4 · Identity')).toBeVisible();
     await page.getByRole('textbox', { name: 'Name' }).fill('Membership Demo');
-    await selectOption(page, 'Locale', 'English (US)');
+    await selectOption(page, 'Locale', 'English');
     for (const step of ['Wallet access', 'Trust', 'Review']) {
       await page.getByRole('button', { name: 'Continue' }).click();
       await expect(page.getByText(`· ${step}`)).toBeVisible();
@@ -170,7 +170,7 @@ test('issue and verify cookbook', async ({ page }) => {
     // Appearance
     await page.getByRole('textbox', { name: 'Display Name' }).fill('Membership');
     await page.getByRole('textbox', { name: 'Description' }).fill('Example membership card');
-    await expect(page.getByRole('combobox', { name: 'Locale' })).toHaveText(/United States/);
+    await expect(page.getByRole('combobox', { name: 'Locale' })).toHaveText('English');
     await page.getByRole('button', { name: 'Continue' }).click();
 
     // Settings

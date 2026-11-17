@@ -16,8 +16,8 @@ const field = (
 ): CredentialField => ({
   ...definition,
   display: [
-    { locale: 'en-US', name: englishName },
-    { locale: 'de-DE', name: germanName },
+    { locale: 'en', name: englishName },
+    { locale: 'de', name: germanName },
   ],
 });
 
@@ -35,14 +35,14 @@ export const configs: PredefinedConfig[] = [
           {
             name: 'PID',
             description: 'PID Credential',
-            locale: 'en-US',
+            locale: 'en',
             background_color: '#FFFFFF',
             text_color: '#000000',
           },
           {
             name: 'PID',
             description: 'PID Nachweis',
-            locale: 'de-DE',
+            locale: 'de',
             background_color: '#FFFFFF',
             text_color: '#000000',
           },
@@ -105,11 +105,11 @@ export const configs: PredefinedConfig[] = [
           disclosable: true,
           display: [
             {
-              locale: 'en-US',
+              locale: 'en',
               name: 'Address',
             },
             {
-              locale: 'de-DE',
+              locale: 'de',
               name: 'Adresse',
             },
           ],
@@ -122,11 +122,11 @@ export const configs: PredefinedConfig[] = [
           disclosable: true,
           display: [
             {
-              locale: 'en-US',
+              locale: 'en',
               name: 'Birth Year',
             },
             {
-              locale: 'de-DE',
+              locale: 'de',
               name: 'Geburtsjahr',
             },
           ],
@@ -211,11 +211,11 @@ export const configs: PredefinedConfig[] = [
           disclosable: true,
           display: [
             {
-              locale: 'en-US',
+              locale: 'en',
               name: 'Age Assertions',
             },
             {
-              locale: 'de-DE',
+              locale: 'de',
               name: 'Altersangaben',
             },
           ],
@@ -228,11 +228,11 @@ export const configs: PredefinedConfig[] = [
           disclosable: true,
           display: [
             {
-              locale: 'en-US',
+              locale: 'en',
               name: 'Age in Years',
             },
             {
-              locale: 'de-DE',
+              locale: 'de',
               name: 'Alter in Jahren',
             },
           ],
@@ -245,11 +245,11 @@ export const configs: PredefinedConfig[] = [
           disclosable: true,
           display: [
             {
-              locale: 'en-US',
+              locale: 'en',
               name: 'Birth Date',
             },
             {
-              locale: 'de-DE',
+              locale: 'de',
               name: 'Geburtsdatum',
             },
           ],
@@ -308,11 +308,11 @@ export const configs: PredefinedConfig[] = [
           disclosable: false,
           display: [
             {
-              locale: 'en-US',
+              locale: 'en',
               name: 'Nationality',
             },
             {
-              locale: 'de-DE',
+              locale: 'de',
               name: 'Staatsangehoerigkeit',
             },
           ],
@@ -325,11 +325,11 @@ export const configs: PredefinedConfig[] = [
           disclosable: true,
           display: [
             {
-              locale: 'en-US',
+              locale: 'en',
               name: 'Nationalities',
             },
             {
-              locale: 'de-DE',
+              locale: 'de',
               name: 'Staatsangehoerigkeiten',
             },
           ],
@@ -348,11 +348,11 @@ export const configs: PredefinedConfig[] = [
           disclosable: false,
           display: [
             {
-              locale: 'en-US',
+              locale: 'en',
               name: 'Place of Birth (City)',
             },
             {
-              locale: 'de-DE',
+              locale: 'de',
               name: 'Geburtsort (Stadt)',
             },
           ],
@@ -366,11 +366,11 @@ export const configs: PredefinedConfig[] = [
           disclosable: true,
           display: [
             {
-              locale: 'en-US',
+              locale: 'en',
               name: 'Place of Birth',
             },
             {
-              locale: 'de-DE',
+              locale: 'de',
               name: 'Geburtsort',
             },
           ],

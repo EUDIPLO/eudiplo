@@ -1,0 +1,67 @@
+<h2 mat-dialog-title>Request Access Certificate from the EUDI Hub</h2>
+<form [formGroup]="form" (ngSubmit)="submit()" novalidate>
+  <mat-dialog-content class="content">
+    <app-eudi-hub-account-fields
+      [dialog]="this"
+      liveHint="Live issues a production access certificate that wallets accept."
+    />
+
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Support URI</mat-label>
+      <input
+        matInput
+        formControlName="supportUri"
+        type="url"
+        placeholder="https://example.com/support"
+      />
+      <mat-hint>Where people can reach your organization about this certificate.</mat-hint>
+      @if (form.controls.supportUri.hasError('required')) {
+        <mat-error>Enter a support URI.</mat-error>
+      } @else if (form.controls.supportUri.hasError('maxlength')) {
+        <mat-error>Use at most 2048 characters.</mat-error>
+      } @else if (form.controls.supportUri.hasError('pattern')) {
+        <mat-error>Enter an http or https URL.</mat-error>
+      }
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Certificate name</mat-label>
+      <input matInput formControlName="name" maxlength="200" [placeholder]="defaultName" />
+      <mat-hint>Shown in the portal. Empty uses {{ defaultName }}.</mat-hint>
+    </mat-form-field>
+
+    @if (error(); as message) {
+      <p class="error" role="alert">
+        <mat-icon>error</mat-icon>
+        <span>{{ message }}</span>
+      </p>
+    }
+  </mat-dialog-content>
+  <mat-dialog-actions align="end">
+    <button
+      mat-button
+      type="button"
+      (click)="cancel()"
+      [disabled]="requesting()"
+      disabledInteractive
+    >
+      Cancel
+    </button>
+    <button
+      mat-flat-button
+      color="primary"
+      type="submit"
+      [disabled]="requesting()"
+      disabledInteractive
+    >
+      <mat-icon>verified</mat-icon>
+      {{
+        requesting()
+          ? 'Requesting...'
+          : form.controls.environment.value === 'live'
+            ? 'Request Live Certificate'
+            : 'Request Certificate'
+      }}
+    </button>
+  </mat-dialog-actions>
+</form>

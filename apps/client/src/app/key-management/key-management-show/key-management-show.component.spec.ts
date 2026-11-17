@@ -149,18 +149,15 @@ describe('KeyManagementShowComponent', () => {
       );
     });
 
-    it('points to View as JSON for a public key the card does not print', async () => {
-      shownWith({ activeCertificate: certificate } as Partial<KeyChainResponseDto>);
+    it('offers no public key copy on a certificate card', () => {
+      const text = shownWith({
+        activeCertificate: certificate,
+        previousCertificate: certificate,
+        previousPublicKey: { kty: 'EC', kid: 'old-kid' },
+      } as Partial<KeyChainResponseDto>);
 
-      clickButton('Copy Public Key (JWK)');
-
-      await vi.waitFor(() =>
-        expect(open).toHaveBeenCalledWith(
-          'Could not copy the public key. Open View as JSON and copy it by hand.',
-          'Close',
-          expect.objectContaining({ duration: expect.any(Number) })
-        )
-      );
+      expect(text).toContain('Copy PEM');
+      expect(text).not.toContain('Copy Public Key (JWK)');
     });
   });
 
@@ -364,6 +361,7 @@ describe('KeyManagementShowComponent registrar enrollment', () => {
   let snackBar: { open: ReturnType<typeof vi.fn> };
   let snackBarAction: Subject<void>;
   let router: { navigate: ReturnType<typeof vi.fn> };
+  let dialog: { open: ReturnType<typeof vi.fn> };
   let roles: string[];
 
   function keyChain(overrides: Record<string, unknown> = {}): KeyChainResponseDto {
@@ -393,7 +391,7 @@ describe('KeyManagementShowComponent registrar enrollment', () => {
       { paramMap: of(convertToParamMap({ id: key.id })) } as never,
       snackBar as never,
       router as never,
-      {} as never,
+      dialog as never,
       { hasRole: (role: string) => roles.includes(role) } as never,
       registrarService as never,
       {} as never,
@@ -418,6 +416,7 @@ describe('KeyManagementShowComponent registrar enrollment', () => {
     snackBarAction = new Subject<void>();
     snackBar = { open: vi.fn(() => ({ onAction: () => snackBarAction })) };
     router = { navigate: vi.fn() };
+    dialog = { open: vi.fn() };
     roles = ['registrar:manage'];
     vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
@@ -741,6 +740,84 @@ describe('KeyManagementShowComponent registrar enrollment', () => {
     await component.enrollWithRegistrar();
 
     expect(snackBar.open.mock.lastCall?.[1]).toBe('Close');
+  });
+
+  describe('EUDI Hub', () => {
+    function closesWith(result: unknown) {
+      dialog.open.mockReturnValue({ afterClosed: () => of(result) });
+    }
+
+    it('offers the EUDI Hub request without a registrar configuration', async () => {
+      registrarService.getConfig.mockResolvedValue(null);
+
+      expect((await create()).canRequestFromEudiHub).toBe(true);
+    });
+
+    it.each([
+      ['an internal chain', { type: 'internalChain' }],
+      ['an attestation key', { usageType: 'attestation' }],
+    ])('does not offer it for %s', async (_, overrides) => {
+      expect((await create(keyChain(overrides))).canRequestFromEudiHub).toBe(false);
+    });
+
+    it('does not offer it without the registrar:manage role', async () => {
+      roles = ['keys:manage'];
+
+      expect((await create()).canRequestFromEudiHub).toBe(false);
+    });
+
+    it('opens the dialog for the key and reloads the key with the stored certificate', async () => {
+      const component = await create(keyChain({ description: 'Verifier key' }));
+      keyChainService.getById.mockClear();
+      closesWith({ id: 'hub-1', certId: 'access-key', crt: 'PEM', environment: 'sandbox' });
+
+      component.requestFromEudiHub();
+
+      expect(window.confirm).not.toHaveBeenCalled();
+      expect(dialog.open.mock.lastCall?.[1].data).toEqual({
+        keyId: 'access-key',
+        description: 'Verifier key',
+      });
+      await vi.waitFor(() => expect(keyChainService.getById).toHaveBeenCalledWith('access-key'));
+      expect(snackBar.open.mock.lastCall?.[0]).toContain('EUDI Hub (sandbox)');
+    });
+
+    it('reloads the key without a success message when the dialog closes without a certificate', async () => {
+      const component = await create();
+      keyChainService.getById.mockClear();
+      snackBar.open.mockClear();
+      closesWith(undefined);
+
+      component.requestFromEudiHub();
+
+      await vi.waitFor(() => expect(keyChainService.getById).toHaveBeenCalledWith('access-key'));
+      expect(snackBar.open).not.toHaveBeenCalled();
+      expect(dialog.open.mock.lastCall?.[1].disableClose).toBe(true);
+    });
+
+    it('warns that rotation replaces the certificate from the EUDI Hub', async () => {
+      const component = await create(keyChain({ rotationPolicy: { enabled: true } }));
+      vi.mocked(window.confirm).mockReturnValue(false);
+
+      component.requestFromEudiHub();
+
+      expect(vi.mocked(window.confirm).mock.lastCall?.[0]).toContain(
+        'replaces the certificate from the EUDI Hub with a self-signed one'
+      );
+      expect(dialog.open).not.toHaveBeenCalled();
+    });
+
+    it('asks before replacing a certificate issued by someone else', async () => {
+      const component = await create(keyChain({ activeCertificate: registrarIssued }));
+      vi.mocked(window.confirm).mockReturnValue(false);
+
+      component.requestFromEudiHub();
+
+      expect(vi.mocked(window.confirm).mock.lastCall?.[0]).toContain(
+        'new certificate from the EUDI Hub'
+      );
+      expect(dialog.open).not.toHaveBeenCalled();
+    });
   });
 });
 

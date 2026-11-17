@@ -33,6 +33,7 @@ import {
     deriveRegistrationCertificateMaterial,
     isJwtActive,
     NO_CREDENTIAL_TYPES_MESSAGE,
+    type RegistrationCertificateMaterial,
     registrationCertificateFingerprint,
     unlistedCredentialTypes,
     unlistedCredentialTypesMessage,
@@ -228,11 +229,7 @@ export class IssuanceService {
         }
 
         const previousJwt = issuanceConfig.registrationCertificateCache?.jwt;
-        const material = deriveRegistrationCertificateMaterial(
-            await this.credentialConfigService.get(tenantId),
-            this.configService.getOrThrow<string>("PUBLIC_URL"),
-            tenantId,
-        );
+        const material = await this.registrationCertificateMaterial(tenantId);
 
         if (material.providesAttestations.length === 0) {
             throw new BadRequestException(NO_CREDENTIAL_TYPES_MESSAGE);
@@ -301,6 +298,21 @@ export class IssuanceService {
         });
 
         return this.getIssuanceConfiguration(tenantId);
+    }
+
+    /**
+     * The credential types an issuer registration certificate of the tenant
+     * must list: the `vct` of each SD-JWT VC and the `docType` of each mDOC
+     * credential configuration, as a generated certificate lists them.
+     */
+    async registrationCertificateMaterial(
+        tenantId: string,
+    ): Promise<RegistrationCertificateMaterial> {
+        return deriveRegistrationCertificateMaterial(
+            await this.credentialConfigService.get(tenantId),
+            this.configService.getOrThrow<string>("PUBLIC_URL"),
+            tenantId,
+        );
     }
 
     /**

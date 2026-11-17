@@ -1,4 +1,9 @@
 import {
+  DEFAULT_LANGUAGE,
+  firstUnusedLanguage,
+  languageOptionsWith,
+} from '../../../utils/language-options';
+import {
   Component,
   type OnInit,
   ChangeDetectionStrategy,
@@ -120,6 +125,8 @@ type WalletProviderTrustListEntry = Omit<WalletProviderTrustListRefDto, 'verifie
   styleUrl: './issuance-config-create.component.scss',
 })
 export class IssuanceConfigCreateComponent implements OnInit {
+  readonly languageOptionsWith = languageOptionsWith;
+
   private trustListVerifierValidator(control: AbstractControl): ValidationErrors | null {
     const value = control.value as {
       mode?: WalletProviderTrustListMode;
@@ -1284,7 +1291,12 @@ export class IssuanceConfigCreateComponent implements OnInit {
   addDisplay(): void {
     const displayGroup = this.fb.group({
       name: ['', Validators.required],
-      locale: ['en-US', Validators.required],
+      // The first language no entry has yet, so a new entry does not repeat one.
+      locale: [
+        firstUnusedLanguage(this.displays.controls.map((entry) => entry.get('locale')?.value)) ??
+          DEFAULT_LANGUAGE,
+        Validators.required,
+      ],
       logo: this.fb.group({
         uri: [''],
       }),

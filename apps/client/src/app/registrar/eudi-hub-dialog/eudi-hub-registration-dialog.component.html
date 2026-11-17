@@ -1,0 +1,190 @@
+<h2 mat-dialog-title>Request Registration Certificate from the EUDI Hub</h2>
+<form [formGroup]="form" (ngSubmit)="submit()" novalidate>
+  <mat-dialog-content class="content">
+    <p>
+      @if (isPresentation) {
+        EUDIPLO registers the DCQL query of this presentation configuration as a credential request
+        at the EUDI Hub, or uses a matching one, and stores the certificate in the configuration.
+      } @else {
+        EUDIPLO registers the vct and docType of your credential configurations at the EUDI Hub and
+        stores the certificate in the issuance configuration (import mode).
+      }
+      It is not renewed automatically: request a new one before it expires and after the
+      @if (isPresentation) {
+        DCQL query
+      } @else {
+        credential types
+      }
+      change.
+    </p>
+
+    <app-eudi-hub-account-fields
+      [dialog]="this"
+      liveHint="Live issues a production registration certificate that wallets rely on."
+    />
+
+    @if (loadingDetails()) {
+      <output>Reading the organization's data from the EUDI Hub…</output>
+    } @else if (detailsError(); as message) {
+      <p class="live-hint" role="note">
+        <mat-icon>info</mat-icon>
+        <span
+          >{{ message }}
+          @if (detailsByHand()) {
+            Enter the fields by hand.
+          }
+        </span>
+      </p>
+    }
+
+    <div class="organization">
+      <mat-form-field appearance="outline">
+        <mat-label>Identifier type</mat-label>
+        <mat-select formControlName="identifierType">
+          @for (type of identifierTypes; track type.value) {
+            <mat-option [value]="type.value">{{ type.label }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field appearance="outline" class="grow">
+        <mat-label>Identifier</mat-label>
+        <input matInput formControlName="identifierValue" maxlength="200" autocomplete="off" />
+        <mat-hint>As in the official record, for example DE/HRB123456B.</mat-hint>
+        @if (form.controls.identifierValue.hasError('required')) {
+          <mat-error>Enter the organization's identifier.</mat-error>
+        }
+      </mat-form-field>
+    </div>
+
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Service description (German)</mat-label>
+      <textarea matInput formControlName="serviceDescriptionDe" rows="2"></textarea>
+      <mat-hint>Shown to wallet users.</mat-hint>
+      @if (form.controls.serviceDescriptionDe.hasError('required')) {
+        <mat-error>The EUDI Hub needs this text.</mat-error>
+      } @else if (form.controls.serviceDescriptionDe.hasError('maxlength')) {
+        <mat-error>Use at most 2000 characters.</mat-error>
+      }
+    </mat-form-field>
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Service description (English)</mat-label>
+      <textarea matInput formControlName="serviceDescriptionEn" rows="2"></textarea>
+      <mat-hint>Shown to wallet users.</mat-hint>
+      @if (form.controls.serviceDescriptionEn.hasError('required')) {
+        <mat-error>The EUDI Hub needs this text.</mat-error>
+      } @else if (form.controls.serviceDescriptionEn.hasError('maxlength')) {
+        <mat-error>Use at most 2000 characters.</mat-error>
+      }
+    </mat-form-field>
+
+    @if (isPresentation) {
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Purpose (German)</mat-label>
+        <textarea matInput formControlName="purposeDe" rows="2"></textarea>
+        <mat-hint>Why you request the data (GDPR purpose).</mat-hint>
+        @if (form.controls.purposeDe.hasError('required')) {
+          <mat-error>The EUDI Hub needs this text.</mat-error>
+        } @else if (form.controls.purposeDe.hasError('maxlength')) {
+          <mat-error>Use at most 2000 characters.</mat-error>
+        }
+      </mat-form-field>
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Purpose (English)</mat-label>
+        <textarea matInput formControlName="purposeEn" rows="2"></textarea>
+        <mat-hint>Why you request the data (GDPR purpose).</mat-hint>
+        @if (form.controls.purposeEn.hasError('required')) {
+          <mat-error>The EUDI Hub needs this text.</mat-error>
+        } @else if (form.controls.purposeEn.hasError('maxlength')) {
+          <mat-error>Use at most 2000 characters.</mat-error>
+        }
+      </mat-form-field>
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Privacy policy</mat-label>
+        <input
+          matInput
+          formControlName="privacyPolicy"
+          type="url"
+          placeholder="https://example.com/privacy"
+        />
+        <mat-hint>Privacy policy for this request.</mat-hint>
+        @if (form.controls.privacyPolicy.hasError('required')) {
+          <mat-error>Enter the privacy policy URL.</mat-error>
+        } @else if (form.controls.privacyPolicy.hasError('maxlength')) {
+          <mat-error>Use at most 2048 characters.</mat-error>
+        } @else if (form.controls.privacyPolicy.hasError('pattern')) {
+          <mat-error>Enter an http or https URL.</mat-error>
+        }
+      </mat-form-field>
+    }
+
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Support URI</mat-label>
+      <input
+        matInput
+        formControlName="supportUri"
+        type="url"
+        placeholder="https://example.com/support"
+      />
+      <mat-hint>Where people can reach your organization about this certificate.</mat-hint>
+      @if (form.controls.supportUri.hasError('required')) {
+        <mat-error>Enter a support URI.</mat-error>
+      } @else if (form.controls.supportUri.hasError('maxlength')) {
+        <mat-error>Use at most 2048 characters.</mat-error>
+      } @else if (form.controls.supportUri.hasError('pattern')) {
+        <mat-error>Enter an http or https URL.</mat-error>
+      }
+    </mat-form-field>
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Info URI</mat-label>
+      <input matInput formControlName="infoUri" type="url" placeholder="https://example.com" />
+      <mat-hint>General web address of your organization.</mat-hint>
+      @if (form.controls.infoUri.hasError('required')) {
+        <mat-error>Enter an info URI.</mat-error>
+      } @else if (form.controls.infoUri.hasError('maxlength')) {
+        <mat-error>Use at most 2048 characters.</mat-error>
+      } @else if (form.controls.infoUri.hasError('pattern')) {
+        <mat-error>Enter an http or https URL.</mat-error>
+      }
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Certificate name</mat-label>
+      <input matInput formControlName="name" maxlength="200" [placeholder]="data.defaultName" />
+      <mat-hint>Shown in the portal. Empty uses {{ data.defaultName }}.</mat-hint>
+    </mat-form-field>
+
+    @if (error(); as message) {
+      <p class="error" role="alert">
+        <mat-icon>error</mat-icon>
+        <span>{{ message }}</span>
+      </p>
+    }
+  </mat-dialog-content>
+  <mat-dialog-actions align="end">
+    <button
+      mat-button
+      type="button"
+      (click)="cancel()"
+      [disabled]="requesting()"
+      disabledInteractive
+    >
+      Cancel
+    </button>
+    <button
+      mat-flat-button
+      color="primary"
+      type="submit"
+      [disabled]="requesting()"
+      disabledInteractive
+    >
+      <mat-icon>verified</mat-icon>
+      {{
+        requesting()
+          ? 'Requesting...'
+          : form.controls.environment.value === 'live'
+            ? 'Request Live Certificate'
+            : 'Request Certificate'
+      }}
+    </button>
+  </mat-dialog-actions>
+</form>

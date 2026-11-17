@@ -1,4 +1,11 @@
 import { Component, OnInit, ChangeDetectionStrategy } from '@angular/core';
+import { MatDialog } from '@angular/material/dialog';
+import { JwtService } from '../../../services/jwt.service';
+import {
+  EudiHubRegistrationDialogComponent,
+  type EudiHubRegistrationDialogData,
+} from '../../../registrar/eudi-hub-dialog/eudi-hub-registration-dialog.component';
+import type { EudiHubRegistrationCertificate } from '../../../registrar/eudi-hub.service';
 import { DatePipe } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
@@ -101,8 +108,60 @@ export class IssuanceConfigShowComponent implements OnInit {
   constructor(
     private readonly issuanceConfigService: IssuanceConfigService,
     private readonly snackBar: MatSnackBar,
-    private readonly configDocuments: ConfigDocumentService
+    private readonly configDocuments: ConfigDocumentService,
+    private readonly dialog: MatDialog,
+    private readonly jwtService: JwtService
   ) {}
+
+  /** What to confirm before a certificate from the EUDI Hub replaces the current one. */
+  private eudiHubReplacementQuestion(): string | undefined {
+    const settings = this.registrationCertificateConfig;
+    if (!settings?.enabled) return undefined;
+    const replaced = this.registrationCertificateGenerated
+      ? 'This switches the issuer registration certificate from generated to imported: EUDIPLO no longer generates or renews it, and the generated certificate is no longer served.'
+      : 'This replaces the imported issuer registration certificate.';
+    return `${replaced} A certificate from the EUDI Hub is not renewed automatically; request a new one before it expires and after the credential types change.\n\nRequest a registration certificate from the EUDI Hub?`;
+  }
+
+  /** Requesting a registration certificate from the EUDI Hub needs both roles. */
+  get canRequestFromEudiHub(): boolean {
+    return (
+      this.jwtService.hasRole('registrar:manage') && this.jwtService.hasRole('issuance:manage')
+    );
+  }
+
+  /**
+   * Opens the EUDI Hub dialog, which registers the credential types, requests
+   * a registration certificate and stores it here in import mode.
+   */
+  requestFromEudiHub(): void {
+    const question = this.eudiHubReplacementQuestion();
+    if (question && !confirm(question)) return;
+    this.dialog
+      .open<
+        EudiHubRegistrationDialogComponent,
+        EudiHubRegistrationDialogData,
+        EudiHubRegistrationCertificate | undefined
+      >(EudiHubRegistrationDialogComponent, {
+        data: { kind: 'issuer', defaultName: 'Issuer registration certificate' },
+        width: '720px',
+        maxWidth: '95vw',
+        // Escape or a backdrop click must not drop a request that is still running.
+        disableClose: true,
+      })
+      .afterClosed()
+      .subscribe((certificate) => {
+        if (certificate) {
+          this.snackBar.open(
+            `Registration certificate from the EUDI Hub (${certificate.environment}) stored`,
+            'Close',
+            { duration: 4000 }
+          );
+        }
+        // A failed request may still have stored a certificate.
+        this.loadConfig();
+      });
+  }
 
   get primaryDisplay(): any {
     return this.config?.display?.[0];
@@ -159,8 +218,22 @@ export class IssuanceConfigShowComponent implements OnInit {
     return (this.config as any)?.registrationCertificate;
   }
 
+  /**
+   * The certificate the issuer serves with its issue and expiry times: in
+   * generate mode the cached one, in import mode the imported JWT.
+   */
   get registrationCertificateCache(): any {
-    return (this.config as any)?.registrationCertificateCache;
+    if (this.registrationCertificateGenerated) {
+      return (this.config as any)?.registrationCertificateCache;
+    }
+    const jwt = this.registrationCertificateConfig?.jwt;
+    if (typeof jwt !== 'string' || jwt.length === 0) return undefined;
+    try {
+      const { iat, exp } = decodeJwt(jwt);
+      return { jwt, issuedAt: iat, expiresAt: exp };
+    } catch {
+      return { jwt };
+    }
   }
 
   get registrationCertificateJwt(): string | null {

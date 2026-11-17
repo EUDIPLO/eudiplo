@@ -48,7 +48,7 @@ curl -X POST "$EUDIPLO_URL/api/key-chain" \
 
 The response is `{ "id": "<key chain id>" }`. `kmsProvider` selects a provider ID from `kms.json`; without it the default provider is used. `alg` selects the signing algorithm and with it the curve: `ES256` (P-256, the default), `ES384` (P-384) or `ES512` (P-521), as far as the provider offers it ([signing algorithms](../operate/kms.md#signing-algorithms)). The root CA and every rotated key use the same algorithm; `GET /api/key-chain/{id}` returns it as `alg`. Wallets only have to support `ES256`. `certValidityDays` defaults to 365. `intervalDays` is required when `rotationPolicy.enabled` is `true`; without rotation the key is only rotated on request.
 
-`GET /api/key-chain/{id}` and `GET /api/key-chain` return the active key's public key as a JWK in `activePublicKey` (after a rotation, the old one in `previousPublicKey`), without private key material. In the Web Client, **Copy Public Key (JWK)** next to a key's certificate copies it.
+`GET /api/key-chain/{id}` and `GET /api/key-chain` return the active key's public key as a JWK in `activePublicKey` (after a rotation, the old one in `previousPublicKey`), without private key material. In the Web Client, federation and authorization server key chains show it on their **Public Key** card with **Copy Public Key (JWK)**; for other key chains, **View as JSON** shows it.
 
 ## Import a key and certificate
 

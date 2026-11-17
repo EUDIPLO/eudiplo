@@ -14,7 +14,7 @@ Set the issuer-wide settings of a tenant: how the issuer is shown in wallets, wh
     "display": [
         {
             "name": "Membership Demo",
-            "locale": "en-US",
+            "locale": "en",
             "logo": { "uri": "https://issuer.example.com/logo.png", "alt_text": "Logo" }
         }
     ],
