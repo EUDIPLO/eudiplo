@@ -155,7 +155,10 @@ path from the WAF log.
 
 Add these rules to `REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf`. Adjust the
 IDs if they collide with your own rules. With them, all requests of the table
-passed CRS 4.30 at paranoia levels 1 to 3.
+passed CRS 4.30 at paranoia levels 1 to 3, except the `/verifiers/` routes of
+the OpenID Provider, which were added later and have not been run against CRS;
+their `redirect_uri` parameters trigger 931130 like those of PAR and token
+requests, so the rule below covers them too.
 
 ```apache
 # Management API: allow its methods and skip the injection rules that
@@ -176,7 +179,7 @@ SecRule REQUEST_FILENAME "@rx ^/issuers/[^/]+/vci/(?:credential|deferred_credent
     setvar:'tx.allowed_request_content_type=|application/json| |application/jwt|'"
 
 # Wallet-facing endpoints: base64url tokens, JSON in form fields, redirect URIs.
-SecRule REQUEST_FILENAME "@rx ^/(?:issuers|presentations)/" \
+SecRule REQUEST_FILENAME "@rx ^/(?:issuers|presentations|verifiers)/" \
     "id:10030,phase:1,pass,nolog,t:none,\
     ctl:ruleRemoveByTag=attack-sqli,\
     ctl:ruleRemoveById=931130"

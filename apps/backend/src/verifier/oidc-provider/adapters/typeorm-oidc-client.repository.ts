@@ -43,7 +43,12 @@ export class TypeOrmOidcClientRepository implements OidcClientRepository {
                 secrets: client.secrets.map(toStored),
             }),
         );
-        return toDomain(saved);
+        // Read back, so the result carries the last use of each secret,
+        // which save leaves to its own column.
+        return (
+            (await this.findForTenant(client.tenantId, client.id)) ??
+            toDomain(saved)
+        );
     }
 
     async deleteForTenant(tenantId: string, id: string): Promise<void> {

@@ -7,7 +7,7 @@ const now = new Date("2026-01-01T10:00:00Z");
 
 function adapter(options: {
     session?: Record<string, unknown> | Error;
-    configs?: Record<string, unknown>[];
+    configs?: Record<string, unknown>[] | Error;
 }) {
     const oid4vp = {
         createRequest: async () => ({
@@ -17,7 +17,10 @@ function adapter(options: {
         }),
     };
     const configs = {
-        getPresentationConfigs: async () => options.configs ?? [],
+        getPresentationConfigs: async () => {
+            if (options.configs instanceof Error) throw options.configs;
+            return options.configs ?? [];
+        },
     };
     const sessions = {
         getForTenant: async () => {
@@ -59,6 +62,15 @@ describe("Oid4vpSignInPresentation", () => {
         expect(
             await adapter({ configs }).unusableReason("t", "missing"),
         ).toContain("does not exist");
+    });
+
+    test("a database error is not reported as a missing config", async () => {
+        await expect(
+            adapter({ configs: new Error("database down") }).unusableReason(
+                "t",
+                "pid",
+            ),
+        ).rejects.toThrow("database down");
     });
 
     test("maps a completed session and tells cross-device by the cleared redirect", async () => {

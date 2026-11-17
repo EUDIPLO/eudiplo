@@ -127,5 +127,30 @@ describe("TypeORM OIDC repositories (SQLite)", () => {
         expect(stored?.secrets.map((secret) => secret.id)).toEqual(["new"]);
         expect(stored?.secrets[0].lastUsedAt).toEqual(now);
         expect(await clients.findForTenant("b", "c")).toBeNull();
+
+        // Saving the client keeps the last use in the result.
+        const saved = await clients.save({ ...stored!, name: "Renamed" });
+        expect(saved.secrets[0].lastUsedAt).toEqual(now);
+    });
+
+    test("recording a use writes only the last-use column", async () => {
+        const repository = dataSource.getRepository(OidcClientEntity);
+        const updates: unknown[] = [];
+        const update = repository.update.bind(repository);
+        repository.update = (async (...args: Parameters<typeof update>) => {
+            updates.push(args[1]);
+            return update(...args);
+        }) as typeof repository.update;
+        await clients.save({
+            id: "c",
+            tenantId: "a",
+            name: "Portal",
+            redirectUris: ["https://rp/cb"],
+            profile: "secure",
+            scopes: [],
+            secrets: [{ id: "s", hash: "h", createdAt: now }],
+        });
+        await clients.recordSecretUse("a", "c", "s", now);
+        expect(updates).toEqual([{ secretLastUsed: { s: now.toISOString() } }]);
     });
 });

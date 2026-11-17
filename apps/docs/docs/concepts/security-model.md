@@ -64,7 +64,7 @@ Refreshing never extends the authorization: the built-in server keeps the refres
 
 ### PKCE
 
-Every authorization code requires PKCE with `S256`: a PAR request without `code_challenge`, or with any other method, is rejected, and the token request must send the matching `code_verifier`. This applies to the built-in, chained and OID4VP-based servers and to interactive authorization. The chained server also uses `S256` towards the upstream provider.
+Every authorization code requires PKCE with `S256`: a PAR request without `code_challenge`, or with any other method, is rejected, and the token request must send the matching `code_verifier`. This applies to the built-in, chained and OID4VP-based servers, to interactive authorization and to the [OpenID Provider](../presentation/openid-connect.md). The chained server also uses `S256` towards the upstream provider.
 
 ### DPoP
 

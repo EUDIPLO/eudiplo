@@ -93,7 +93,9 @@ A same-device sign-in waits for the wallet's redirect. A wallet that does not re
 
 If the presentation fails or the sign-in expires (15 minutes), the browser returns to your `redirect_uri` with `error=access_denied`, a short `error_description` for your logs, and your `state`.
 
-An invalid request (unknown scope, missing PKCE, `prompt=none`) is answered where it was sent: with the `secure` profile in the pushed request's response (HTTP 400 with `error` and `error_description`), with `basic` at your `redirect_uri` with the matching OAuth error. The user sees an error page instead of a redirect for an unknown client, an unregistered `redirect_uri`, a `state` over 1024 characters, and an expired (after 5 minutes) or already used `request_uri`.
+An invalid request (unknown scope, missing PKCE or a `code_challenge` that is not a 43-character S256 hash, `prompt=none`, a `state` over 1024 characters) is answered where it was sent: with the `secure` profile in the pushed request's response (HTTP 400 with `error` and `error_description`); with `basic` at your `redirect_uri` with the matching OAuth error, except an over-long `state`, which cannot be returned and shows an error page.
+
+The user sees an error page instead of a redirect for an unknown client, an unregistered `redirect_uri`, and an expired (after 5 minutes) or already used `request_uri`. If EUDIPLO cannot create the presentation request, the browser returns with `error=server_error`.
 
 ## Rotate the client secret
 

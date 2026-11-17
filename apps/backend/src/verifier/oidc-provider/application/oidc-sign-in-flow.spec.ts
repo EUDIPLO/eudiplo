@@ -19,6 +19,7 @@ import type {
     SignInPresentationResult,
 } from "../ports/sign-in-presentation.js";
 import { AuthenticateOidcClient } from "./authenticate-client.js";
+import { BuildOidcDiscovery } from "./build-oidc-discovery.js";
 import { FinishSignIn, type SignInStep } from "./finish-sign-in.js";
 import { PushAuthorizationRequest } from "./push-authorization-request.js";
 import { RedeemAuthorizationCode } from "./redeem-authorization-code.js";
@@ -118,7 +119,7 @@ const signer: IdTokenSigner = {
         return [];
     },
     async algorithms() {
-        return ["ES256"];
+        return ["ES384"];
     },
 };
 
@@ -445,6 +446,30 @@ describe("OpenID Provider sign-in", () => {
         await expect(push.execute(client, request)).rejects.toMatchObject({
             code: "invalid_scope",
         });
+    });
+
+    test("discovery advertises the signer's algorithm", async () => {
+        const discovery = new BuildOidcDiscovery(
+            { existsForTenant: async () => true },
+            signer,
+            PUBLIC_URL,
+        );
+        expect(
+            (await discovery.execute("tenant"))
+                .id_token_signing_alg_values_supported,
+        ).toEqual(["ES384"]);
+    });
+
+    test("a failure after the presentation started is not reported as server_error", async () => {
+        const { request_uri } = await push.execute(client, request);
+        const transition = signIns.transition.bind(signIns);
+        signIns.transition = async (tenantId, id, from, changes) => {
+            if (changes.presentationSessionId) throw new Error("database down");
+            return transition(tenantId, id, from, changes);
+        };
+        await expect(
+            start.execute("tenant", { client_id: client.id, request_uri }),
+        ).rejects.toThrow("database down");
     });
 
     test("a presentation that cannot be requested fails the sign-in with server_error", async () => {
