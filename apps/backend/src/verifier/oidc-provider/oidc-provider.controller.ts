@@ -51,14 +51,14 @@ import {
     signInCookieName,
 } from "./oidc-http.util.js";
 import {
-    ID_TOKEN_SIGNER,
-    type IdTokenSigner,
-} from "./ports/id-token-signer.js";
-import {
     OIDC_PROVIDER_SETTINGS,
     type OidcProviderSettings,
     oidcIssuer,
 } from "./oidc-provider-settings.js";
+import {
+    ID_TOKEN_SIGNER,
+    type IdTokenSigner,
+} from "./ports/id-token-signer.js";
 import {
     type RenderedPage,
     renderMessagePage,

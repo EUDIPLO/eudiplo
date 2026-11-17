@@ -87,7 +87,9 @@ class FakePresentation implements SignInPresentation {
     async unusableReason() {
         return this.unusable;
     }
+    startFails = false;
     async start(_t: string, _c: string, callbackUrl: string) {
+        if (this.startFails) throw new Error("KMS unavailable");
         this.callbackUrl = callbackUrl;
         return {
             sessionId: "presentation-1",
@@ -114,6 +116,9 @@ const signer: IdTokenSigner = {
     },
     async publicKeys() {
         return [];
+    },
+    async algorithms() {
+        return ["ES256"];
     },
 };
 
@@ -442,6 +447,57 @@ describe("OpenID Provider sign-in", () => {
         });
     });
 
+    test("a presentation that cannot be requested fails the sign-in with server_error", async () => {
+        presentation.startFails = true;
+        const { request_uri } = await push.execute(client, request);
+        const error = await start
+            .execute("tenant", { client_id: client.id, request_uri })
+            .catch((caught) => caught);
+        expect(error).toMatchObject({
+            code: "server_error",
+            redirect: { redirectUri: REDIRECT, state: "state-1" },
+        });
+        expect([...signIns.rows.values()][0].status).toBe(
+            OidcSignInStatus.Failed,
+        );
+    });
+
+    test("only one of two concurrent completions gets a code", async () => {
+        const { signInId, browserSecret } = await pushedSignIn();
+        presentation.completed(true);
+        const results = await Promise.allSettled([
+            finish.fromBrowser("tenant", signInId, browserSecret),
+            finish.fromBrowser("tenant", signInId, browserSecret),
+        ]);
+        expect(
+            results.filter((result) => result.status === "fulfilled"),
+        ).toHaveLength(1);
+        const rejected = results.find(
+            (result) => result.status === "rejected",
+        ) as PromiseRejectedResult;
+        expect(rejected.reason).toBeInstanceOf(SignInNotUsable);
+    });
+
+    describe("pushed authorization request", () => {
+        test.each([
+            ["another client_id", { client_id: "client-2" }],
+            ["a pushed request_uri", { request_uri: "urn:x" }],
+        ])("refuses %s with invalid_request", async (_, override) => {
+            await expect(
+                push.execute(client, { ...request, ...override }),
+            ).rejects.toMatchObject({ code: "invalid_request" });
+        });
+
+        test("returns validation errors in the response, never by redirect", async () => {
+            const error = await push
+                .execute(client, { ...request, scope: "openid email" })
+                .catch((caught) => caught);
+            expect(error).toBeInstanceOf(OidcError);
+            expect(error.code).toBe("invalid_scope");
+            expect(error.redirect).toBeUndefined();
+        });
+    });
+
     describe("token endpoint", () => {
         async function authorizedCode() {
             const { signInId, browserSecret } = await pushedSignIn();
@@ -486,6 +542,25 @@ describe("OpenID Provider sign-in", () => {
         test("refuses an expired code", async () => {
             const code = await authorizedCode();
             now = new Date(now.getTime() + 61 * 1000);
+            await expect(
+                redeem.execute(client, {
+                    grant_type: "authorization_code",
+                    code,
+                    redirect_uri: REDIRECT,
+                    code_verifier: VERIFIER,
+                }),
+            ).rejects.toMatchObject({ code: "invalid_grant" });
+        });
+
+        test("refuses a request without code", async () => {
+            await expect(
+                redeem.execute(client, { grant_type: "authorization_code" }),
+            ).rejects.toMatchObject({ code: "invalid_request" });
+        });
+
+        test("refuses a code whose presentation is gone", async () => {
+            const code = await authorizedCode();
+            presentation.result_ = { status: "expired", crossDevice: true };
             await expect(
                 redeem.execute(client, {
                     grant_type: "authorization_code",

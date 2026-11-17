@@ -1,6 +1,6 @@
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { assertS256CodeChallenge } from "../../../issuer/issuance/oid4vci/authorization/domain/pkce.js";
-import { OPENID_SCOPE, type OidcClient } from "./oidc-client.js";
+import { type OidcClient, OPENID_SCOPE } from "./oidc-client.js";
 import { OidcError } from "./oidc-error.js";
 
 /**
@@ -31,6 +31,9 @@ export const SIGN_IN_LIFETIME_SECONDS = 900;
 export const AUTHORIZATION_CODE_LIFETIME_SECONDS = 60;
 /** Lifetime of the ID token and of the (unusable) access token. */
 export const ID_TOKEN_LIFETIME_SECONDS = 300;
+
+/** An S256 code challenge: base64url of a SHA-256 hash (RFC 7636 Section 4.2). */
+const S256_CHALLENGE_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 
 /** Upper bound for `state` and `nonce`, so a request cannot bloat storage. */
 const MAX_PARAMETER_LENGTH = 1024;
@@ -132,12 +135,10 @@ export function validateAuthorizationRequest(
         );
     }
     const redirectUri = params.redirect_uri;
-    const state =
-        params.state && params.state.length <= MAX_PARAMETER_LENGTH
-            ? params.state
-            : undefined;
+    // An error redirect must carry the client's exact state (RFC 6749
+    // Section 4.1.2.1); a state too long to keep is shown on a page instead.
+    const state = boundedParameter("state", params.state);
     try {
-        boundedParameter("state", params.state);
         if (params.request !== undefined) {
             throw new OidcError(
                 "request_not_supported",
@@ -169,6 +170,12 @@ export function validateAuthorizationRequest(
             throw new OidcError(
                 "invalid_request",
                 error instanceof Error ? error.message : "PKCE is required",
+            );
+        }
+        if (!S256_CHALLENGE_PATTERN.test(params.code_challenge!)) {
+            throw new OidcError(
+                "invalid_request",
+                "code_challenge must be the base64url SHA-256 of the code_verifier (43 characters)",
             );
         }
         const prompts = (params.prompt ?? "").split(" ").filter(Boolean);
@@ -230,29 +237,6 @@ function resolveScope(
         scope: `${OPENID_SCOPE} ${assigned.scope}`,
         presentationConfigId: assigned.presentationConfigId,
     };
-}
-
-/** A random secret for a cookie or an authorization code. */
-export function generateOpaqueSecret(): string {
-    return randomBytes(32).toString("base64url");
-}
-
-/** SHA-256 of an opaque secret, base64url, as stored. */
-export function hashOpaqueSecret(secret: string): string {
-    return createHash("sha256").update(secret).digest("base64url");
-}
-
-/** Constant-time comparison of a stored hash with a presented secret. */
-export function matchesOpaqueSecret(
-    storedHash: string | null | undefined,
-    presented: string | null | undefined,
-): boolean {
-    if (!storedHash || !presented) return false;
-    const stored = Buffer.from(storedHash);
-    const candidate = Buffer.from(hashOpaqueSecret(presented));
-    return (
-        stored.length === candidate.length && timingSafeEqual(stored, candidate)
-    );
 }
 
 /** Constant-time comparison of two secrets of arbitrary length. */

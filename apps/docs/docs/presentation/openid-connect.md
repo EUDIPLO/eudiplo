@@ -52,12 +52,13 @@ The discovery document exists once the tenant has a client. Configure the librar
 | Scope | `openid` and exactly one scope of the client, for example `openid pid` |
 | PKCE | `S256`, always required |
 | Response type | `code` |
+| ID token algorithm | The one in `id_token_signing_alg_values_supported`, ES256 unless the key chain uses another curve. RS256 is not offered: set `id_token_signed_response_alg` in libraries that default to it, such as openid-client |
 
 Every request must ask for `openid` and exactly one other scope. Many libraries request `openid profile email` by default, which EUDIPLO refuses with `invalid_scope`; set the scope explicitly. `prompt=none` fails with `login_required`, since every sign-in is a new presentation.
 
 ## 3. Read the ID token
 
-The ID token is signed with ES256 by the tenant's authorization server key chain; verify it with the keys from `jwks_uri`. The verified claims arrive under `credentials`, in the same shape as the [presentation webhook](../reference/webhooks.md):
+The ID token is signed by the tenant's [authorization server key chain](../trust/keys-and-certificates.md#authorization-server-key-chain) with its algorithm (ES256, ES384 or ES512); verify it with the keys from `jwks_uri`. The verified claims arrive under `credentials`, in the same shape as the [presentation webhook](../reference/webhooks.md):
 
 ```json
 {
@@ -73,7 +74,7 @@ The ID token is signed with ES256 by the tenant's authorization server key chain
 
 - `sub` is the ID of the presentation session and new for every sign-in: EUDIPLO keeps no account of the user. Never use it as a key; identify the user by a claim in `credentials`.
 - There is no userinfo endpoint, refresh token or logout. The access token is opaque and accepted nowhere.
-- The sign-in is an ordinary presentation session of the tenant: it appears in the session list, triggers the configuration's webhook and follows the tenant's retention.
+- The sign-in is an ordinary presentation session of the tenant: it appears in the session list, triggers the configuration's webhook and follows the tenant's retention. A webhook that answers with a `redirectUri` replaces the sign-in's callback, so a same-device sign-in can no longer finish; leave it out for configurations used here.
 
 ## Same device and cross device
 
@@ -90,7 +91,9 @@ A same-device sign-in waits for the wallet's redirect. A wallet that does not re
 
 ## Errors
 
-If the presentation fails or the sign-in expires (15 minutes), the browser returns to your `redirect_uri` with `error=access_denied`, a short `error_description` for your logs, and your `state`. An invalid request (unknown scope, missing PKCE) also returns there, with the matching OAuth error. An unknown client or an unregistered `redirect_uri` is never redirected to; the user sees an error page instead.
+If the presentation fails or the sign-in expires (15 minutes), the browser returns to your `redirect_uri` with `error=access_denied`, a short `error_description` for your logs, and your `state`.
+
+An invalid request (unknown scope, missing PKCE, `prompt=none`) is answered where it was sent: with the `secure` profile in the pushed request's response (HTTP 400 with `error` and `error_description`), with `basic` at your `redirect_uri` with the matching OAuth error. The user sees an error page instead of a redirect for an unknown client, an unregistered `redirect_uri`, a `state` over 1024 characters, and an expired (after 5 minutes) or already used `request_uri`.
 
 ## Rotate the client secret
 

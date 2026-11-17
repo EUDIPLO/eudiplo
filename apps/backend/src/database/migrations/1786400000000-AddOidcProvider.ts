@@ -25,15 +25,18 @@ export class AddOidcProvider1786400000000 implements MigrationInterface {
         if (!(await queryRunner.hasTable("tenant_entity"))) return;
 
         const isPostgres = queryRunner.connection.options.type === "postgres";
-        const timestamp = isPostgres ? "timestamp with time zone" : "datetime";
-        const now = isPostgres ? "now()" : "(datetime('now'))";
-        const json = isPostgres ? "jsonb" : "json";
+        // The types TypeORM derives from the entities, so an upgraded
+        // database matches a fresh install.
+        const timestamp = isPostgres ? "timestamp" : "datetime";
+        const now = isPostgres ? "now()" : "datetime('now')";
+        const json = "json";
         const tenantForeignKey = () =>
             new TableForeignKey({
                 columnNames: ["tenantId"],
                 referencedTableName: "tenant_entity",
                 referencedColumnNames: ["id"],
                 onDelete: "CASCADE",
+                onUpdate: "NO ACTION",
             });
 
         if (!(await queryRunner.hasTable("oidc_client"))) {
@@ -48,6 +51,11 @@ export class AddOidcProvider1786400000000 implements MigrationInterface {
                         { name: "profile", type: "varchar" },
                         { name: "scopes", type: json },
                         { name: "secrets", type: json },
+                        {
+                            name: "secretLastUsed",
+                            type: json,
+                            isNullable: true,
+                        },
                         { name: "createdAt", type: timestamp, default: now },
                         { name: "updatedAt", type: timestamp, default: now },
                     ],

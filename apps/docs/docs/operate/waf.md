@@ -20,7 +20,8 @@ TLS termination and general proxy settings are on [TLS and reverse proxy](tls.md
 Match the `/api/` prefix case-insensitively: the backend routes `/API/session`
 like `/api/session`, so a case-sensitive rule can be bypassed. If your WAF
 supports an allow list of paths, allow `/api/`, `/.well-known/`, `/issuers/`,
-`/presentations/`, `/storage/`, `/health`, `/docs` and `/`, and block the rest.
+`/presentations/`, `/verifiers/`, `/storage/`, `/health`, `/docs` and `/`, and
+block the rest.
 Check the list against the [path prefixes](../reference/api.md#path-prefixes)
 after each upgrade.
 
@@ -97,6 +98,10 @@ Wallets call these from phones on mobile networks, so:
 | `/presentations/{walletNonce}/oid4vp/request`, `/presentations/{walletNonce}/oid4vp/request/no-redirect`                                 | GET, POST | POST: form (`wallet_metadata`, `wallet_nonce`)                     | Wallets                       |
 | `/presentations/{walletNonce}/oid4vp`                                                                                                    | POST      | Form (`response` or `vp_token`) from wallets; JSON from your page (DC API) | Wallets, your page      |
 | `/presentations/{walletNonce}/iso-18013-7`                                                                                               | POST      | JSON (`data`)                                                      | Your page (DC API)            |
+| `/verifiers/{tenant}/oidc/.well-known/openid-configuration`, `/verifiers/{tenant}/oidc/jwks`                                              | GET       | –                                                                  | Relying parties               |
+| `/verifiers/{tenant}/oidc/par`, `/verifiers/{tenant}/oidc/token`                                                                         | POST      | Form                                                               | Relying parties' backends     |
+| `/verifiers/{tenant}/oidc/authorize`                                                                                                     | GET, POST | POST: form                                                         | User's browser                |
+| `/verifiers/{tenant}/oidc/sign-in/{id}`, `…/status`, `…/complete`, `…/callback`                                                          | GET       | –                                                                  | User's browser, redirected back by the wallet |
 | `/storage/{key}`                                                                                                                         | GET       | –                                                                  | Wallets (logos, images)       |
 
 | Setting       | Value                                                                                                                                                                         |

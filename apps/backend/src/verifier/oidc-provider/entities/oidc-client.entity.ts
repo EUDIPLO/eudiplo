@@ -14,7 +14,6 @@ export interface StoredOidcClientSecret {
     hash: string;
     createdAt: string;
     expiresAt?: string | null;
-    lastUsedAt?: string | null;
 }
 
 /** A relying party of the tenant's OpenID Provider. */
@@ -44,6 +43,13 @@ export class OidcClientEntity {
 
     @Column("json")
     secrets!: StoredOidcClientSecret[];
+
+    /**
+     * Last use per secret ID, ISO strings. A column of its own: recording a
+     * use never writes `secrets`, so it cannot bring back a deleted secret.
+     */
+    @Column("json", { nullable: true })
+    secretLastUsed?: Record<string, string> | null;
 
     @CreateDateColumn()
     createdAt!: Date;

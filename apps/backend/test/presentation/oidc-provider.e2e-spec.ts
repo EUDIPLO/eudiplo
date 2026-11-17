@@ -197,6 +197,7 @@ describe("OpenID Provider", () => {
         await request(app.getHttpServer())
             .get(`${base()}/.well-known/openid-configuration`)
             .expect(404);
+        await request(app.getHttpServer()).get(`${base()}/jwks`).expect(404);
     });
 
     test("refuses a client with an HTTP redirect URI or an unknown config", async () => {
@@ -356,6 +357,10 @@ describe("OpenID Provider", () => {
         await request(app.getHttpServer())
             .get(`${pagePath}/complete`)
             .expect(400);
+        const foreign = await request(app.getHttpServer())
+            .get(`${pagePath}/status`)
+            .expect(409);
+        expect(foreign.body).toEqual({ error: "sign_in_not_usable" });
 
         const complete = await request(app.getHttpServer())
             .get(`${pagePath}/complete`)
@@ -488,6 +493,40 @@ describe("OpenID Provider", () => {
             .get(`${base()}/authorize`)
             .query({ ...params, redirect_uri: "https://attacker.example/cb" })
             .expect(400);
+    });
+
+    test("an expired secret is refused, and deleting the client ends the provider", async () => {
+        const auth = `Bearer ${authToken}`;
+        const client = await request(app.getHttpServer())
+            .get(`/verifier/oidc-clients/${clientId}`)
+            .set("Authorization", auth)
+            .expect(200);
+        await request(app.getHttpServer())
+            .patch(
+                `/verifier/oidc-clients/${clientId}/secrets/${client.body.secrets[0].id}`,
+            )
+            .set("Authorization", auth)
+            .send({ expiresAt: new Date(Date.now() - 1000).toISOString() })
+            .expect(200);
+        const expired = await request(app.getHttpServer())
+            .post(`${base()}/token`)
+            .set("Authorization", basic())
+            .type("form")
+            .send({ grant_type: "authorization_code", code: "x" })
+            .expect(401);
+        expect(expired.body.error).toBe("invalid_client");
+
+        await request(app.getHttpServer())
+            .delete(`/verifier/oidc-clients/${clientId}`)
+            .set("Authorization", auth)
+            .expect(204);
+        await request(app.getHttpServer())
+            .get(`/verifier/oidc-clients/${clientId}`)
+            .set("Authorization", auth)
+            .expect(404);
+        await request(app.getHttpServer())
+            .get(`${base()}/.well-known/openid-configuration`)
+            .expect(404);
     });
 
     test("client management needs a management token", async () => {

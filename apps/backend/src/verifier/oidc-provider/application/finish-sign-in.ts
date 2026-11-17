@@ -1,4 +1,3 @@
-import { oidcIssuer } from "../oidc-provider-settings.js";
 import {
     authorizationCodeRedirect,
     authorizationErrorRedirect,
@@ -8,14 +7,17 @@ import {
     ACR_CROSS_DEVICE,
     ACR_SAME_DEVICE,
     AUTHORIZATION_CODE_LIFETIME_SECONDS,
-    generateOpaqueSecret,
-    hashOpaqueSecret,
     isExpired,
-    matchesOpaqueSecret,
     type OidcSignIn,
     OidcSignInStatus,
     sameSecret,
 } from "../domain/oidc-sign-in.js";
+import {
+    generateOpaqueSecret,
+    hashOpaqueSecret,
+    matchesOpaqueSecret,
+} from "../domain/opaque-secret.js";
+import { oidcIssuer } from "../oidc-provider-settings.js";
 import type { OidcSignInRepository } from "../ports/oidc-sign-in.repository.js";
 import type {
     SignInPresentation,

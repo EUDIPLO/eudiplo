@@ -105,7 +105,7 @@ export class AdminActivityLogsComponent implements OnInit {
     for (const log of this.activityLogs) {
       if (log.actionType) {
         const match = log.actionType.match(
-          /^(.+?)(?:_created|_updated|_deleted|_reset|_cancelled)$/
+          /^(.+?)(?:_created|_updated|_deleted|_reset|_cancelled|_added)$/
         );
         if (match) {
           objectTypes.add(match[1]);
@@ -122,6 +122,8 @@ export class AdminActivityLogsComponent implements OnInit {
       status_list_config: 'Status List Config',
       webhook_endpoint: 'Webhook Endpoint',
       federation_trust_anchor: 'Federation Trust Anchor',
+      oidc_client: 'OpenID Connect Client',
+      oidc_client_secret: 'OpenID Connect Client Secret',
       session: 'Session',
     };
 
@@ -158,12 +160,12 @@ export class AdminActivityLogsComponent implements OnInit {
       webhook_endpoint_created: 'Webhook Endpoint Created',
       webhook_endpoint_updated: 'Webhook Endpoint Updated',
       webhook_endpoint_deleted: 'Webhook Endpoint Deleted',
-      oidc_client_created: 'OIDC Client Created',
-      oidc_client_updated: 'OIDC Client Updated',
-      oidc_client_deleted: 'OIDC Client Deleted',
-      oidc_client_secret_added: 'OIDC Client Secret Added',
-      oidc_client_secret_updated: 'OIDC Client Secret Updated',
-      oidc_client_secret_deleted: 'OIDC Client Secret Deleted',
+      oidc_client_created: 'OpenID Connect Client Created',
+      oidc_client_updated: 'OpenID Connect Client Updated',
+      oidc_client_deleted: 'OpenID Connect Client Deleted',
+      oidc_client_secret_added: 'OpenID Connect Client Secret Added',
+      oidc_client_secret_updated: 'OpenID Connect Client Secret Updated',
+      oidc_client_secret_deleted: 'OpenID Connect Client Secret Deleted',
       federation_trust_anchor_created: 'Federation Trust Anchor Created',
       federation_trust_anchor_updated: 'Federation Trust Anchor Updated',
       federation_trust_anchor_deleted: 'Federation Trust Anchor Deleted',

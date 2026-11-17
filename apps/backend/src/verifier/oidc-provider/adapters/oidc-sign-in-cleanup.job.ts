@@ -11,7 +11,7 @@ import {
 } from "../ports/oidc-sign-in.repository.js";
 
 /** How often expired sign-ins are deleted. */
-export const OIDC_SIGN_IN_CLEANUP_INTERVAL_MS = 15 * 60 * 1000;
+const OIDC_SIGN_IN_CLEANUP_INTERVAL_MS = 15 * 60 * 1000;
 
 /**
  * Deletes expired sign-ins. Deletes are idempotent, so every replica may run

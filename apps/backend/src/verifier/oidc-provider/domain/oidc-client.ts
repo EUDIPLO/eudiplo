@@ -1,4 +1,8 @@
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import {
+    generateOpaqueSecret,
+    hashOpaqueSecret,
+    matchesOpaqueSecret,
+} from "./opaque-secret.js";
 
 /**
  * How strictly a client's authorization requests are made:
@@ -8,7 +12,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
  * - `basic`: the parameters may also be sent to the authorization endpoint
  *   directly, for libraries that cannot push a request.
  */
-export type OidcClientProfile = "secure" | "basic";
+type OidcClientProfile = "secure" | "basic";
 
 /** A client secret, stored only as its hash. */
 export interface OidcClientSecret {
@@ -49,26 +53,19 @@ export const MAX_CLIENT_SECRETS = 2;
 export const MAX_CLIENT_SCOPES = 20;
 
 /** `lastUsedAt` is written at most this often per secret. */
-export const SECRET_LAST_USED_GRANULARITY_MS = 5 * 60 * 1000;
+const SECRET_LAST_USED_GRANULARITY_MS = 5 * 60 * 1000;
 
 /** Scope token (RFC 6749 Section 3.3), restricted to a safe subset. */
-export const SCOPE_NAME_PATTERN = /^[A-Za-z0-9_.:-]{1,64}$/;
+const SCOPE_NAME_PATTERN = /^[A-Za-z0-9_.:-]{1,64}$/;
 
 /** Scope every request carries; it cannot be assigned to a configuration. */
 export const OPENID_SCOPE = "openid";
 
-/** A new client secret: 256 bits of randomness, base64url. */
-export function generateClientSecret(): string {
-    return randomBytes(32).toString("base64url");
-}
+/** A new client secret. */
+export const generateClientSecret = generateOpaqueSecret;
 
-/**
- * Hash of a client secret. Secrets are generated with 256 bits of entropy, so
- * a fast hash suffices: there is nothing to guess.
- */
-export function hashClientSecret(secret: string): string {
-    return createHash("sha256").update(secret).digest("base64url");
-}
+/** Hash of a client secret, as stored. */
+export const hashClientSecret = hashOpaqueSecret;
 
 /**
  * The client's secret that matches the presented one and has not expired.
@@ -79,13 +76,10 @@ export function matchClientSecret(
     presented: string,
     now: Date,
 ): OidcClientSecret | undefined {
-    const presentedHash = Buffer.from(hashClientSecret(presented));
     let match: OidcClientSecret | undefined;
     for (const secret of client.secrets) {
-        const stored = Buffer.from(secret.hash);
-        const equal =
-            stored.length === presentedHash.length &&
-            timingSafeEqual(stored, presentedHash);
+        // Every secret is compared, so the timing does not tell which matched.
+        const equal = matchesOpaqueSecret(secret.hash, presented);
         const expired =
             !!secret.expiresAt && secret.expiresAt.getTime() <= now.getTime();
         if (equal && !expired) match = secret;

@@ -36,7 +36,7 @@ import type {
     UpdateOidcClientSecret,
 } from "./schemas/oidc-client.schema.js";
 
-export class OidcClientNotFound extends NotFoundError {
+class OidcClientNotFound extends NotFoundError {
     constructor(id: string) {
         super(`OpenID Connect client '${id}' not found`);
     }
@@ -51,9 +51,9 @@ export class InvalidOidcClient extends Error {
 }
 
 /** The client's secrets do not allow the change. */
-export class OidcClientSecretConflict extends ConflictError {}
+class OidcClientSecretConflict extends ConflictError {}
 
-export class OidcClientSecretNotFound extends NotFoundError {
+class OidcClientSecretNotFound extends NotFoundError {
     constructor(id: string) {
         super(`Client secret '${id}' not found`);
     }

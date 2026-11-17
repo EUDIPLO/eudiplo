@@ -6,10 +6,9 @@ import {
     ACR_CROSS_DEVICE,
     ACR_SAME_DEVICE,
     type AuthorizationRequestParameters,
-    hashOpaqueSecret,
-    matchesOpaqueSecret,
     validateAuthorizationRequest,
 } from "./oidc-sign-in.js";
+import { hashOpaqueSecret, matchesOpaqueSecret } from "./opaque-secret.js";
 
 const client: OidcClient = {
     id: "client",
@@ -104,6 +103,27 @@ describe("validateAuthorizationRequest", () => {
             redirectUri: "https://rp.example.com/cb",
             state: "xyz",
         });
+    });
+
+    test("a state too long to return is not redirected", () => {
+        const error = errorOf({ ...valid, state: "x".repeat(1025) });
+        expect(error.code).toBe("invalid_request");
+        expect(error.redirect).toBeUndefined();
+    });
+
+    test("a nonce too long is redirected with the state", () => {
+        const error = errorOf({ ...valid, nonce: "x".repeat(1025) });
+        expect(error.code).toBe("invalid_request");
+        expect(error.redirect?.state).toBe("xyz");
+    });
+
+    test("refuses a code_challenge that is not an S256 hash", () => {
+        expect(errorOf({ ...valid, code_challenge: "short" }).code).toBe(
+            "invalid_request",
+        );
+        expect(
+            errorOf({ ...valid, code_challenge: `${challenge}x` }).code,
+        ).toBe("invalid_request");
     });
 
     test("accepts prompt login and repeated openid", () => {

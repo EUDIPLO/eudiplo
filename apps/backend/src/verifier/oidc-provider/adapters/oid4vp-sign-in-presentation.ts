@@ -1,3 +1,4 @@
+import { SessionNotFound } from "../../../session/application/session-errors.js";
 import type { SessionStore } from "../../../session/application/session-store.js";
 import { SessionStatus } from "../../../session/domain/session-state.js";
 import type { Oid4vpService } from "../../oid4vp/oid4vp.service.js";
@@ -14,7 +15,7 @@ export class Oid4vpSignInPresentation implements SignInPresentation {
         private readonly oid4vp: Pick<Oid4vpService, "createRequest">,
         private readonly configs: Pick<
             PresentationConfigService,
-            "getPresentationConfig"
+            "getPresentationConfigs"
         >,
         private readonly sessions: Pick<SessionStore, "getForTenant">,
         private readonly publicUrl: string,
@@ -25,9 +26,11 @@ export class Oid4vpSignInPresentation implements SignInPresentation {
         tenantId: string,
         presentationConfigId: string,
     ): Promise<string | undefined> {
-        const config = await this.configs
-            .getPresentationConfig(presentationConfigId, tenantId)
-            .catch(() => null);
+        // The list, not getPresentationConfig: that one turns every failure
+        // into a 409, so a database error would read as a missing config.
+        const config = (
+            await this.configs.getPresentationConfigs(tenantId)
+        ).find((entry) => entry.id === presentationConfigId);
         if (!config) {
             return `Presentation config '${presentationConfigId}' does not exist`;
         }
@@ -63,7 +66,11 @@ export class Oid4vpSignInPresentation implements SignInPresentation {
     ): Promise<SignInPresentationResult> {
         const session = await this.sessions
             .getForTenant(tenantId, sessionId)
-            .catch(() => null);
+            .catch((error) => {
+                // Deleted, for example by the session retention.
+                if (error instanceof SessionNotFound) return null;
+                throw error;
+            });
         if (!session) {
             return {
                 status: "expired",

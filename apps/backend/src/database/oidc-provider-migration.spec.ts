@@ -2,6 +2,8 @@ import { DataSource } from "typeorm";
 import { afterEach, describe, expect, test } from "vitest";
 import { ClientEntity } from "../auth/client/entities/client.entity.js";
 import { TenantEntity } from "../auth/tenant/entities/tenant.entity.js";
+import { OidcClientEntity } from "../verifier/oidc-provider/entities/oidc-client.entity.js";
+import { OidcSignInEntity } from "../verifier/oidc-provider/entities/oidc-sign-in.entity.js";
 import { AddOidcProvider1786400000000 } from "./migrations/1786400000000-AddOidcProvider.js";
 
 describe("AddOidcProvider1786400000000", () => {
@@ -44,6 +46,32 @@ describe("AddOidcProvider1786400000000", () => {
         await migration.down(queryRunner);
         expect(await queryRunner.hasTable("oidc_client")).toBe(false);
         expect(await queryRunner.hasTable("oidc_sign_in")).toBe(false);
+        await queryRunner.release();
+    });
+
+    test("matches the schema the entities produce", async () => {
+        dataSource = new DataSource({
+            type: "better-sqlite3",
+            database: ":memory:",
+            entities: [
+                TenantEntity,
+                ClientEntity,
+                OidcClientEntity,
+                OidcSignInEntity,
+            ],
+        });
+        await dataSource.initialize();
+        await dataSource.synchronize();
+        const drift = async () =>
+            (await dataSource!.driver.createSchemaBuilder().log()).upQueries
+                .map((query) => query.query)
+                .sort();
+        const driftAfterSynchronize = await drift();
+        const queryRunner = dataSource.createQueryRunner();
+        const migration = new AddOidcProvider1786400000000();
+        await migration.down(queryRunner);
+        await migration.up(queryRunner);
+        expect(await drift()).toEqual(driftAfterSynchronize);
         await queryRunner.release();
     });
 

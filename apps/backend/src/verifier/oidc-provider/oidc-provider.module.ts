@@ -51,11 +51,16 @@ import {
 const useCaseProviders = [
     {
         provide: BuildOidcDiscovery,
-        inject: [OIDC_CLIENT_REPOSITORY, OIDC_PROVIDER_SETTINGS],
+        inject: [
+            OIDC_CLIENT_REPOSITORY,
+            ID_TOKEN_SIGNER,
+            OIDC_PROVIDER_SETTINGS,
+        ],
         useFactory: (
             clients: OidcClientRepository,
+            signer: IdTokenSigner,
             settings: OidcProviderSettings,
-        ) => new BuildOidcDiscovery(clients, settings.publicUrl),
+        ) => new BuildOidcDiscovery(clients, signer, settings.publicUrl),
     },
     {
         provide: AuthenticateOidcClient,

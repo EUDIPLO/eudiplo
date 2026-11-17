@@ -1,6 +1,7 @@
 import { NotFoundError } from "../../../shared/domain/not-found-error.js";
-import { oidcIssuer } from "../oidc-provider-settings.js";
 import { ACR_CROSS_DEVICE, ACR_SAME_DEVICE } from "../domain/oidc-sign-in.js";
+import { oidcIssuer } from "../oidc-provider-settings.js";
+import type { IdTokenSigner } from "../ports/id-token-signer.js";
 import type { OidcClientRepository } from "../ports/oidc-client.repository.js";
 
 /** The tenant has no OpenID Connect client, so it offers no provider. */
@@ -17,6 +18,7 @@ export class OidcProviderNotEnabled extends NotFoundError {
 export class BuildOidcDiscovery {
     constructor(
         private readonly clients: Pick<OidcClientRepository, "existsForTenant">,
+        private readonly signer: Pick<IdTokenSigner, "algorithms">,
         private readonly publicUrl: string,
     ) {}
 
@@ -42,7 +44,9 @@ export class BuildOidcDiscovery {
             grant_types_supported: ["authorization_code"],
             // No subject is shared between clients or sign-ins.
             subject_types_supported: ["pairwise"],
-            id_token_signing_alg_values_supported: ["ES256"],
+            // The algorithm of the tenant's key; RS256 is not offered.
+            id_token_signing_alg_values_supported:
+                await this.signer.algorithms(tenantId),
             token_endpoint_auth_methods_supported: [
                 "client_secret_basic",
                 "client_secret_post",

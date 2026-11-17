@@ -9,11 +9,6 @@ export interface OidcClientRepository {
     findForTenant(tenantId: string, id: string): Promise<OidcClient | null>;
     /** Whether the tenant has at least one client. */
     existsForTenant(tenantId: string): Promise<boolean>;
-    /** Clients whose scopes use the presentation config. */
-    listUsingPresentationConfig(
-        tenantId: string,
-        presentationConfigId: string,
-    ): Promise<OidcClient[]>;
     save(client: OidcClient): Promise<OidcClient>;
     deleteForTenant(tenantId: string, id: string): Promise<void>;
     /** Record the use of a secret without touching the rest of the client. */

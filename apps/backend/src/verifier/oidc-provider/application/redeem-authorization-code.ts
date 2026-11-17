@@ -1,13 +1,15 @@
 import { checkS256Pkce } from "../../../issuer/issuance/oid4vci/authorization/domain/pkce.js";
-import { oidcIssuer } from "../oidc-provider-settings.js";
 import type { OidcClient } from "../domain/oidc-client.js";
 import { OidcError } from "../domain/oidc-error.js";
 import {
-    generateOpaqueSecret,
-    hashOpaqueSecret,
     ID_TOKEN_LIFETIME_SECONDS,
     OidcSignInStatus,
 } from "../domain/oidc-sign-in.js";
+import {
+    generateOpaqueSecret,
+    hashOpaqueSecret,
+} from "../domain/opaque-secret.js";
+import { oidcIssuer } from "../oidc-provider-settings.js";
 import type { IdTokenSigner } from "../ports/id-token-signer.js";
 import type { OidcSignInRepository } from "../ports/oidc-sign-in.repository.js";
 import type { SignInPresentation } from "../ports/sign-in-presentation.js";

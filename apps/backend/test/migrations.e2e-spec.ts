@@ -30,6 +30,7 @@ import { AddAllowedOriginsToPresentationConfig1786000000000 } from "../src/datab
 import { AddTrustListSequenceNumber1786100000000 } from "../src/database/migrations/1786100000000-AddTrustListSequenceNumber.js";
 import { NormalizeTrustListEntityInfo1786200000000 } from "../src/database/migrations/1786200000000-NormalizeTrustListEntityInfo.js";
 import { AddWalletUnitRevocation1786300000000 } from "../src/database/migrations/1786300000000-AddWalletUnitRevocation.js";
+import { AddOidcProvider1786400000000 } from "../src/database/migrations/1786400000000-AddOidcProvider.js";
 import { describeWithContainers } from "./container-runtime.js";
 import {
     addTokensValidAfterContract,
@@ -3082,6 +3083,79 @@ function describeNullableColumn(
                             await queryRunner.getTable("credential_config")
                         )?.findColumnByName("revokeWithWalletUnit"),
                     ).toBeUndefined();
+                    await queryRunner.release();
+                });
+            });
+        });
+        describe("AddOidcProvider1786400000000", () => {
+            const migration = new AddOidcProvider1786400000000();
+
+            describeWithContainers("PostgreSQL", () => {
+                let dataSource: DataSource;
+                let driftAfterSynchronize: string[];
+                let postgresContainer: StartedPostgreSqlContainer;
+                const drift = async () =>
+                    (
+                        await dataSource.driver.createSchemaBuilder().log()
+                    ).upQueries
+                        .map((query) => query.query)
+                        .sort();
+
+                beforeAll(async () => {
+                    const entities = await Promise.all([
+                        import(
+                            "../src/auth/tenant/entities/tenant.entity.js"
+                        ).then((m) => m.TenantEntity),
+                        import(
+                            "../src/auth/client/entities/client.entity.js"
+                        ).then((m) => m.ClientEntity),
+                        import(
+                            "../src/verifier/oidc-provider/entities/oidc-client.entity.js"
+                        ).then((m) => m.OidcClientEntity),
+                        import(
+                            "../src/verifier/oidc-provider/entities/oidc-sign-in.entity.js"
+                        ).then((m) => m.OidcSignInEntity),
+                    ]);
+                    postgresContainer = await new PostgreSqlContainer(
+                        "postgres:alpine",
+                    ).start();
+                    dataSource = new DataSource({
+                        type: "postgres",
+                        url: postgresContainer.getConnectionUri(),
+                        entities,
+                        synchronize: true,
+                        logging: false,
+                    });
+                    await dataSource.initialize();
+                    driftAfterSynchronize = await drift();
+                    const queryRunner = dataSource.createQueryRunner();
+                    await migration.down(queryRunner);
+                    await queryRunner.release();
+                }, 60_000);
+
+                afterAll(async () => {
+                    await dataSource?.destroy();
+                    await postgresContainer?.stop();
+                });
+
+                test("creates both tables idempotently, matching the entities, and is reversible", async () => {
+                    const queryRunner = dataSource.createQueryRunner();
+                    expect(await queryRunner.hasTable("oidc_client")).toBe(
+                        false,
+                    );
+
+                    await migration.up(queryRunner);
+                    await migration.up(queryRunner);
+
+                    expect(await drift()).toEqual(driftAfterSynchronize);
+
+                    await migration.down(queryRunner);
+                    expect(await queryRunner.hasTable("oidc_client")).toBe(
+                        false,
+                    );
+                    expect(await queryRunner.hasTable("oidc_sign_in")).toBe(
+                        false,
+                    );
                     await queryRunner.release();
                 });
             });

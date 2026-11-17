@@ -31,18 +31,6 @@ export class TypeOrmOidcClientRepository implements OidcClientRepository {
         return this.clients.existsBy({ tenantId });
     }
 
-    async listUsingPresentationConfig(
-        tenantId: string,
-        presentationConfigId: string,
-    ): Promise<OidcClient[]> {
-        // Scopes are a JSON column; a tenant has few clients.
-        return (await this.listForTenant(tenantId)).filter((client) =>
-            client.scopes.some(
-                (scope) => scope.presentationConfigId === presentationConfigId,
-            ),
-        );
-    }
-
     async save(client: OidcClient): Promise<OidcClient> {
         const saved = await this.clients.save(
             this.clients.create({
@@ -68,15 +56,22 @@ export class TypeOrmOidcClientRepository implements OidcClientRepository {
         secretId: string,
         at: Date,
     ): Promise<void> {
-        const entity = await this.clients.findOneBy({ tenantId, id: clientId });
+        const entity = await this.clients.findOne({
+            where: { tenantId, id: clientId },
+            select: { id: true, tenantId: true, secretLastUsed: true },
+        });
         if (!entity) return;
-        const secrets = entity.secrets.map((secret) =>
-            secret.id === secretId
-                ? { ...secret, lastUsedAt: at.toISOString() }
-                : secret,
+        // Only this column: a concurrent change of the secrets survives, and
+        // a lost update here only loses a timestamp.
+        await this.clients.update(
+            { tenantId, id: clientId },
+            {
+                secretLastUsed: {
+                    ...(entity.secretLastUsed ?? {}),
+                    [secretId]: at.toISOString(),
+                },
+            },
         );
-        // Only the secrets column, so a concurrent edit of the rest survives.
-        await this.clients.update({ tenantId, id: clientId }, { secrets });
     }
 }
 
@@ -86,7 +81,6 @@ function toStored(secret: OidcClientSecret): StoredOidcClientSecret {
         hash: secret.hash,
         createdAt: secret.createdAt.toISOString(),
         expiresAt: secret.expiresAt?.toISOString() ?? null,
-        lastUsedAt: secret.lastUsedAt?.toISOString() ?? null,
     };
 }
 
@@ -103,7 +97,7 @@ function toDomain(entity: OidcClientEntity): OidcClient {
             hash: secret.hash,
             createdAt: new Date(secret.createdAt),
             expiresAt: toDate(secret.expiresAt),
-            lastUsedAt: toDate(secret.lastUsedAt),
+            lastUsedAt: toDate(entity.secretLastUsed?.[secret.id]),
         })),
         createdAt: entity.createdAt,
         updatedAt: entity.updatedAt,

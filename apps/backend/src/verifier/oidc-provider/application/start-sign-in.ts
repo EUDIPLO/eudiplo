@@ -1,20 +1,25 @@
 import { v4 } from "uuid";
-import { oidcIssuer } from "../oidc-provider-settings.js";
 import type { OidcClient } from "../domain/oidc-client.js";
 import { OidcError, SignInNotUsable } from "../domain/oidc-error.js";
 import {
     type AuthorizationRequestParameters,
-    generateOpaqueSecret,
-    hashOpaqueSecret,
     isExpired,
     type OidcSignIn,
     OidcSignInStatus,
     SIGN_IN_LIFETIME_SECONDS,
     validateAuthorizationRequest,
 } from "../domain/oidc-sign-in.js";
+import {
+    generateOpaqueSecret,
+    hashOpaqueSecret,
+} from "../domain/opaque-secret.js";
+import { oidcIssuer } from "../oidc-provider-settings.js";
 import type { OidcClientRepository } from "../ports/oidc-client.repository.js";
 import type { OidcSignInRepository } from "../ports/oidc-sign-in.repository.js";
-import type { SignInPresentation } from "../ports/sign-in-presentation.js";
+import type {
+    SignInPresentation,
+    StartedPresentation,
+} from "../ports/sign-in-presentation.js";
 import { REQUEST_URI_PREFIX } from "./push-authorization-request.js";
 
 /** A sign-in the browser now holds, through a cookie with `browserSecret`. */
@@ -72,21 +77,12 @@ export class StartSignIn {
                   );
 
         const issuer = oidcIssuer(this.publicUrl, tenantId);
+        let presentation: StartedPresentation;
         try {
-            const presentation = await this.presentations.start(
+            presentation = await this.presentations.start(
                 tenantId,
                 signIn.presentationConfigId,
                 `${issuer}/sign-in/${signIn.id}/callback`,
-            );
-            await this.signIns.transition(
-                tenantId,
-                signIn.id,
-                OidcSignInStatus.Pending,
-                {
-                    presentationSessionId: presentation.sessionId,
-                    sameDeviceRequest: presentation.sameDeviceRequest,
-                    crossDeviceRequest: presentation.crossDeviceRequest,
-                },
             );
         } catch (cause) {
             await this.signIns.transition(
@@ -107,6 +103,16 @@ export class StartSignIn {
                 },
             );
         }
+        await this.signIns.transition(
+            tenantId,
+            signIn.id,
+            OidcSignInStatus.Pending,
+            {
+                presentationSessionId: presentation.sessionId,
+                sameDeviceRequest: presentation.sameDeviceRequest,
+                crossDeviceRequest: presentation.crossDeviceRequest,
+            },
+        );
 
         return { signInId: signIn.id, browserSecret };
     }
