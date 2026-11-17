@@ -53,7 +53,7 @@ export class Oid4vpSignInPresentation implements SignInPresentation {
                 (authority) => (authority.values?.length ?? 0) > 0,
             );
             if (!trusted) {
-                return `Credential query '${subjectCredentialId}' of presentation config '${presentationConfigId}' must name trusted_authorities to identify users by one of its claims`;
+                return `Credential query '${subjectCredentialId}' of presentation config '${presentationConfigId}' must name trusted_authorities with at least one value to identify users by one of its claims`;
             }
         }
         return undefined;

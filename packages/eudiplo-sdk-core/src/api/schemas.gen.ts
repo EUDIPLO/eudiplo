@@ -9396,7 +9396,7 @@ export const VerificationProvenanceDtoSchema = {
     properties: {
         matchedIssuer: {
             type: 'string',
-            description: 'Matched trusted entity ID, or the issuance certificate subject.'
+            description: 'Name of the matched trust list entry, else the issuance certificate subject; under OpenID Federation the issuer\'s entity ID.'
         },
         issuanceThumbprint: {
             type: 'string',
@@ -9404,7 +9404,7 @@ export const VerificationProvenanceDtoSchema = {
         },
         matchMode: {
             type: 'string',
-            description: 'How the chain matched a trusted entity, e.g. `ca` or `leaf-pinned`.'
+            description: 'How the chain matched a trusted entity: `ca`, `leaf-pinned` or `pathEnd-pinned`, or `federation` for an OpenID Federation issuer.'
         },
         revocationThumbprint: {
             type: 'string',

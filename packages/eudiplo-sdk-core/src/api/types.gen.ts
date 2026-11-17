@@ -4228,7 +4228,7 @@ export type FederationTrustAnchorInUseDto = {
 
 export type VerificationProvenanceDto = {
     /**
-     * Matched trusted entity ID, or the issuance certificate subject.
+     * Name of the matched trust list entry, else the issuance certificate subject; under OpenID Federation the issuer's entity ID.
      */
     matchedIssuer?: string;
     /**
@@ -4236,7 +4236,7 @@ export type VerificationProvenanceDto = {
      */
     issuanceThumbprint?: string;
     /**
-     * How the chain matched a trusted entity, e.g. `ca` or `leaf-pinned`.
+     * How the chain matched a trusted entity: `ca`, `leaf-pinned` or `pathEnd-pinned`, or `federation` for an OpenID Federation issuer.
      */
     matchMode?: string;
     /**

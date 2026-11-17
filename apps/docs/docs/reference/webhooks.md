@@ -75,7 +75,7 @@ EUDIPLO sends one `POST` per presentation after the session reached its final st
                 "id": "membership",
                 "verified": true,
                 "trust": {
-                    "matchedIssuer": "Membership Issuer",
+                    "matchedIssuer": "Membership Demo",
                     "issuanceThumbprint": "3f…",
                     "matchMode": "ca"
                 }
