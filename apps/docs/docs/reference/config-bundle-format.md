@@ -27,13 +27,13 @@ Every portable resource is one JSON document:
 | `metadata.ownership`  | no       | `unmanaged` or `file-managed`. Reported on export, where a detached resource is reported as `unmanaged`; ignored on import, which always records `file-managed`. |
 | `spec`                | yes      | The desired configuration, without runtime state. The ID is `spec.id`, for clients `spec.clientId`, which is unique across tenants: a client ID another tenant uses blocks the plan (`CLIENT_ID_TAKEN`). |
 
-Tenant, KMS, registrar and issuance settings and the key chain defaults exist
+Tenant, KMS and issuance settings and the key chain defaults exist
 once per tenant and have no ID.
 In tenant config folders, the importer also accepts *bare* files (only the
 `spec` content) at the known paths and wraps them; a document with an unknown
 `$schema` or a newer version than the backend supports is rejected. A bare file
-names no version, so it is read as version 1, except key chain, KMS, registrar,
-tenant and presentation files
+names no version, so it is read as version 1, except key chain, key chain
+defaults, KMS, tenant and presentation files
 ([format versions](#resource-types-and-versions)): prefer documents, which
 `GET /api/config-bundles/resources/:kind/:id/document` and the Web Client's
 download buttons write ([single resources](#single-resources)).
@@ -51,10 +51,9 @@ rejects versions newer than its own.
 | `KmsConfig`          | `KmsConfigFile`               | 2               | yes       |
 | `KeyChain`           | `KeyChainConfigFile`          | 4               |           |
 | `KeyChainDefaults`   | `KeyChainDefaultsConfigFile`  | 2               | yes       |
-| `RegistrarConfig`    | `RegistrarConfigFile`         | 2               | yes       |
-| `IssuanceConfig`     | `IssuanceConfigFile`          | 6               | yes       |
+| `IssuanceConfig`     | `IssuanceConfigFile`          | 7               | yes       |
 | `CredentialConfig`   | `CredentialConfigFile`        | 4               |           |
-| `PresentationConfig` | `PresentationConfigFile`      | 4               |           |
+| `PresentationConfig` | `PresentationConfigFile`      | 5               |           |
 | `AttributeProvider`  | `AttributeProviderConfigFile` | 1               |           |
 | `WebhookEndpoint`    | `WebhookEndpointConfigFile`   | 1               |           |
 | `TrustList`          | `TrustListConfigFile`         | 2               |           |
@@ -97,6 +96,19 @@ A v3 document is migrated unchanged, and a bare presentation file with
 `allowedOrigins`, or with an `etsi_tl` value that has `format`, is read as v4.
 9.x cannot read v4 files.
 
+**PresentationConfig v5** came with EUDIPLO 10.0. `registration_cert` holds the
+certificate (`jwt`) and the `purpose` and `privacy_policy` it is requested with
+([Registration Certificates](../trust/registration-certificates.md)); `id`,
+`body` and the flat `registrationCert*` form fields are removed. The v4 to v5
+step moves `body.purpose` and `body.privacy_policy` up a level (from the form
+fields when no `registration_cert` is set), drops `id` and the other `body`
+fields with the warning `REGISTRATION_CERT_FIELD_REMOVED`, drops purposes
+without language or text with `REGISTRATION_CERT_PURPOSE_INCOMPLETE`, and warns
+with `REGISTRATION_CERT_NOT_REQUESTED` when the certificate was requested from
+the registrar and no `jwt` is set. A bare presentation file with
+`registration_cert.purpose` or `.privacy_policy` is read as v5. 9.x cannot read
+v5 files.
+
 **IssuanceConfig v4** came with EUDIPLO 10.0. It adds the optional
 `walletAttestationStatusCheckMode` (`strict`, `best_effort` or `disabled`) to the
 issuance configuration and its `built-in`, `chained` and `oid4vp` authorization
@@ -129,6 +141,16 @@ at its path: from v6 on it must name a key chain with usage type `authorizationS
 else the plan reports `KEY_CHAIN_USAGE_MISMATCH`, as a warning when the stored
 configuration already has the value. A document without either field is migrated unchanged;
 9.x cannot read v6 files.
+
+**IssuanceConfig v7** came with EUDIPLO 10.0. `registrationCertificate.mode`
+and `.renewal` are removed: the issuer metadata carries the configured `jwt`
+only ([Registration Certificates](../trust/registration-certificates.md#issuer-registration-certificate)).
+The v6 to v7 step drops both. In `generate` mode, which was the default, a
+`jwt` was not served; the step drops it too, with the warning
+`ISSUER_REGISTRATION_CERTIFICATE_JWT_DROPPED`, so that it does not start to be
+published. An enabled certificate in `generate` mode then without `jwt` gets the
+warning `ISSUER_REGISTRATION_CERTIFICATE_NOT_GENERATED`. 9.x cannot read v7
+files.
 
 **CredentialConfig v2** came with EUDIPLO 10.0. It accepts `x509` as
 `frameworkType` of `schemaMeta.trustedAuthorities` entries, with the root
@@ -218,11 +240,13 @@ key chains, including `KeyChain` documents of a bundle. A bare `kms.json` with
 `algorithms` or `defaultAlgorithm` on a provider is read as v2. A
 v1 document is migrated unchanged; 9.x cannot read v2 files.
 
-**RegistrarConfig v2** came with EUDIPLO 10.0 as well. It adds the optional
-`relyingPartyContact`, sent when EUDIPLO registers the relying party at the
-registrar ([Registrar](../trust/registrar.md#relying-party)). A bare
-`registrar.json` with `relyingPartyContact` is read as v2. A v1 document is
-migrated unchanged; 9.x cannot read v2 files.
+**RegistrarConfig** was removed in EUDIPLO 10.0 together with the sandbox
+registrar integration. A `registrar.json` in a tenant folder and a
+`RegistrarConfig` document in a bundle are skipped with the warning
+`REGISTRAR_CONFIG_REMOVED`; the rest of the import goes on.
+`eudiplo config upgrade` leaves `registrar.json` out of the upgraded folder
+with a warning; run on a single `RegistrarConfig` document, it fails with the
+same message, as there is no current version to upgrade it to.
 
 ## Tenant folder layout
 
@@ -238,7 +262,6 @@ that does not exist yet is created only if its folder contains `info.json`.
     ├── info.json               Tenant (name, description, session and status-list defaults)
     ├── kms.json                tenant KMS providers, merged over the global file
     ├── key-chain-defaults.json KeyChainDefaults (default key chains: access, authorizationServer)
-    ├── registrar.json
     ├── clients/<id>.json
     ├── key-chains/<id>.json
     ├── attribute-providers/<id>.json
@@ -290,13 +313,13 @@ exception ([single resources](#single-resources)).
 
 | Value                                                                 | In the export                                                | Requirement code         | On import                                                             |
 | --------------------------------------------------------------------- | ------------------------------------------------------------ | ------------------------ | --------------------------------------------------------------------- |
-| Retrievable secrets (KMS, registrar, webhook and attribute-provider credentials, upstream client secrets of chained authorization servers) | `${…}` placeholder | `SECRET_REQUIRED`        | Set the environment variable or replace the value                    |
+| Retrievable secrets (KMS, webhook and attribute-provider credentials, upstream client secrets of chained authorization servers) | `${…}` placeholder | `SECRET_REQUIRED`        | Set the environment variable or replace the value                    |
 | Client secrets (stored as bcrypt hash)                                | `${…}` placeholder                                           | `CLIENT_SECRET_REQUIRED` | Supply a secret, or `"secret": "!generate"` to get a new one once in `generatedSecrets` |
 | Private keys of `db` key chains                                       | `keySource: { "type": "required", "publicJwk": … }`          | `PRIVATE_KEY_REQUIRED`   | Supply `private-jwk`, or `{ "type": "regenerate" }` for new key material |
 | Keys in an external KMS                                               | `keySource: { "type": "external-reference", provider, externalKeyId, publicJwk }` | -  | The target provider must reach the same key; checked by signing a challenge |
 | Sessions, status values, caches                                       | not exported                                                 | -                        | -                                                                     |
 
-A secret that is not set, such as the client secret of a registrar account without one, is left out of the export and adds no requirement. Exception: with Keycloak (`OIDC` set and `OIDC_PROVIDER` unset or `keycloak`), Keycloak holds the client secrets, so every client gets the placeholder and `CLIENT_SECRET_REQUIRED`.
+A secret that is not set, such as the API key of a webhook endpoint without authentication, is left out of the export and adds no requirement. Exception: with Keycloak (`OIDC` set and `OIDC_PROVIDER` unset or `keycloak`), Keycloak holds the client secrets, so every client gets the placeholder and `CLIENT_SECRET_REQUIRED`.
 
 `regenerate` keeps the key chain ID but creates a new cryptographic identity:
 certificates and anything bound to the old key must be renewed. In `upsert` and
@@ -350,11 +373,11 @@ placeholders are handled according to `CONFIG_VARIABLE_STRICT`:
 | `unchanged` | Already matches, or a key chain or `!generate` client document this source already applied (see below); only ownership metadata may be updated |
 | `skip`      | Exists and is left alone: in `create` mode (`RESOURCE_EXISTS`), in a startup import when the resource was detached from that folder (`RESOURCE_DETACHED`) or has a newer stored generation (`STALE_GENERATION`), or because it is the tenant's encryption key chain (`KEY_CHAIN_ID_RESERVED`), or a client record that `replace` keeps with `OIDC_PROVIDER=generic` (`CLIENT_MANAGED_BY_IDENTITY_PROVIDER`, [see below](#clients-with-another-identity-provider)) |
 | `delete`    | Will be removed (`replace` mode)                                                            |
-| `blocked`   | Cannot be applied, for example `STALE_GENERATION`, `MISSING_RESOURCE_REFERENCE`, `STATUS_LIST_LAYOUT_IMMUTABLE`, `REGISTRATION_CERTIFICATE_REFUSED` for an imported registration certificate that fails its checks, for example because it is expired or does not cover the DCQL query ([Validation and caching](../trust/registration-certificates.md#validation-and-caching)), a missing secret or key, `UNSUPPORTED_KEY_ALGORITHM` for a key chain whose key uses an algorithm its KMS provider does not offer ([Signing algorithms](../operate/kms.md#signing-algorithms)), `KMS_CONFIG_FOLDER_MISSING` on a `KmsConfig` document for a tenant whose ID is no folder name ([Per-tenant providers](../operate/kms.md#per-tenant-providers)), `CLIENT_MANAGED_BY_IDENTITY_PROVIDER` on a `Client` document with `OIDC_PROVIDER=generic` ([see below](#clients-with-another-identity-provider)), `TRUST_LIST_IN_USE` on a trust list that `replace` would delete while a configuration still references it ([Delete a trust list](../trust/trust-lists.md#delete-a-trust-list)), `MISSING_RESOURCE_REFERENCE` on a presentation configuration that names, or the issuance configuration that adds, an OpenID Federation trust anchor neither the tenant nor the bundle registers, `FEDERATION_TRUST_ANCHOR_IN_USE` on a trust anchor that the import would delete or give another entity ID while a configuration still names it ([Delete a trust anchor](../trust/federation.md#delete-a-trust-anchor)), `KEY_CHAIN_IN_USE` on a key chain that `replace` would delete while a configuration still names it ([Delete a key chain](../trust/keys-and-certificates.md#delete-a-key-chain)), or `KEY_CHAIN_USAGE_MISMATCH` on the key chain defaults (`KeyChainDefaults`) when an entry names a key chain of another usage type ([Default access key chain](../trust/keys-and-certificates.md#default-access-key-chain)), on the issuance configuration when a `token.signingKeyId` it sets names no `authorizationServer` key chain ([Authorization server key chain](../trust/keys-and-certificates.md#authorization-server-key-chain)), or on a trust list when an internal entity names a key chain of another usage type in `issuerKeyChainId` or `revocationKeyChainId` that the stored list does not already name there and the import does not skip the list, or when the key chain that signs a list the import writes, in `keyChainId` or kept from the stored list, has no usage type `trustList` ([Trust lists](../trust/trust-lists.md#publish-a-managed-trust-list)). `KEY_CHAIN_USAGE_MISMATCH` takes the usage type from a `KeyChain` document of the bundle that the import writes, else from the stored key chain; a `KeyChain` document the plan skips does not count. One blocked item blocks the whole plan |
+| `blocked`   | Cannot be applied, for example `STALE_GENERATION`, `MISSING_RESOURCE_REFERENCE`, `STATUS_LIST_LAYOUT_IMMUTABLE`, `REGISTRATION_CERTIFICATE_REFUSED` for an imported registration certificate that fails its checks, for example because it is expired or does not cover the DCQL query ([Validation](../trust/registration-certificates.md#validation)), a missing secret or key, `UNSUPPORTED_KEY_ALGORITHM` for a key chain whose key uses an algorithm its KMS provider does not offer ([Signing algorithms](../operate/kms.md#signing-algorithms)), `KMS_CONFIG_FOLDER_MISSING` on a `KmsConfig` document for a tenant whose ID is no folder name ([Per-tenant providers](../operate/kms.md#per-tenant-providers)), `CLIENT_MANAGED_BY_IDENTITY_PROVIDER` on a `Client` document with `OIDC_PROVIDER=generic` ([see below](#clients-with-another-identity-provider)), `TRUST_LIST_IN_USE` on a trust list that `replace` would delete while a configuration still references it ([Delete a trust list](../trust/trust-lists.md#delete-a-trust-list)), `MISSING_RESOURCE_REFERENCE` on a presentation configuration that names, or the issuance configuration that adds, an OpenID Federation trust anchor neither the tenant nor the bundle registers, `FEDERATION_TRUST_ANCHOR_IN_USE` on a trust anchor that the import would delete or give another entity ID while a configuration still names it ([Delete a trust anchor](../trust/federation.md#delete-a-trust-anchor)), `KEY_CHAIN_IN_USE` on a key chain that `replace` would delete while a configuration still names it ([Delete a key chain](../trust/keys-and-certificates.md#delete-a-key-chain)), or `KEY_CHAIN_USAGE_MISMATCH` on the key chain defaults (`KeyChainDefaults`) when an entry names a key chain of another usage type ([Default access key chain](../trust/keys-and-certificates.md#default-access-key-chain)), on the issuance configuration when a `token.signingKeyId` it sets names no `authorizationServer` key chain ([Authorization server key chain](../trust/keys-and-certificates.md#authorization-server-key-chain)), or on a trust list when an internal entity names a key chain of another usage type in `issuerKeyChainId` or `revocationKeyChainId` that the stored list does not already name there and the import does not skip the list, or when the key chain that signs a list the import writes, in `keyChainId` or kept from the stored list, has no usage type `trustList` ([Trust lists](../trust/trust-lists.md#publish-a-managed-trust-list)). `KEY_CHAIN_USAGE_MISMATCH` takes the usage type from a `KeyChain` document of the bundle that the import writes, else from the stored key chain; a `KeyChain` document the plan skips does not count. One blocked item blocks the whole plan |
 
 An `update` item lists its field changes in `changes`: the `path` in the document, the stored value as `before` and the value after the import as `after`. Without `before`, the import adds the field; without `after`, it removes the stored value. Entries with `redacted: true` hide the values: a secret reads `[redacted]`, and a value that changes between an object, a list and a plain value reads `[changed]` on both sides.
 
-A `KmsConfig`, `RegistrarConfig` or `KeyChainDefaults` document replaces the stored resource: fields it leaves out are removed, and the plan lists their removal. A `KeyChain` document replaces the stored key material, and also the type, description and rotation policy:
+A `KmsConfig` or `KeyChainDefaults` document replaces the stored resource: fields it leaves out are removed, and the plan lists their removal. A `KeyChain` document replaces the stored key material, and also the type, description and rotation policy:
 
 - The plan lists `type` as the import creates it, also for a document without `type` ([KeyChain v2](#resource-types-and-versions)).
 - A `description` it leaves out is removed.
@@ -363,7 +386,7 @@ A `KmsConfig`, `RegistrarConfig` or `KeyChainDefaults` document replaces the sto
 
 The plan lists these values as they will be stored. For the other kinds, a top-level field the document leaves out keeps its stored value.
 
-A `KeyChain` document that is identical to the one last applied from the same source (the same config folder, or bundles whose manifest names the same tenant) plans `unchanged` while the key chain is `file-managed`, without comparing it with the stored key chain: importers add key IDs, EUDIPLO creates the signing key of a CA key, and rotation or registrar enrollment replace keys and certificates later. These changes stay, so certificates EUDIPLO created during the import are only renewed by rotation. A document applied under an earlier format version, for example a KeyChain v1 file that 9.x applied, is still identical when its migration to the current format changes only `$schema`; a migration that rewrites `spec` or `metadata` makes it a changed document. Reattaching always applies the folder version. To apply an unchanged document again, for example to regenerate a key, raise `metadata.generation`; in a bundle, also update the document's `sha256` in `manifest.json`.
+A `KeyChain` document that is identical to the one last applied from the same source (the same config folder, or bundles whose manifest names the same tenant) plans `unchanged` while the key chain is `file-managed`, without comparing it with the stored key chain: importers add key IDs, EUDIPLO creates the signing key of a CA key, and rotation or a certificate from a registrar replace keys and certificates later. These changes stay, so certificates EUDIPLO created during the import are only renewed by rotation. A document applied under an earlier format version, for example a KeyChain v1 file that 9.x applied, is still identical when its migration to the current format changes only `$schema`; a migration that rewrites `spec` or `metadata` makes it a changed document. Reattaching always applies the folder version. To apply an unchanged document again, for example to regenerate a key, raise `metadata.generation`; in a bundle, also update the document's `sha256` in `manifest.json`.
 
 The same rule covers a `Client` document with `"secret": "!generate"`, since applying it generates a new secret: once this source applied it, the client keeps its secret while the document stays the same. A changed document, a raised `metadata.generation`, another source or reattaching generates a new secret, returned once in `generatedSecrets`. Other `Client` documents are compared field by field. With Keycloak (`OIDC` set and `OIDC_PROVIDER` unset or `keycloak`), every `Client` document is applied on every import, because the plan cannot see changes made in Keycloak; a `!generate` client applied as it is keeps its secret.
 
@@ -420,7 +443,6 @@ resources of that kind, so screens can lock file-managed resources for them:
 | `IssuanceConfig`, `CredentialConfig`, `AttributeProvider`, `StatusList` | `issuance:manage`                                       |
 | `PresentationConfig`                                                    | `presentation:manage`                                   |
 | `Client`                                                                | `clients:manage`                                        |
-| `RegistrarConfig`                                                       | `registrar:manage`                                      |
 | `KmsConfig`                                                             | no other role                                           |
 
 ### Single resources
@@ -429,9 +451,9 @@ resources of that kind, so screens can lock file-managed resources for them:
 a document in the current format version: the content of its file in a
 [tenant folder](#tenant-folder-layout) or a bundle. Save it as
 `<directory>/<id>.json` (for the singletons `info.json`, `kms.json`,
-`key-chain-defaults.json`, `registrar.json` and `issuance/issuance.json`) and, once its `${…}`
-placeholders are set, the next import plans it as `unchanged`. The singletons use their fixed IDs `tenant`, `kms`, `defaults`,
-`registrar` and `issuance`; the tenant's encryption key chain is not configuration and
+`key-chain-defaults.json` and `issuance/issuance.json`) and, once its `${…}`
+placeholders are set, the next import plans it as `unchanged`. The singletons use their fixed IDs `tenant`, `kms`, `defaults`
+and `issuance`; the tenant's encryption key chain is not configuration and
 answers `404`. The **Download configuration** buttons of the Web Client save
 this document as `<id>.json`, and the import of **Settings > Config
 Portability** accepts it in place of a bundle.

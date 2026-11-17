@@ -281,24 +281,39 @@
                   </mat-form-field>
                 </div>
               </mat-expansion-panel>
-              <mat-expansion-panel [expanded]="showSettingsErrors || hasRegistrationCertificate">
+              <mat-expansion-panel
+                [expanded]="showSettingsErrors || registrationCertExpanded"
+                (opened)="registrationCertExpanded = true"
+                (closed)="registrationCertExpanded = false"
+              >
                 <mat-expansion-panel-header
                   ><mat-panel-title>Registration certificate</mat-panel-title
                   ><mat-panel-description>{{
                     hasRegistrationCertificate
-                      ? 'Configured'
+                      ? registrationCertSummary
                       : 'When required by your wallet ecosystem'
                   }}</mat-panel-description></mat-expansion-panel-header
                 >
                 <div class="field-stack">
-                  <h4>Registrar Certificate (optional)</h4>
+                  <h4>Registration certificate (optional)</h4>
                   <mat-hint>
-                    Two approaches are supported: (1) import/reuse existing certificate via
-                    <code>jwt</code> or <code>id</code>, or (2) request a new one via
-                    <code>body</code> (including multilingual <code>purpose</code>).
+                    A registrar such as the EUDI Hub issues the certificate; EUDIPLO attaches it to
+                    every request and does not renew it. On the configuration's
+                    <strong>Security</strong> tab, <strong>Request from EUDI Hub</strong> requests
+                    one and stores it here with the purpose and privacy policy.
                   </mat-hint>
 
-                  @if (!create) {
+                  @if (dcqlChangedWithCertificate) {
+                    <output class="reg-cert-dcql-changed">
+                      <mat-icon aria-hidden="true">info</mat-icon>
+                      <span>
+                        The DCQL query changed. If the certificate does not cover the new query,
+                        saving fails: remove the JWT, save, and request a new certificate on the
+                        Security tab.
+                      </span>
+                    </output>
+                  }
+                  @if (registrationCertStatus !== 'none') {
                     <div
                       class="reg-cert-status"
                       [attr.data-status]="registrationCertStatus"
@@ -314,9 +329,6 @@
                             @if (registrationCertExpiresIn) {
                               — expires in {{ registrationCertExpiresIn }}
                             }
-                            @if (registrationCertCache?.source) {
-                              ({{ registrationCertCache.source }})
-                            }
                           </span>
                         }
                         @case ('expiring') {
@@ -328,184 +340,141 @@
                         }
                         @case ('expired') {
                           <mat-icon color="warn">error_outline</mat-icon>
-                          <span><strong>Expired</strong> — reissue required</span>
-                        }
-                        @case ('pending') {
-                          <mat-icon color="accent">refresh</mat-icon>
                           <span
-                            ><strong>Pending</strong> — will be reissued on save (config
-                            changed)</span
+                            ><strong>Expired</strong> — the configuration cannot be saved with it;
+                            request a new one or remove it</span
                           >
                         }
-                        @case ('none') {
-                          <mat-icon>info</mat-icon>
-                          <span>No registration certificate configured</span>
+                        @case ('notYetValid') {
+                          <mat-icon color="warn">schedule</mat-icon>
+                          <span
+                            ><strong>Not yet valid</strong> — requests fail until its start
+                            time</span
+                          >
                         }
-                      }
-                      <span fxFlex></span>
-                      @if (registrationCertStatus !== 'none') {
-                        <button
-                          mat-stroked-button
-                          type="button"
-                          [disabled]="reissuing"
-                          disabledInteractive
-                          [matTooltip]="reissuing ? 'Reissuing the registration certificate…' : ''"
-                          (click)="reissueRegistrationCert()"
-                        >
-                          <mat-icon>refresh</mat-icon>
-                          {{ reissuing ? 'Reissuing…' : 'Reissue now' }}
-                        </button>
+                        @case ('invalid') {
+                          <mat-icon color="warn">gpp_bad</mat-icon>
+                          <span
+                            ><strong>Not a valid JWT</strong> — the configuration cannot be saved
+                            with it; paste a valid JWT or request a new one</span
+                          >
+                        }
+                        @case ('missing') {
+                          <mat-icon color="accent">report</mat-icon>
+                          <span
+                            ><strong>No certificate</strong> — the purpose and privacy policy are
+                            kept for the next request</span
+                          >
+                        }
                       }
                     </div>
                   }
-                  <mat-tab-group
-                    [selectedIndex]="registrationCertTabIndex"
-                    (selectedIndexChange)="registrationCertTabIndex = $event"
-                  >
-                    <mat-tab label="Import">
-                      <div fxLayout="column" fxLayoutGap="16px" class="tab-content">
-                        <mat-form-field>
-                          <mat-label>Registration Certificate JWT</mat-label>
-                          <textarea
-                            matInput
-                            formControlName="registrationCertImportJwt"
-                            rows="4"
-                            placeholder="Paste existing registration certificate JWT"
-                          ></textarea>
-                          <mat-hint>
-                            If JWT is provided, EUDIPLO uses it directly without contacting
-                            registrar.
-                          </mat-hint>
-                        </mat-form-field>
 
-                        <mat-form-field>
-                          <mat-label>Existing Registrar Certificate ID</mat-label>
+                  <mat-form-field>
+                    <mat-label>Registration Certificate JWT</mat-label>
+                    <textarea
+                      matInput
+                      formControlName="registrationCertJwt"
+                      rows="4"
+                      placeholder="Paste a registration certificate JWT"
+                    ></textarea>
+                    <mat-hint>
+                      It must be valid and authorize every credential the DCQL query requests;
+                      otherwise saving fails. After you change the query, remove the JWT, save, and
+                      request a new certificate on the Security tab.
+                    </mat-hint>
+                  </mat-form-field>
+
+                  <mat-form-field>
+                    <mat-label>Privacy Policy URL</mat-label>
+                    <input
+                      matInput
+                      type="url"
+                      formControlName="registrationCertPrivacyPolicy"
+                      placeholder="https://verifier.example/privacy"
+                    />
+                    @if (form.get('registrationCertPrivacyPolicy')?.hasError('maxlength')) {
+                      <mat-error>Use at most 2048 characters.</mat-error>
+                    } @else if (form.get('registrationCertPrivacyPolicy')?.hasError('url')) {
+                      <mat-error>Enter an http or https URL.</mat-error>
+                    }
+                    <mat-hint>Kept for requesting the next certificate.</mat-hint>
+                  </mat-form-field>
+
+                  <div fxLayout="row" fxLayoutAlign="space-between center">
+                    <h5>Purposes</h5>
+                    <button
+                      #addPurposeButton
+                      mat-button
+                      type="button"
+                      (click)="addRegistrationCertPurpose(unusedPurposeLanguage)"
+                    >
+                      <mat-icon>add</mat-icon>
+                      Add Purpose
+                    </button>
+                  </div>
+
+                  <div formArrayName="registrationCertPurpose" fxLayout="column" fxLayoutGap="12px">
+                    @for (
+                      purposeCtrl of registrationCertPurposeArray.controls;
+                      let i = $index;
+                      track purposeCtrl
+                    ) {
+                      <div
+                        [formGroup]="asFormGroup(purposeCtrl)"
+                        fxLayout="row"
+                        fxLayoutGap="12px"
+                        fxLayout.lt-md="column"
+                        class="purpose-row"
+                      >
+                        <mat-form-field fxFlex="30">
+                          <mat-label>Language</mat-label>
+                          <mat-select formControlName="lang">
+                            @for (
+                              option of languageOptionsWith(purposeCtrl.get('lang')?.value);
+                              track option.value
+                            ) {
+                              <mat-option [value]="option.value">{{
+                                option.label.includes(option.value)
+                                  ? option.label
+                                  : option.label + ' (' + option.value + ')'
+                              }}</mat-option>
+                            }
+                          </mat-select>
+                        </mat-form-field>
+                        <mat-form-field fxFlex>
+                          <mat-label>Purpose</mat-label>
                           <input
+                            #purposeContent
                             matInput
-                            formControlName="registrationCertImportId"
-                            placeholder="existing-registration-cert-id"
-                          />
-                          <mat-hint>
-                            Optional alternative to JWT: reuse an active registrar certificate by
-                            ID.
-                          </mat-hint>
-                        </mat-form-field>
-                      </div>
-                    </mat-tab>
-
-                    <mat-tab label="Form Based">
-                      <div fxLayout="column" fxLayoutGap="16px" class="tab-content">
-                        <mat-hint>
-                          Defaults from tenant registrar configuration are prefilled here. You can
-                          override values per presentation config.
-                        </mat-hint>
-
-                        <mat-form-field>
-                          <mat-label>Privacy Policy URL</mat-label>
-                          <input
-                            matInput
-                            formControlName="registrationCertBodyPrivacyPolicy"
-                            placeholder="https://verifier.example/privacy"
+                            formControlName="content"
+                            placeholder="To register a new user"
                           />
                         </mat-form-field>
-
-                        <mat-form-field>
-                          <mat-label>Support URI</mat-label>
-                          <input
-                            matInput
-                            formControlName="registrationCertBodySupportUri"
-                            placeholder="mailto:support@verifier.example"
-                          />
-                        </mat-form-field>
-
-                        <mat-form-field>
-                          <mat-label>Intermediary RP ID (optional)</mat-label>
-                          <input
-                            matInput
-                            formControlName="registrationCertBodyIntermediary"
-                            placeholder="optional-relying-party-id"
-                          />
-                        </mat-form-field>
-
-                        <div fxLayout="row" fxLayoutAlign="space-between center">
-                          <h5>Purposes</h5>
-                          <button
-                            mat-button
-                            type="button"
-                            (click)="addRegistrationCertPurpose(unusedPurposeLanguage)"
-                          >
-                            <mat-icon>add</mat-icon>
-                            Add Purpose
-                          </button>
-                        </div>
-
-                        <div
-                          formArrayName="registrationCertBodyPurpose"
-                          fxLayout="column"
-                          fxLayoutGap="12px"
+                        <button
+                          mat-icon-button
+                          color="warn"
+                          type="button"
+                          (click)="removeRegistrationCertPurpose(i)"
+                          [matTooltip]="
+                            'Remove purpose ' +
+                            (asFormGroup(purposeCtrl).get('lang')?.value || i + 1)
+                          "
+                          [attr.aria-label]="
+                            'Remove purpose ' +
+                            (asFormGroup(purposeCtrl).get('lang')?.value || i + 1)
+                          "
                         >
-                          @for (
-                            purposeCtrl of registrationCertPurposeArray.controls;
-                            let i = $index;
-                            track i
-                          ) {
-                            <div
-                              [formGroup]="asFormGroup(purposeCtrl)"
-                              fxLayout="row"
-                              fxLayoutGap="12px"
-                              fxLayout.lt-md="column"
-                              class="purpose-row"
-                            >
-                              <mat-form-field fxFlex="30">
-                                <mat-label>Language</mat-label>
-                                <mat-select formControlName="lang">
-                                  @for (
-                                    option of languageOptionsWith(purposeCtrl.get('lang')?.value);
-                                    track option.value
-                                  ) {
-                                    <mat-option [value]="option.value">{{
-                                      option.label.includes(option.value)
-                                        ? option.label
-                                        : option.label + ' (' + option.value + ')'
-                                    }}</mat-option>
-                                  }
-                                </mat-select>
-                              </mat-form-field>
-                              <mat-form-field fxFlex>
-                                <mat-label>Purpose</mat-label>
-                                <input
-                                  matInput
-                                  formControlName="content"
-                                  placeholder="To register a new user"
-                                />
-                              </mat-form-field>
-                              <button
-                                mat-icon-button
-                                color="warn"
-                                type="button"
-                                (click)="removeRegistrationCertPurpose(i)"
-                                [matTooltip]="
-                                  'Remove purpose ' +
-                                  (asFormGroup(purposeCtrl).get('lang')?.value || i + 1)
-                                "
-                                [attr.aria-label]="
-                                  'Remove purpose ' +
-                                  (asFormGroup(purposeCtrl).get('lang')?.value || i + 1)
-                                "
-                              >
-                                <mat-icon>delete</mat-icon>
-                              </button>
-                            </div>
-                          }
-                        </div>
-
-                        <mat-hint>
-                          Add one or more multilingual purpose statements that explain why user data
-                          is requested.
-                        </mat-hint>
+                          <mat-icon>delete</mat-icon>
+                        </button>
                       </div>
-                    </mat-tab>
-                  </mat-tab-group>
+                    }
+                  </div>
+
+                  <mat-hint>
+                    Why the data is requested (GDPR purpose), one text per language. The EUDI Hub
+                    needs a German (de) and an English (en) text.
+                  </mat-hint>
                 </div>
               </mat-expansion-panel>
               <mat-expansion-panel [expanded]="showSettingsErrors || hasIntegrationOptions">
@@ -602,7 +571,7 @@
               </div>
               <div>
                 <dt>Registration certificate</dt>
-                <dd>{{ hasRegistrationCertificate ? 'Configured' : 'Not configured' }}</dd>
+                <dd>{{ registrationCertSummary }}</dd>
               </div>
               <div>
                 <dt>Webhook</dt>

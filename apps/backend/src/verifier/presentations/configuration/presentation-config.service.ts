@@ -39,7 +39,6 @@ import {
     type PresentationSettings,
 } from "../presentation-settings.js";
 import { PresentationRegistrationCertificateService } from "./presentation-registration-certificate.service.js";
-import { normalizeRegistrationCertFormFields } from "./registration-cert-form-fields.js";
 
 /**
  * Tenant-scoped CRUD for presentation configurations, including the
@@ -98,10 +97,10 @@ export class PresentationConfigService {
                     // remove the stored config.
                     requireCheckableTransactionData(data);
                     await this.requireTrustedAuthorities(tid, data);
-                    await this.registrationCertificates.validateImported({
-                        ...normalizeRegistrationCertFormFields(data),
+                    this.registrationCertificates.validate({
+                        ...data,
                         tenantId: tid,
-                    } as PresentationConfig);
+                    });
                     await this.repository.delete({
                         id: data.id,
                         tenantId: tid,
@@ -160,21 +159,13 @@ export class PresentationConfigService {
     ) {
         requireCheckableTransactionData(vprequest);
         await this.requireTrustedAuthorities(tenantId, vprequest);
-        const normalizedRequest =
-            normalizeRegistrationCertFormFields(vprequest);
         const merged = {
-            ...normalizedRequest,
+            ...vprequest,
             tenantId,
         } as PresentationConfig;
-        await this.registrationCertificates.validateImported(merged);
+        this.registrationCertificates.validate(merged);
 
-        // Persist first for fast UI response; cache is resolved asynchronously.
-        merged.registrationCertCache = null;
         const saved = await this.repository.save(merged);
-
-        if (saved.registration_cert) {
-            this.registrationCertificates.scheduleRefresh(saved.id, tenantId);
-        }
 
         if (actorToken) {
             await this.auditLogService.record({
@@ -205,43 +196,27 @@ export class PresentationConfigService {
     ) {
         // Verify the config exists
         const existing = await this.getPresentationConfig(id, tenantId);
-        const normalizedRequest =
-            normalizeRegistrationCertFormFields(vprequest);
-
         // Merge existing with updates - client must explicitly set fields to null to clear them
         // Omitted fields keep their existing values
         const merged: PresentationConfig = {
             ...existing,
-            ...normalizedRequest,
+            ...vprequest,
             id,
             tenantId,
         } as PresentationConfig;
         requireCheckableTransactionData(merged);
         await this.requireTrustedAuthorities(tenantId, merged, existing);
 
-        // Return quickly; resolve registration-certificate cache asynchronously.
-        const cacheRelevantChanged =
-            Object.prototype.hasOwnProperty.call(
-                normalizedRequest,
-                "registration_cert",
-            ) || Object.prototype.hasOwnProperty.call(vprequest, "dcql_query");
-
-        if (cacheRelevantChanged) {
-            await this.registrationCertificates.validateImported(merged);
-        }
-
-        if (!merged.registration_cert) {
-            merged.registrationCertCache = null;
-        } else if (cacheRelevantChanged) {
-            // Mark pending in UI while async refresh runs.
-            merged.registrationCertCache = null;
+        // A stored certificate that has expired since does not block other
+        // changes; it is checked when it or the DCQL query changes.
+        if (
+            Object.hasOwn(vprequest, "registration_cert") ||
+            Object.hasOwn(vprequest, "dcql_query")
+        ) {
+            this.registrationCertificates.validate(merged);
         }
 
         const saved = await this.repository.save(merged);
-
-        if (saved.registration_cert && cacheRelevantChanged) {
-            this.registrationCertificates.scheduleRefresh(saved.id, tenantId);
-        }
 
         if (actorToken) {
             await this.auditLogService.record({
@@ -334,26 +309,6 @@ export class PresentationConfigService {
 
         return result;
     }
-
-    /**
-     * Force-reissue the registration certificate for a presentation config,
-     * bypassing the cache. Used by the management UI's "Reissue now" action.
-     *
-     * Throws if the config has no `registrationCert` spec, or the spec needs
-     * the registrar (`id` or `body`) and the registrar is not enabled for this
-     * tenant.
-     */
-    async reissueRegistrationCertificate(
-        id: string,
-        tenantId: string,
-    ): Promise<PresentationConfig> {
-        const presentationConfig = await this.getPresentationConfig(
-            id,
-            tenantId,
-        );
-        await this.registrationCertificates.reissue(presentationConfig);
-        return this.getPresentationConfig(id, tenantId);
-    }
 }
 
 function sanitizeForLog(config: PresentationConfig): Record<string, unknown> {
@@ -365,7 +320,6 @@ function sanitizeForLog(config: PresentationConfig): Record<string, unknown> {
         transaction_data: config.transaction_data,
         skewSeconds: config.skewSeconds,
         registration_cert: config.registration_cert,
-        registrationCertCache: config.registrationCertCache,
         attached: config.attached,
         redirectUri: config.redirectUri,
         accessKeyChainId: config.accessKeyChainId,

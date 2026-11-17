@@ -1,6 +1,9 @@
 import type { ChangeSessionState } from "../../../session/application/change-session-state.js";
 import type { SessionStore } from "../../../session/application/session-store.js";
-import type { SessionOutcome } from "../../../session/domain/session-outcome.js";
+import type {
+    SessionOutcome,
+    VerificationProvenance,
+} from "../../../session/domain/session-outcome.js";
 import { SessionStatus } from "../../../session/domain/session-state.js";
 
 export interface CompletePresentationResponseInput {
@@ -9,6 +12,8 @@ export interface CompletePresentationResponseInput {
     /** Classifies the session for metrics (verification sessions carry one). */
     requestId?: string | null;
     credentials: unknown[];
+    /** Trusted issuer per credential query, recorded in the outcome. */
+    trust?: Record<string, VerificationProvenance>;
     responseCode: string;
     consumedAt?: Date;
 }
@@ -40,13 +45,14 @@ export class CompletePresentationResponse {
         const outcome: SessionOutcome = {
             result: "success",
             source: "verifier",
-            credentials: input.credentials.map((credential: any) => ({
-                id:
+            credentials: input.credentials.map((credential: any) => {
+                const id =
                     typeof credential?.id === "string"
                         ? credential.id
-                        : undefined,
-                verified: true,
-            })),
+                        : undefined;
+                const trust = id ? input.trust?.[id] : undefined;
+                return { id, verified: true, ...(trust && { trust }) };
+            }),
         };
         const completed = await this.sessions.updateIfUnconsumed(
             input.tenantId,

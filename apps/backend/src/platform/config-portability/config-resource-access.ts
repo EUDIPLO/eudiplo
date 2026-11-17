@@ -18,7 +18,6 @@ const CONFIG_RESOURCE_MANAGE_ROLES: Record<
     KmsConfig: [],
     KeyChain: [Role.Issuances, Role.Presentations, Role.Keys],
     KeyChainDefaults: [Role.Issuances, Role.Presentations, Role.Keys],
-    RegistrarConfig: [Role.Registrar],
     IssuanceConfig: [Role.Issuances],
     CredentialConfig: [Role.Issuances],
     PresentationConfig: [Role.Presentations],

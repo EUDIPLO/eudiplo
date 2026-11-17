@@ -3,7 +3,19 @@ import {
   firstUnusedLanguage,
   languageOptionsWith,
 } from '../../../utils/language-options';
-import { Component, OnInit, ChangeDetectionStrategy } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  inject,
+  Injector,
+  OnInit,
+  QueryList,
+  ViewChild,
+  ViewChildren,
+} from '@angular/core';
+import { focusRowAfterRemoval } from '../../../common/focus-if-lost.util';
+import { httpUrlValidator } from '../../../utils/http-url-validator';
 import {
   AbstractControl,
   FormArray,
@@ -31,6 +43,7 @@ import {
   webhookEndpointControllerGetAll,
   KeyChainResponseDto,
   WebhookEndpointEntity,
+  type PresentationRegistrationCertificate,
 } from '@eudiplo/sdk-core';
 import { PresentationManagementService } from '../presentation-management.service';
 import { MatDialog } from '@angular/material/dialog';
@@ -53,9 +66,11 @@ import {
 import {
   formatRegistrationCertExpiresIn,
   getRegistrationCertStatus,
+  getRegistrationCertTimes,
+  registrationCertStatusSentence,
+  type RegistrationCertStatus,
 } from '../../../utils/registration-cert-status';
 import { CredentialIdsComponent } from '../../credential-ids/credential-ids.component';
-import { RegistrarService } from '../../../registrar/registrar.service';
 import { ConfigOwnershipDirective } from '../../../config-portability/config-ownership.directive';
 import { ConfigOwnershipNoticeComponent } from '../../../config-portability/config-ownership-notice.component';
 import { DcqlQueryEditorComponent } from '../dcql-query-editor/dcql-query-editor.component';
@@ -128,9 +143,6 @@ export class PresentationCreateComponent implements OnInit {
   public form: FormGroup;
   public create = true;
   public copyMode = false;
-  public registrationCertTabIndex = 0;
-  public registrationCertCache: any = null;
-  public reissuing = false;
   public guided = true;
   public activeStep = 0;
   public furthestStep = 0;
@@ -160,13 +172,26 @@ export class PresentationCreateComponent implements OnInit {
 
   readonly languageOptionsWith = languageOptionsWith;
 
+  /**
+   * Whether the registration certificate panel is open. It opens for a loaded
+   * certificate and then follows the user, so removing the last purpose does
+   * not close it under the user's focus.
+   */
+  registrationCertExpanded = false;
+
+  private readonly injector = inject(Injector);
+  /** The purpose text of each row, which takes focus after a removal. */
+  @ViewChildren('purposeContent', { read: ElementRef })
+  private readonly purposeContents?: QueryList<ElementRef<HTMLElement>>;
+  @ViewChild('addPurposeButton', { read: ElementRef })
+  private readonly addPurposeButton?: ElementRef<HTMLElement>;
+
   constructor(
     private readonly presentationService: PresentationManagementService,
     private readonly router: Router,
     private readonly route: ActivatedRoute,
     private readonly snackBar: MatSnackBar,
-    private readonly dialog: MatDialog,
-    private readonly registrarService: RegistrarService
+    private readonly dialog: MatDialog
   ) {
     this.form = new FormGroup({
       id: new FormControl(undefined, [Validators.required]),
@@ -184,12 +209,12 @@ export class PresentationCreateComponent implements OnInit {
       ]),
       lifeTime: new FormControl(300, [Validators.required, Validators.min(1)]),
       statusCheckMode: new FormControl<'strict' | 'best_effort' | 'disabled'>('strict'),
-      registrationCertImportJwt: new FormControl(undefined),
-      registrationCertImportId: new FormControl(undefined),
-      registrationCertBodyPrivacyPolicy: new FormControl(undefined),
-      registrationCertBodySupportUri: new FormControl(undefined),
-      registrationCertBodyIntermediary: new FormControl(undefined),
-      registrationCertBodyPurpose: new FormArray([]),
+      registrationCertJwt: new FormControl(undefined),
+      registrationCertPrivacyPolicy: new FormControl(undefined, [
+        Validators.maxLength(2048),
+        httpUrlValidator,
+      ]),
+      registrationCertPurpose: new FormArray([]),
       transaction_data: new FormControl(undefined, [
         schemaFormValidator(transactionDataArraySchema),
       ]),
@@ -200,7 +225,6 @@ export class PresentationCreateComponent implements OnInit {
 
   ngOnInit(): void {
     this.guided = !this.route.snapshot.params['id'];
-    this.loadRegistrarDefaults();
 
     // Load key chains for the select dropdown (filter by access usage type)
     keyChainControllerGetAll({}).then(
@@ -269,9 +293,6 @@ export class PresentationCreateComponent implements OnInit {
             this.loadRegistrationCertIntoForm(formData.registration_cert);
             delete formData.registration_cert;
           }
-
-          this.registrationCertCache = formData.registrationCertCache ?? null;
-          delete formData.registrationCertCache;
 
           if (formData.transaction_data && typeof formData.transaction_data === 'object') {
             formData.transaction_data = JSON.stringify(formData.transaction_data, null, 2);
@@ -381,6 +402,20 @@ export class PresentationCreateComponent implements OnInit {
 
   get hasRegistrationCertificate(): boolean {
     return !!this.buildRegistrationCertFromForm();
+  }
+
+  /**
+   * Summary of the registration certificate settings for the panel header and
+   * the Review step: it names a JWT only when there is one.
+   */
+  get registrationCertSummary(): string {
+    const registrationCert = this.buildRegistrationCertFromForm();
+    if (!registrationCert) return 'Not configured';
+    if (!registrationCert.jwt) return 'Purpose only, no certificate';
+    return (
+      registrationCertStatusSentence(this.registrationCertStatus, this.registrationCertExpiresIn) ??
+      'Configured'
+    );
   }
 
   get hasIntegrationOptions(): boolean {
@@ -508,47 +543,6 @@ export class PresentationCreateComponent implements OnInit {
         return `${section} references missing credential "${missing}". Update its credential IDs in Settings.`;
     }
     return null;
-  }
-
-  private async loadRegistrarDefaults(): Promise<void> {
-    try {
-      const config = await this.registrarService.getConfig();
-      const defaults = config?.registrationCertificateDefaults;
-      if (!defaults || typeof defaults !== 'object') {
-        return;
-      }
-
-      this.applyRegistrationCertDefaultsIfMissing(defaults as Record<string, unknown>);
-    } catch {
-      // Optional enhancement only; keep form functional if registrar config is unavailable.
-    }
-  }
-
-  private applyRegistrationCertDefaultsIfMissing(defaults: Record<string, unknown>): void {
-    const privacy =
-      typeof defaults['privacy_policy'] === 'string' ? defaults['privacy_policy'].trim() : '';
-    const support =
-      typeof defaults['support_uri'] === 'string' ? defaults['support_uri'].trim() : '';
-    const intermediary =
-      typeof defaults['intermediary'] === 'string' ? defaults['intermediary'].trim() : '';
-
-    const privacyCtrl = this.form.get('registrationCertBodyPrivacyPolicy');
-    const supportCtrl = this.form.get('registrationCertBodySupportUri');
-    const intermediaryCtrl = this.form.get('registrationCertBodyIntermediary');
-
-    const currentPrivacy = `${privacyCtrl?.value ?? ''}`.trim();
-    const currentSupport = `${supportCtrl?.value ?? ''}`.trim();
-    const currentIntermediary = `${intermediaryCtrl?.value ?? ''}`.trim();
-
-    if (!currentPrivacy && privacy) {
-      privacyCtrl?.setValue(privacy);
-    }
-    if (!currentSupport && support) {
-      supportCtrl?.setValue(support);
-    }
-    if (!currentIntermediary && intermediary) {
-      intermediaryCtrl?.setValue(intermediary);
-    }
   }
 
   getFormArray(value: string) {
@@ -715,12 +709,9 @@ export class PresentationCreateComponent implements OnInit {
 
     this.ensureValidStatusCheckMode(formValue);
 
-    delete formValue.registrationCertImportJwt;
-    delete formValue.registrationCertImportId;
-    delete formValue.registrationCertBodyPrivacyPolicy;
-    delete formValue.registrationCertBodySupportUri;
-    delete formValue.registrationCertBodyIntermediary;
-    delete formValue.registrationCertBodyPurpose;
+    delete formValue.registrationCertJwt;
+    delete formValue.registrationCertPrivacyPolicy;
+    delete formValue.registrationCertPurpose;
 
     // Parse dcql_query if it's a string
     if (formValue.dcql_query && typeof formValue.dcql_query === 'string') {
@@ -739,9 +730,7 @@ export class PresentationCreateComponent implements OnInit {
       }
     }
 
-    formValue.registration_cert = forExport
-      ? this.getExportRegistrationCert()
-      : this.buildRegistrationCertFromForm();
+    formValue.registration_cert = this.buildRegistrationCertFromForm();
     if (!formValue.webhook?.url) {
       formValue.webhook = undefined;
     }
@@ -788,51 +777,6 @@ export class PresentationCreateComponent implements OnInit {
     ) {
       formValue.statusCheckMode = 'strict';
     }
-  }
-
-  private getExportRegistrationCert(): any {
-    const body = this.getRegistrationCertBodyFromForm();
-    const importId = `${this.form.get('registrationCertImportId')?.value ?? ''}`.trim();
-    const cachedJwt = this.registrationCertCache?.jwt;
-    if (typeof cachedJwt === 'string' && cachedJwt.trim().length > 0) {
-      return {
-        ...(body ? { body } : {}),
-        ...(importId ? { id: importId } : {}),
-        jwt: cachedJwt.trim(),
-      };
-    }
-
-    return this.buildRegistrationCertFromForm();
-  }
-
-  private getRegistrationCertBodyFromForm(): any {
-    const purpose = this.registrationCertPurposeArray.controls
-      .map((ctrl) => ({
-        lang: ctrl.get('lang')?.value?.trim(),
-        content: ctrl.get('content')?.value?.trim(),
-      }))
-      .filter((entry) => entry.lang && entry.content);
-
-    if (purpose.length === 0) {
-      return null;
-    }
-
-    const privacyPolicy = this.form.get('registrationCertBodyPrivacyPolicy')?.value?.trim();
-    const supportUri = this.form.get('registrationCertBodySupportUri')?.value?.trim();
-    const intermediary = this.form.get('registrationCertBodyIntermediary')?.value?.trim();
-
-    const body: any = { purpose };
-    if (privacyPolicy) {
-      body.privacy_policy = privacyPolicy;
-    }
-    if (supportUri) {
-      body.support_uri = supportUri;
-    }
-    if (intermediary) {
-      body.intermediary = intermediary;
-    }
-
-    return body;
   }
 
   /**
@@ -885,7 +829,6 @@ export class PresentationCreateComponent implements OnInit {
       this.getFormArray('attached').clear();
       this.registrationCertPurposeArray.clear();
       this.form.reset({ lifeTime: 300, statusCheckMode: 'strict', webhookEndpointId: '' });
-      this.registrationCertTabIndex = 0;
       this.loadRegistrationCertIntoForm(registrationCert);
       (formData.attached || []).forEach(() => this.addAttachment());
       this.form.patchValue(formData);
@@ -964,7 +907,7 @@ export class PresentationCreateComponent implements OnInit {
   }
 
   get registrationCertPurposeArray(): FormArray {
-    return this.form.get('registrationCertBodyPurpose') as FormArray;
+    return this.form.get('registrationCertPurpose') as FormArray;
   }
 
   /** The first language no purpose is written in yet, for the next one. */
@@ -989,108 +932,87 @@ export class PresentationCreateComponent implements OnInit {
     );
   }
 
+  /** Removes a purpose; focus moves to the row now in its place, else to Add Purpose. */
   removeRegistrationCertPurpose(index: number): void {
     this.registrationCertPurposeArray.removeAt(index);
+    focusRowAfterRemoval(
+      this.injector,
+      () => this.purposeContents?.map((content) => content.nativeElement),
+      index,
+      () => this.addPurposeButton?.nativeElement
+    );
   }
 
   /**
-   * Status of the persisted registration-certificate cache for the loaded
-   * presentation config. The backend invalidates this cache automatically
-   * when the registrationCert spec or dcql_query change, so a `null` cache
-   * after editing those fields means a fresh issuance is pending.
+   * The DCQL query was edited while the form holds a registration certificate
+   * JWT, which may no longer cover it; saving then fails.
    */
-  get registrationCertStatus(): 'none' | 'active' | 'expiring' | 'expired' | 'pending' {
-    if (this.create) return 'none';
-    return getRegistrationCertStatus({
-      registration_cert: this.buildRegistrationCertFromForm() as any,
-      registrationCertCache: this.registrationCertCache,
-    });
+  get dcqlChangedWithCertificate(): boolean {
+    return (
+      this.queryControl.dirty && !!`${this.form.get('registrationCertJwt')?.value ?? ''}`.trim()
+    );
+  }
+
+  /** Status of the registration certificate the form holds, read from its JWT. */
+  get registrationCertStatus(): RegistrationCertStatus {
+    return getRegistrationCertStatus({ registration_cert: this.buildRegistrationCertFromForm() });
   }
 
   get registrationCertExpiresIn(): string | null {
-    return formatRegistrationCertExpiresIn(this.registrationCertCache);
+    return formatRegistrationCertExpiresIn(
+      getRegistrationCertTimes({ registration_cert: this.buildRegistrationCertFromForm() })
+    );
   }
 
-  reissueRegistrationCert(): void {
-    const id = this.route.snapshot.params['id'];
-    // `disabledInteractive` keeps the button clickable while it looks disabled.
-    if (!id || this.create || this.reissuing) return;
-    this.reissuing = true;
-    this.presentationService
-      .reissueRegistrationCertificate(id)
-      .then((updated) => {
-        this.registrationCertCache = updated?.registrationCertCache ?? null;
-        this.snackBar.open('Registration certificate reissued', 'Close', {
-          duration: 3000,
-        });
-      })
-      .catch((err) => {
-        console.error('Failed to reissue registration certificate', err);
-        openErrorSnackBar(
-          this.snackBar,
-          getApiErrorMessage(err, 'Failed to reissue registration certificate')
-        );
-      })
-      .finally(() => {
-        this.reissuing = false;
-      });
+  /**
+   * The `registration_cert` the form describes: the JWT from a registrar and
+   * the purpose and privacy policy it is requested with. Null when all are empty.
+   */
+  private buildRegistrationCertFromForm(): PresentationRegistrationCertificate | null {
+    const jwt = `${this.form.get('registrationCertJwt')?.value ?? ''}`.trim();
+    const privacyPolicy = `${this.form.get('registrationCertPrivacyPolicy')?.value ?? ''}`.trim();
+    const purpose = this.registrationCertPurposeArray.controls
+      .map((ctrl) => ({
+        lang: `${ctrl.get('lang')?.value ?? ''}`.trim(),
+        content: `${ctrl.get('content')?.value ?? ''}`.trim(),
+      }))
+      .filter((entry) => entry.lang && entry.content);
+    const registrationCert: PresentationRegistrationCertificate = {
+      ...(jwt ? { jwt } : {}),
+      ...(purpose.length ? { purpose } : {}),
+      ...(privacyPolicy ? { privacy_policy: privacyPolicy } : {}),
+    };
+    return Object.keys(registrationCert).length ? registrationCert : null;
   }
 
-  private buildRegistrationCertFromForm(): any {
-    if (this.registrationCertTabIndex === 0) {
-      const jwt = this.form.get('registrationCertImportJwt')?.value?.trim();
-      const id = this.form.get('registrationCertImportId')?.value?.trim();
-
-      if (jwt) {
-        return { jwt };
-      }
-
-      if (id) {
-        return { id };
-      }
-
-      return null;
-    }
-
-    const body = this.getRegistrationCertBodyFromForm();
-    if (!body) {
-      return null;
-    }
-
-    return { body };
-  }
-
+  /**
+   * Fills the registration certificate fields. A file of an earlier version
+   * kept the purpose and privacy policy under `body`; they are read from
+   * there too.
+   */
   private loadRegistrationCertIntoForm(registrationCert: any): void {
     this.form.patchValue({
-      registrationCertImportJwt: registrationCert?.jwt ?? undefined,
-      registrationCertImportId: registrationCert?.id ?? undefined,
-      registrationCertBodyPrivacyPolicy: registrationCert?.body?.privacy_policy ?? undefined,
-      registrationCertBodySupportUri: registrationCert?.body?.support_uri ?? undefined,
-      registrationCertBodyIntermediary: registrationCert?.body?.intermediary ?? undefined,
+      registrationCertJwt: registrationCert?.jwt ?? undefined,
+      registrationCertPrivacyPolicy:
+        registrationCert?.privacy_policy ?? registrationCert?.body?.privacy_policy ?? undefined,
     });
 
-    while (this.registrationCertPurposeArray.length > 0) {
-      this.registrationCertPurposeArray.removeAt(0);
+    this.registrationCertPurposeArray.clear();
+    this.registrationCertExpanded = !!(
+      registrationCert?.jwt ||
+      registrationCert?.privacy_policy ||
+      registrationCert?.purpose?.length ||
+      registrationCert?.body
+    );
+    // Files saved before the body was removed keep the purpose under it.
+    let purposes: { lang?: string; content?: string }[] = [];
+    if (Array.isArray(registrationCert?.purpose)) {
+      purposes = registrationCert.purpose;
+    } else if (Array.isArray(registrationCert?.body?.purpose)) {
+      purposes = registrationCert.body.purpose;
     }
-
-    const purposes = Array.isArray(registrationCert?.body?.purpose)
-      ? registrationCert.body.purpose
-      : [];
-
     for (const purpose of purposes) {
-      this.addRegistrationCertPurpose(
-        purpose?.lang || '',
-        purpose?.content || purpose?.value || ''
-      );
-    }
-
-    if (registrationCert?.jwt || registrationCert?.id) {
-      this.registrationCertTabIndex = 0;
-      return;
-    }
-
-    if (registrationCert?.body) {
-      this.registrationCertTabIndex = 1;
+      this.addRegistrationCertPurpose(purpose?.lang || '', purpose?.content || '');
     }
   }
 }

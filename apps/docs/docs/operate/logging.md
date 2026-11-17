@@ -93,7 +93,7 @@ reason). Secrets are not recorded: the API keys of webhook endpoints and
 attribute providers and the upstream client secrets of chained authorization
 servers appear as `[REDACTED]`, and a changed secret is still listed among the
 changed fields. Not audited: key chains, trust lists, API clients and users (including
-role changes and secret rotation), KMS provider and registrar configuration,
+role changes and secret rotation), KMS provider configuration,
 and session retention settings. Read the audit log with
 `GET /api/admin/audit-logs` (role `audit:read` or `clients:manage`) or under
 **Administration → Activity Logs** in the web client. The

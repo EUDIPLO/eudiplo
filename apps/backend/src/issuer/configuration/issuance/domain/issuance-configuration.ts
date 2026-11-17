@@ -25,12 +25,6 @@ export type IssuanceConfiguration = Omit<
     tenantId: string;
     createdAt: Date;
     updatedAt: Date;
-    registrationCertificateCache?: {
-        jwt: string;
-        fingerprint: string;
-        issuedAt?: number;
-        expiresAt?: number;
-    } | null;
 };
 export class IssuanceConfigurationNotFound extends NotFoundError {
     constructor(readonly tenantId: string) {

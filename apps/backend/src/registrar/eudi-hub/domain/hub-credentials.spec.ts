@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
     hubCredentialsForDcql,
+    hubPurpose,
     sameCredentialRequest,
 } from "./hub-credentials.js";
 
@@ -174,5 +175,43 @@ describe("sameCredentialRequest", () => {
         expect(sameCredentialRequest({ ...wanted, ...change }, wanted)).toBe(
             false,
         );
+    });
+});
+
+describe("hubPurpose", () => {
+    const text = (lang: string) => ({ lang, content: `text ${lang}` });
+
+    it("sends the two-letter languages and keeps the others back", () => {
+        expect(
+            hubPurpose([text("en"), text("pt-BR"), text("de"), text("fr")]),
+        ).toEqual({
+            sent: [text("en"), text("de"), text("fr")],
+            notSent: ["pt-BR"],
+        });
+    });
+
+    it("keeps back three-letter codes, which the EUDI Hub does not take", () => {
+        expect(hubPurpose([text("de"), text("en"), text("eng")])).toEqual({
+            sent: [text("de"), text("en")],
+            notSent: ["eng"],
+        });
+    });
+
+    it("never drops German or English for the limit of 24 texts", () => {
+        const others = Array.from({ length: 30 }, (_, index) =>
+            text(
+                String.fromCharCode(97 + Math.floor(index / 26)) +
+                    String.fromCharCode(97 + (index % 26)),
+            ),
+        ).filter(({ lang }) => lang !== "de" && lang !== "en");
+        const { sent, notSent } = hubPurpose([
+            ...others,
+            text("de"),
+            text("en"),
+        ]);
+
+        expect(sent).toHaveLength(24);
+        expect(sent.slice(0, 2).map(({ lang }) => lang)).toEqual(["de", "en"]);
+        expect(notSent).toHaveLength(others.length - 22);
     });
 });

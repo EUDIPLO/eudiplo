@@ -313,17 +313,11 @@ export class Oid4vpService {
                     undefined,
             });
 
-            // The registration certificate links the access certificate that
-            // signs this request.
-            if (presentationConfig.registration_cert) {
-                regCert =
-                    await this.registrationCertificateService.getOrIssueRegistrationCertificate(
-                        presentationConfig,
-                        dcql_query,
-                        session.requestId!,
-                        cert,
-                    );
-            }
+            regCert = this.registrationCertificateService.forRequest(
+                presentationConfig,
+                dcql_query,
+                session.requestId!,
+            );
             const nonce = randomUUID();
             await this.sessionStore.updateForTenant(
                 session.tenantId,
@@ -888,10 +882,21 @@ export class Oid4vpService {
 
         try {
             //TODO: load required fields from the config
-            const credentials = await this.verifyPresentation(
+            const verified = await this.verifyPresentation(
                 res,
                 presentationConfig,
                 session,
+            );
+            // Stored and published claims keep their shape; the trusted
+            // issuers go to the session outcome only.
+            const credentials = verified.map(({ id, values }) => ({
+                id,
+                values,
+            }));
+            const trust = Object.fromEntries(
+                verified.flatMap((entry) =>
+                    entry.trust ? [[entry.id, entry.trust]] : [],
+                ),
             );
 
             this.logger.debug(
@@ -917,6 +922,7 @@ export class Oid4vpService {
                 response: res,
                 session,
                 credentials,
+                trust,
                 responseCode,
                 webhook,
                 rawPresentationPayload: decrypted,

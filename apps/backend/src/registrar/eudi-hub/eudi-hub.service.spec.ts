@@ -1,8 +1,9 @@
-import { webcrypto, X509Certificate } from "node:crypto";
+import { webcrypto } from "node:crypto";
 import { BadGatewayException, BadRequestException } from "@nestjs/common";
 import * as x509 from "@peculiar/x509";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { KeyUsageType } from "../../crypto/key/types/key-usage-type.js";
+import { AccessCertificateStorage } from "../access-certificate-storage.service.js";
 import { EudiHubRequestError } from "./eudi-hub.client.js";
 import { EudiHubService } from "./eudi-hub.service.js";
 
@@ -97,8 +98,11 @@ describe("EudiHubService.requestAccessCertificate", () => {
         };
         service = new EudiHubService(
             client as any,
-            keyChainService as any,
-            certService as any,
+            new AccessCertificateStorage(
+                keyChainService as any,
+                certService as any,
+                { chainFor: (_tenant: string, crt: string) => [crt] } as any,
+            ),
         );
     });
 
@@ -473,164 +477,6 @@ describe("EudiHubService.requestAccessCertificate", () => {
     });
 });
 
-describe("EudiHubService issuing CA of an access certificate", () => {
-    const AIA = "http://ca.example/issuing.cer";
-
-    async function ca(
-        name: string,
-        signer?: { keys: CryptoKeyPair; name: string },
-    ) {
-        const keys = await keyPair();
-        const cert = await x509.X509CertificateGenerator.create(
-            {
-                serialNumber: "02",
-                subject: name,
-                issuer: signer?.name ?? name,
-                notBefore: new Date(Date.now() - 60_000),
-                notAfter: new Date(Date.now() + 3_600_000),
-                signingAlgorithm: algorithm,
-                publicKey: keys.publicKey,
-                signingKey: (signer?.keys ?? keys).privateKey,
-                extensions: [new x509.BasicConstraintsExtension(true, 0, true)],
-            },
-            crypto,
-        );
-        return { keys, name, pem: cert.toString("pem") };
-    }
-
-    async function leafFrom(
-        issuer: { keys: CryptoKeyPair; name: string },
-        key: CryptoKeyPair,
-        aia = true,
-    ) {
-        const cert = await x509.X509CertificateGenerator.create(
-            {
-                serialNumber: "03",
-                subject: "CN=Relying party",
-                issuer: issuer.name,
-                notBefore: new Date(Date.now() - 60_000),
-                notAfter: new Date(Date.now() + 3_600_000),
-                signingAlgorithm: algorithm,
-                publicKey: key.publicKey,
-                signingKey: issuer.keys.privateKey,
-                extensions: aia
-                    ? [
-                          new x509.AuthorityInfoAccessExtension({
-                              caIssuers: AIA,
-                          }),
-                      ]
-                    : [],
-            },
-            crypto,
-        );
-        return cert.toString("pem");
-    }
-
-    let key: CryptoKeyPair;
-    let client: Record<string, ReturnType<typeof vi.fn>>;
-    let certService: { addCertificate: ReturnType<typeof vi.fn> };
-    let service: EudiHubService;
-
-    beforeEach(async () => {
-        key = await keyPair();
-        client = {
-            createAccessCertificate: vi
-                .fn()
-                .mockResolvedValue(hubCertificate("hub-1")),
-            downloadAccessCertificate: vi.fn(),
-            fetchCaCertificate: vi.fn(),
-            revokeAccessCertificate: vi.fn(),
-        };
-        certService = { addCertificate: vi.fn().mockResolvedValue("access") };
-        service = new EudiHubService(
-            client as any,
-            {
-                getEntity: vi.fn().mockResolvedValue({
-                    usageType: KeyUsageType.Access,
-                    description: "My access key",
-                    hasInternalCa: () => false,
-                }),
-                createCertificateSigningRequest: vi
-                    .fn()
-                    .mockResolvedValue("csr"),
-            } as any,
-            certService as any,
-        );
-    });
-
-    it("stores the issuing CA the certificate names after it", async () => {
-        const root = await ca("CN=Hub Root");
-        const issuing = await ca("CN=Hub Issuing", root);
-        const leaf = await leafFrom(issuing, key);
-        client.downloadAccessCertificate.mockResolvedValue(leaf);
-        client.fetchCaCertificate.mockResolvedValue(
-            new X509Certificate(issuing.pem),
-        );
-
-        await service.requestAccessCertificate("t1", request);
-
-        expect(client.fetchCaCertificate).toHaveBeenCalledWith(AIA);
-        const chain = certService.addCertificate.mock.lastCall?.[1].crt;
-        expect(chain).toHaveLength(2);
-        expect(new X509Certificate(chain[1]).subject).toBe("CN=Hub Issuing");
-    });
-
-    it("leaves out a self-signed issuer, which is the trust anchor", async () => {
-        const root = await ca("CN=Hub Root");
-        const leaf = await leafFrom(root, key);
-        client.downloadAccessCertificate.mockResolvedValue(leaf);
-        client.fetchCaCertificate.mockResolvedValue(
-            new X509Certificate(root.pem),
-        );
-
-        await service.requestAccessCertificate("t1", request);
-
-        expect(certService.addCertificate.mock.lastCall?.[1].crt).toEqual([
-            leaf,
-        ]);
-    });
-
-    it("stores the certificate alone when the fetched CA did not issue it", async () => {
-        const issuing = await ca("CN=Hub Issuing");
-        const other = await ca("CN=Hub Issuing");
-        const leaf = await leafFrom(issuing, key);
-        client.downloadAccessCertificate.mockResolvedValue(leaf);
-        client.fetchCaCertificate.mockResolvedValue(
-            new X509Certificate(other.pem),
-        );
-
-        await service.requestAccessCertificate("t1", request);
-
-        expect(certService.addCertificate.mock.lastCall?.[1].crt).toEqual([
-            leaf,
-        ]);
-    });
-
-    it("stores the certificate alone when the CA cannot be fetched or is not named", async () => {
-        const issuing = await ca("CN=Hub Issuing");
-        client.downloadAccessCertificate.mockResolvedValue(
-            await leafFrom(issuing, key),
-        );
-        client.fetchCaCertificate.mockRejectedValue(
-            new EudiHubRequestError("blocked", { blocked: true }),
-        );
-
-        await service.requestAccessCertificate("t1", request);
-        expect(certService.addCertificate.mock.lastCall?.[1].crt).toHaveLength(
-            1,
-        );
-
-        const withoutAia = await leafFrom(issuing, key, false);
-        client.downloadAccessCertificate.mockResolvedValue(withoutAia);
-        client.fetchCaCertificate.mockClear();
-        await service.requestAccessCertificate("t1", request);
-        expect(client.fetchCaCertificate).not.toHaveBeenCalled();
-        expect(certService.addCertificate.mock.lastCall?.[1].crt).toEqual([
-            withoutAia,
-        ]);
-    });
-});
-
 describe("EudiHubService.listOrganizations", () => {
     it("reports a refused token as 400", async () => {
         const client = {
@@ -640,7 +486,7 @@ describe("EudiHubService.listOrganizations", () => {
                     new EudiHubRequestError("refused", { status: 401 }),
                 ),
         };
-        const service = new EudiHubService(client as any, {} as any, {} as any);
+        const service = new EudiHubService(client as any, {} as any);
 
         const error = await service
             .listOrganizations("t1", "token")

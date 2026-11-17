@@ -5,7 +5,6 @@ import { CryptoModule } from "../../crypto/crypto.module.js";
 import { IssuanceService } from "../../issuer/configuration/issuance/issuance.service.js";
 import { IssuanceConfigModule } from "../../issuer/configuration/issuance/issuance-config.module.js";
 import { WebhookEndpointEntity } from "../../issuer/configuration/webhook-endpoint/entities/webhook-endpoint.entity.js";
-import { RegistrarModule } from "../../registrar/registrar.module.js";
 import { ChangeSessionState } from "../../session/application/change-session-state.js";
 import { SessionStore } from "../../session/application/session-store.js";
 import { SessionModule } from "../../session/session.module.js";
@@ -33,7 +32,6 @@ import { VerifierMetadataService } from "./verifier-metadata.service.js";
 @Module({
     imports: [
         CryptoModule,
-        RegistrarModule,
         SessionModule,
         WebhookModule,
         TypeOrmModule.forFeature([WebhookEndpointEntity]),

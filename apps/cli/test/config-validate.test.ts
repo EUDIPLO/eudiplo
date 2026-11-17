@@ -116,7 +116,7 @@ describe("eudiplo config validate tenant(s)", () => {
         expect(output.stdout).toContain("1 attribute provider");
     });
 
-    it("does not require optional registrar or tenant KMS config files", async () => {
+    it("does not require an optional tenant KMS config file", async () => {
         const { context, output, cwd } = await createContext();
         const tenantDir = join(cwd, "root");
         await writeTenantInfo(tenantDir, { name: "Root Tenant" });
@@ -130,7 +130,7 @@ describe("eudiplo config validate tenant(s)", () => {
         expect(output.stdout).toContain("PASS root");
     });
 
-    it("validates the optional registrar config file when present", async () => {
+    it("warns about a registrar config file, which is no longer imported", async () => {
         const { context, output, cwd } = await createContext();
         const tenantDir = join(cwd, "root");
         await writeTenantInfo(tenantDir, { name: "Root Tenant" });
@@ -145,8 +145,11 @@ describe("eudiplo config validate tenant(s)", () => {
             context,
         );
 
-        expect(code).toBe(1);
-        expect(output.stdout).toContain("registrar.json");
+        expect(code).toBe(0);
+        expect(output.stdout).toContain("PASS root");
+        expect(output.stdout).toContain(
+            "warning registrar.json: registrar.json is skipped",
+        );
     });
 
     it.each([
@@ -390,6 +393,28 @@ describe("eudiplo config validate tenant(s)", () => {
             file: "info.json",
             message: expect.stringContaining("Missing required"),
         });
+    });
+
+    it("lists a skipped registrar config file in the json report", async () => {
+        const { context, output, cwd } = await createContext();
+        const tenantDir = join(cwd, "root");
+        await writeTenantInfo(tenantDir, { name: "Root Tenant" });
+        await writeFile(join(tenantDir, "registrar.json"), "{}", "utf8");
+
+        const code = await runCli(
+            ["config", "validate", "tenant", tenantDir, "--format", "json"],
+            context,
+        );
+
+        expect(code).toBe(0);
+        const report = JSON.parse(output.stdout);
+        expect(report.valid).toBe(true);
+        expect(report.tenants[0].warnings).toEqual([
+            {
+                file: "registrar.json",
+                message: expect.stringMatching(/^registrar\.json is skipped/),
+            },
+        ]);
     });
 
     it("fails with a clear error when the configuration root does not exist", async () => {

@@ -31,7 +31,7 @@ describe('CredentialConfigShowComponent', () => {
   });
 });
 
-describe('CredentialConfigShowComponent schema links', () => {
+describe('CredentialConfigShowComponent schema metadata', () => {
   function render(roles: string[], extra: Record<string, unknown> = {}): HTMLElement {
     TestBed.configureTestingModule({
       imports: [CredentialConfigShowComponent],
@@ -57,30 +57,19 @@ describe('CredentialConfigShowComponent schema links', () => {
     return fixture.nativeElement as HTMLElement;
   }
 
-  const createSchema = '[aria-label="Create schema for this configuration"]';
-  const linked = { schemaMeta: { id: 'https://registrar.example/schema-metadata/schema-1' } };
+  const linked = { schemaMeta: { id: 'https://catalog.example/schema-metadata/schema-1' } };
 
-  it('offers Create schema to users who can open the schema pages', () => {
-    expect(
-      render(['issuance:manage', 'registrar:manage']).querySelector(createSchema)
-    ).not.toBeNull();
+  it('offers no schema pages, which were removed with the sandbox registrar', () => {
+    const page = render(['issuance:manage', 'registrar:manage']);
+
+    expect(page.querySelector('[aria-label="Create schema for this configuration"]')).toBeNull();
   });
 
-  it('hides Create schema without registrar:manage, which would end in "Access denied"', () => {
-    expect(render(['issuance:manage']).querySelector(createSchema)).toBeNull();
-  });
-
-  it('links the linked schema for users who can open it', () => {
+  it('shows the linked schema ID as text', () => {
     const page = render(['issuance:manage', 'registrar:manage'], linked);
 
-    expect(page.querySelector('a[href="/schema/schema-1"]')).not.toBeNull();
-  });
-
-  it('shows the linked schema as text without registrar:manage', () => {
-    const page = render(['issuance:manage'], linked);
-
-    expect(page.querySelector('a[href="/schema/schema-1"]')).toBeNull();
-    expect(page.textContent).toContain('https://registrar.example/schema-metadata/schema-1');
+    expect(page.querySelector('a[href*="/schema"]')).toBeNull();
+    expect(page.textContent).toContain('https://catalog.example/schema-metadata/schema-1');
   });
 });
 
@@ -146,7 +135,6 @@ describe('CredentialConfigShowComponent loading', () => {
       { snapshot: { paramMap: { get: () => 'pid' } } } as never,
       { open: vi.fn() } as never,
       { navigate: vi.fn() } as never,
-      { hasRole: () => true } as never,
       {} as never
     );
 
@@ -164,7 +152,6 @@ describe('CredentialConfigShowComponent download', () => {
   it('downloads the configuration document', async () => {
     const downloadWithFeedback = vi.fn().mockResolvedValue(undefined);
     const component = new CredentialConfigShowComponent(
-      {} as never,
       {} as never,
       {} as never,
       {} as never,
@@ -375,7 +362,7 @@ describe('CredentialConfigShowComponent claim fields', () => {
 
   it('names array items with * in the card heading, as the matrix does', () => {
     const component = new CredentialConfigShowComponent(
-      ...(Array.from({ length: 7 }, () => ({})) as never as ConstructorParameters<
+      ...(Array.from({ length: 6 }, () => ({})) as never as ConstructorParameters<
         typeof CredentialConfigShowComponent
       >)
     );
@@ -386,7 +373,7 @@ describe('CredentialConfigShowComponent claim fields', () => {
 
   it('shows the JSON Schema when a nested child leaves a matrix cell empty', () => {
     const component = new CredentialConfigShowComponent(
-      ...(Array.from({ length: 7 }, () => ({})) as never as ConstructorParameters<
+      ...(Array.from({ length: 6 }, () => ({})) as never as ConstructorParameters<
         typeof CredentialConfigShowComponent
       >)
     );

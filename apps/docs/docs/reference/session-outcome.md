@@ -63,10 +63,10 @@ Expiry is enforced when a wallet uses the session: a presentation request or res
 | `description`              | The wallet's own text: `error_description` of a wallet error response, or `event_description` of a `credential_failure` or `credential_deleted` notification. Wallet-controlled; show it as plain text only.    |
 | `credentials[]`            | Per credential query. On success every presented query with `"verified": true`; on a classified verification failure the credential that failed, with its `error` and `message`. |
 | `credentials[].format`, `docType` | Credential format and, for mDOC, the docType, when known.                                                                                                    |
-| `credentials[].trust`      | ISO 18013-7 success only: the matched trust list entry (`matchedIssuer`, `issuanceThumbprint`, `matchMode`, `revocationThumbprint`).                               |
+| `credentials[].trust`      | Success only, when an issuer was matched: the matched trust list entry (`matchedIssuer`: the entry's name, else the subject of its issuance certificate; `issuanceThumbprint`, `matchMode`, `revocationThumbprint`), or under OpenID Federation the issuer's entity ID with `matchMode` `federation`. For the first presented credential of each query. |
 | `credentials[].warnings[]` | Reserved for non-fatal conditions (`code`, `message`) observed while verifying the credential; currently never set.                                                |
 
-Branch on `error`; treat `message` as display text. Detailed diagnostics, such as certificate subjects or trust list URLs, are never part of the outcome; they go to the server log and the [session log](#session-logs).
+Branch on `error`; treat `message` as display text. Detailed diagnostics of a failure, such as certificate subjects or trust list URLs, are never part of the outcome; they go to the server log and the [session log](#session-logs).
 
 ## Failure codes
 

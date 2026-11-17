@@ -374,6 +374,7 @@ describe("Access certificate from the EUDI Hub (e2e)", () => {
         });
         let jwt = "";
         let certificateBody: unknown;
+        let sentPurpose: unknown;
         nock(hub)
             .get(`${base}/organizations/${ORG}/credential-requests`)
             .query(true)
@@ -381,6 +382,7 @@ describe("Access certificate from the EUDI Hub (e2e)", () => {
             .post(`${base}/organizations/${ORG}/credential-requests`)
             .reply(201, async (req: Request) => {
                 const body = await req.json();
+                sentPurpose = body.purpose;
                 jwt = unsignedJwt({
                     credentials: body.credentials.map((credential: any) => ({
                         format: credential.format,
@@ -417,10 +419,17 @@ describe("Access certificate from the EUDI Hub (e2e)", () => {
                 purpose: [
                     { lang: "de", content: "Altersprüfung" },
                     { lang: "en", content: "Age check" },
+                    { lang: "pt-BR", content: "Verificação de idade" },
                 ],
                 privacyPolicy: "https://verifier.example/privacy",
             })
             .expect(201);
+
+        // The EUDI Hub gets the texts with two-letter codes only.
+        expect(sentPurpose).toEqual([
+            { lang: "de", content: "Altersprüfung" },
+            { lang: "en", content: "Age check" },
+        ]);
 
         expect(res.body).toMatchObject({
             id: "rc-1",
@@ -438,7 +447,17 @@ describe("Access certificate from the EUDI Hub (e2e)", () => {
             .get(`/verifier/config/${id}`)
             .set("Authorization", `Bearer ${registrarToken}`)
             .expect(200);
-        expect(stored.body.registration_cert).toEqual({ jwt });
+        // The purpose, in every language, and the privacy policy are kept
+        // for renewing.
+        expect(stored.body.registration_cert).toEqual({
+            jwt,
+            purpose: [
+                { lang: "de", content: "Altersprüfung" },
+                { lang: "en", content: "Age check" },
+                { lang: "pt-BR", content: "Verificação de idade" },
+            ],
+            privacy_policy: "https://verifier.example/privacy",
+        });
     });
 
     test("refuses a verifier registration certificate without the presentation:manage role", async () => {
@@ -462,7 +481,7 @@ describe("Access certificate from the EUDI Hub (e2e)", () => {
             .expect(403);
     });
 
-    test("stores an issuer registration certificate from the EUDI Hub in import mode", async () => {
+    test("stores an issuer registration certificate from the EUDI Hub", async () => {
         const keyChainId = (
             await request(app.getHttpServer())
                 .post("/key-chain")
@@ -525,10 +544,10 @@ describe("Access certificate from the EUDI Hub (e2e)", () => {
             .get("/issuer/config")
             .set("Authorization", `Bearer ${registrarToken}`)
             .expect(200);
-        expect(stored.body.registrationCertificate).toMatchObject({
+        expect(stored.body.registrationCertificate).toEqual({
             enabled: true,
-            mode: "import",
             jwt,
+            supportUri: certificateFields.supportUri,
         });
     });
 

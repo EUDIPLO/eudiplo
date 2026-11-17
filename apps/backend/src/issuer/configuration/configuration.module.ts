@@ -1,5 +1,4 @@
 import { Module } from "@nestjs/common";
-import { SchemaMetadataModule } from "../../registrar/schema-metadata/schema-metadata.module.js";
 import { StatusListModule } from "../status-list/status-list.module.js";
 import { AttributeProviderModule } from "./attribute-provider/attribute-provider.module.js";
 import { CredentialConfigModule } from "./credentials/credential-config.module.js";
@@ -21,7 +20,6 @@ import { WebhookEndpointModule } from "./webhook-endpoint/webhook-endpoint.modul
         CredentialConfigModule,
         CredentialIssuanceModule,
         IssuanceConfigModule,
-        SchemaMetadataModule,
         StatusListModule,
         WebhookEndpointModule,
     ],

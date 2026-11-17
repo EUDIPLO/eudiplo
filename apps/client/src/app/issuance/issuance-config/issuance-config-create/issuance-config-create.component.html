@@ -1298,110 +1298,79 @@
 
                       @if (registrationCertificateEnabled) {
                         <mat-form-field>
-                          <mat-label>Mode</mat-label>
-                          <mat-select formControlName="mode">
-                            <mat-option value="import">Import existing JWT</mat-option>
-                            <mat-option value="generate"
-                              >Generate from credential configs</mat-option
-                            >
-                          </mat-select>
-                          <mat-icon matSuffix>tune</mat-icon>
+                          <mat-label>Registration Certificate JWT</mat-label>
+                          <textarea
+                            matInput
+                            id="registration-cert-jwt"
+                            aria-label="Registration certificate JWT"
+                            formControlName="jwt"
+                            placeholder="eyJ..."
+                            rows="7"
+                          ></textarea>
+                          <mat-icon matSuffix>key</mat-icon>
+                          <mat-hint
+                            >Paste a registration certificate JWT from a registrar, or save and
+                            request one on the Registration Certificate tab of Issuer Settings
+                            (needs the registrar:manage role). EUDIPLO does not renew it: request a
+                            new one before it expires and after the credential types
+                            change.</mat-hint
+                          >
                         </mat-form-field>
 
-                        @if (registrationCertificateMode === 'import') {
-                          <mat-form-field>
-                            <mat-label>Registration Certificate JWT</mat-label>
-                            <textarea
-                              matInput
-                              id="registration-cert-jwt"
-                              aria-label="Registration certificate JWT"
-                              formControlName="jwt"
-                              placeholder="eyJ..."
-                              rows="7"
-                            ></textarea>
-                            <mat-icon matSuffix>key</mat-icon>
-                            <mat-hint>Paste an existing registration certificate JWT.</mat-hint>
-                          </mat-form-field>
-                        }
+                        <mat-form-field>
+                          <mat-label>Privacy Policy URL (optional)</mat-label>
+                          <input
+                            (keydown.enter)="onInputEnter($event)"
+                            matInput
+                            type="url"
+                            id="registration-cert-privacy-policy"
+                            aria-label="Registration certificate privacy policy URL"
+                            formControlName="privacyPolicy"
+                            placeholder="https://issuer.example/privacy"
+                          />
+                          <mat-icon matSuffix>privacy_tip</mat-icon>
+                          @if (
+                            registrationCertificate.get('privacyPolicy')?.hasError('maxlength')
+                          ) {
+                            <mat-error>Use at most 2048 characters.</mat-error>
+                          } @else if (
+                            registrationCertificate.get('privacyPolicy')?.hasError('url')
+                          ) {
+                            <mat-error>Enter an http or https URL.</mat-error>
+                          }
+                          <mat-hint
+                            >Stored with the registration certificate settings; the EUDI Hub request
+                            does not use it.</mat-hint
+                          >
+                        </mat-form-field>
 
-                        @if (registrationCertificateMode === 'generate') {
-                          <mat-hint>
-                            Provided attestations are derived automatically from the vct of your
-                            SD-JWT VC credential configs (the hosted VCT URL for a VCT that EUDIPLO
-                            hosts) and the docType of your mDOC credential configs.
-                          </mat-hint>
-
-                          <div>
-                            <button
-                              mat-stroked-button
-                              type="button"
-                              (click)="applyRegistrarDefaultsFromRegistrar()"
-                            >
-                              <mat-icon>sync</mat-icon>
-                              Use Registrar Defaults
-                            </button>
-                          </div>
-
-                          <mat-form-field>
-                            <mat-label>Privacy Policy URL (optional)</mat-label>
-                            <input
-                              (keydown.enter)="onInputEnter($event)"
-                              matInput
-                              type="url"
-                              id="registration-cert-privacy-policy"
-                              aria-label="Registration certificate privacy policy URL"
-                              formControlName="privacyPolicy"
-                              placeholder="https://issuer.example/privacy"
-                            />
-                            <mat-icon matSuffix>privacy_tip</mat-icon>
-                          </mat-form-field>
-
-                          <mat-form-field>
-                            <mat-label>Support URI (optional)</mat-label>
-                            <input
-                              (keydown.enter)="onInputEnter($event)"
-                              matInput
-                              id="registration-cert-support-uri"
-                              aria-label="Registration certificate support URI"
-                              formControlName="supportUri"
-                              placeholder="mailto:support@issuer.example"
-                            />
-                            <mat-icon matSuffix>support_agent</mat-icon>
-                          </mat-form-field>
-
-                          <mat-form-field subscriptSizing="dynamic">
-                            <mat-label>Renewal</mat-label>
-                            <mat-select id="registration-cert-renewal" formControlName="renewal">
-                              <mat-option value="onCredentialConfigChange"
-                                >When credential configs or these settings change
-                                (default)</mat-option
-                              >
-                              <mat-option value="onMetadataRequest"
-                                >On the next metadata request</mat-option
-                              >
-                              <mat-option value="manual">Only with Regenerate now</mat-option>
-                            </mat-select>
-                            <mat-icon matSuffix>autorenew</mat-icon>
-                            <mat-hint>
-                              @switch (registrationCertificate.get('renewal')?.value) {
-                                @case ('onMetadataRequest') {
-                                  A changed credential config or setting gets a new certificate when
-                                  a wallet next fetches the issuer metadata.
-                                }
-                                @case ('manual') {
-                                  After a change, use Regenerate now on the Registration Certificate
-                                  tab. Until then wallets get the old certificate, which may not
-                                  list new credential types. A missing or expired certificate is
-                                  still requested automatically.
-                                }
-                                @default {
-                                  A new certificate is requested in the background after you save a
-                                  credential config or these settings.
-                                }
-                              }
-                            </mat-hint>
-                          </mat-form-field>
-                        }
+                        <mat-form-field>
+                          <mat-label>Support URI (optional)</mat-label>
+                          <input
+                            (keydown.enter)="onInputEnter($event)"
+                            matInput
+                            type="url"
+                            id="registration-cert-support-uri"
+                            aria-label="Registration certificate support URI"
+                            formControlName="supportUri"
+                            placeholder="https://issuer.example/support"
+                          />
+                          <mat-icon matSuffix>support_agent</mat-icon>
+                          @if (registrationCertificate.get('supportUri')?.hasError('maxlength')) {
+                            <mat-error>Use at most 2048 characters.</mat-error>
+                          } @else if (registrationCertificate.get('supportUri')?.hasError('url')) {
+                            <mat-error>Enter an http or https URL.</mat-error>
+                          }
+                          <mat-hint
+                            >Kept for requesting the next certificate; the EUDI Hub request stores
+                            the support URI it used.</mat-hint
+                          >
+                        </mat-form-field>
+                      } @else {
+                        <p class="toggle-description">
+                          Turned off: no certificate is served in the issuer metadata. A stored JWT
+                          and the URIs are kept for when you turn it on again.
+                        </p>
                       }
                     </mat-card-content>
                   </mat-card>

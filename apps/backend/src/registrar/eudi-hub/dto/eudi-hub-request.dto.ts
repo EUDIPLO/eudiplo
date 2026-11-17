@@ -1,5 +1,6 @@
 import { createZodDto } from "nestjs-zod";
 import { z } from "zod";
+import { HUB_LANGUAGE, MAX_HUB_TEXTS } from "../domain/hub-credentials.js";
 
 /**
  * Access token of the EUDI Hub portal, with or without the `Bearer ` prefix.
@@ -24,7 +25,7 @@ const EudiHubTokenSchema = z
         "Access token of the EUDI Hub portal (the value of the Authorization header the portal sends, with or without 'Bearer '). EUDIPLO uses it for this request only and does not store it.",
     );
 
-const HttpUrlSchema = z.url({ protocol: /^https?$/ }).max(2048);
+export const HttpUrlSchema = z.url({ protocol: /^https?$/ }).max(2048);
 
 const OrganizationIdSchema = z
     .uuid()
@@ -80,32 +81,64 @@ export class EudiHubAccessCertificateRequestDto extends createZodDto(
     EudiHubAccessCertificateRequestSchema,
 ) {}
 
-/** Texts in German and English, as the EUDI Hub requires, and optionally more languages. */
-const BilingualTextSchema = z
-    .array(
-        z
-            .object({
-                lang: z
-                    .string()
-                    .regex(/^[a-z]{2}$/, "Use an ISO 639-1 language code.")
-                    .describe("ISO 639-1 language code, such as de or en."),
-                content: z.string().trim().min(1).max(2000),
-            })
-            .strict(),
-    )
-    .min(2)
-    .max(24)
-    .refine(
-        (texts) => new Set(texts.map(({ lang }) => lang)).size === texts.length,
-        "Give each language once.",
-    )
-    .refine(
-        (texts) =>
-            ["de", "en"].every((lang) =>
-                texts.some((text) => text.lang === lang),
-            ),
-        "The EUDI Hub needs a German (de) and an English (en) text.",
-    );
+/** Most purpose texts EUDIPLO stores for a verifier registration certificate. */
+const MAX_PURPOSE_TEXTS = 50;
+
+/**
+ * Texts with a German and an English one, as the EUDI Hub requires, each
+ * language once, and optionally more languages.
+ */
+function textsSchema(lang: z.ZodString, max: number) {
+    return z
+        .array(
+            z
+                .object({
+                    lang,
+                    content: z.string().trim().min(1).max(2000),
+                })
+                .strict(),
+        )
+        .min(2)
+        .max(max)
+        .refine(
+            (texts) =>
+                new Set(texts.map((text) => text.lang)).size === texts.length,
+            "Give each language once.",
+        )
+        .refine(
+            (texts) =>
+                ["de", "en"].every((wanted) =>
+                    texts.some((text) => text.lang === wanted),
+                ),
+            "The EUDI Hub needs a German (de) and an English (en) text.",
+        );
+}
+
+/** Texts the EUDI Hub takes as they are: two-letter language codes only. */
+const BilingualTextSchema = textsSchema(
+    z
+        .string()
+        .regex(HUB_LANGUAGE, "Use an ISO 639-1 language code.")
+        .describe("ISO 639-1 language code, such as de or en."),
+    MAX_HUB_TEXTS,
+);
+
+/**
+ * The purpose of a verifier registration certificate: German and English, as
+ * the EUDI Hub requires, and optionally more languages, also with a region
+ * (BCP 47, such as pt-BR). The EUDI Hub takes two-letter codes only; the
+ * others are kept in the presentation configuration but not sent.
+ */
+export const PurposeTextSchema = textsSchema(
+    z
+        .string()
+        .regex(
+            /^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$/,
+            "Use a language tag such as de, en or pt-BR.",
+        )
+        .describe("Language tag, such as de, en or pt-BR."),
+    MAX_PURPOSE_TEXTS,
+);
 
 // Identifier scheme names (URIs), never fetched.
 const EU_ID = "http://data.europa.eu/eudi/id/"; // NOSONAR: scheme name
@@ -167,10 +200,12 @@ export const EudiHubPresentationRegistrationCertificateRequestSchema =
             .describe(
                 "Presentation configuration whose DCQL query the certificate covers and that stores it.",
             ),
-        purpose: BilingualTextSchema.describe(
-            "Why the data is requested, in German and English (GDPR purpose).",
+        purpose: PurposeTextSchema.optional().describe(
+            "Why the data is requested (GDPR purpose), in German and English and optionally more languages. Defaults to registration_cert.purpose of the presentation configuration; stored there with the certificate. The EUDI Hub takes two-letter language codes only: texts with another tag, such as pt-BR, are stored but not sent.",
         ),
-        privacyPolicy: HttpUrlSchema.describe("Privacy policy URL."),
+        privacyPolicy: HttpUrlSchema.optional().describe(
+            "Privacy policy URL. Defaults to registration_cert.privacy_policy of the presentation configuration; stored there with the certificate.",
+        ),
     })
         .describe(
             "Payload for requesting a verifier registration certificate from the EUDI Hub.",

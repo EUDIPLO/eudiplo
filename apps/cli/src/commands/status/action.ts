@@ -1,6 +1,6 @@
-import { redactUrl } from "../../services/url.js";
 import { runDoctor } from "../../services/diagnostics.js";
 import { resolveInstance } from "../../services/instance-selection.js";
+import { redactUrl } from "../../services/url.js";
 import type { CliConfig, CommandContext, ParsedArgs } from "../../types.js";
 
 export async function runStatusCommand(

@@ -12,6 +12,10 @@ export function buildJsonReport(results: TenantValidationResult[]) {
                 path: error.path,
                 message: error.message,
             })),
+            warnings: result.warnings.map((warning) => ({
+                file: warning.file,
+                message: warning.message,
+            })),
         })),
         summary: {
             tenants: results.length,
@@ -55,6 +59,9 @@ function formatTenantBlock(result: TenantValidationResult): string[] {
         }
     } else {
         lines.push(...formatTenantErrors(result.errors));
+    }
+    for (const warning of result.warnings) {
+        lines.push(`  warning ${warning.file}: ${warning.message}`);
     }
 
     lines.push("");

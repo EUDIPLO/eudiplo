@@ -159,3 +159,34 @@ function byCodeUnits(a: string, b: string): number {
     if (a < b) return -1;
     return a > b ? 1 : 0;
 }
+
+/** Most texts in different languages the EUDI Hub accepts for one field. */
+export const MAX_HUB_TEXTS = 24;
+
+/** Language codes the EUDI Hub accepts: two letters (ISO 639-1). */
+export const HUB_LANGUAGE = /^[a-z]{2}$/;
+
+/**
+ * The purpose texts the EUDI Hub accepts: those with a two-letter language
+ * code, at most 24. The language tags of the others, which are kept in the
+ * presentation configuration only, are listed in `notSent`.
+ */
+export function hubPurpose(purpose: EudiHubText[]): {
+    sent: EudiHubText[];
+    notSent: string[];
+} {
+    const twoLetter = purpose.filter(({ lang }) => HUB_LANGUAGE.test(lang));
+    // German and English first, so the limit never drops them.
+    const ordered = [
+        ...twoLetter.filter(({ lang }) => lang === "de" || lang === "en"),
+        ...twoLetter.filter(({ lang }) => lang !== "de" && lang !== "en"),
+    ];
+    const sent = ordered.slice(0, MAX_HUB_TEXTS);
+    const sentLangs = new Set(sent.map(({ lang }) => lang));
+    return {
+        sent,
+        notSent: purpose
+            .map(({ lang }) => lang)
+            .filter((lang) => !sentLangs.has(lang)),
+    };
+}

@@ -43,8 +43,7 @@ import type {
     ConfigImportPlan,
 } from "../../src/platform/config-portability/config-resource.types.js";
 import { ConfigResourceMetadataEntity } from "../../src/platform/config-portability/entities/config-resource-metadata.entity.js";
-import { RegistrarConfigEntity } from "../../src/registrar/entities/registrar-config.entity.js";
-import { documentBundle } from "../shared/config-bundle.js";
+import { documentBundle, documentsBundle } from "../shared/config-bundle.js";
 
 describe("startup configuration reconciliation", () => {
     let app: INestApplication;
@@ -1098,90 +1097,63 @@ describe("startup configuration reconciliation", () => {
         ).rejects.toThrow("is not defined in the config folder");
     });
 
-    it("applies a registrar configuration without contacting the registrar and removes omitted optional fields", async () => {
+    it("skips the registrar configuration of a 9.x bundle with a warning", async () => {
         const service = app.get(ConfigBundleService);
         const apply = app.get(ConfigBundleApplyService);
-        const dataSource = app.get(DataSource);
-        const registrars = dataSource.getRepository(RegistrarConfigEntity);
-        // Unresolvable hosts: a credential check would fail the apply with 503.
-        const spec = {
-            registrarUrl: "https://registrar.example.invalid/api",
-            oidcUrl: "https://auth.example.invalid/realms/registrar",
-            clientId: "client",
-            username: "user",
-            password: "password",
+        const registrar = {
+            $schema:
+                "https://eudiplo.dev/schemas/v1/RegistrarConfigFile.schema.json",
+            metadata: { generation: 1 },
+            spec: {
+                registrarUrl: "https://registrar.example.invalid/api",
+                oidcUrl: "https://auth.example.invalid/realms/registrar",
+                clientId: "client",
+                username: "user",
+                password: "password",
+            },
         };
-        const defaults = { privacy_policy: "https://rp.example/privacy" };
-        const contact = { email: "support@rp.example" };
-        const registrarItem = (plan: ConfigImportPlan) =>
-            plan.items.find((item) => item.kind === "RegistrarConfig");
+        const empty = documentsBundle("demo", []);
+        const bundle = {
+            ...empty,
+            manifest: {
+                ...empty.manifest,
+                resources: [
+                    {
+                        kind: "RegistrarConfig",
+                        id: "registrar",
+                        $schema: registrar.$schema,
+                        path: "registrar.json",
+                        sha256: createHash("sha256")
+                            .update(JSON.stringify(registrar))
+                            .digest("hex"),
+                        ownership: "unmanaged",
+                        generation: 1,
+                    },
+                ],
+            },
+            documents: [registrar],
+        } as unknown as ConfigBundle;
 
-        try {
-            const full = registrarBundle({
-                ...spec,
-                clientSecret: "client-secret",
-                registrationCertificateDefaults: defaults,
-                relyingPartyContact: contact,
-            });
-            expect(
-                registrarItem(await service.plan("demo", full, "upsert"))
-                    ?.action,
-            ).toBe("create");
-            await apply.apply("demo", full, "upsert");
-            expect(
-                await registrars.findOneByOrFail({ tenantId: "demo" }),
-            ).toMatchObject({
-                registrarUrl: spec.registrarUrl,
-                clientSecret: "client-secret",
-                registrationCertificateDefaults: defaults,
-                relyingPartyContact: contact,
-            });
-            expect(
-                registrarItem(await service.plan("demo", full, "upsert"))
-                    ?.action,
-            ).toBe("unchanged");
+        const plan = await service.plan("demo", bundle, "upsert");
 
-            const minimal = registrarBundle(spec);
-            const replacement = registrarItem(
-                await service.plan("demo", minimal, "upsert"),
-            );
-            expect(replacement?.action).toBe("update");
-            expect(replacement?.changes?.map((change) => change.path)).toEqual([
-                "/spec/clientSecret",
-                "/spec/registrationCertificateDefaults/privacy_policy",
-                "/spec/relyingPartyContact/email",
-            ]);
-            await apply.apply("demo", minimal, "upsert");
-            expect(
-                await registrars.findOneByOrFail({ tenantId: "demo" }),
-            ).toMatchObject({
-                clientSecret: null,
-                registrationCertificateDefaults: null,
-                relyingPartyContact: null,
-            });
-            expect(
-                registrarItem(await service.plan("demo", minimal, "upsert"))
-                    ?.action,
-            ).toBe("unchanged");
-
-            const exported = await service.exportBundle("demo");
-            expect(
-                exported.manifest.requirements
-                    .filter(
-                        (requirement) =>
-                            requirement.resource?.kind === "RegistrarConfig",
-                    )
-                    .map((requirement) => requirement.path),
-            ).toEqual(["/spec/password"]);
-        } finally {
-            await registrars.delete({ tenantId: "demo" });
-            await dataSource
-                .getRepository(ConfigResourceMetadataEntity)
-                .delete({
-                    tenantId: "demo",
-                    kind: "RegistrarConfig",
-                });
-        }
+        expect(plan.applicable).toBe(true);
+        expect(plan.items).toEqual([]);
+        expect(plan.issues).toEqual([
+            expect.objectContaining({
+                severity: "warning",
+                code: "REGISTRAR_CONFIG_REMOVED",
+                message: expect.stringMatching(/^registrar\.json is skipped/),
+            }),
+        ]);
+        await expect(
+            apply.apply(
+                "demo",
+                bundle,
+                "upsert",
+                undefined,
+                plan.planFingerprint,
+            ),
+        ).resolves.toMatchObject({ items: [] });
     });
 
     it("applies the description and rotation settings of a key chain document as the plan lists them", async () => {
@@ -2024,86 +1996,6 @@ describe("startup configuration reconciliation", () => {
         }
     });
 
-    it("imports a registrar configuration whose hosts do not resolve yet", async () => {
-        const apply = app.get(ConfigBundleApplyService);
-        const registrars = app
-            .get(DataSource)
-            .getRepository(RegistrarConfigEntity);
-        const appConfig = app.get(ConfigService);
-        // The default policy, under which the check would resolve the hosts.
-        appConfig.set("OUTBOUND_URL_ALLOW_PRIVATE_NETWORK", false);
-        try {
-            await apply.apply(
-                "demo",
-                registrarBundle({
-                    registrarUrl: "https://registrar.example.invalid/api",
-                    oidcUrl: "https://auth.example.invalid/realms/registrar",
-                    clientId: "client",
-                    username: "user",
-                    password: "password",
-                }),
-                "upsert",
-            );
-            expect(
-                await registrars.findOneBy({ tenantId: "demo" }),
-            ).toMatchObject({
-                registrarUrl: "https://registrar.example.invalid/api",
-            });
-        } finally {
-            appConfig.set("OUTBOUND_URL_ALLOW_PRIVATE_NETWORK", true);
-            await registrars.delete({ tenantId: "demo" });
-            await app
-                .get(DataSource)
-                .getRepository(ConfigResourceMetadataEntity)
-                .delete({ tenantId: "demo", kind: "RegistrarConfig" });
-        }
-    });
-
-    it("stops a registrar import at a URL the outbound URL policy blocks", async () => {
-        const apply = app.get(ConfigBundleApplyService);
-        const registrars = app
-            .get(DataSource)
-            .getRepository(RegistrarConfigEntity);
-        const appConfig = app.get(ConfigService);
-        // The e2e environment allows private networks, so the allowlist is
-        // what blocks the OIDC host here. No request is sent either way.
-        appConfig.set(
-            "OUTBOUND_URL_ALLOWED_HOSTS",
-            "registrar.example.invalid",
-        );
-        try {
-            await expect(
-                apply.apply(
-                    "demo",
-                    registrarBundle({
-                        registrarUrl: "https://registrar.example.invalid/api",
-                        oidcUrl:
-                            "https://auth.blocked.invalid/realms/registrar",
-                        clientId: "client",
-                        username: "user",
-                        password: "password",
-                    }),
-                    "upsert",
-                ),
-            ).rejects.toMatchObject({
-                response: expect.objectContaining({
-                    code: "CONFIG_APPLY_FAILED",
-                    failedOperation: expect.objectContaining({
-                        kind: "RegistrarConfig",
-                    }),
-                }),
-            });
-            expect(await registrars.findOneBy({ tenantId: "demo" })).toBeNull();
-        } finally {
-            appConfig.set("OUTBOUND_URL_ALLOWED_HOSTS", "");
-            await registrars.delete({ tenantId: "demo" });
-            await app
-                .get(DataSource)
-                .getRepository(ConfigResourceMetadataEntity)
-                .delete({ tenantId: "demo", kind: "RegistrarConfig" });
-        }
-    });
-
     it("imports an internal chain with private keys and plans it again as unchanged", async () => {
         const service = app.get(ConfigBundleService);
         const apply = app.get(ConfigBundleApplyService);
@@ -2391,16 +2283,6 @@ describe("startup configuration reconciliation", () => {
         }
     });
 });
-
-function registrarBundle(spec: Record<string, unknown>): ConfigBundle {
-    return documentBundle(
-        "demo",
-        "RegistrarConfig",
-        "registrar",
-        "registrar.json",
-        spec,
-    );
-}
 
 function keyChainBundle(
     spec: Record<string, unknown>,

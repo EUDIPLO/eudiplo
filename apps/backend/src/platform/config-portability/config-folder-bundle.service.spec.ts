@@ -430,6 +430,37 @@ describe("ConfigFolderBundleService", () => {
         }
     });
 
+    it("logs the resources of retired kinds the startup import skipped", async () => {
+        const { service, warn } = folderService(
+            vi.fn().mockResolvedValue({
+                items: [],
+                issues: [
+                    {
+                        severity: "warning",
+                        code: "REGISTRAR_CONFIG_REMOVED",
+                        path: "",
+                        message: "registrar.json is skipped: removed.",
+                    },
+                    {
+                        severity: "warning",
+                        code: "SOMETHING_ELSE",
+                        path: "",
+                        message: "not logged here",
+                    },
+                ],
+            }),
+        );
+        try {
+            await service.applyTenantFolder("demo", "upsert");
+
+            expect(warn.mock.calls.map(([message]) => String(message))).toEqual(
+                ["[demo] registrar.json is skipped: removed."],
+            );
+        } finally {
+            warn.mockRestore();
+        }
+    });
+
     it("names clients that got a generated secret before a startup apply failed", async () => {
         const failure = new InternalServerErrorException({
             code: "CONFIG_APPLY_FAILED",
@@ -520,7 +551,7 @@ describe("ConfigFolderBundleService", () => {
         }
     });
 
-    it("uses stable IDs for legacy singleton configuration files", () => {
+    it("uses stable IDs for legacy singleton configuration files and skips a registrar.json with a warning", () => {
         const tenantRoot = tenantFolder({
             "registrar.json": JSON.stringify({
                 registrarUrl: "https://registrar.example.com/api",
@@ -540,18 +571,21 @@ describe("ConfigFolderBundleService", () => {
         try {
             const bundle = service.buildBundle("test", tenantRoot);
 
-            expect(bundle.documents).toEqual(
-                expect.arrayContaining([
-                    expect.objectContaining({
-                        $schema: schemaUrl("RegistrarConfig"),
-                        metadata: { generation: 1 },
-                    }),
-                    expect.objectContaining({
-                        $schema: schemaUrl("IssuanceConfig"),
-                        metadata: { generation: 1 },
-                    }),
-                ]),
-            );
+            expect(bundle.documents).toEqual([
+                expect.objectContaining({
+                    $schema: schemaUrl("IssuanceConfig"),
+                    metadata: { generation: 1 },
+                }),
+            ]);
+            expect(bundle.manifest.warnings).toEqual([
+                expect.objectContaining({
+                    severity: "warning",
+                    code: "REGISTRAR_CONFIG_REMOVED",
+                    message: expect.stringMatching(
+                        /^registrar\.json is skipped/,
+                    ),
+                }),
+            ]);
         } finally {
             rmSync(tenantRoot, { recursive: true, force: true });
         }

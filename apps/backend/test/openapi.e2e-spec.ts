@@ -110,27 +110,6 @@ describe("OpenAPI contract", () => {
         ]);
     });
 
-    test("documents registrar category and tags only on schema metadata publish requests", () => {
-        const schemas = document.components?.schemas ?? {};
-        const publishConfig = schemas.PublishSchemaMetaConfig as any;
-
-        expect(publishConfig.properties.category.enum).toContain("identity");
-        expect(publishConfig.properties.tags.items.enum).toContain("pid");
-        for (const body of [
-            "SignSchemaMetaConfigDto",
-            "SignVersionSchemaMetaConfigDto",
-        ]) {
-            expect((schemas[body] as any).properties.config.allOf).toEqual([
-                { $ref: "#/components/schemas/PublishSchemaMetaConfig" },
-            ]);
-        }
-        // SchemaMetaConfig is also the schemaMeta of credential configs,
-        // whose endpoints and config files reject these fields.
-        const schemaMetaConfig = schemas.SchemaMetaConfig as any;
-        expect(schemaMetaConfig.properties).not.toHaveProperty("category");
-        expect(schemaMetaConfig.properties).not.toHaveProperty("tags");
-    });
-
     test("documents tenant description clearing without create-only PATCH fields", () => {
         const createTenantSchema = document.components?.schemas
             ?.CreateTenantDto as any;
@@ -190,35 +169,17 @@ describe("OpenAPI contract", () => {
             { oauth2: ["presentation:request"] },
         ]);
         // match "all": one requirement object with every role.
-        for (const path of [
-            "/api/schema-metadata/publish",
-            "/api/schema-metadata/publish-version",
-        ]) {
-            expect(getOperation(document, path, "post").security).toEqual([
-                { oauth2: ["issuance:manage", "registrar:manage"] },
-            ]);
-        }
         expect(
-            getOperation(document, "/api/schema-metadata/vocabularies", "get")
+            getOperation(
+                document,
+                "/api/eudi-hub/registration-certificate/issuer",
+                "post",
+            ).security,
+        ).toEqual([{ oauth2: ["registrar:manage", "issuance:manage"] }]);
+        expect(
+            getOperation(document, "/api/eudi-hub/organizations", "post")
                 .security,
         ).toEqual([{ oauth2: ["registrar:manage"] }]);
-    });
-
-    test("documents every field of the access certificate response", () => {
-        const operation = getOperation(
-            document,
-            "/api/registrar/access-certificate",
-            "post",
-        );
-        const schema = operation.responses["201"].content?.["application/json"]
-            .schema as { properties?: object; required?: string[] };
-
-        expect(Object.keys(schema.properties ?? {}).sort()).toEqual([
-            "certId",
-            "crt",
-            "id",
-        ]);
-        expect(schema.required?.sort()).toEqual(["certId", "crt", "id"]);
     });
 
     test("marks the required schema metadata values as required", () => {
@@ -380,15 +341,6 @@ describe("OpenAPI contract", () => {
         );
         expect(userDeleteOperation.responses["204"].content).toBeUndefined();
 
-        const jwtOperation = getOperation(
-            document,
-            "/api/schema-metadata/{id}/versions/{version}/jwt",
-            "get",
-        );
-        expect(
-            jwtOperation.responses["200"].content?.["application/jwt"].schema,
-        ).toMatchObject({ type: "string" });
-
         const deferredFailOperation = getOperation(
             document,
             "/api/issuer/deferred/{transactionId}/fail",
@@ -481,18 +433,5 @@ describe("OpenAPI contract", () => {
                 "text/event-stream"
             ].schema?.example,
         ).toContain("event: message");
-
-        const schemaPublishOperation = getOperation(
-            document,
-            "/api/schema-metadata/publish",
-            "post",
-        );
-        expect(
-            schemaPublishOperation.responses["201"].content?.[
-                "application/json"
-            ].schema,
-        ).toMatchObject({
-            $ref: "#/components/schemas/SchemaMetadataResponseDto",
-        });
     });
 });

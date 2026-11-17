@@ -7,8 +7,6 @@ import { v4 } from "uuid";
 import { CryptoModule } from "../../crypto/crypto.module.js";
 import { EncryptionService } from "../../crypto/encryption/encryption.service.js";
 import { KeyChainService } from "../../crypto/key/key-chain.service.js";
-import { RegistrarModule } from "../../registrar/registrar.module.js";
-import { RegistrarService } from "../../registrar/registrar.service.js";
 import { ChangeSessionState } from "../../session/application/change-session-state.js";
 import { CreateSession } from "../../session/application/create-session.js";
 import { ResolveExternalAuthorizationSession } from "../../session/application/resolve-external-authorization-session.js";
@@ -35,7 +33,6 @@ import {
     type CredentialClaimsProvider,
 } from "../configuration/credentials/domain/credential-claims.js";
 import { IssuanceService } from "../configuration/issuance/issuance.service.js";
-import { IssuerRegistrationCertificateLock } from "../configuration/issuance/issuer-registration-certificate-lock.js";
 import {
     WEBHOOK_ENDPOINT_REPOSITORY,
     type WebhookEndpointRepository,
@@ -51,15 +48,14 @@ import {
 import { CredentialOfferController } from "./offer/credential-offer.controller.js";
 import { ConfiguredCredentialAuthorizationSources } from "./oid4vci/adapters/configured-credential-authorization-sources.js";
 import { ConfiguredIssuerMetadataSources } from "./oid4vci/adapters/configured-issuer-metadata-sources.js";
+import { ConfiguredIssuerRegistrationCertificateProvider } from "./oid4vci/adapters/configured-issuer-registration-certificate-provider.js";
 import { OpenIdCredentialOfferProtocol } from "./oid4vci/adapters/credential-offer-protocol.js";
 import { CredentialsServiceBatchIssuer } from "./oid4vci/adapters/credentials-service-batch-issuer.js";
 import { CredentialsServiceDeferredCredentialIssuer } from "./oid4vci/adapters/credentials-service-deferred-credential-issuer.js";
 import { DeferredTransactionCleanupJob } from "./oid4vci/adapters/deferred-transaction-cleanup.job.js";
 import { HostedAuthorizationServerMetadataAdapter } from "./oid4vci/adapters/hosted-authorization-server-metadata.adapter.js";
 import { HttpExternalAuthorizationServerMetadataResolver } from "./oid4vci/adapters/http-external-authorization-server-metadata-resolver.js";
-import { IssuerRegistrationCertificateRenewalListener } from "./oid4vci/adapters/issuer-registration-certificate-renewal.listener.js";
 import { OpenIdCredentialProofVerifier } from "./oid4vci/adapters/openid-credential-proof-verifier.js";
-import { RegistrarIssuerRegistrationCertificateProvider } from "./oid4vci/adapters/registrar-issuer-registration-certificate-provider.js";
 import { TypeOrmDeferredTransactionRepository } from "./oid4vci/adapters/typeorm-deferred-transaction.repository.js";
 import { WebhookCredentialNotificationPublisher } from "./oid4vci/adapters/webhook-credential-notification-publisher.js";
 import { BuildIssuerMetadata } from "./oid4vci/application/build-issuer-metadata.js";
@@ -156,7 +152,6 @@ import { WellKnownService } from "./oid4vci/well-known/well-known.service.js";
         AuthorizationModule,
         CredentialNonceModule,
         DpopProofModule,
-        RegistrarModule,
         TypeOrmModule.forFeature([DeferredTransactionEntity]),
     ],
     controllers: [
@@ -169,7 +164,6 @@ import { WellKnownService } from "./oid4vci/well-known/well-known.service.js";
         FederationEntityController,
     ],
     providers: [
-        IssuerRegistrationCertificateRenewalListener,
         {
             provide: RetrieveCredentialOffer,
             inject: [SessionStore, ConfigService],
@@ -234,27 +228,8 @@ import { WellKnownService } from "./oid4vci/well-known/well-known.service.js";
         },
         {
             provide: ISSUER_REGISTRATION_CERTIFICATE_PROVIDER,
-            inject: [
-                RegistrarService,
-                CredentialsService,
-                IssuanceService,
-                ConfigService,
-                IssuerRegistrationCertificateLock,
-            ],
-            useFactory: (
-                registrar: RegistrarService,
-                credentials: CredentialsService,
-                issuance: IssuanceService,
-                config: ConfigService,
-                lock: IssuerRegistrationCertificateLock,
-            ) =>
-                new RegistrarIssuerRegistrationCertificateProvider(
-                    registrar,
-                    credentials,
-                    issuance,
-                    config.getOrThrow<string>("PUBLIC_URL"),
-                    lock,
-                ),
+            useFactory: () =>
+                new ConfiguredIssuerRegistrationCertificateProvider(),
         },
         {
             provide: BuildIssuerMetadata,

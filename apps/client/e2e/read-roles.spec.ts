@@ -177,14 +177,10 @@ test.describe('read and status roles', () => {
     expect((await keyChains).ok(), 'GET /api/key-chain').toBe(true);
     await expect(page.getByRole('heading', { name: 'Key Management' })).toBeVisible();
 
-    // Without registrar:manage, the wizard says why registrar enrollment is out of reach.
     const description = `keys:manage ${suffix}`;
     await page.goto('/keys/create');
     await page.getByRole('radio', { name: 'Access Certificate' }).check();
     await page.getByRole('button', { name: /^(Next|Configure Key)/ }).click();
-    await expect(
-      page.getByText('Enrolling through the registrar needs the registrar:manage role.')
-    ).toBeVisible();
     await page.getByRole('radio', { name: 'Self-Signed Certificate' }).check();
     await page.getByRole('button', { name: /^(Next|Configure Key)/ }).click();
     await page.getByRole('textbox', { name: 'Description' }).fill(description);

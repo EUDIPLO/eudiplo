@@ -48,13 +48,6 @@
     },
     {
       "fileMatch": [
-        "/assets/config/*/registrar*.json",
-        "/apps/backend/test/fixtures/*/registrar*.json"
-      ],
-      "url": "./schemas/RegistrarConfigFile.schema.json"
-    },
-    {
-      "fileMatch": [
         "/assets/config/kms.json",
         "/assets/config/*/kms.json",
         "/apps/backend/test/fixtures/kms.json",

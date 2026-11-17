@@ -3,11 +3,11 @@
  * the role descriptions of the generated docs (apps/docs/scripts/generate-roles-docs.ts).
  */
 export enum Role {
-    // to manage verifier resources: presentation configurations, trust lists, federation trust anchors, key chains, webhook endpoints and session settings, and, together with registrar:manage, to request a verifier registration certificate from the EUDI Hub
+    // to manage verifier resources: presentation configurations, OpenID Connect clients, trust lists, federation trust anchors, key chains, webhook endpoints and session settings, and, together with registrar:manage, to request a verifier registration certificate from the EUDI Hub
     Presentations = "presentation:manage",
     // to create presentation requests, read presentation configurations and read, cancel or delete presentation sessions
     PresentationRequest = "presentation:request",
-    // to manage issuer resources: credential and issuance configurations, attribute providers, status lists and their settings, trust lists, federation trust anchors, key chains, webhook endpoints and session settings, to revoke, suspend or reinstate issued credentials, and, together with registrar:manage, to publish schema metadata at the registrar and request an issuer registration certificate from the EUDI Hub
+    // to manage issuer resources: credential and issuance configurations, attribute providers, status lists and their settings, trust lists, federation trust anchors, key chains, webhook endpoints and session settings, to revoke, suspend or reinstate issued credentials, and, together with registrar:manage, to request an issuer registration certificate from the EUDI Hub
     Issuances = "issuance:manage",
     // to create credential offers, complete or fail deferred issuance, read, cancel or delete issuance sessions and read the status of their credentials
     IssuanceOffer = "issuance:offer",
@@ -19,7 +19,7 @@ export enum Role {
     Tenants = "tenants:manage",
     // to manage the current tenant's full configuration: configuration bundles, key export and KMS provider settings; a caller with it may grant every role except tenants:manage and tenant:admin
     TenantAdmin = "tenant:admin",
-    // to manage the registrar configuration, enroll access certificates, create access key chains enrolled at the registrar, and list, update, deprecate and delete schema metadata at the registrar; publishing it also needs issuance:manage. At the EUDI Hub: to list the organizations of a portal token and request access certificates; registration certificates also need presentation:manage or issuance:manage
+    // to request certificates from a registrar such as the EUDI Hub: list the organizations of a portal token and request access certificates for access key chains; registration certificates also need presentation:manage or issuance:manage
     Registrar = "registrar:manage",
     // to read the tenant's audit log
     AuditRead = "audit:read",

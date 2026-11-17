@@ -372,36 +372,11 @@
               <mat-icon>content_copy</mat-icon>
               Copy PEM
             </button>
-            @if (canEnrollWithRegistrar) {
-              <button
-                mat-stroked-button
-                (click)="enrollWithRegistrar()"
-                [disabled]="isEnrolling"
-                disabledInteractive
-                [matTooltip]="
-                  isEnrolling
-                    ? 'Enrolling this key with the registrar…'
-                    : 'Request a certificate for this key from the registrar'
-                "
-                appConfigManaged
-                managedKind="KeyChain"
-                [managedResourceId]="keyId"
-              >
-                <mat-icon>how_to_reg</mat-icon>
-                {{ isEnrolling ? 'Enrolling...' : 'Enroll with Registrar' }}
-              </button>
-            }
             @if (canRequestFromEudiHub) {
               <button
                 mat-stroked-button
                 (click)="requestFromEudiHub()"
-                [disabled]="isEnrolling"
-                disabledInteractive
-                [matTooltip]="
-                  isEnrolling
-                    ? 'Wait until the registrar enrollment of this key finishes'
-                    : 'Request a certificate for this key from the German EUDI Hub with a token from its portal'
-                "
+                matTooltip="Request a certificate for this key from the German EUDI Hub with a token from its portal"
                 appConfigManaged
                 managedKind="KeyChain"
                 [managedResourceId]="keyId"
@@ -410,22 +385,7 @@
                 Request from EUDI Hub
               </button>
             }
-            @if (needsRegistrarConfig) {
-              <a mat-button routerLink="/registrar">
-                <mat-icon>settings</mat-icon>
-                Or configure a registrar to enroll this key
-              </a>
-            }
           </div>
-          @if (showRegistrarContactHint) {
-            <p class="registrar-contact-hint">
-              <mat-icon>info</mat-icon>
-              <span>
-                No relying party contact set; the first enrollment needs one.
-                <a routerLink="/registrar" [fragment]="contactAnchor">Add a contact</a>
-              </span>
-            </p>
-          }
         </mat-card-content>
       </mat-card>
     }

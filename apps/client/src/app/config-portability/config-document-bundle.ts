@@ -7,7 +7,6 @@ const KIND_BY_SCHEMA_FILE: Record<string, string> = {
   KmsConfigFile: 'KmsConfig',
   KeyChainConfigFile: 'KeyChain',
   KeyChainDefaultsConfigFile: 'KeyChainDefaults',
-  RegistrarConfigFile: 'RegistrarConfig',
   IssuanceConfigFile: 'IssuanceConfig',
   CredentialConfigFile: 'CredentialConfig',
   PresentationConfigFile: 'PresentationConfig',
@@ -21,7 +20,6 @@ const KIND_BY_SCHEMA_FILE: Record<string, string> = {
 const SINGLETON_IDS: Record<string, string> = {
   Tenant: 'tenant',
   KmsConfig: 'kms',
-  RegistrarConfig: 'registrar',
   IssuanceConfig: 'issuance',
   KeyChainDefaults: 'defaults',
 };
@@ -60,6 +58,11 @@ export async function singleDocumentBundle(
   const file = /^https:\/\/eudiplo\.dev\/schemas\/v[1-9]\d*\/([A-Za-z]+)\.schema\.json$/.exec(
     document.$schema
   )?.[1];
+  if (file === 'RegistrarConfigFile') {
+    throw new Error(
+      'The registrar configuration was removed; request certificates from the EUDI Hub instead.'
+    );
+  }
   const kind = file ? KIND_BY_SCHEMA_FILE[file] : undefined;
   if (!kind) throw new Error(`Unknown configuration schema: ${document.$schema}`);
   const id =

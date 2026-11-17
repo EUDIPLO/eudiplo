@@ -52,7 +52,11 @@
       >
       <a mat-stroked-button routerLink="/credential-config/create">Configure a credential type</a>
     </div>
-    <mat-tab-group animationDuration="200ms">
+    <mat-tab-group
+      animationDuration="200ms"
+      [selectedIndex]="selectedTab"
+      (selectedIndexChange)="selectedTab = $event"
+    >
       <mat-tab>
         <ng-template mat-tab-label>
           <mat-icon class="tab-icon">info</mat-icon>
@@ -343,7 +347,10 @@
                 <mat-icon>verified_user</mat-icon>
                 Certificate Status
               </mat-card-title>
-              <mat-card-subtitle>Issuer registration certificate lifecycle</mat-card-subtitle>
+              <mat-card-subtitle
+                >Issued by a registrar such as the EUDI Hub; request a new one before it expires or
+                after the credential types change</mat-card-subtitle
+              >
             </mat-card-header>
             <mat-card-content>
               <mat-list class="config-list">
@@ -362,22 +369,6 @@
 
                 @if (registrationCertificateConfig?.enabled) {
                   <mat-list-item>
-                    <mat-icon matListItemIcon>tune</mat-icon>
-                    <span matListItemTitle>Mode</span>
-                    <span matListItemLine>{{
-                      registrationCertificateConfig?.mode || 'generate'
-                    }}</span>
-                  </mat-list-item>
-
-                  @if (registrationCertificateGenerated) {
-                    <mat-list-item>
-                      <mat-icon matListItemIcon>autorenew</mat-icon>
-                      <span matListItemTitle>Renewal</span>
-                      <span matListItemLine>{{ registrationCertificateRenewalLabel }}</span>
-                    </mat-list-item>
-                  }
-
-                  <mat-list-item>
                     <mat-icon matListItemIcon>
                       {{
                         registrationCertificateStatus === 'active'
@@ -386,13 +377,17 @@
                             ? 'warning'
                             : registrationCertificateStatus === 'expired'
                               ? 'error'
-                              : registrationCertificateStatus === 'pending'
-                                ? 'pending'
-                                : 'block'
+                              : registrationCertificateStatus === 'missing'
+                                ? 'report'
+                                : registrationCertificateStatus === 'invalid'
+                                  ? 'gpp_bad'
+                                  : registrationCertificateStatus === 'notYetValid'
+                                    ? 'pending'
+                                    : 'block'
                       }}
                     </mat-icon>
                     <span matListItemTitle>Status</span>
-                    <span matListItemLine>{{ registrationCertificateStatus }}</span>
+                    <span matListItemLine>{{ registrationCertificateStatusText }}</span>
                   </mat-list-item>
 
                   @if (registrationCertificateCache?.issuedAt) {
@@ -415,6 +410,22 @@
                     </mat-list-item>
                   }
                 }
+
+                @if (registrationCertificateConfig?.privacyPolicy) {
+                  <mat-list-item>
+                    <mat-icon matListItemIcon>policy</mat-icon>
+                    <span matListItemTitle>Privacy Policy</span>
+                    <span matListItemLine>{{ registrationCertificateConfig.privacyPolicy }}</span>
+                  </mat-list-item>
+                }
+
+                @if (registrationCertificateConfig?.supportUri) {
+                  <mat-list-item>
+                    <mat-icon matListItemIcon>support_agent</mat-icon>
+                    <span matListItemTitle>Support URI</span>
+                    <span matListItemLine>{{ registrationCertificateConfig.supportUri }}</span>
+                  </mat-list-item>
+                }
               </mat-list>
 
               @if (canRequestFromEudiHub) {
@@ -430,21 +441,6 @@
                   >
                     <mat-icon>verified</mat-icon>
                     Request from EUDI Hub
-                  </button>
-                </div>
-              }
-              @if (registrationCertificateConfig?.enabled && registrationCertificateGenerated) {
-                <div fxLayout="row" fxLayoutGap="12px" style="margin-top: 16px">
-                  <button
-                    mat-raised-button
-                    color="primary"
-                    (click)="reissueRegistrationCertificate()"
-                    [disabled]="reissuing"
-                    disabledInteractive
-                    [matTooltip]="reissuing ? 'Regenerating the registration certificate…' : ''"
-                  >
-                    <mat-icon>autorenew</mat-icon>
-                    {{ reissuing ? 'Regenerating...' : 'Regenerate now' }}
                   </button>
                 </div>
               }

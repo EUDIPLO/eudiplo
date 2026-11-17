@@ -87,7 +87,7 @@ Create these four files in `config/membership-files/`.
 
 ```json
 {
-  "$schema": "https://eudiplo.dev/schemas/v6/IssuanceConfigFile.schema.json",
+  "$schema": "https://eudiplo.dev/schemas/v7/IssuanceConfigFile.schema.json",
   "metadata": { "generation": 1 },
   "spec": {
     "authorizationServers": [{ "id": "issuer-built-in", "type": "built-in" }],
@@ -101,7 +101,7 @@ Create these four files in `config/membership-files/`.
 
 ```json
 {
-  "$schema": "https://eudiplo.dev/schemas/v3/CredentialConfigFile.schema.json",
+  "$schema": "https://eudiplo.dev/schemas/v4/CredentialConfigFile.schema.json",
   "metadata": { "generation": 1 },
   "spec": {
     "id": "membership",

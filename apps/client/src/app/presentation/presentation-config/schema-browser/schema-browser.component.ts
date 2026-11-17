@@ -1,5 +1,5 @@
 import { Component, Inject, OnInit, ChangeDetectionStrategy } from '@angular/core';
-import { FormControl, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatCheckboxModule } from '@angular/material/checkbox';
@@ -9,28 +9,14 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { MatSelectModule } from '@angular/material/select';
-import { MatTabsModule } from '@angular/material/tabs';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { MatChipsModule } from '@angular/material/chips';
-import { MatListModule } from '@angular/material/list';
 import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { JsonPipe } from '@angular/common';
-import {
-  CatalogEntry,
-  ResolvedSchema,
-  SchemaImportResult,
-  SchemaBrowserService,
-} from './schema-browser.service';
+import { getApiErrorMessage } from '../../../utils/error-message';
+import { ResolvedSchema, SchemaImportResult, SchemaBrowserService } from './schema-browser.service';
 
 export interface SchemaBrowserDialogData {
   initialUrl?: string;
-}
-
-interface CatalogGroup {
-  id: string;
-  entries: CatalogEntry[];
-  selectedEntry: CatalogEntry;
 }
 
 @Component({
@@ -42,17 +28,12 @@ interface CatalogGroup {
     MatIconModule,
     MatFormFieldModule,
     MatInputModule,
-    MatSelectModule,
     MatCheckboxModule,
     MatCardModule,
     MatDividerModule,
     MatProgressSpinnerModule,
     MatTooltipModule,
-    MatTabsModule,
-    MatChipsModule,
-    MatListModule,
     ReactiveFormsModule,
-    FormsModule,
     FlexLayoutModule,
     JsonPipe,
   ],
@@ -69,17 +50,6 @@ export class SchemaBrowserComponent implements OnInit {
   resolved: ResolvedSchema | null = null;
 
   selectedFormats = new Map<string, boolean>();
-
-  // Catalog browse state
-  catalogLoading = false;
-  catalogError: string | null = null;
-  catalogEntries: CatalogEntry[] = [];
-  catalogFilter = '';
-  catalogCategoryFilter = '';
-  catalogFormatFilter = '';
-  catalogIncludeDeprecated = false;
-  catalogLoaded = false;
-  private readonly selectedCatalogVersions = new Map<string, string>();
 
   constructor(
     public dialogRef: MatDialogRef<SchemaBrowserComponent>,
@@ -107,160 +77,9 @@ export class SchemaBrowserComponent implements OnInit {
       for (const format of this.resolved.schema.supportedFormats) {
         this.selectedFormats.set(format, true);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to fetch schema metadata:', err);
-      if (err.status === 0) {
-        this.error =
-          'Failed to fetch schema through the EUDIPLO proxy. Check network connectivity and URL, then try again.';
-      } else if (err.status === 404) {
-        this.error = 'Schema not found at the specified URL.';
-      } else {
-        this.error = err.message || 'Failed to fetch schema.';
-      }
-    } finally {
-      this.loading = false;
-    }
-  }
-
-  async loadCatalog(force = false): Promise<void> {
-    if (this.catalogLoaded && !force) return;
-    this.catalogLoading = true;
-    this.catalogError = null;
-
-    try {
-      this.catalogEntries = await this.schemaBrowserService.fetchCatalog();
-      this.catalogLoaded = true;
-      this.syncSelectedCatalogVersions();
-    } catch (err: any) {
-      console.error('Failed to load catalog:', err);
-      this.catalogError = err.error?.message || err.message || 'Failed to load catalog.';
-    } finally {
-      this.catalogLoading = false;
-    }
-  }
-
-  async refreshCatalog(): Promise<void> {
-    await this.loadCatalog(true);
-  }
-
-  get catalogCategories(): string[] {
-    return Array.from(
-      new Set(this.catalogEntries.map((entry) => entry.category).filter(Boolean) as string[])
-    ).sort((a, b) => a.localeCompare(b));
-  }
-
-  get catalogFormats(): string[] {
-    return Array.from(new Set(this.catalogEntries.flatMap((entry) => entry.supportedFormats))).sort(
-      (a, b) => a.localeCompare(b)
-    );
-  }
-
-  get filteredCatalogGroups(): CatalogGroup[] {
-    const groups = new Map<string, CatalogEntry[]>();
-
-    for (const entry of this.catalogEntries.filter((item) => this.matchesCatalogFilters(item))) {
-      const existing = groups.get(entry.id) ?? [];
-      existing.push(entry);
-      groups.set(entry.id, existing);
-    }
-
-    return Array.from(groups.entries())
-      .map(([id, entries]) => {
-        const sortedEntries = [...entries].sort((a, b) =>
-          this.compareVersionsDesc(a.version, b.version)
-        );
-        return {
-          id,
-          entries: sortedEntries,
-          selectedEntry: this.resolveSelectedCatalogEntry(id, sortedEntries),
-        };
-      })
-      .sort((a, b) =>
-        this.catalogTitle(a.selectedEntry).localeCompare(this.catalogTitle(b.selectedEntry))
-      );
-  }
-
-  catalogDescription(entry: CatalogEntry): string | undefined {
-    return entry.issuerOffers.find((offer) => offer.description)?.description;
-  }
-
-  catalogTitle(entry: CatalogEntry): string {
-    return entry.displayName || entry.id;
-  }
-
-  catalogMeta(entry: CatalogEntry): string {
-    return [entry.issuer, entry.category, entry.attestationLoS, entry.bindingType]
-      .filter(Boolean)
-      .join(' · ');
-  }
-
-  selectCatalogVersion(group: CatalogGroup, version: string): void {
-    this.selectedCatalogVersions.set(group.id, version);
-  }
-
-  private matchesCatalogFilters(entry: CatalogEntry): boolean {
-    const query = this.catalogFilter.toLowerCase().trim();
-    const description = this.catalogDescription(entry) ?? '';
-    const matchesQuery =
-      !query ||
-      this.catalogTitle(entry).toLowerCase().includes(query) ||
-      entry.id.toLowerCase().includes(query) ||
-      entry.issuer.toLowerCase().includes(query) ||
-      (entry.category ?? '').toLowerCase().includes(query) ||
-      (entry.tags ?? []).some((tag) => tag.toLowerCase().includes(query)) ||
-      description.toLowerCase().includes(query);
-
-    return (
-      matchesQuery &&
-      (!this.catalogCategoryFilter || entry.category === this.catalogCategoryFilter) &&
-      (!this.catalogFormatFilter ||
-        entry.supportedFormats.includes(this.catalogFormatFilter as any)) &&
-      (this.catalogIncludeDeprecated || !entry.deprecated)
-    );
-  }
-
-  private syncSelectedCatalogVersions(): void {
-    const grouped = new Map<string, CatalogEntry[]>();
-    for (const entry of this.catalogEntries) {
-      const entries = grouped.get(entry.id) ?? [];
-      entries.push(entry);
-      grouped.set(entry.id, entries);
-    }
-
-    for (const [id, entries] of grouped.entries()) {
-      if (this.selectedCatalogVersions.has(id)) continue;
-      const latestActive = [...entries]
-        .filter((entry) => !entry.deprecated)
-        .sort((a, b) => this.compareVersionsDesc(a.version, b.version))[0];
-      const latest = [...entries].sort((a, b) => this.compareVersionsDesc(a.version, b.version))[0];
-      this.selectedCatalogVersions.set(id, (latestActive ?? latest).version);
-    }
-  }
-
-  private resolveSelectedCatalogEntry(id: string, entries: CatalogEntry[]): CatalogEntry {
-    const selectedVersion = this.selectedCatalogVersions.get(id);
-    return entries.find((entry) => entry.version === selectedVersion) ?? entries[0];
-  }
-
-  private compareVersionsDesc(a: string, b: string): number {
-    return b.localeCompare(a, undefined, { numeric: true, sensitivity: 'base' });
-  }
-
-  async selectFromCatalog(entry: CatalogEntry): Promise<void> {
-    this.loading = true;
-    this.error = null;
-    this.resolved = null;
-    this.selectedFormats.clear();
-
-    try {
-      // Fetch and resolve the full metadata via the catalog entry
-      this.resolved = await this.schemaBrowserService.resolveCatalogEntry(entry);
-      for (const format of this.resolved.schema.supportedFormats) {
-        this.selectedFormats.set(format, true);
-      }
-    } catch (err: any) {
-      console.error('Failed to load catalog entry:', err);
-      this.error = err.message || 'Failed to load schema from catalog.';
+      this.error = getApiErrorMessage(err, 'Failed to fetch schema');
     } finally {
       this.loading = false;
     }

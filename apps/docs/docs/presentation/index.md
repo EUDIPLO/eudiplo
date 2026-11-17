@@ -22,6 +22,7 @@ Presentations can also be part of issuance, for example to issue a credential on
 3. [Create presentation requests](requests.md): start a verification for each flow above.
 4. [Transaction data](transaction-data.md): bind a transaction, such as a payment, to the presentation.
 5. [Receive results](receive-results.md): get the verified claims by webhook, SSE, polling or redirect.
+6. [Sign-in with OpenID Connect](openid-connect.md): let an application that speaks OpenID Connect receive the verified claims in an ID token.
 
 Field and status references: [Presentation configuration](../reference/presentation-configuration.md), [Session outcome](../reference/session-outcome.md), [Webhooks](../reference/webhooks.md). For how a presentation works internally, see [Presentation concepts](../concepts/presentation.md).
 

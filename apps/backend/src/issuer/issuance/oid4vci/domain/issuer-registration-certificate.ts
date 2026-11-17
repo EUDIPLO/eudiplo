@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { decodeJwt } from "jose";
 import { hostedVctUrl } from "../../../configuration/credentials/domain/hosted-vct.js";
 import type { IssuanceConfiguration } from "../../../configuration/issuance/domain/issuance-configuration.js";
@@ -6,49 +5,6 @@ import type { IssuanceConfiguration } from "../../../configuration/issuance/doma
 export type IssuerRegistrationCertificateSettings = NonNullable<
     IssuanceConfiguration["registrationCertificate"]
 >;
-
-export type RegistrationCertificateRenewal = NonNullable<
-    IssuerRegistrationCertificateSettings["renewal"]
->;
-
-/** Renewal used when `renewal` is not set. */
-export const DEFAULT_REGISTRATION_CERTIFICATE_RENEWAL: RegistrationCertificateRenewal =
-    "onCredentialConfigChange";
-
-/**
- * The cached generated certificate to serve instead of requesting a new one,
- * if any. An inactive certificate is never served. In `manual` mode an active
- * one is served even when the credential types or settings changed; otherwise
- * it must match the current fingerprint.
- */
-export function usableCachedCertificate(
-    cache: { jwt?: string; fingerprint?: string } | null | undefined,
-    fingerprint: string,
-    renewal: RegistrationCertificateRenewal,
-    nowMs = Date.now(),
-): string | undefined {
-    if (!cache?.jwt || !isJwtActive(cache.jwt, nowMs)) {
-        return undefined;
-    }
-    return renewal === "manual" || cache.fingerprint === fingerprint
-        ? cache.jwt
-        : undefined;
-}
-
-/**
- * Whether a change of the credential or issuance configuration renews the
- * generated certificate in the background.
- */
-export function renewsOnConfigChange(
-    settings: IssuerRegistrationCertificateSettings | null | undefined,
-): boolean {
-    return (
-        !!settings?.enabled &&
-        (settings.mode ?? "generate") === "generate" &&
-        (settings.renewal ?? DEFAULT_REGISTRATION_CERTIFICATE_RENEWAL) ===
-            "onCredentialConfigChange"
-    );
-}
 
 /** Minimal view of a credential configuration needed for the derivation. */
 export interface CredentialConfigurationTypeInfo {
@@ -72,8 +28,7 @@ export interface RegistrationCertificateMaterial {
  * Derives the credential types an issuer provides from its credential
  * configurations: the `vct` of SD-JWT VC configurations (the hosted VCT URL
  * when EUDIPLO hosts the type metadata) and the `docType` of mdoc
- * configurations. The result is deduplicated and sorted so the fingerprint is
- * stable.
+ * configurations. The result is deduplicated and sorted.
  */
 export function deriveRegistrationCertificateMaterial(
     credentialConfigs: CredentialConfigurationTypeInfo[],
@@ -130,10 +85,8 @@ function nonEmpty(value: unknown): string | undefined {
 
 /**
  * The requested credential types that a registrar-issued certificate does not
- * list in `provides_attestations`. A registrar without support for
- * `custom_provides_attestations` ignores the field and issues a certificate
- * that lists none. The registrar trims the values, so they are compared
- * trimmed.
+ * list in `provides_attestations`. Registrars may trim the values, so they
+ * are compared trimmed.
  */
 export function unlistedCredentialTypes(
     payload: Record<string, unknown>,
@@ -164,35 +117,9 @@ export function unlistedCredentialTypes(
         .map(({ type }) => type);
 }
 
-/** Why a certificate that does not list every requested type is refused. */
-export function unlistedCredentialTypesMessage(types: string[]): string {
-    return `The registrar issued a registration certificate that does not list ${types.join(", ")}; it needs support for custom_provides_attestations (rp-registrar 811ed05 or later)`;
-}
-
-/** Why a generated certificate cannot be requested without credential types. */
+/** Why an issuer registration certificate cannot be requested without credential types. */
 export const NO_CREDENTIAL_TYPES_MESSAGE =
-    "Create an SD-JWT VC credential configuration with a vct or an mDOC credential configuration with a docType before generating an issuer registration certificate";
-
-/**
- * Fingerprint of everything that influences a generated certificate. A cached
- * certificate is reused only while the fingerprint is unchanged. The format
- * of each type is part of it, as the certificate names the format.
- */
-export function registrationCertificateFingerprint(
-    settings: IssuerRegistrationCertificateSettings,
-    material: RegistrationCertificateMaterial,
-): string {
-    return createHash("sha256")
-        .update(
-            JSON.stringify({
-                mode: settings.mode,
-                providesAttestations: material.providesAttestations,
-                privacyPolicy: settings.privacyPolicy,
-                supportUri: settings.supportUri,
-            }),
-        )
-        .digest("hex");
-}
+    "Create an SD-JWT VC credential configuration with a vct or an mDOC credential configuration with a docType before requesting an issuer registration certificate";
 
 const CLOCK_SKEW_SECONDS = 30;
 

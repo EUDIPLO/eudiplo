@@ -30,10 +30,7 @@ import {
 } from "../dto/authorization-server-config.dto.js";
 import { DisplayInfo } from "../dto/display.dto.js";
 import { FederationConfig } from "../dto/federation-config.dto.js";
-import {
-    IssuerRegistrationCertificateCache,
-    IssuerRegistrationCertificateConfig,
-} from "../dto/issuer-registration-certificate.dto.js";
+import { IssuerRegistrationCertificateConfig } from "../dto/issuer-registration-certificate.dto.js";
 
 class WalletProviderTrustListRefDto {
     @ApiPropertyOptional({
@@ -186,21 +183,11 @@ export class IssuanceConfig {
 
     /**
      * Optional registration certificate configuration for issuer metadata (`issuer_info`).
-     * Supports importing an existing JWT or generating one via registrar.
+     * The JWT comes from a registrar, for example the EUDI Hub.
      */
     @ApiPropertyOptional({ type: () => IssuerRegistrationCertificateConfig })
     @Column({ type: "json", nullable: true })
     registrationCertificate?: IssuerRegistrationCertificateConfig | null;
-
-    /**
-     * Server-managed cache for generated issuer registration certificates.
-     */
-    @ApiPropertyOptional({
-        type: () => IssuerRegistrationCertificateCache,
-        readOnly: true,
-    })
-    @Column({ type: "json", nullable: true })
-    registrationCertificateCache?: IssuerRegistrationCertificateCache | null;
 
     @Column("json", { nullable: true })
     display!: DisplayInfo[];

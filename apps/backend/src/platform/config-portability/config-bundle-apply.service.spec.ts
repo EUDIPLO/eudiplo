@@ -19,28 +19,67 @@ import type {
 import { documentSourceHash } from "./config-source-hash.js";
 
 describe("ConfigBundleApplyService", () => {
-    it("publishes a registration certificate input change only after a successful apply", async () => {
+    it("plans and applies a bundle without its resources of retired kinds", async () => {
+        const registrar = {
+            $schema:
+                "https://eudiplo.dev/schemas/v2/RegistrarConfigFile.schema.json",
+            spec: { registrarUrl: "https://registrar.example/api" },
+        };
+        const bundle = {
+            manifest: {
+                format: "eudiplo.config-bundle",
+                formatVersion: 2,
+                sourceVersion: "test",
+                exportedAt: new Date(0).toISOString(),
+                tenant: "tenant-a",
+                resources: [
+                    {
+                        kind: "RegistrarConfig",
+                        id: "registrar",
+                        $schema: registrar.$schema,
+                        path: "registrar.json",
+                        sha256: "0".repeat(64),
+                        ownership: "file-managed",
+                        generation: 1,
+                    },
+                ],
+                assets: [],
+                requirements: [],
+                warnings: [],
+            },
+            documents: [registrar],
+            assets: [],
+        } as unknown as ConfigBundle;
+        const plan: ConfigImportPlan = {
+            tenantId: "tenant-a",
+            mode: "upsert",
+            applicable: true,
+            items: [],
+            issues: [],
+        };
         const service = Object.create(
             ConfigBundleApplyService.prototype,
         ) as any;
-        service.events = { emit: vi.fn() };
-        const bundle = { manifest: { tenant: "tenant-a" } } as ConfigBundle;
-
-        service.journal = { run: vi.fn().mockResolvedValue({ items: [] }) };
-        await service.apply("tenant-a", bundle, "upsert");
-        expect(service.events.emit).toHaveBeenCalledExactlyOnceWith(
-            "issuer.registration-certificate-inputs.changed",
-            { tenantId: "tenant-a" },
-        );
-
-        service.events.emit.mockClear();
         service.journal = {
-            run: vi.fn().mockRejectedValue(new Error("plan changed")),
+            run: async (_tenant: string, _mode: string, execute: any) =>
+                execute({ id: "run-1", operations: [] }),
+            checkpoint: vi.fn(),
         };
+        service.bundleService = { plan: vi.fn().mockResolvedValue(plan) };
+        service.migrationService = { upgrade: vi.fn() };
+        service.ownershipService = { markApplied: vi.fn(), remove: vi.fn() };
+
         await expect(
             service.apply("tenant-a", bundle, "upsert"),
-        ).rejects.toThrow("plan changed");
-        expect(service.events.emit).not.toHaveBeenCalled();
+        ).resolves.toMatchObject(plan);
+
+        const planned = service.bundleService.plan.mock.calls[0][1];
+        expect(planned.documents).toEqual([]);
+        expect(planned.manifest.resources).toEqual([]);
+        expect(planned.manifest.warnings).toEqual([
+            expect.objectContaining({ code: "REGISTRAR_CONFIG_REMOVED" }),
+        ]);
+        expect(service.migrationService.upgrade).not.toHaveBeenCalled();
     });
 
     it("does not apply or claim ownership of resources skipped in create mode", async () => {
@@ -85,7 +124,6 @@ describe("ConfigBundleApplyService", () => {
         const service = Object.create(
             ConfigBundleApplyService.prototype,
         ) as any;
-        service.events = { emit: vi.fn() };
         service.journal = {
             run: async (_tenant: string, _mode: string, execute: any) =>
                 execute({ id: "run-1", operations: [] }),
@@ -146,7 +184,6 @@ function setupApply(
         assets: [],
     } as unknown as ConfigBundle;
     const service = Object.create(ConfigBundleApplyService.prototype) as any;
-    service.events = { emit: vi.fn() };
     service.journal = {
         run: async (_tenant: string, _mode: string, execute: any) =>
             execute({ id: "run-1", operations: [] }),
@@ -409,36 +446,6 @@ describe("reviewed plans and replacement failures", () => {
         ).rejects.toThrow("invalid replacement");
         expect(service.repos.keyChains.delete).not.toHaveBeenCalled();
         expect(service.repos.keyChains.save).not.toHaveBeenCalled();
-    });
-    it("replaces a registrar configuration without checking its credentials", async () => {
-        const service = Object.create(
-            ConfigBundleApplyService.prototype,
-        ) as any;
-        service.registrarConfigService = {
-            saveConfig: vi.fn(),
-            replaceConfig: vi.fn(),
-        };
-        const spec = {
-            registrarUrl: "https://registrar.example/api",
-            oidcUrl: "https://auth.example/realms/registrar",
-            clientId: "client",
-            username: "user",
-            password: "password",
-        };
-
-        await service.applyDocument("tenant", {
-            $schema: schemaUrl("RegistrarConfig"),
-            kind: "RegistrarConfig",
-            metadata: {},
-            spec,
-        });
-
-        expect(
-            service.registrarConfigService.replaceConfig,
-        ).toHaveBeenCalledWith("tenant", spec);
-        expect(
-            service.registrarConfigService.saveConfig,
-        ).not.toHaveBeenCalled();
     });
     it("uploads only assets marked as changed by the plan", async () => {
         const { service, bundle, plan } = setupApply([]);

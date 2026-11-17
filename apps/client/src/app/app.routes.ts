@@ -11,6 +11,7 @@ import {
   attributeProviderRoutes,
 } from './issuance/issuance.routes';
 import { webhookEndpointRoutes } from './webhook-endpoint/webhook-endpoint.routes';
+import { oidcClientRoutes } from './oidc-client/oidc-client.routes';
 import { keyManagementRoutes } from './key-management/key-management.routes';
 import { KEY_CHAIN_ROLES } from './key-management/key-chain.service';
 import {
@@ -23,7 +24,6 @@ import { clientRoutes, tenantRoutes } from './tenants/tenants.routes';
 import { trustListRoutes } from './trust-list/trust-list.routes';
 import { federationTrustAnchorRoutes } from './federation-trust-anchor/federation-trust-anchor.routes';
 import { userRoutes } from './users/users.routes';
-import { schemaRoutes } from './schema/schema.routes';
 
 export const routes: Routes = [
   {
@@ -54,6 +54,10 @@ export const routes: Routes = [
     data: { role: TENANT_ADMIN_ROLES },
   },
   { path: '', redirectTo: '/dashboard', pathMatch: 'full' },
+  // Pages of the removed sandbox registrar integration; old bookmarks land on the dashboard.
+  { path: 'registrar', redirectTo: '/dashboard', pathMatch: 'full' },
+  { path: 'schema', redirectTo: '/dashboard', pathMatch: 'prefix' },
+  { path: 'schema-metadata', redirectTo: '/dashboard', pathMatch: 'prefix' },
 
   // Tenant & Client routes
   {
@@ -149,15 +153,6 @@ export const routes: Routes = [
       ),
   },
 
-  // Registrar
-  {
-    path: 'registrar',
-    canActivate: [AuthGuard, RoleGuard],
-    data: { role: getRole('registrar:manage') },
-    loadComponent: () =>
-      import('./registrar/registrar.component').then((m) => m.RegistrarComponent),
-  },
-
   // Status list routes
   {
     path: 'status-lists',
@@ -190,6 +185,14 @@ export const routes: Routes = [
     children: presentationConfigRoutes,
   },
 
+  // OpenID Connect clients that sign users in with a wallet
+  {
+    path: 'oidc-clients',
+    canActivate: [AuthGuard, RoleGuard],
+    data: { role: getRole('presentation:manage') },
+    children: oidcClientRoutes,
+  },
+
   // Trust list routes: issuers publish trust lists, verifiers accept issuers from them
   {
     path: 'trust-list',
@@ -205,15 +208,4 @@ export const routes: Routes = [
     data: { role: [getRole('issuance:manage'), getRole('presentation:manage')] },
     children: federationTrustAnchorRoutes,
   },
-
-  // Schema routes
-  {
-    path: 'schema',
-    canActivate: [AuthGuard, RoleGuard],
-    data: { role: getRole('registrar:manage') },
-    children: schemaRoutes,
-  },
-  { path: 'schema-metadata', redirectTo: 'schema', pathMatch: 'full' },
-  { path: 'schema-metadata/create', redirectTo: 'schema/create' },
-  { path: 'schema-metadata/:id', redirectTo: 'schema/:id' },
 ];

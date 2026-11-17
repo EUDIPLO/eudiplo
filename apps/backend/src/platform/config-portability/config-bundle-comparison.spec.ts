@@ -188,7 +188,6 @@ describe("configuration comparisons", () => {
             Object.assign(result.repos, {
                 tenants: { findOneByOrFail: async () => ({ name: "Tenant" }) },
                 clients: none,
-                registrarConfigs: none,
                 issuanceConfigs: none,
                 credentialConfigs: none,
                 presentationConfigs: none,
@@ -438,72 +437,5 @@ describe("configuration comparisons", () => {
                 )
             ).unchanged,
         ).toBe(false);
-    });
-    it("reports registrar fields that the replacement removes", async () => {
-        const document: ConfigDocument = {
-            $schema: schemaUrl("RegistrarConfig"),
-            kind: "RegistrarConfig",
-            metadata: {},
-            spec: {
-                registrarUrl: "https://registrar.example/api",
-                oidcUrl: "https://auth.example/realms/registrar",
-                clientId: "client",
-                username: "user",
-                password: "password",
-            },
-        };
-
-        expect(
-            await service({ ...document.spec }).compareDocument(
-                "tenant",
-                document,
-            ),
-        ).toEqual({ unchanged: true, changes: [] });
-        const changed = await service({
-            ...document.spec,
-            clientSecret: "stored-secret",
-            registrationCertificateDefaults: {
-                privacy_policy: "https://rp.example/privacy",
-            },
-        }).compareDocument("tenant", document);
-        expect(changed.unchanged).toBe(false);
-        expect(changed.changes).toEqual([
-            {
-                path: "/spec/clientSecret",
-                before: "[redacted]",
-                after: undefined,
-                redacted: true,
-            },
-            {
-                path: "/spec/registrationCertificateDefaults/privacy_policy",
-                before: "https://rp.example/privacy",
-                after: undefined,
-            },
-        ]);
-    });
-    it("treats registrar defaults and contact set to null like omitted ones", async () => {
-        const document: ConfigDocument = {
-            $schema: schemaUrl("RegistrarConfig"),
-            kind: "RegistrarConfig",
-            metadata: {},
-            spec: {
-                registrarUrl: "https://registrar.example/api",
-                oidcUrl: "https://auth.example/realms/registrar",
-                clientId: "client",
-                username: "user",
-                password: "password",
-                registrationCertificateDefaults: null,
-                relyingPartyContact: null,
-            },
-        };
-        const {
-            registrationCertificateDefaults,
-            relyingPartyContact,
-            ...stored
-        } = document.spec;
-
-        expect(
-            await service(stored).compareDocument("tenant", document),
-        ).toEqual({ unchanged: true, changes: [] });
     });
 });

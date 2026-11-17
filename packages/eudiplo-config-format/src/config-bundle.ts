@@ -9,6 +9,7 @@ import {
     normalizeDocument,
     resolveConfigIdentity,
     resourceId,
+    retiredConfigIssue,
 } from "./config-format.js";
 interface ConfigBundleResource {
     kind: ConfigResourceKind;
@@ -132,10 +133,26 @@ export class ConfigBundleCodec {
         if (!manifestBytes) {
             throw new Error("Configuration ZIP has no manifest.json");
         }
-        const manifest = this.parseJson(
+        const parsedManifest = this.parseJson(
             strFromU8(manifestBytes),
             "manifest.json",
         ) as ConfigBundle["manifest"];
+        // Entries of retired kinds are skipped with a warning; their ZIP
+        // entries still count as listed.
+        const kept = withoutRetiredResources({
+            manifest: parsedManifest,
+            documents: [],
+            assets: [],
+        }).manifest;
+        const retiredPaths = new Set<string>();
+        if (kept !== parsedManifest) {
+            for (const resource of parsedManifest.resources) {
+                if (kept.resources.includes(resource)) continue;
+                assertSafeBundlePath(resource?.path);
+                retiredPaths.add(resource.path);
+            }
+        }
+        const manifest = kept;
         assertBundleManifest(manifest);
         const documents: ConfigFile[] = [];
         for (const resource of manifest.resources ?? []) {
@@ -175,6 +192,7 @@ export class ConfigBundleCodec {
         assertConfigBundle(bundle);
         const declared = new Set([
             "manifest.json",
+            ...retiredPaths,
             ...manifest.resources.map((r) => r.path),
             ...manifest.assets.map((a) => a.path),
         ]);
@@ -278,6 +296,38 @@ export class ConfigBundleCodec {
             throw new Error(`Invalid JSON in ${path}`);
         }
     }
+}
+
+/**
+ * The bundle without its resources of retired kinds (such as a registrar
+ * configuration), each reported as a warning in `manifest.warnings`. A bundle
+ * without such resources is returned as is, so applying this twice is the
+ * same as once.
+ */
+export function withoutRetiredResources(bundle: ConfigBundle): ConfigBundle {
+    const manifest = bundle?.manifest;
+    if (!Array.isArray(manifest?.resources) || !Array.isArray(bundle.documents))
+        return bundle;
+    const warnings = manifest.resources.flatMap((resource) => {
+        const issue = retiredConfigIssue(resource, resource?.path);
+        return issue ? [issue] : [];
+    });
+    const documents = bundle.documents.filter(
+        (document) => !retiredConfigIssue(document),
+    );
+    if (warnings.length === 0 && documents.length === bundle.documents.length)
+        return bundle;
+    return {
+        ...bundle,
+        manifest: {
+            ...manifest,
+            resources: manifest.resources.filter(
+                (resource) => !retiredConfigIssue(resource),
+            ),
+            warnings: [...(manifest.warnings ?? []), ...warnings],
+        },
+        documents,
+    };
 }
 
 function assertSafeBundlePath(path: unknown): asserts path is string {

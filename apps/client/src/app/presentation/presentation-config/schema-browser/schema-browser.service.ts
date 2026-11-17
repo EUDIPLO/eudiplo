@@ -1,10 +1,7 @@
 import { Injectable } from '@angular/core';
 import {
-  presentationManagementControllerListSchemaMetadataCatalog,
   presentationManagementControllerResolveSchemaMetadata,
-  presentationManagementControllerResolveSchemaMetadataJwt,
   type ResolvedSchemaMetadataResponseDto,
-  type SchemaMetadataResponseDto,
 } from '@eudiplo/sdk-core';
 
 export type ResolvedSchema = ResolvedSchemaMetadataResponseDto;
@@ -15,27 +12,11 @@ export interface SchemaImportResult {
   suggestedDescription?: string;
 }
 
-export type CatalogEntry = SchemaMetadataResponseDto;
-
 @Injectable()
 export class SchemaBrowserService {
   async fetchSchema(schemaMetadataUrl: string): Promise<ResolvedSchema> {
     const response = await presentationManagementControllerResolveSchemaMetadata({
       body: { schemaMetadataUrl },
-    });
-
-    return response.data as ResolvedSchema;
-  }
-
-  async fetchCatalog(): Promise<CatalogEntry[]> {
-    const response = await presentationManagementControllerListSchemaMetadataCatalog();
-
-    return response.data ?? [];
-  }
-
-  async resolveCatalogEntry(entry: CatalogEntry): Promise<ResolvedSchema> {
-    const response = await presentationManagementControllerResolveSchemaMetadataJwt({
-      body: { signedJwt: entry.signedJwt },
     });
 
     return response.data as ResolvedSchema;

@@ -1,6 +1,7 @@
 import { BadGatewayException, BadRequestException } from "@nestjs/common";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { IssuanceConfigurationNotFound } from "../../issuer/configuration/issuance/domain/issuance-configuration.js";
+import { RegistrationCertificateStorage } from "../registration-certificate-storage.service.js";
 import { EudiHubRequestError } from "./eudi-hub.client.js";
 import { EudiHubRegistrationService } from "./eudi-hub-registration.service.js";
 
@@ -92,7 +93,6 @@ describe("EudiHubRegistrationService", () => {
                 id: "age",
                 description: "Age check",
                 dcql_query: dcql,
-                registration_cert: { body: { purpose: [] } },
             }),
             updatePresentationConfig: vi.fn().mockResolvedValue({}),
         };
@@ -106,19 +106,22 @@ describe("EudiHubRegistrationService", () => {
             getIssuanceConfiguration: vi.fn().mockResolvedValue({
                 registrationCertificate: {
                     enabled: true,
-                    mode: "generate",
                     privacyPolicy: "https://issuer.example/privacy",
                 },
             }),
             storeIssuanceConfiguration: vi.fn().mockResolvedValue({}),
-            updateRegistrationCertificateCache: vi
-                .fn()
-                .mockResolvedValue(undefined),
         };
         service = new EudiHubRegistrationService(
             client as any,
-            presentationConfigs as any,
-            issuance as any,
+            new RegistrationCertificateStorage(
+                presentationConfigs as any,
+                issuance as any,
+                {
+                    publicUrl: "https://eudiplo.example",
+                    skipTrustAuthority: false,
+                    skipOveraskingCheck: false,
+                },
+            ),
         );
     });
 
@@ -166,7 +169,7 @@ describe("EudiHubRegistrationService", () => {
                     credentialRequestId: "cr-new",
                 },
             );
-            // The body stays, the JWT takes precedence over it.
+            // The purpose and privacy policy are kept for the next request.
             expect(
                 presentationConfigs.updatePresentationConfig,
             ).toHaveBeenCalledWith(
@@ -174,8 +177,9 @@ describe("EudiHubRegistrationService", () => {
                 "t1",
                 {
                     registration_cert: {
-                        body: { purpose: [] },
                         jwt: certificate,
+                        purpose: presentationRequest.purpose,
+                        privacy_policy: presentationRequest.privacyPolicy,
                     },
                 },
                 actor,
@@ -186,6 +190,35 @@ describe("EudiHubRegistrationService", () => {
                 expirationDate: "2027-01-01T00:00:00Z",
                 credentialRequestId: "cr-new",
                 reusedCredentialRequest: false,
+            });
+        });
+
+        it("reuses a credential request when the purposes differ only in texts that are not sent", async () => {
+            client.listCredentialRequests.mockResolvedValue([
+                {
+                    id: "cr-same",
+                    credentials: hubCredentials,
+                    purpose: presentationRequest.purpose,
+                    privacyPolicy: presentationRequest.privacyPolicy,
+                },
+            ]);
+
+            const result = await service.requestPresentationCertificate(
+                "t1",
+                {
+                    ...presentationRequest,
+                    purpose: [
+                        ...presentationRequest.purpose,
+                        { lang: "pt-BR", content: "Verificação de idade" },
+                    ],
+                },
+                actor,
+            );
+
+            expect(client.createCredentialRequest).not.toHaveBeenCalled();
+            expect(result).toMatchObject({
+                credentialRequestId: "cr-same",
+                reusedCredentialRequest: true,
             });
         });
 
@@ -216,6 +249,160 @@ describe("EudiHubRegistrationService", () => {
                 credentialRequestId: "cr-same",
                 reusedCredentialRequest: true,
             });
+        });
+
+        it("takes the purpose and privacy policy kept in the configuration when the request leaves them out", async () => {
+            presentationConfigs.getPresentationConfig.mockResolvedValue({
+                id: "age",
+                description: "Age check",
+                dcql_query: dcql,
+                registration_cert: {
+                    jwt: "old",
+                    purpose: presentationRequest.purpose,
+                    privacy_policy: presentationRequest.privacyPolicy,
+                },
+            });
+            const { purpose, privacyPolicy, ...renewal } = presentationRequest;
+
+            await service.requestPresentationCertificate("t1", renewal, actor);
+
+            expect(
+                client.createCredentialRequest.mock.lastCall?.[2],
+            ).toMatchObject({ purpose, privacyPolicy });
+            expect(
+                presentationConfigs.updatePresentationConfig.mock.lastCall?.[2],
+            ).toEqual({
+                registration_cert: {
+                    jwt: expect.any(String),
+                    purpose,
+                    privacy_policy: privacyPolicy,
+                },
+            });
+        });
+
+        it("refuses without a purpose or privacy policy before calling the EUDI Hub", async () => {
+            const { purpose: _, ...withoutPurpose } = presentationRequest;
+
+            await expect(
+                service.requestPresentationCertificate(
+                    "t1",
+                    withoutPurpose,
+                    actor,
+                ),
+            ).rejects.toBeInstanceOf(BadRequestException);
+            expect(client.listCredentialRequests).not.toHaveBeenCalled();
+        });
+
+        it("refuses a kept purpose without German and English text", async () => {
+            presentationConfigs.getPresentationConfig.mockResolvedValue({
+                id: "age",
+                dcql_query: dcql,
+                registration_cert: {
+                    purpose: [{ lang: "fr", content: "Contrôle d'âge" }],
+                    privacy_policy: presentationRequest.privacyPolicy,
+                },
+            });
+            const { purpose: _, ...withoutPurpose } = presentationRequest;
+
+            await expect(
+                service.requestPresentationCertificate(
+                    "t1",
+                    withoutPurpose,
+                    actor,
+                ),
+            ).rejects.toThrow(/German \(de\) and an English \(en\)/);
+            expect(client.listCredentialRequests).not.toHaveBeenCalled();
+        });
+
+        it("refuses a kept privacy policy that is no http or https URL", async () => {
+            presentationConfigs.getPresentationConfig.mockResolvedValue({
+                id: "age",
+                dcql_query: dcql,
+                registration_cert: {
+                    purpose: presentationRequest.purpose,
+                    privacy_policy: "privacy.html",
+                },
+            });
+            const { privacyPolicy: _, ...withoutPolicy } = presentationRequest;
+
+            await expect(
+                service.requestPresentationCertificate(
+                    "t1",
+                    withoutPolicy,
+                    actor,
+                ),
+            ).rejects.toThrow(/not an http or https URL/);
+            expect(client.listCredentialRequests).not.toHaveBeenCalled();
+        });
+
+        it("stores every purpose text but sends the EUDI Hub only those with two-letter codes", async () => {
+            const purpose = [
+                ...presentationRequest.purpose,
+                { lang: "pt-BR", content: "Verificação de idade" },
+            ];
+
+            await service.requestPresentationCertificate(
+                "t1",
+                { ...presentationRequest, purpose },
+                actor,
+            );
+
+            expect(
+                client.createCredentialRequest.mock.lastCall?.[2].purpose,
+            ).toEqual(presentationRequest.purpose);
+            expect(
+                presentationConfigs.updatePresentationConfig.mock.lastCall?.[2]
+                    .registration_cert.purpose,
+            ).toEqual(purpose);
+        });
+
+        it("keeps a stored regional purpose when renewing without a purpose", async () => {
+            const purpose = [
+                ...presentationRequest.purpose,
+                { lang: "pt-BR", content: "Verificação de idade" },
+            ];
+            presentationConfigs.getPresentationConfig.mockResolvedValue({
+                id: "age",
+                dcql_query: dcql,
+                registration_cert: {
+                    jwt: "old",
+                    purpose,
+                    privacy_policy: presentationRequest.privacyPolicy,
+                },
+            });
+            const { purpose: _, ...renewal } = presentationRequest;
+
+            await service.requestPresentationCertificate("t1", renewal, actor);
+
+            expect(
+                presentationConfigs.updatePresentationConfig.mock.lastCall?.[2]
+                    .registration_cert.purpose,
+            ).toEqual(purpose);
+        });
+
+        it("registers the DCQL query with <TENANT_URL> resolved", async () => {
+            presentationConfigs.getPresentationConfig.mockResolvedValue({
+                id: "age",
+                dcql_query: {
+                    credentials: [
+                        {
+                            ...dcql.credentials[0],
+                            meta: { vct_values: ["<TENANT_URL>/vct/pid"] },
+                        },
+                    ],
+                },
+            });
+
+            await service.requestPresentationCertificate(
+                "t1",
+                presentationRequest,
+                actor,
+            );
+
+            expect(
+                client.createCredentialRequest.mock.lastCall?.[2].credentials[0]
+                    .type,
+            ).toBe("https://eudiplo.example/issuers/t1/vct/pid");
         });
 
         it("names the request after the configuration's ID without a description", async () => {
@@ -325,7 +512,7 @@ describe("EudiHubRegistrationService", () => {
             ],
         });
 
-        it("registers missing credential types and stores the certificate in import mode", async () => {
+        it("registers missing credential types and stores the certificate", async () => {
             client.listCredentialIssuances.mockResolvedValue([
                 {
                     id: "ci-existing",
@@ -370,20 +557,59 @@ describe("EudiHubRegistrationService", () => {
                 {
                     registrationCertificate: {
                         enabled: true,
-                        mode: "import",
                         privacyPolicy: "https://issuer.example/privacy",
                         jwt: listing,
+                        supportUri: base.supportUri,
                     },
                 },
                 actor,
             );
-            expect(
-                issuance.updateRegistrationCertificateCache,
-            ).toHaveBeenCalledWith("t1", null);
             expect(result.credentialIssuanceIds).toEqual([
                 "ci-existing",
                 "ci-org.b",
             ]);
+        });
+
+        it("keeps the order of the types when the creations finish out of order", async () => {
+            client.createCredentialIssuance.mockImplementation(
+                (_t, _o, body) =>
+                    new Promise((resolve) =>
+                        setTimeout(
+                            () => resolve({ id: `ci-${body.credential.type}` }),
+                            body.credential.type === "urn:a" ? 20 : 0,
+                        ),
+                    ),
+            );
+            client.downloadRegistrationCertificate.mockResolvedValue(listing);
+
+            const result = await service.requestIssuerCertificate(
+                "t1",
+                base,
+                actor,
+            );
+
+            expect(result.credentialIssuanceIds).toEqual([
+                "ci-urn:a",
+                "ci-org.b",
+            ]);
+        });
+
+        it("requests no certificate when the EUDI Hub refuses to register a type", async () => {
+            client.createCredentialIssuance.mockImplementation(
+                (_t, _o, body) =>
+                    body.credential.type === "org.b"
+                        ? Promise.reject(
+                              new EudiHubRequestError("down", { status: 503 }),
+                          )
+                        : Promise.resolve({ id: "ci-urn:a" }),
+            );
+
+            await expect(
+                service.requestIssuerCertificate("t1", base, actor),
+            ).rejects.toBeInstanceOf(BadGatewayException);
+            expect(client.createRegistrationCertificate).not.toHaveBeenCalled();
+            expect(client.revokeRegistrationCertificate).not.toHaveBeenCalled();
+            expect(issuance.storeIssuanceConfiguration).not.toHaveBeenCalled();
         });
 
         it("refuses without credential types", async () => {
@@ -429,8 +655,8 @@ describe("EudiHubRegistrationService", () => {
             ).toEqual({
                 registrationCertificate: {
                     enabled: true,
-                    mode: "import",
                     jwt: listing,
+                    supportUri: base.supportUri,
                 },
             });
         });
@@ -462,23 +688,6 @@ describe("EudiHubRegistrationService", () => {
             ).rejects.toThrow("database down");
             expect(issuance.storeIssuanceConfiguration).not.toHaveBeenCalled();
             expect(client.revokeRegistrationCertificate).toHaveBeenCalled();
-        });
-
-        it("succeeds and keeps the stored certificate when the old cache cannot be cleared", async () => {
-            client.downloadRegistrationCertificate.mockResolvedValue(listing);
-            issuance.updateRegistrationCertificateCache.mockRejectedValue(
-                new Error("cache"),
-            );
-
-            const result = await service.requestIssuerCertificate(
-                "t1",
-                base,
-                actor,
-            );
-
-            expect(result.id).toBe("rc-1");
-            expect(issuance.storeIssuanceConfiguration).toHaveBeenCalled();
-            expect(client.revokeRegistrationCertificate).not.toHaveBeenCalled();
         });
 
         it("revokes a certificate that cannot be stored", async () => {

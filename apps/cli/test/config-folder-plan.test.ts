@@ -93,6 +93,32 @@ describe("config plan / import with a tenant folder", () => {
         await rm(cwd, { recursive: true, force: true });
     });
 
+    it("prints the validation warnings of the folder and leaves registrar.json out", async () => {
+        await writeJson(join(tenant, "registrar.json"), {
+            registrarUrl: "https://registrar.example/api",
+        });
+
+        const code = await runPortabilityCommand(
+            "plan",
+            config,
+            {
+                positionals: ["acme"],
+                flags: { "allow-env": "PORTAL_SECRET" },
+            },
+            context,
+        );
+
+        expect(code).toBe(0);
+        expect(output.stderr).toContain(
+            "registrar.json: registrar.json is skipped",
+        );
+        const [, init] = vi.mocked(context.fetch).mock.calls[0];
+        const bundle = await sentBundle(init);
+        expect(bundle.manifest.resources.map((r) => r.path)).not.toContain(
+            "registrar.json",
+        );
+    });
+
     it("packs the folder into a ZIP bundle and plans it", async () => {
         const code = await runPortabilityCommand(
             "plan",

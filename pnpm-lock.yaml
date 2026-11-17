@@ -129,9 +129,6 @@ importers:
       '@azure/keyvault-secrets':
         specifier: ^4.12.0
         version: 4.12.0(supports-color@10.2.2)
-      '@badgateway/oauth2-client':
-        specifier: ^3.3.1
-        version: 3.3.1
       '@eudiplo/config-format':
         specifier: workspace:*
         version: link:../../packages/eudiplo-config-format
@@ -330,6 +327,9 @@ importers:
       pkcs11js:
         specifier: ^2.1.7
         version: 2.1.7
+      qrcode:
+        specifier: ^1.5.4
+        version: 1.5.4
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
@@ -355,9 +355,6 @@ importers:
       '@biomejs/biome':
         specifier: 2.6.8
         version: 2.6.8
-      '@hey-api/openapi-ts':
-        specifier: ^0.99.0
-        version: 0.99.0(magicast@0.5.5)(typescript@6.0.3)
       '@nestjs/cli':
         specifier: ^12.0.13
         version: 12.0.13(1d503a17397c1678040421c7812b9197)
@@ -394,6 +391,9 @@ importers:
       '@types/passport-jwt':
         specifier: ^4.0.1
         version: 4.0.1
+      '@types/qrcode':
+        specifier: ^1.5.5
+        version: 1.5.5
       '@types/supertest':
         specifier: ^7.2.1
         version: 7.2.1
@@ -6356,6 +6356,9 @@ packages:
 
   '@types/prismjs@1.26.6':
     resolution: {integrity: sha512-vqlvI7qlMvcCBbVe0AKAb4f97//Hy0EBTaiW8AalRnG/xAN5zOiWWyrNqNXeq8+KAuvRewjCVY1+IPxk4RdNYw==}
+
+  '@types/qrcode@1.5.5':
+    resolution: {integrity: sha512-CdfBi/e3Qk+3Z/fXYShipBT13OJ2fDO2Q2w5CIP5anLTLIndQG9z6P1cnm+8zCWSpm5dnxMFd/uREtb0EXuQzg==}
 
   '@types/qrcode@1.5.6':
     resolution: {integrity: sha512-te7NQcV2BOvdj2b1hCAHzAoMNuj65kNBMz0KBaxM6c3VGBOhU0dURQKOtH8CFNI/dsKkwlv32p26qYQTWoB5bw==}
@@ -21214,6 +21217,10 @@ snapshots:
       pg-types: 2.2.0
 
   '@types/prismjs@1.26.6': {}
+
+  '@types/qrcode@1.5.5':
+    dependencies:
+      '@types/node': 26.6.6
 
   '@types/qrcode@1.5.6':
     dependencies:

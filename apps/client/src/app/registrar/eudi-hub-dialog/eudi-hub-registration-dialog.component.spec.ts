@@ -37,7 +37,7 @@ function createDialog(
     kind: 'presentation',
     presentationConfigId: 'age',
     defaultName: 'Age check',
-    purposeEn: 'Age check',
+    purpose: [{ lang: 'en', content: 'Age check' }],
   }
 ) {
   const eudiHub = {
@@ -137,6 +137,200 @@ describe('EudiHubRegistrationDialogComponent', () => {
       privacyPolicy: 'https://example.com/privacy',
     });
     expect(dialogRef.close).toHaveBeenCalledWith({ id: 'rc-1' });
+  });
+
+  it('starts from the purpose and privacy policy kept in the configuration', async () => {
+    const { dialog, eudiHub } = createDialog({
+      kind: 'presentation',
+      presentationConfigId: 'age',
+      defaultName: 'Age check',
+      purpose: [
+        { lang: 'de-DE', content: 'Altersprüfung' },
+        { lang: 'en', content: 'Age check' },
+      ],
+      privacyPolicy: 'https://verifier.example/privacy',
+    });
+    dialog.token.setValue('abc');
+    dialog.organizationId.setValue(ORG);
+    await vi.waitFor(() => expect(dialog.loadingDetails()).toBe(false));
+
+    expect(eudiHub.organizationDetails).toHaveBeenCalled();
+    // The organization's privacy policy does not replace the kept one.
+    expect(dialog.form.getRawValue()).toMatchObject({
+      purposeDe: 'Altersprüfung',
+      purposeEn: 'Age check',
+      privacyPolicy: 'https://verifier.example/privacy',
+    });
+  });
+
+  it('starts an issuer request from the kept support URI', () => {
+    const { dialog } = createDialog({
+      kind: 'issuer',
+      defaultName: 'Issuer registration certificate',
+      supportUri: 'https://issuer.example/support',
+    });
+
+    expect(dialog.form.controls.supportUri.value).toBe('https://issuer.example/support');
+  });
+
+  it('sends kept purposes in other languages along, so renewing keeps them', async () => {
+    const { dialog, eudiHub } = createDialog({
+      kind: 'presentation',
+      presentationConfigId: 'age',
+      defaultName: 'Age check',
+      purpose: [
+        { lang: 'de', content: 'Altersprüfung' },
+        { lang: 'en', content: 'Age check' },
+        { lang: 'fr', content: "Contrôle d'âge" },
+        { lang: 'pt-BR', content: 'Verificação de idade' },
+      ],
+      privacyPolicy: 'https://verifier.example/privacy',
+    });
+    eudiHub.requestPresentationRegistrationCertificate.mockResolvedValue({ id: 'rc-1' });
+    dialog.token.setValue('abc');
+    dialog.organizationId.setValue(ORG);
+    await vi.waitFor(() => expect(dialog.loadingDetails()).toBe(false));
+
+    await dialog.submit();
+
+    expect(eudiHub.requestPresentationRegistrationCertificate.mock.lastCall?.[0].purpose).toEqual([
+      { lang: 'de', content: 'Altersprüfung' },
+      { lang: 'en', content: 'Age check' },
+      { lang: 'fr', content: "Contrôle d'âge" },
+      { lang: 'pt-BR', content: 'Verificação de idade' },
+    ]);
+    expect(dialog.purposesNotSentToHub).toEqual(['pt-BR']);
+  });
+
+  it('does not send a regional German text twice when it prefilled the German field', async () => {
+    const { dialog, eudiHub } = createDialog({
+      kind: 'presentation',
+      presentationConfigId: 'age',
+      defaultName: 'Age check',
+      purpose: [
+        { lang: 'de-DE', content: 'Altersprüfung' },
+        { lang: 'en', content: 'Age check' },
+        { lang: 'de-AT', content: 'Altersprüfung (AT)' },
+      ],
+      privacyPolicy: 'https://verifier.example/privacy',
+    });
+    eudiHub.requestPresentationRegistrationCertificate.mockResolvedValue({ id: 'rc-1' });
+    dialog.token.setValue('abc');
+    dialog.organizationId.setValue(ORG);
+    await vi.waitFor(() => expect(dialog.loadingDetails()).toBe(false));
+
+    await dialog.submit();
+
+    expect(eudiHub.requestPresentationRegistrationCertificate.mock.lastCall?.[0].purpose).toEqual([
+      { lang: 'de', content: 'Altersprüfung' },
+      { lang: 'en', content: 'Age check' },
+      { lang: 'de-AT', content: 'Altersprüfung (AT)' },
+    ]);
+  });
+
+  describe('note on kept purposes in other languages', () => {
+    const dialogWith = (purpose: { lang: string; content: string }[]) =>
+      createDialog({
+        kind: 'presentation',
+        presentationConfigId: 'age',
+        defaultName: 'Age check',
+        purpose: [
+          { lang: 'de', content: 'Altersprüfung' },
+          { lang: 'en', content: 'Age check' },
+          ...purpose,
+        ],
+        privacyPolicy: 'https://verifier.example/privacy',
+      });
+    it('is not shown for German and English only', () => {
+      const { fixture } = dialogWith([]);
+      expect(fixture.nativeElement.querySelector('.purpose-other-languages')).toBeNull();
+    });
+
+    it('names what goes into the certificate and what is only stored, in their own sentences', () => {
+      const { fixture } = dialogWith([
+        { lang: 'fr', content: "Contrôle d'âge" },
+        { lang: 'pt-BR', content: 'Verificação de idade' },
+      ]);
+      const [sent, stored] = [
+        ...fixture.nativeElement.querySelectorAll('.purpose-other-languages p'),
+      ].map((paragraph: HTMLElement) => paragraph.textContent ?? '');
+
+      expect(sent).toContain('Also sent to the EUDI Hub');
+      expect(sent).toContain('French (fr)');
+      expect(sent).not.toContain('pt-BR');
+      expect(stored).toContain('not part of the certificate');
+      expect(stored).toContain('Portuguese (pt-BR)');
+      expect(stored).not.toContain('(fr)');
+      expect(fixture.nativeElement.querySelector('.purpose-dropped')).toBeNull();
+    });
+
+    it('warns about every kept text the request removes, with the reason, and leaves them out', async () => {
+      const { fixture, dialog, eudiHub } = dialogWith([
+        { lang: 'Portuguese', content: 'x' },
+        { lang: 'fr', content: "Contrôle d'âge" },
+        { lang: 'fr', content: 'Encore' },
+        { lang: 'it', content: '   ' },
+        { lang: 'de', content: 'Noch einmal' },
+      ]);
+
+      expect(dialog.purposesDropped).toEqual([
+        { lang: 'Portuguese', reason: 'no valid language tag' },
+        { lang: 'fr', reason: 'language given twice' },
+        { lang: 'it', reason: 'empty text' },
+        { lang: 'de', reason: 'language given twice' },
+      ]);
+      const warning = fixture.nativeElement.querySelector('.purpose-dropped');
+      expect(warning?.getAttribute('role')).toBe('note');
+      expect(warning?.textContent).toContain('removes these kept purpose texts');
+      expect(warning?.querySelectorAll('li')).toHaveLength(4);
+
+      eudiHub.requestPresentationRegistrationCertificate.mockResolvedValue({ id: 'rc-1' });
+      dialog.token.setValue('abc');
+      dialog.organizationId.setValue(ORG);
+      await vi.waitFor(() => expect(dialog.loadingDetails()).toBe(false));
+      await dialog.submit();
+
+      expect(eudiHub.requestPresentationRegistrationCertificate.mock.lastCall?.[0].purpose).toEqual(
+        [
+          { lang: 'de', content: 'Altersprüfung' },
+          { lang: 'en', content: 'Age check' },
+          { lang: 'fr', content: "Contrôle d'âge" },
+        ]
+      );
+    });
+
+    it('fills German and English from texts tagged in upper case and does not remove them', () => {
+      const { dialog } = createDialog({
+        kind: 'presentation',
+        presentationConfigId: 'age',
+        defaultName: 'Age check',
+        purpose: [
+          { lang: 'DE', content: 'Altersprüfung' },
+          { lang: 'EN', content: 'Age check' },
+        ],
+        privacyPolicy: 'https://verifier.example/privacy',
+      });
+
+      expect(dialog.form.controls.purposeDe.value).toBe('Altersprüfung');
+      expect(dialog.form.controls.purposeEn.value).toBe('Age check');
+      expect(dialog.purposesDropped).toEqual([]);
+    });
+
+    it('applies the limits of the backend: 24 texts for the EUDI Hub, 50 stored', () => {
+      const codes = Array.from(
+        { length: 26 * 26 },
+        (_, index) =>
+          `${String.fromCharCode(97 + Math.floor(index / 26))}${String.fromCharCode(97 + (index % 26))}`
+      ).filter((code) => code !== 'de' && code !== 'en');
+      const { dialog } = dialogWith(
+        codes.slice(0, 49).map((lang) => ({ lang, content: `text ${lang}` }))
+      );
+
+      expect(dialog.otherPurposes).toHaveLength(48);
+      expect(dialog.purposesInCertificate).toHaveLength(22);
+      expect(dialog.purposesNotSentToHub).toHaveLength(26);
+      expect(dialog.purposesDropped).toEqual([{ lang: codes[48], reason: 'more than 50 texts' }]);
+    });
   });
 
   it('does not send a verifier request without a German purpose', async () => {

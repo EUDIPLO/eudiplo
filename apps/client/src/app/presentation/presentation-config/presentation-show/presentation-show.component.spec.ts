@@ -7,7 +7,6 @@ import { of } from 'rxjs';
 import { PresentationShowComponent } from './presentation-show.component';
 import { renderDownloadButton } from '../../../config-portability/config-document.testing';
 import { PresentationManagementService } from '../presentation-management.service';
-import { expectAvailable, expectUnavailable } from '../../../common/unavailable-action.testing';
 
 describe('PresentationShowComponent', () => {
   let component: PresentationShowComponent;
@@ -169,8 +168,7 @@ describe('PresentationShowComponent registration certificate', () => {
     vi.restoreAllMocks();
   });
 
-  it('keeps Reissue now focusable while it runs: a second click sends one request', async () => {
-    const reissueRequest = vi.fn().mockReturnValue(new Promise(() => undefined));
+  it('shows the kept purpose and privacy policy and offers no reissue', async () => {
     TestBed.configureTestingModule({
       imports: [PresentationShowComponent],
       providers: [
@@ -185,9 +183,11 @@ describe('PresentationShowComponent registration certificate', () => {
             getPresentationById: async () => ({
               id: 'age-check',
               dcql_query: { credentials: [] },
-              registration_cert: { jwt: 'ey.registration.cert' },
+              registration_cert: {
+                purpose: [{ lang: 'en', content: 'Checks that you are of age' }],
+                privacy_policy: 'https://verifier.example/privacy',
+              },
             }),
-            reissueRegistrationCertificate: reissueRequest,
           },
         },
         { provide: MatSnackBar, useValue: { open: vi.fn() } },
@@ -202,22 +202,16 @@ describe('PresentationShowComponent registration certificate', () => {
       .find((tab) => tab.textContent?.includes('Security'))!
       .click();
     fixture.detectChanges();
-    const reissue = await vi.waitFor(() => {
-      const button = [...element.querySelectorAll<HTMLButtonElement>('button')].find((b) =>
-        b.textContent?.includes('Reissue now')
-      );
-      expect(button).toBeDefined();
-      return button!;
+
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(element.textContent).toContain('Checks that you are of age');
     });
-    expectAvailable(fixture, reissue);
-
-    reissue.click();
-    fixture.detectChanges();
-    reissue.click();
-    fixture.detectChanges();
-
-    expect(reissueRequest).toHaveBeenCalledExactlyOnceWith('age-check');
-    expectUnavailable(fixture, reissue, 'Reissuing the registration certificate…');
+    expect(element.textContent).toContain('https://verifier.example/privacy');
+    expect(element.textContent).toContain('No certificate');
+    expect(
+      [...element.querySelectorAll('button')].some((b) => b.textContent?.includes('Reissue'))
+    ).toBe(false);
   });
 });
 
@@ -245,7 +239,7 @@ describe('PresentationShowComponent EUDI Hub', () => {
     expect(create(['presentation:manage']).component.canRequestFromEudiHub).toBe(false);
   });
 
-  it('opens the dialog for the configuration with its English purpose and reloads it', async () => {
+  it('opens the dialog with the kept purpose and privacy policy and reloads the configuration', async () => {
     const open = vi.fn().mockReturnValue({
       afterClosed: () => of({ id: 'rc-1', environment: 'sandbox' }),
     });
@@ -257,12 +251,12 @@ describe('PresentationShowComponent EUDI Hub', () => {
       id: 'age-check',
       description: 'Age check',
       registration_cert: {
-        body: {
-          purpose: [
-            { lang: 'de', content: 'Alter' },
-            { lang: 'en', content: 'Age' },
-          ],
-        },
+        jwt: 'a.b.c',
+        purpose: [
+          { lang: 'de', content: 'Alter' },
+          { lang: 'en', content: 'Age' },
+        ],
+        privacy_policy: 'https://verifier.example/privacy',
       },
     } as never;
 
@@ -271,7 +265,7 @@ describe('PresentationShowComponent EUDI Hub', () => {
     component.requestFromEudiHub();
 
     expect(confirm.mock.lastCall?.[0]).toContain(
-      'takes precedence over the current registration certificate settings'
+      'replaces the registration certificate of this configuration'
     );
     confirm.mockRestore();
     expect(open.mock.lastCall?.[1]).toMatchObject({
@@ -280,7 +274,11 @@ describe('PresentationShowComponent EUDI Hub', () => {
         kind: 'presentation',
         presentationConfigId: 'age-check',
         defaultName: 'Age check',
-        purposeEn: 'Age',
+        purpose: [
+          { lang: 'de', content: 'Alter' },
+          { lang: 'en', content: 'Age' },
+        ],
+        privacyPolicy: 'https://verifier.example/privacy',
       },
     });
     await vi.waitFor(() => expect(getPresentationById).toHaveBeenCalledWith('age-check'));
@@ -299,7 +297,7 @@ describe('PresentationShowComponent EUDI Hub', () => {
     confirm.mockRestore();
   });
 
-  it('shows an imported certificate as active before it was cached, not as pending', () => {
+  it('shows the stored certificate as active with its expiry', () => {
     const { component } = create([]);
     const part = (value: unknown) =>
       btoa(JSON.stringify(value)).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
@@ -308,7 +306,23 @@ describe('PresentationShowComponent EUDI Hub', () => {
     component.config = { id: 'age-check', registration_cert: { jwt } } as never;
 
     expect(component.registrationCertStatus).toBe('active');
-    expect(component.registrationCertSource).toBe('imported');
-    expect(component.registrationCertCache?.expiresAt).toBe(exp);
+    expect(component.registrationCertTimes?.expiresAt).toBe(exp);
+  });
+
+  it('opens the dialog without asking when the configuration holds no certificate', () => {
+    const open = vi.fn().mockReturnValue({ afterClosed: () => of(undefined) });
+    const { component } = create(['registrar:manage', 'presentation:manage'], open);
+    component.config = {
+      id: 'age-check',
+      registration_cert: { purpose: [{ lang: 'en', content: 'Age' }] },
+    } as never;
+    const confirm = vi.spyOn(window, 'confirm');
+
+    component.requestFromEudiHub();
+
+    expect(confirm).not.toHaveBeenCalled();
+    expect(open).toHaveBeenCalled();
+    expect(component.registrationCertStatus).toBe('missing');
+    confirm.mockRestore();
   });
 });

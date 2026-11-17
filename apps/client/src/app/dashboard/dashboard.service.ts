@@ -9,7 +9,6 @@ import {
   keyChainControllerGetAll,
   keyChainControllerGetProvidersHealth,
   issuanceConfigControllerGetIssuanceConfigurations,
-  registrarControllerGetConfig,
   trustListControllerGetAllTrustLists,
   KeyChainResponseDto,
   ProviderHealthResponseDto,
@@ -22,8 +21,34 @@ import { JwtService } from '../services/jwt.service';
 import { SESSION_READER_ROLES } from '../session-management/session-roles';
 import { KEY_CHAIN_ROLES } from '../key-management/key-chain.service';
 import { accessKeyChainsInUse } from '../key-management/default-access-key-chain';
-import { apiErrorDetail, groupUnreachable, hasHttpStatus } from '../utils/error-message';
+import { apiErrorDetail, groupUnreachable } from '../utils/error-message';
 import { lastDays, lastHours } from '../utils/local-day';
+import {
+  formatRegistrationCertExpiresIn,
+  getIssuerRegistrationCertStatus,
+  getRegistrationCertStatus,
+  getRegistrationCertTimes,
+  jwtTimes,
+  type RegistrationCertStatus,
+  registrationCertStatusSentence,
+} from '../utils/registration-cert-status';
+
+/**
+ * Presentation registration certificate states that need a new certificate
+ * soon or now. A purpose kept without JWT is left out: requests still work.
+ */
+const PRESENTATION_ATTENTION_STATUSES = new Set<RegistrationCertStatus>([
+  'expiring',
+  'expired',
+  'invalid',
+  'notYetValid',
+]);
+
+/** Issuer states that need attention; an enabled certificate without JWT is not served. */
+const ISSUER_ATTENTION_STATUSES = new Set<RegistrationCertStatus>([
+  ...PRESENTATION_ATTENTION_STATUSES,
+  'missing',
+]);
 
 type AccessCertificateStatus = 'missing' | 'expired' | 'expiring' | 'healthy';
 
@@ -34,7 +59,6 @@ export type DashboardSource =
   | 'issuance'
   | 'presentations'
   | 'trustLists'
-  | 'registrar'
   | 'sessionStats'
   | 'recentSessions'
   | 'activity'
@@ -47,7 +71,6 @@ const sourceLabels: Record<DashboardSource, string> = {
   issuance: 'issuer settings',
   presentations: 'presentation configs',
   trustLists: 'trust lists',
-  registrar: 'registrar config',
   sessionStats: 'session counts',
   recentSessions: 'recent sessions',
   activity: 'session activity',
@@ -117,8 +140,11 @@ export interface ActivityBucket {
 
 export interface DashboardWarning {
   message: string;
-  /** Route to the page that fixes the cause. */
-  action?: { label: string; route: string[] };
+  /**
+   * Route to the page that fixes the cause, the tab `fragment` opens there, and
+   * an accessible name when the label alone does not say which resource it opens.
+   */
+  action?: { label: string; route: string[]; fragment?: string; ariaLabel?: string };
   /** The cause is a failed request that loading again may fix. */
   retry?: boolean;
 }
@@ -171,8 +197,12 @@ export class DashboardService {
   accessCertificateDaysUntilExpiry: number | null = null;
   trustListCount = 0;
   hasTrustList = false;
-  hasRegistrarConfig = false;
   hasIssuanceConfig = false;
+  /**
+   * Registration certificates that need attention: EUDIPLO does not renew them,
+   * so the dashboard is the only early warning.
+   */
+  registrationCertificateWarnings: DashboardWarning[] = [];
   recentSessions: Session[] = [];
   /** The window of the activity chart and the window KPIs, once the retention is known. */
   activity: ActivityWindow | null = null;
@@ -278,11 +308,6 @@ export class DashboardService {
       promiseKeys.push('kmsHealth');
     }
 
-    if (this.canManageRegistrar) {
-      promises.push(registrarControllerGetConfig());
-      promiseKeys.push('registrar');
-    }
-
     const results = await Promise.allSettled(promises);
     // A newer load has started; its results win.
     if (loadId !== this.loadId) return;
@@ -299,8 +324,7 @@ export class DashboardService {
           this.failedSources.set(key, { message: 'the response has an unexpected format' });
           return;
         }
-      } else if (!(key === 'registrar' && hasHttpStatus(result.reason, 404))) {
-        // The registrar answers 404 while it is not configured; anything else is a failure.
+      } else {
         console.error(`Failed to load ${sourceLabels[key]} for the dashboard:`, result.reason);
         this.failedSources.set(key, result.reason);
         return;
@@ -329,16 +353,17 @@ export class DashboardService {
     return this.jwtService.hasRole(KEY_CHAIN_ROLES);
   }
 
+  /** Requesting a certificate from the EUDI Hub needs registrar:manage. */
+  private get canRequestFromEudiHub(): boolean {
+    return this.jwtService.hasRole('registrar:manage');
+  }
+
   get canManageIssuance(): boolean {
     return this.jwtService.hasRole('issuance:manage');
   }
 
   get canManagePresentation(): boolean {
     return this.jwtService.hasRole('presentation:manage');
-  }
-
-  get canManageRegistrar(): boolean {
-    return this.jwtService.hasRole('registrar:manage');
   }
 
   get isReadOnly(): boolean {
@@ -467,7 +492,6 @@ export class DashboardService {
     return (
       this.canManageKeyChains ||
       this.canManagePresentation ||
-      this.canManageRegistrar ||
       !!this.sessionStats.issuance ||
       !!this.sessionStats.presentation
     );
@@ -643,6 +667,7 @@ export class DashboardService {
     if (certificateWarning) {
       warnings.push(certificateWarning);
     }
+    warnings.push(...this.registrationCertificateWarnings);
 
     for (const provider of this.unhealthyKmsProviders) {
       const reason = provider.error ? `: ${provider.error}` : '.';
@@ -656,14 +681,6 @@ export class DashboardService {
       warnings.push({
         message: 'No trust list configured. Presentation trust-chain validation may fail.',
         action: { label: 'Add Trust List', route: ['/trust-list/create'] },
-      });
-    }
-
-    if (this.canManageRegistrar && this.isLoaded('registrar') && !this.hasRegistrarConfig) {
-      warnings.push({
-        message:
-          'Registrar is not configured. Access certificate enrollment via registrar is unavailable.',
-        action: { label: 'Configure Registrar', route: ['/registrar'] },
       });
     }
 
@@ -704,10 +721,10 @@ export class DashboardService {
     this.accessCertificateDaysUntilExpiry = null;
     this.trustListCount = 0;
     this.hasTrustList = false;
-    this.hasRegistrarConfig = false;
     this.credentialConfigs = 0;
     this.presentationConfigs = 0;
     this.hasIssuanceConfig = false;
+    this.registrationCertificateWarnings = [];
     this.recentSessions = [];
     this.activity = null;
     this.bucketStats = [];
@@ -740,6 +757,12 @@ export class DashboardService {
         break;
       case 'presentations':
         this.presentationConfigs = data.length;
+        // Only those who can change a configuration can request its certificate.
+        if (this.canManagePresentation) {
+          this.registrationCertificateWarnings.push(
+            ...presentationRegistrationCertificateWarnings(data, this.canRequestFromEudiHub)
+          );
+        }
         break;
       case 'sessionStats':
         this.sessionStats = data;
@@ -770,15 +793,18 @@ export class DashboardService {
           data.defaultAccess
         );
         break;
-      case 'issuance':
+      case 'issuance': {
         this.hasIssuanceConfig = !!data;
+        const warning = issuerRegistrationCertificateWarning(
+          data?.registrationCertificate,
+          this.canRequestFromEudiHub
+        );
+        if (warning) this.registrationCertificateWarnings.push(warning);
         break;
+      }
       case 'trustLists':
         this.trustListCount = data.length;
         this.hasTrustList = this.trustListCount > 0;
-        break;
-      case 'registrar':
-        this.hasRegistrarConfig = !!data;
         break;
     }
   }
@@ -844,4 +870,56 @@ export class DashboardService {
       (this.sessionStats.presentation?.byStatus[status] ?? 0)
     );
   }
+}
+
+/** A warning for each presentation configuration whose registration certificate needs attention. */
+function presentationRegistrationCertificateWarnings(
+  configs: { id: string; description?: string | null; registration_cert?: unknown }[],
+  canRequestFromEudiHub: boolean
+): DashboardWarning[] {
+  return configs.flatMap((config) => {
+    const status = getRegistrationCertStatus(config as never);
+    if (!PRESENTATION_ATTENTION_STATUSES.has(status)) return [];
+    const sentence = registrationCertStatusSentence(
+      status,
+      formatRegistrationCertExpiresIn(getRegistrationCertTimes(config as never)),
+      { canRequestFromEudiHub }
+    );
+    // The ID makes the name unique; the description alone may repeat.
+    const description = config.description?.trim();
+    const name = description ? `"${description}" (${config.id})` : config.id;
+    return [
+      {
+        message: `Registration certificate of presentation configuration ${name}: ${sentence}.`,
+        action: {
+          label: 'Open Security Tab',
+          route: ['/presentation-config', config.id],
+          fragment: 'security',
+          ariaLabel: `Open the Security tab of presentation configuration ${name}`,
+        },
+      },
+    ];
+  });
+}
+
+/** A warning when the issuer registration certificate needs attention. */
+function issuerRegistrationCertificateWarning(
+  settings: { enabled?: boolean; jwt?: string } | null | undefined,
+  canRequestFromEudiHub: boolean
+): DashboardWarning | null {
+  const status = getIssuerRegistrationCertStatus(settings);
+  if (!ISSUER_ATTENTION_STATUSES.has(status)) return null;
+  const sentence = registrationCertStatusSentence(
+    status,
+    formatRegistrationCertExpiresIn(settings?.jwt ? jwtTimes(settings.jwt) : undefined),
+    { canRequestFromEudiHub }
+  );
+  return {
+    message: `Issuer registration certificate: ${sentence}.`,
+    action: {
+      label: 'Open Registration Certificate',
+      route: ['/issuance-config'],
+      fragment: 'registration-certificate',
+    },
+  };
 }

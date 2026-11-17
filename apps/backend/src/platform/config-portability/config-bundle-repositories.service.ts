@@ -10,7 +10,6 @@ import { IssuanceConfig } from "../../issuer/configuration/issuance/entities/iss
 import { WebhookEndpointEntity } from "../../issuer/configuration/webhook-endpoint/entities/webhook-endpoint.entity.js";
 import { StatusListEntity } from "../../issuer/status-list/entities/status-list.entity.js";
 import { TrustList } from "../../issuer/trust-list/entities/trust-list.entity.js";
-import { RegistrarConfigEntity } from "../../registrar/entities/registrar-config.entity.js";
 import { FederationTrustAnchorEntity } from "../../trust/federation-trust-anchor/entities/federation-trust-anchor.entity.js";
 import { PresentationConfig } from "../../verifier/presentations/entities/presentation-config.entity.js";
 
@@ -27,8 +26,6 @@ export class ConfigBundleRepositories {
         readonly clients: Repository<ClientEntity>,
         @InjectRepository(KeyChainEntity)
         readonly keyChains: Repository<KeyChainEntity>,
-        @InjectRepository(RegistrarConfigEntity)
-        readonly registrarConfigs: Repository<RegistrarConfigEntity>,
         @InjectRepository(IssuanceConfig)
         readonly issuanceConfigs: Repository<IssuanceConfig>,
         @InjectRepository(CredentialConfig)

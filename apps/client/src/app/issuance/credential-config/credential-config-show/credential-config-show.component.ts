@@ -24,7 +24,6 @@ import { StatusListManagementService } from '../../../status-list-management/sta
 import { ConfigDocumentService } from '../../../config-portability/config-document.service';
 import { ConfigOwnershipDirective } from '../../../config-portability/config-ownership.directive';
 import { ConfigOwnershipNoticeComponent } from '../../../config-portability/config-ownership-notice.component';
-import { JwtService } from '../../../services/jwt.service';
 import { getApiErrorMessage } from '../../../utils/error-message';
 import { openErrorSnackBar } from '../../../utils/error-snackbar';
 import { LoadErrorComponent } from '../../../common/load-error.component';
@@ -83,14 +82,8 @@ export class CredentialConfigShowComponent implements OnInit {
     private readonly route: ActivatedRoute,
     private readonly snackBar: MatSnackBar,
     private readonly router: Router,
-    private readonly jwtService: JwtService,
     private readonly configDocuments: ConfigDocumentService
   ) {}
-
-  /** The schema pages need `registrar:manage`; without it their links would end in "Access denied". */
-  get canOpenSchemas(): boolean {
-    return this.jwtService.hasRole('registrar:manage');
-  }
 
   get isMdocFormat(): boolean {
     return this.config?.config?.format === 'mso_mdoc';
@@ -158,15 +151,6 @@ export class CredentialConfigShowComponent implements OnInit {
   get schemaMetadataId(): string | null {
     const id = (this.config as any)?.schemaMeta?.id;
     return typeof id === 'string' && id.trim().length > 0 ? id : null;
-  }
-
-  get schemaMetadataRouteId(): string | null {
-    if (!this.schemaMetadataId) {
-      return null;
-    }
-
-    const segments = this.schemaMetadataId.split('/').filter(Boolean);
-    return segments.at(-1) ?? this.schemaMetadataId;
   }
 
   get fields(): Record<string, unknown>[] {

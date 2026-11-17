@@ -33,6 +33,7 @@ Management endpoints carry the `/api` prefix, for example `POST /api/issuer/offe
 | `/issuers/{tenant}/.well-known/openid-federation`   | [OpenID Federation entity configuration](../trust/federation.md#publish-your-entity-configuration) |
 | `/presentations/{walletNonce}/oid4vp/...`           | OID4VP request object and response endpoint                          |
 | `/presentations/{walletNonce}/iso-18013-7`          | ISO 18013-7 Annex C response endpoint                                |
+| `/verifiers/{tenant}/oidc/...`                      | [OpenID Provider](../presentation/openid-connect.md): discovery, JWKS, PAR, authorize, sign-in page, token |
 | `/storage/{key}`                                    | Public files such as credential logos                                |
 | `/health`                                           | Health check                                                         |
 

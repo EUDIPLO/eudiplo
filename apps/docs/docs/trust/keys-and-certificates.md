@@ -11,7 +11,7 @@ A key chain is a signing key together with its certificate chain. Each tenant ne
 | `usageType`   | Signs                                                                                          | Web Client option                 |
 | ------------- | ---------------------------------------------------------------------------------------------- | --------------------------------- |
 | `access`      | Presentation requests (it determines the `client_id`), signed issuer metadata, ISO 18013-7 `readerAuth` | Access Certificate                |
-| `authorizationServer` | The access tokens of EUDIPLO's [authorization servers](../issuance/authorization-servers.md) ([details](#authorization-server-key-chain)) | Authorization Server              |
+| `authorizationServer` | The access tokens of EUDIPLO's [authorization servers](../issuance/authorization-servers.md) and the ID tokens of the [OpenID Provider](../presentation/openid-connect.md) ([details](#authorization-server-key-chain)) | Authorization Server              |
 | `attestation` | Issued credentials (SD-JWT VC and mDOC)                                                        | Credential Signing (Attestation)  |
 | `statusList`  | Status lists for [revocation](../issuance/revocation.md)                                       | Status List Signing               |
 | `trustList`   | [Trust lists](trust-lists.md) you publish                                                      | Trust List Signing                |
@@ -28,7 +28,7 @@ A key chain is a signing key together with its certificate chain. Each tenant ne
 | Imported key      | `POST /api/key-chain/import` with `"type": "standalone"`             | Your chain from `crt` (leaf first), or a self-signed certificate valid 365 days if `crt` is omitted                           | New key with a self-signed certificate (see warning below) |
 | External CA chain | `POST /api/key-chain/import` with `"type": "internalChain"`          | `key` is your CA key and the last `crt` entry its CA certificate, or a self-signed CA certificate EUDIPLO creates if `crt` is omitted; EUDIPLO generates leaf keys signed by it | New leaf key signed by your CA                 |
 
-In the Web Client, attestation and status list keys offer **Create Key Chain** (internal chain), **Standalone Key** and **External CA Chain** (external CA chain; the last certificate must be the CA certificate); access keys offer **Self-Signed Certificate**, **Registrar Enrollment** ([Registrar](registrar.md)) and **External Certificate**. Standalone Key and the other usage types except OpenID Federation Entity Key and Authorization Server, which are always created, offer an external certificate with **Use a certificate from an external CA**. For an external certificate, choose **Import a key and the certificate chain issued for it**, or **Create the key in EUDIPLO and request its certificate with a CSR** ([details](#request-a-certificate-with-a-csr)). Create Key Chain and External CA Chain rotate the signing key by default; with **Enable automatic key rotation** off, the signing certificate expires after **Certificate Validity** and is renewed only once you turn rotation on by editing the key chain. The other options create key chains without rotation. When EUDIPLO creates the key, **Signing Algorithm** offers the algorithms of the selected KMS provider, starting with its default; imported keys keep the algorithm of their curve, and Registrar Enrollment uses the provider default. The wizard accepts pasted PEM values and PEM, CRT, CER or DER files; EUDIPLO checks that key and certificate match.
+In the Web Client, attestation and status list keys offer **Create Key Chain** (internal chain), **Standalone Key** and **External CA Chain** (external CA chain; the last certificate must be the CA certificate); access keys offer **Self-Signed Certificate** and **External Certificate**; a self-signed access key chain can then get its certificate from the [EUDI Hub](eudi-hub.md#request-an-access-certificate). Standalone Key and the other usage types except OpenID Federation Entity Key and Authorization Server, which are always created, offer an external certificate with **Use a certificate from an external CA**. For an external certificate, choose **Import a key and the certificate chain issued for it**, or **Create the key in EUDIPLO and request its certificate with a CSR** ([details](#request-a-certificate-with-a-csr)). Create Key Chain and External CA Chain rotate the signing key by default; with **Enable automatic key rotation** off, the signing certificate expires after **Certificate Validity** and is renewed only once you turn rotation on by editing the key chain. The other options create key chains without rotation. When EUDIPLO creates the key, **Signing Algorithm** offers the algorithms of the selected KMS provider, starting with its default; imported keys keep the algorithm of their curve. The wizard accepts pasted PEM values and PEM, CRT, CER or DER files; EUDIPLO checks that key and certificate match.
 
 Use an internal or external CA chain for attestation and status list keys: trust lists publish the CA certificate, so entries stay valid when the leaf key rotates.
 
@@ -114,7 +114,7 @@ Rotating a standalone or imported key chain replaces its certificate with a self
 
 ## Authorization server key chain
 
-The hosted [authorization servers](../issuance/authorization-servers.md) (built-in, chained and OID4VP) sign their access tokens only with a key chain of usage type `authorizationServer`, never with the access certificate or a credential signing key. Only EUDIPLO verifies these tokens, with the keys in the authorization server's JWKS (`/.well-known/jwks.json/issuers/{tenant}` for the built-in server), so the key chain needs no certificate from a CA.
+The hosted [authorization servers](../issuance/authorization-servers.md) (built-in, chained and OID4VP) sign their access tokens only with a key chain of usage type `authorizationServer`, never with the access certificate or a credential signing key. Only EUDIPLO verifies these tokens, with the keys in the authorization server's JWKS (`/.well-known/jwks.json/issuers/{tenant}` for the built-in server), so the key chain needs no certificate from a CA. The tenant's [OpenID Provider](../presentation/openid-connect.md) signs its ID tokens with the tenant's authorization server key chain too; relying parties verify them with `/verifiers/{tenant}/oidc/jwks`, so a rotation reaches them through that JWKS.
 
 An authorization server uses, in this order:
 
@@ -199,7 +199,7 @@ Existing key chains get the profile with their next signing certificate: when th
 
 ### Default access key chain
 
-Presentation requests (OID4VP and ISO 18013-7) of a configuration without `accessKeyChainId`, signed issuer metadata and the link of a registration certificate to its access certificate use the tenant's default access key chain. A presentation configuration's `accessKeyChainId` always takes precedence; the issuer metadata has no such field, so all issuance of a tenant uses the default.
+Presentation requests (OID4VP and ISO 18013-7) of a configuration without `accessKeyChainId` and signed issuer metadata use the tenant's default access key chain. A presentation configuration's `accessKeyChainId` always takes precedence; the issuer metadata has no such field, so all issuance of a tenant uses the default.
 
 To choose the default, set `access` of the tenant's key chain defaults:
 
@@ -217,7 +217,7 @@ Without the setting, EUDIPLO picks one of the tenant's access key chains in this
 
 A new access key chain therefore only becomes the default when its certificate is of a better kind, or when the certificate of the current default is no longer valid. To use a particular key chain, set the default access key chain, or `accessKeyChainId` for one presentation configuration.
 
-An OpenID4VP request keeps the access key chain chosen when it was created: the request object a wallet fetches later is signed with the key chain its `client_id` was derived from, even when the default or the configuration's `accessKeyChainId` has changed in between. Its registration certificate is resolved for that key chain as well; see [Registration Certificates](registration-certificates.md#validation-and-caching). If that key chain is deleted or rotated before the wallet fetches the request, the wallet cannot use the request; create a new one.
+An OpenID4VP request keeps the access key chain chosen when it was created: the request object a wallet fetches later is signed with the key chain its `client_id` was derived from, even when the default or the configuration's `accessKeyChainId` has changed in between. If that key chain is deleted or rotated before the wallet fetches the request, the wallet cannot use the request; create a new one.
 
 ### Revocation check
 

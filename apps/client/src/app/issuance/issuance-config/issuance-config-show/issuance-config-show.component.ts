@@ -1,4 +1,4 @@
-import { Component, OnInit, ChangeDetectionStrategy } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, Optional } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { JwtService } from '../../../services/jwt.service';
 import {
@@ -18,8 +18,14 @@ import { MatTabsModule } from '@angular/material/tabs';
 import { MatTableModule } from '@angular/material/table';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { RouterModule } from '@angular/router';
+import { ActivatedRoute, RouterModule } from '@angular/router';
 import { decodeJwt, decodeProtectedHeader } from 'jose';
+import {
+  formatRegistrationCertExpiresIn,
+  getIssuerRegistrationCertStatus,
+  registrationCertStatusSentence,
+  type RegistrationCertStatus,
+} from '../../../utils/registration-cert-status';
 import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { IssuanceConfig } from '@eudiplo/sdk-core';
 import { ConfigDocumentService } from '../../../config-portability/config-document.service';
@@ -31,7 +37,6 @@ import {
 import { ConfigOwnershipDirective } from '../../../config-portability/config-ownership.directive';
 import { ConfigOwnershipNoticeComponent } from '../../../config-portability/config-ownership-notice.component';
 import { getApiErrorMessage } from '../../../utils/error-message';
-import { openErrorSnackBar } from '../../../utils/error-snackbar';
 import { copyToClipboard } from '../../../utils/copy-to-clipboard';
 import { LoadErrorComponent } from '../../../common/load-error.component';
 
@@ -91,7 +96,6 @@ export class IssuanceConfigShowComponent implements OnInit {
   config?: IssuanceConfig;
   /** Set when the page's data could not be loaded, so the page is not left blank. */
   loadError = '';
-  reissuing = false;
   readonly authServerDisplayedColumns = [
     'label',
     'id',
@@ -110,17 +114,19 @@ export class IssuanceConfigShowComponent implements OnInit {
     private readonly snackBar: MatSnackBar,
     private readonly configDocuments: ConfigDocumentService,
     private readonly dialog: MatDialog,
-    private readonly jwtService: JwtService
+    private readonly jwtService: JwtService,
+    @Optional() private readonly route?: ActivatedRoute
   ) {}
+
+  /** Index of the Registration Certificate tab, which `#registration-certificate` opens. */
+  static readonly REGISTRATION_CERTIFICATE_TAB = 3;
+  selectedTab = 0;
 
   /** What to confirm before a certificate from the EUDI Hub replaces the current one. */
   private eudiHubReplacementQuestion(): string | undefined {
     const settings = this.registrationCertificateConfig;
-    if (!settings?.enabled) return undefined;
-    const replaced = this.registrationCertificateGenerated
-      ? 'This switches the issuer registration certificate from generated to imported: EUDIPLO no longer generates or renews it, and the generated certificate is no longer served.'
-      : 'This replaces the imported issuer registration certificate.';
-    return `${replaced} A certificate from the EUDI Hub is not renewed automatically; request a new one before it expires and after the credential types change.\n\nRequest a registration certificate from the EUDI Hub?`;
+    if (!settings?.enabled || !settings.jwt) return undefined;
+    return `This replaces the issuer registration certificate. A certificate from the EUDI Hub is not renewed automatically; request a new one before it expires and after the credential types change.\n\nRequest a registration certificate from the EUDI Hub?`;
   }
 
   /** Requesting a registration certificate from the EUDI Hub needs both roles. */
@@ -132,7 +138,7 @@ export class IssuanceConfigShowComponent implements OnInit {
 
   /**
    * Opens the EUDI Hub dialog, which registers the credential types, requests
-   * a registration certificate and stores it here in import mode.
+   * a registration certificate and stores it in the issuer settings.
    */
   requestFromEudiHub(): void {
     const question = this.eudiHubReplacementQuestion();
@@ -143,7 +149,11 @@ export class IssuanceConfigShowComponent implements OnInit {
         EudiHubRegistrationDialogData,
         EudiHubRegistrationCertificate | undefined
       >(EudiHubRegistrationDialogComponent, {
-        data: { kind: 'issuer', defaultName: 'Issuer registration certificate' },
+        data: {
+          kind: 'issuer',
+          defaultName: 'Issuer registration certificate',
+          supportUri: this.registrationCertificateConfig?.supportUri,
+        },
         width: '720px',
         maxWidth: '95vw',
         // Escape or a backdrop click must not drop a request that is still running.
@@ -218,14 +228,8 @@ export class IssuanceConfigShowComponent implements OnInit {
     return (this.config as any)?.registrationCertificate;
   }
 
-  /**
-   * The certificate the issuer serves with its issue and expiry times: in
-   * generate mode the cached one, in import mode the imported JWT.
-   */
+  /** The certificate the issuer serves, with its issue and expiry times. */
   get registrationCertificateCache(): any {
-    if (this.registrationCertificateGenerated) {
-      return (this.config as any)?.registrationCertificateCache;
-    }
     const jwt = this.registrationCertificateConfig?.jwt;
     if (typeof jwt !== 'string' || jwt.length === 0) return undefined;
     try {
@@ -237,11 +241,6 @@ export class IssuanceConfigShowComponent implements OnInit {
   }
 
   get registrationCertificateJwt(): string | null {
-    const cacheJwt = this.registrationCertificateCache?.jwt;
-    if (typeof cacheJwt === 'string' && cacheJwt.length > 0) {
-      return cacheJwt;
-    }
-
     const importedJwt = this.registrationCertificateConfig?.jwt;
     if (typeof importedJwt === 'string' && importedJwt.length > 0) {
       return importedJwt;
@@ -250,47 +249,19 @@ export class IssuanceConfigShowComponent implements OnInit {
     return null;
   }
 
-  /** Generate mode, which is also the backend's default when `mode` is unset. */
-  get registrationCertificateGenerated(): boolean {
-    return (this.registrationCertificateConfig?.mode || 'generate') === 'generate';
+  /** Status of the issuer registration certificate; `none` while it is turned off. */
+  get registrationCertificateStatus(): RegistrationCertStatus {
+    return getIssuerRegistrationCertStatus(this.registrationCertificateConfig);
   }
 
-  get registrationCertificateRenewalLabel(): string {
-    switch (this.registrationCertificateConfig?.renewal) {
-      case 'onMetadataRequest':
-        return 'On the next metadata request';
-      case 'manual':
-        return 'Only with Regenerate now';
-      default:
-        return 'When credential configs or issuer settings change';
-    }
-  }
-
-  get registrationCertificateStatus(): 'none' | 'pending' | 'active' | 'expiring' | 'expired' {
-    const cfg = this.registrationCertificateConfig;
-    if (!cfg?.enabled) {
-      return 'none';
-    }
-
-    const cache = this.registrationCertificateCache;
-    if (!cache) {
-      return 'pending';
-    }
-
-    const exp = cache.expiresAt;
-    if (typeof exp === 'number') {
-      const now = Math.floor(Date.now() / 1000);
-      if (exp < now) {
-        return 'expired';
-      }
-
-      const oneWeekSeconds = 7 * 24 * 60 * 60;
-      if (exp - now < oneWeekSeconds) {
-        return 'expiring';
-      }
-    }
-
-    return 'active';
+  /** What the status means and what to do next. */
+  get registrationCertificateStatusText(): string {
+    return (
+      registrationCertStatusSentence(
+        this.registrationCertificateStatus,
+        formatRegistrationCertExpiresIn(this.registrationCertificateCache)
+      ) ?? 'Turned off'
+    );
   }
 
   get parsedRegistrationCertHeader(): string {
@@ -386,33 +357,10 @@ export class IssuanceConfigShowComponent implements OnInit {
     );
   }
 
-  reissueRegistrationCertificate(): void {
-    // `disabledInteractive` keeps the button clickable while it looks disabled.
-    if (this.reissuing) return;
-    this.reissuing = true;
-    this.issuanceConfigService
-      .reissueRegistrationCertificate()
-      .then((updated) => {
-        this.config = updated;
-        this.snackBar.open(
-          'Registration certificate regenerated. Previous active certificate was revoked if present.',
-          'Close',
-          { duration: 3500 }
-        );
-      })
-      .catch((error) => {
-        console.error('Failed to regenerate issuer registration certificate', error);
-        openErrorSnackBar(
-          this.snackBar,
-          getApiErrorMessage(error, 'Failed to regenerate registration certificate')
-        );
-      })
-      .finally(() => {
-        this.reissuing = false;
-      });
-  }
-
   ngOnInit(): void {
+    if (this.route?.snapshot.fragment === 'registration-certificate') {
+      this.selectedTab = IssuanceConfigShowComponent.REGISTRATION_CERTIFICATE_TAB;
+    }
     this.loadConfig();
   }
 

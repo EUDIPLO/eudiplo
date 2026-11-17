@@ -14,7 +14,6 @@ startup from `ENCRYPTION_KEY_SOURCE`.
 | Table                              | Columns                                                                                 |
 | ---------------------------------- | --------------------------------------------------------------------------------------- |
 | Key chains                         | `rootJwk`, `activeJwk`, `previousJwk` (private keys of `db` key chains)                  |
-| Registrar configuration            | `password`, `clientSecret`                                                              |
 | Webhook endpoints, attribute providers | The API key in `auth` (`config.value`)                                              |
 | Issuance configuration             | The upstream client secret of chained authorization servers in `authorizationServers`  |
 | Sessions                           | `credentials` (verified presentations), `credentialPayload` (offer claims), `offer`, `auth_queries`, `responseEncryptionPrivateJwk` (per-request key that decrypts the wallet response), the webhook API key in `parsedWebhook` |
@@ -123,7 +122,11 @@ key changes, or with `env` the `MASTER_SECRET` changes:
 - the single-active-credential policy no longer recognizes earlier subjects, so
   their existing credentials stop counting against the limit,
 - with the built-in OAuth2 server, all management tokens become invalid
-  (they are signed with `MASTER_SECRET`).
+  (they are signed with `MASTER_SECRET`),
+- with any key source, a change of `MASTER_SECRET` changes the `sub` that
+  OpenID Provider clients with a
+  [`subject`](../presentation/openid-connect.md#stable-subject-and-top-level-claims)
+  receive, so relying parties see every user as new.
 
 Store the key, or `MASTER_SECRET`, in your secret manager with versioning, and
 include it in the [backup plan](production-checklist.md#backups): a database

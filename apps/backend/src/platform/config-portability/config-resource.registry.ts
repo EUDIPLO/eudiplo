@@ -62,15 +62,6 @@ const DEFINITIONS: Omit<ConfigResourceDefinition, "slug" | "currentVersion">[] =
             sensitivePaths: [],
         },
         {
-            kind: "RegistrarConfig",
-            importPhase: 40,
-            dependsOn: ["Tenant", "KeyChain"],
-            legacyFolders: ["registrar.json"],
-            bundlePath: "registrar.json",
-            singletonId: "registrar",
-            sensitivePaths: ["clientSecret", "password"],
-        },
-        {
             kind: "IssuanceConfig",
             importPhase: 70,
             dependsOn: [

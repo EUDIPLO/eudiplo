@@ -6,9 +6,7 @@ import {
   Injector,
   OnDestroy,
   OnInit,
-  QueryList,
   ViewChild,
-  ViewChildren,
   ChangeDetectionStrategy,
 } from '@angular/core';
 import {
@@ -25,7 +23,7 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
-import { MatRadioButton, MatRadioModule } from '@angular/material/radio';
+import { MatRadioModule } from '@angular/material/radio';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
@@ -37,18 +35,9 @@ import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { merge } from 'rxjs';
 import { readCertificateFiles } from '../certificate-files';
 import { KeyChainService } from '../key-chain.service';
-import {
-  accessKeyEnrollmentFailure,
-  hasRelyingPartyContact,
-  RELYING_PARTY_CONTACT_ANCHOR,
-  RegistrarConfig,
-  RegistrarService,
-} from '../../registrar/registrar.service';
 import { KeyChainCreateDto, KeyChainImportDto, KmsProviderInfoDto } from '@eudiplo/sdk-core';
-import { asSentence, getApiErrorMessage, getHttpErrorMessage } from '../../utils/error-message';
+import { asSentence, getApiErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
-import { JwtService } from '../../services/jwt.service';
-import { focusIfFocusWasLost } from '../../common/focus-if-lost.util';
 import { type CreatedForForm, openedFromForm } from '../../common/return-to-form';
 import { ReturnToFormComponent } from '../../common/return-to-form.component';
 import { showFieldsToFix } from '../../common/field-to-fix.util';
@@ -56,7 +45,7 @@ import { showFieldsToFix } from '../../common/field-to-fix.util';
 export type KeyUsageSelection =
   'attestation' | 'statusList' | 'access' | 'authorizationServer' | 'trustList' | 'federation';
 export type KeyChainTypeSelection = 'internalChain' | 'externalCaChain' | 'standalone';
-export type AccessSourceSelection = 'selfSigned' | 'registrar' | 'external';
+export type AccessSourceSelection = 'selfSigned' | 'external';
 export type SigningAlgorithm = NonNullable<KeyChainCreateDto['alg']>;
 
 /** Signing algorithms with the curve each one selects. */
@@ -68,17 +57,6 @@ const SIGNING_ALGORITHM_LABELS: Record<SigningAlgorithm, string> = {
 
 /** Whether the external certificate comes with its key, or is requested for a key EUDIPLO creates. */
 type ExternalCertificateSource = 'import' | 'csr';
-
-/** Why a registrar enrollment was refused, shown next to Create & Enroll. */
-export interface EnrollmentError {
-  message: string;
-  /** False when the registrar configuration is not the cause, for example a missing role. */
-  offerRegistrar: boolean;
-  /** A key EUDIPLO kept although the enrollment failed, offered for deletion. */
-  keptKeyId?: string;
-  /** True when the outcome is unknown and the user should check Keys. */
-  offerKeys?: boolean;
-}
 
 /** A pasted key or certificate chain: required, and blank text does not count. */
 function requiredText(control: AbstractControl): ValidationErrors | null {
@@ -115,24 +93,7 @@ function requiredText(control: AbstractControl): ValidationErrors | null {
 export class KeyCreateWizardComponent implements OnInit, OnDestroy {
   @ViewChild('stepper') stepper!: MatStepper;
 
-  @ViewChild('createButton', { read: ElementRef })
-  private readonly createButton?: ElementRef<HTMLElement>;
-
-  /**
-   * The error of a refused enrollment takes the focus from Create & Enroll, which keeps it
-   * while the enrollment runs, or from the page, unless the user has moved it meanwhile.
-   */
-  @ViewChild('enrollmentErrorBox') set enrollmentErrorBox(
-    box: ElementRef<HTMLElement> | undefined
-  ) {
-    focusIfFocusWasLost(box?.nativeElement, this.createButton?.nativeElement);
-  }
-
-  @ViewChild('registrarRetry', { read: ElementRef })
-  private readonly registrarRetry?: ElementRef<HTMLButtonElement>;
-  @ViewChildren(MatRadioButton) private readonly radioButtons?: QueryList<MatRadioButton>;
-
-  /** Set when the user left the wizard, so a running enrollment does not pull them back. */
+  /** Set when the user left the wizard, so a running request does not pull them back. */
   private destroyed = false;
 
   // Form groups for each step
@@ -146,13 +107,7 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
   @ViewChild('configFormElement', { read: ElementRef })
   private readonly configFormElement?: ElementRef<HTMLFormElement>;
   private readonly injector = inject(Injector);
-  isCheckingRegistrar = false;
   isLoadingKmsProviders = false;
-  registrarConfig: RegistrarConfig | null = null;
-  registrarConfigChecked = false;
-  /** Why the registrar configuration could not be read; null when it was read or is missing. */
-  registrarConfigError: string | null = null;
-  enrollmentError: EnrollmentError | null = null;
   /** Set when a form in another tab opened the wizard to get the key chain it misses. */
   openedFromForm = false;
   /** The key chain created for that form; the wizard then says to return to the form's tab. */
@@ -181,7 +136,7 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
       label: 'Access Certificate',
       icon: 'badge',
       description: 'Prove your identity as an issuer/verifier to EUDI wallets.',
-      hint: 'Self-signed for development or obtained through registrar enrollment',
+      hint: 'Self-signed for development; with the registrar:manage role, request a trusted one from the EUDI Hub on the key page',
     },
     {
       value: 'authorizationServer' as KeyUsageSelection,
@@ -251,14 +206,7 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
       label: 'Self-Signed Certificate',
       icon: 'key',
       description: 'Create a self-signed access certificate for development or testing.',
-      hint: 'Quick setup, no registrar required. Suitable for dev/test environments.',
-    },
-    {
-      value: 'registrar' as AccessSourceSelection,
-      label: 'Registrar Enrollment',
-      icon: 'verified',
-      description: 'Obtain a certificate through your registrar.',
-      hint: 'Required for production. Provides a trusted certificate chain.',
+      hint: 'Quick setup for development and testing. For a trusted certificate, request one from the EUDI Hub on the key page afterwards, which needs the registrar:manage role.',
     },
     {
       value: 'external' as AccessSourceSelection,
@@ -272,11 +220,9 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
   constructor(
     private readonly fb: FormBuilder,
     private readonly keyChainService: KeyChainService,
-    private readonly registrarService: RegistrarService,
     private readonly route: ActivatedRoute,
     private readonly router: Router,
-    private readonly snackBar: MatSnackBar,
-    private readonly jwtService: JwtService
+    private readonly snackBar: MatSnackBar
   ) {
     // Step 1: Usage selection
     this.usageForm = this.fb.group({
@@ -288,7 +234,7 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
       keyChainType: ['internalChain', Validators.required],
     });
 
-    // Step 2b: Access source selection (self-signed vs registrar)
+    // Step 2b: Access source selection (self-signed vs external)
     this.accessSourceForm = this.fb.group({
       accessSource: ['selfSigned', Validators.required],
     });
@@ -339,11 +285,6 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
         );
       }
     });
-
-    // A refusal belongs to the registrar enrollment it reports.
-    merge(this.usageForm.valueChanges, this.accessSourceForm.valueChanges).subscribe(() => {
-      this.enrollmentError = null;
-    });
   }
 
   ngOnDestroy(): void {
@@ -378,9 +319,6 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
       this.usageForm.get('usage')!.setValue(requestedUsage);
     }
     this.openedFromForm = openedFromForm(this.route.snapshot.queryParamMap);
-    // Pre-check registrar config so we can show status quickly
-    // checkRegistrarConfig handles its own errors.
-    if (this.canUseRegistrar) void this.checkRegistrarConfig();
     this.loadKmsProviders();
   }
 
@@ -421,65 +359,6 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
     }
   }
 
-  /**
-   * Check if registrar credentials are configured.
-   */
-  async checkRegistrarConfig(): Promise<void> {
-    if (this.isCheckingRegistrar) return;
-    this.isCheckingRegistrar = true;
-    try {
-      this.registrarConfig = await this.registrarService.getConfig();
-      this.registrarConfigError = null;
-    } catch (error) {
-      // getConfig answers null for a missing configuration, so this is a failed load.
-      this.registrarConfig = null;
-      this.registrarConfigError = getHttpErrorMessage(
-        error,
-        'Could not check the registrar configuration'
-      );
-    } finally {
-      this.isCheckingRegistrar = false;
-      this.registrarConfigChecked = true;
-    }
-  }
-
-  /**
-   * Reads the registrar configuration again. The Retry button stays while it
-   * runs and goes away once the configuration is read, so focus then moves
-   * from it to the selected certificate source, where a radio group takes it.
-   */
-  async retryRegistrarCheck(): Promise<void> {
-    await this.checkRegistrarConfig();
-    const retryHadFocus = document.activeElement === this.registrarRetry?.nativeElement;
-    if (!this.registrarConfigError && retryHadFocus) {
-      this.radioButtons?.find((radio) => radio.value === this.selectedAccessSource)?.focus();
-    }
-  }
-
-  /**
-   * Check if registrar is configured and ready to use.
-   */
-  get hasRegistrarConfig(): boolean {
-    return this.registrarConfig !== null;
-  }
-
-  /** Fragment of the registrar page's contact section. */
-  readonly contactAnchor = RELYING_PARTY_CONTACT_ANCHOR;
-
-  /** A configuration without relying party contact; the first enrollment needs one. */
-  get registrarContactMissing(): boolean {
-    return this.registrarConfig !== null && !hasRelyingPartyContact(this.registrarConfig);
-  }
-
-  /** Reading the registrar configuration and enrolling through it need registrar:manage. */
-  get canUseRegistrar(): boolean {
-    return this.jwtService.hasRole('registrar:manage');
-  }
-
-  isAccessSourceAvailable(source: AccessSourceSelection): boolean {
-    return source !== 'registrar' || this.canUseRegistrar;
-  }
-
   get selectedUsage(): KeyUsageSelection | null {
     return this.usageForm.get('usage')?.value || null;
   }
@@ -502,10 +381,6 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
   }
 
   get showConfigStep(): boolean {
-    // Access certificates via registrar are created in this wizard if registrar is configured
-    if (this.selectedUsage === 'access' && this.selectedAccessSource === 'registrar') {
-      return this.hasRegistrarConfig;
-    }
     return !!this.selectedUsage;
   }
 
@@ -552,14 +427,10 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
 
   /**
    * True when EUDIPLO generates the key, so the user picks its algorithm. An
-   * imported key brings its own curve, and registrar enrollment uses the
-   * provider's default.
+   * imported key brings its own curve.
    */
   get showAlgorithm(): boolean {
-    return (
-      !this.importsExternalKey &&
-      !(this.selectedUsage === 'access' && this.selectedAccessSource === 'registrar')
-    );
+    return !this.importsExternalKey;
   }
 
   get isExternalCertificate(): boolean {
@@ -612,49 +483,19 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
 
   /**
    * Handle access source selection and advance to next step.
-   * For registrar enrollment, we stay in the wizard if credentials are configured.
    */
   onAccessSourceNext(): void {
-    if (this.selectedAccessSource === 'registrar') {
-      if (!this.canUseRegistrar) {
-        this.snackBar.open(
-          'Enrolling through the registrar needs the registrar:manage role',
-          'Close',
-          {
-            duration: 5000,
-          }
-        );
-        return;
-      }
-      if (!this.hasRegistrarConfig) {
-        // Config not yet set - user can go to registrar page via UI link
-        // but we don't force navigation automatically
-        this.snackBar
-          .open('Please configure registrar credentials first', 'Go to Registrar', {
-            duration: 5000,
-          })
-          .onAction()
-          .subscribe(() => {
-            this.router.navigate(['/registrar']);
-          });
-        return;
-      }
-    }
     this.stepper.next();
   }
 
   /** Create stays focusable while the key chain is created, so its tooltip says why it waits. */
   get createTooltip(): string {
     if (!this.isSubmitting) return '';
-    if (this.selectedUsage === 'access' && this.selectedAccessSource === 'registrar') {
-      return 'Creating the key and enrolling it with the registrar…';
-    }
     return this.importsExternalKey ? 'Importing the key chain…' : 'Creating the key chain…';
   }
 
   /**
    * Create the key chain based on wizard selections.
-   * For registrar enrollment, creates the key then requests a certificate.
    */
   async createKey(): Promise<void> {
     // `disabledInteractive` keeps Create clickable while it looks disabled.
@@ -681,20 +522,13 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
       return;
     }
     this.isSubmitting = true;
-    this.enrollmentError = null;
 
     try {
       const usage = this.selectedUsage!;
       const description = this.configForm.value.description?.trim();
-      const isRegistrarEnrollment = usage === 'access' && this.selectedAccessSource === 'registrar';
 
       if (this.importsExternalKey) {
         await this.importExternalKey(usage, description);
-        return;
-      }
-
-      if (isRegistrarEnrollment) {
-        await this.enrollWithRegistrar(description);
         return;
       }
 
@@ -779,93 +613,6 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
       intervalDays: this.rotationEnabled ? this.configForm.value.rotationIntervalDays : undefined,
       certValidityDays: this.configForm.value.certValidityDays,
     };
-  }
-
-  /**
-   * Creates an access key enrolled at the registrar in one request. When the
-   * enrollment fails, EUDIPLO deletes the new key itself, so the tenant is not
-   * left with a self-signed access key. A refusal is shown next to Create &
-   * Enroll, so the user can check the registrar configuration and try again.
-   * A server error carries the backend's reason, which names a key EUDIPLO
-   * could not delete. Without an answer the outcome is unknown, so the message
-   * says how to tell an enrolled key from a self-signed one. A user who left
-   * the wizard meanwhile gets the outcome in a snackbar and stays where they are.
-   */
-  private async enrollWithRegistrar(description?: string): Promise<void> {
-    let keyId: string;
-    const keyDescription = description || this.getDefaultDescription();
-    try {
-      ({ certId: keyId } = await this.registrarService.createAccessKeyChain({
-        description: keyDescription,
-        kmsProvider: this.configForm.value.kmsProvider || this.defaultKmsProvider || 'db',
-      }));
-    } catch (error) {
-      console.error('Error enrolling certificate:', error);
-      this.showEnrollmentError(this.enrollmentErrorFor(error));
-      return;
-    }
-    if (this.openedFromForm) {
-      this.returnToForm(keyId, `Key chain "${keyDescription}" created and enrolled`);
-      return;
-    }
-    this.snackBar
-      .open('Access certificate enrolled via registrar successfully!', 'View Key', {
-        duration: 5000,
-      })
-      .onAction()
-      .subscribe(() => this.router.navigate(['/keys', keyId]));
-    if (!this.destroyed) this.router.navigate(['/keys', keyId]);
-  }
-
-  /** What to tell the user about a failed {@link enrollWithRegistrar}. */
-  private enrollmentErrorFor(error: unknown): EnrollmentError {
-    // Names an unreachable backend separately from a registrar failure.
-    const reason = asSentence(
-      getHttpErrorMessage(error, 'Failed to enroll certificate from registrar')
-    );
-    const failure = accessKeyEnrollmentFailure(error);
-    switch (failure.kind) {
-      case 'role':
-        return {
-          message:
-            'Enrolling through the registrar needs the registrar:manage role. No key was kept.',
-          offerRegistrar: false,
-        };
-      case 'registrar':
-        return {
-          message: `${reason} No key was kept. Check the registrar configuration and try again.`,
-          offerRegistrar: true,
-        };
-      case 'refused':
-      case 'failed':
-        return { message: `${reason} No key was kept.`, offerRegistrar: false };
-      case 'keyLeft':
-        return {
-          message:
-            `${reason} The new key has only its self-signed certificate: open it and ` +
-            'select Enroll with Registrar on its Active Certificate, or delete it.',
-          offerRegistrar: false,
-          keptKeyId: failure.keyId,
-        };
-      case 'unknown':
-        return {
-          message:
-            `${reason} EUDIPLO may still have created the key. If Keys lists a new access key, open it: ` +
-            'a different Issuer than Subject in its Active Certificate means it is enrolled; ' +
-            'the same Issuer as Subject means it is self-signed: select Enroll with Registrar ' +
-            'on that certificate, or delete the key.',
-          offerRegistrar: false,
-          offerKeys: true,
-        };
-    }
-  }
-
-  private showEnrollmentError(enrollmentError: EnrollmentError): void {
-    if (this.destroyed) {
-      openErrorSnackBar(this.snackBar, enrollmentError.message);
-    } else {
-      this.enrollmentError = enrollmentError;
-    }
   }
 
   /**
@@ -1020,21 +767,14 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
     return summary;
   }
 
-  /** The summary's algorithm: the chosen one, or the provider default for a registrar enrollment. */
+  /** The summary's algorithm, unless an imported key brings its own. */
   private algorithmSummary(): string | undefined {
-    if (this.showAlgorithm) {
-      const alg = this.configForm.value.alg as SigningAlgorithm;
-      return SIGNING_ALGORITHM_LABELS[alg] ?? alg;
-    }
-    if (this.selectedUsage === 'access' && this.selectedAccessSource === 'registrar') {
-      const alg = this.defaultAlgorithmOf(this.configForm.value.kmsProvider);
-      return `${SIGNING_ALGORITHM_LABELS[alg]} (provider default)`;
-    }
-    return undefined;
+    if (!this.showAlgorithm) return undefined;
+    const alg = this.configForm.value.alg as SigningAlgorithm;
+    return SIGNING_ALGORITHM_LABELS[alg] ?? alg;
   }
 
   private getCertificateSourceLabel(): string {
-    if (this.selectedAccessSource === 'registrar') return 'Registrar Enrollment';
     if (this.selectedAccessSource === 'external') return 'External Certificate';
     return 'Self-Signed';
   }

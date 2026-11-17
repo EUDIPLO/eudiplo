@@ -604,128 +604,47 @@
       ]
     },
     "registration_cert": {
-      "description": "Optional registration certificate request settings.",
+      "description": "Registration certificate from a registrar, with the purpose and privacy policy it is requested with.",
       "anyOf": [
         {
           "type": "object",
           "properties": {
-            "id": {
-              "type": "string"
-            },
-            "body": {
-              "type": "object",
-              "properties": {
-                "privacy_policy": {
-                  "type": "string"
-                },
-                "support_uri": {
-                  "type": "string"
-                },
-                "intermediary": {
-                  "type": "string"
-                },
-                "purpose": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "lang": {
-                        "type": "string"
-                      },
-                      "content": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "lang",
-                      "content"
-                    ],
-                    "additionalProperties": false
-                  }
-                },
-                "credentials": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "propertyNames": {
-                      "type": "string"
-                    },
-                    "additionalProperties": {}
-                  }
-                },
-                "provides_attestations": {
-                  "type": "array",
-                  "items": {
-                    "type": "string",
-                    "minLength": 1
-                  }
-                }
-              },
-              "additionalProperties": false
-            },
             "jwt": {
-              "type": "string"
+              "description": "Registration certificate JWT issued by a registrar. Attached to every request object as is; it must be valid and authorize every credential the DCQL query requests.",
+              "type": "string",
+              "minLength": 1
+            },
+            "purpose": {
+              "description": "Why the data is requested (GDPR purpose), one text per language. Used when a certificate is requested from a registrar.",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "lang": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Language tag of the text, such as en or pt-BR. The EUDI Hub takes two-letter codes only."
+                  },
+                  "content": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "The purpose in that language."
+                  }
+                },
+                "required": [
+                  "lang",
+                  "content"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "privacy_policy": {
+              "description": "URL of the privacy policy that applies to this request. Used when a certificate is requested from a registrar.",
+              "type": "string",
+              "minLength": 1
             }
           },
           "additionalProperties": false
-        },
-        {
-          "type": "null"
-        }
-      ]
-    },
-    "registrationCertImportJwt": {
-      "description": "Optional imported registration certificate JWT.",
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "registrationCertImportId": {
-      "description": "Optional registrar-side registration certificate id.",
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "registrationCertBodyPrivacyPolicy": {
-      "description": "Optional registration certificate privacy policy URI.",
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "registrationCertBodySupportUri": {
-      "description": "Optional registration certificate support URI.",
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "registrationCertBodyIntermediary": {
-      "description": "Optional registration certificate intermediary.",
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "registrationCertBodyPurpose": {
-      "description": "Optional registration certificate purpose entries.",
-      "anyOf": [
-        {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "lang": {
-                "type": "string"
-              },
-              "content": {
-                "type": "string"
-              }
-            },
-            "additionalProperties": false
-          }
         },
         {
           "type": "null"

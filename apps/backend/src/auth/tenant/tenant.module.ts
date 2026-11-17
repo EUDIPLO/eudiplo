@@ -5,7 +5,6 @@ import type { Repository } from "typeorm";
 import { AuditLogModule } from "../../audit-log/audit-log.module.js";
 import { CryptoModule } from "../../crypto/crypto.module.js";
 import { provideKeyChainReferenceSource } from "../../crypto/key/key-chain-reference-source.provider.js";
-import { RegistrarModule } from "../../registrar/registrar.module.js";
 import { ClientModule } from "../client/client.module.js";
 import { TypeOrmTenantRepository } from "./adapters/typeorm-tenant.repository.js";
 import { TypeOrmTenantKeyChainReferences } from "./adapters/typeorm-tenant-key-chain-references.js";
@@ -22,7 +21,6 @@ import { TenantService } from "./tenant.service.js";
         AuditLogModule,
         ClientModule,
         CryptoModule,
-        RegistrarModule,
     ],
     providers: [
         TenantService,

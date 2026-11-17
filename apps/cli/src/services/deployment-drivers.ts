@@ -1,21 +1,14 @@
+import { spawn } from "node:child_process";
 import { access, mkdir, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { delimiter, join, resolve } from "node:path";
-import { spawn } from "node:child_process";
-import {
-    copyBundledDemoConfig,
-    createComposeFile,
-    createComposeEnv,
-    createGlobalKmsConfig,
-    createNoClientComposeOverride,
-    configDirectoryName,
-    demoComposeFileName,
-    demoConfigDirectory,
-    demoEnvFileName,
-    defaultComposeFileName,
-    defaultComposeOverrideFileName,
-    defaultEnvFileName,
-    hasFiles,
-} from "./compose-project.js";
+import type {
+    CommandContext,
+    DeploymentDriver,
+    DeploymentTarget,
+    DoctorCheck,
+    DriverCommandOptions,
+    InstanceConfig,
+} from "../types.js";
 import {
     assertKnownService,
     assertServiceName,
@@ -28,30 +21,37 @@ import {
     parseServiceList,
 } from "./compose-args.js";
 import {
+    configDirectoryName,
+    copyBundledDemoConfig,
+    createComposeEnv,
+    createComposeFile,
+    createGlobalKmsConfig,
+    createNoClientComposeOverride,
+    defaultComposeFileName,
+    defaultComposeOverrideFileName,
+    defaultEnvFileName,
+    demoComposeFileName,
+    demoConfigDirectory,
+    demoEnvFileName,
+    hasFiles,
+} from "./compose-project.js";
+import {
     parseContainerStates,
     summarizeContainerStates,
 } from "./container-state.js";
 import type { KubernetesScope } from "./kubectl.js";
 import {
     buildCanIArgs,
-    buildLogsArgs,
-    buildRestartArgs,
-    buildRolloutStatusArgs,
-    resolveWorkload,
     buildGetEndpointSlicesArgs,
     buildGetPodsArgs,
     buildGetWorkloadArgs,
+    buildLogsArgs,
+    buildRestartArgs,
+    buildRolloutStatusArgs,
     resolveScope,
+    resolveWorkload,
     resolveWorkloads,
 } from "./kubectl.js";
-import type {
-    CommandContext,
-    DeploymentDriver,
-    DeploymentTarget,
-    DoctorCheck,
-    DriverCommandOptions,
-    InstanceConfig,
-} from "../types.js";
 
 type ContainerRuntimeName = "docker" | "podman";
 

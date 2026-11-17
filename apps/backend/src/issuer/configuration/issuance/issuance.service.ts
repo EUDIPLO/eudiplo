@@ -5,8 +5,6 @@ import {
     Logger,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { EventEmitter2 } from "@nestjs/event-emitter";
-import { v4 } from "uuid";
 import type { AuditLogRequestMeta } from "../../../audit-log/audit-log.service.js";
 import { AuditLogService } from "../../../audit-log/audit-log.service.js";
 import {
@@ -20,8 +18,6 @@ import {
     ConfigImportOrchestratorService,
     ImportPhase,
 } from "../../../platform/config-import/config-import-orchestrator.service.js";
-import { issuerRegistrationCertificateBody } from "../../../registrar/issuer-registration-certificate-request.js";
-import { RegistrarService } from "../../../registrar/registrar.service.js";
 import { loadConfigDto } from "../../../shared/utils/config-file-loader.util.js";
 import { FilesService } from "../../../storage/files.service.js";
 import { unregisteredTrustAnchorsMessage } from "../../../trust/federation-trust-anchor/domain/federation-trust-anchor-errors.js";
@@ -31,18 +27,9 @@ import type { TrustListRef } from "../../../verifier/presentations/entities/pres
 import { OutboundUrlPolicyService } from "../../../webhook/outbound-url-policy.service.js";
 import {
     deriveRegistrationCertificateMaterial,
-    isJwtActive,
-    NO_CREDENTIAL_TYPES_MESSAGE,
     type RegistrationCertificateMaterial,
-    registrationCertificateFingerprint,
-    unlistedCredentialTypes,
-    unlistedCredentialTypesMessage,
 } from "../../issuance/oid4vci/domain/issuer-registration-certificate.js";
 import { CredentialConfigService } from "../credentials/credential-config/credential-config.service.js";
-import {
-    ISSUER_REGISTRATION_CERTIFICATE_INPUTS_CHANGED,
-    type IssuerRegistrationCertificateInputsChangedEvent,
-} from "../issuer-registration-certificate-inputs-changed.js";
 import type { IssuanceConfiguration as IssuanceConfig } from "./domain/issuance-configuration.js";
 import { federationEntityIdProblem } from "./domain/own-federation-entity.js";
 import {
@@ -51,7 +38,6 @@ import {
 } from "./domain/removed-authorization-servers.js";
 import { DisplayInfo } from "./dto/display.dto.js";
 import { IssuanceDto } from "./dto/issuance.dto.js";
-import { IssuerRegistrationCertificateLock } from "./issuer-registration-certificate-lock.js";
 import {
     ISSUANCE_CONFIG_REPOSITORY,
     type IssuanceConfigRepository,
@@ -78,7 +64,6 @@ export class IssuanceService {
         private readonly issuanceConfigRepo: IssuanceConfigRepository,
         private readonly filesService: FilesService,
         private readonly credentialConfigService: CredentialConfigService,
-        private readonly registrarService: RegistrarService,
         private readonly configImportService: ConfigImportService,
         private readonly configImportOrchestrator: ConfigImportOrchestratorService,
         private readonly tenantActionLogService: AuditLogService,
@@ -86,8 +71,6 @@ export class IssuanceService {
         private readonly outboundUrlPolicy: OutboundUrlPolicyService,
         private readonly configService: ConfigService,
         private readonly keyChainService: KeyChainService,
-        private readonly events: EventEmitter2,
-        private readonly certificateLock: IssuerRegistrationCertificateLock,
     ) {
         this.configImportOrchestrator.register(
             "issuance",
@@ -178,132 +161,9 @@ export class IssuanceService {
     }
 
     /**
-     * Updates only the server-managed registration certificate cache.
-     */
-    async updateRegistrationCertificateCache(
-        tenantId: string,
-        registrationCertificateCache: IssuanceConfig["registrationCertificateCache"],
-    ): Promise<void> {
-        await this.issuanceConfigRepo.updateRegistrationCertificateCache(
-            tenantId,
-            registrationCertificateCache,
-        );
-    }
-
-    /**
-     * Force reissue of issuer registration certificate in generate mode.
-     * Replaces cache and revokes the previously active cached certificate.
-     * Runs under the tenant's certificate lock, after any generation in
-     * progress, so it replaces and revokes the certificate cached by then.
-     */
-    reissueRegistrationCertificate(tenantId: string): Promise<IssuanceConfig> {
-        return this.certificateLock.run(tenantId, () =>
-            this.reissueRegistrationCertificateLocked(tenantId),
-        );
-    }
-
-    private async reissueRegistrationCertificateLocked(
-        tenantId: string,
-    ): Promise<IssuanceConfig> {
-        const issuanceConfig = await this.getIssuanceConfiguration(tenantId);
-        const registrationCertificateConfig =
-            issuanceConfig.registrationCertificate;
-
-        if (!registrationCertificateConfig?.enabled) {
-            throw new BadRequestException(
-                "Issuance config has no enabled registration certificate",
-            );
-        }
-
-        const mode = registrationCertificateConfig.mode ?? "generate";
-        if (mode !== "generate") {
-            throw new BadRequestException(
-                "Reissue is only supported in generate mode",
-            );
-        }
-
-        if (!(await this.registrarService.isEnabledForTenant(tenantId))) {
-            throw new BadRequestException(
-                "Registrar is not enabled for this tenant",
-            );
-        }
-
-        const previousJwt = issuanceConfig.registrationCertificateCache?.jwt;
-        const material = await this.registrationCertificateMaterial(tenantId);
-
-        if (material.providesAttestations.length === 0) {
-            throw new BadRequestException(NO_CREDENTIAL_TYPES_MESSAGE);
-        }
-
-        const creationBody = issuerRegistrationCertificateBody(
-            registrationCertificateConfig,
-            material.providesAttestations,
-        );
-
-        const resolved =
-            await this.registrarService.resolveRegistrationCertificate(
-                { body: creationBody },
-                {},
-                `issuance-reissue-${v4()}`,
-                tenantId,
-            );
-
-        const unlisted = unlistedCredentialTypes(resolved.payload, material);
-        if (unlisted.length > 0) {
-            await this.registrarService
-                .revokeRegistrationCertificateByJwt(tenantId, resolved.jwt)
-                .catch((error: unknown) =>
-                    this.logger.warn(
-                        `[${tenantId}] Failed to revoke a registration certificate that does not list the requested types: ${error instanceof Error ? error.message : "unknown error"}`,
-                    ),
-                );
-            throw new BadRequestException(
-                unlistedCredentialTypesMessage(unlisted),
-            );
-        }
-
-        if (
-            previousJwt &&
-            previousJwt !== resolved.jwt &&
-            isJwtActive(previousJwt)
-        ) {
-            try {
-                await this.registrarService.revokeRegistrationCertificateByJwt(
-                    tenantId,
-                    previousJwt,
-                );
-            } catch (error) {
-                this.logger.warn(
-                    `[${tenantId}] Failed to revoke previous issuer registration certificate during manual reissue: ${error instanceof Error ? error.message : "unknown error"}`,
-                );
-            }
-        }
-
-        const fingerprint = registrationCertificateFingerprint(
-            registrationCertificateConfig,
-            material,
-        );
-
-        await this.updateRegistrationCertificateCache(tenantId, {
-            jwt: resolved.jwt,
-            fingerprint,
-            issuedAt:
-                typeof resolved.payload.iat === "number"
-                    ? resolved.payload.iat
-                    : undefined,
-            expiresAt:
-                typeof resolved.payload.exp === "number"
-                    ? resolved.payload.exp
-                    : undefined,
-        });
-
-        return this.getIssuanceConfiguration(tenantId);
-    }
-
-    /**
      * The credential types an issuer registration certificate of the tenant
      * must list: the `vct` of each SD-JWT VC and the `docType` of each mDOC
-     * credential configuration, as a generated certificate lists them.
+     * credential configuration.
      */
     async registrationCertificateMaterial(
         tenantId: string,
@@ -485,9 +345,6 @@ export class IssuanceService {
             ...filteredValue,
             tenantId,
         });
-        this.events.emit(ISSUER_REGISTRATION_CERTIFICATE_INPUTS_CHANGED, {
-            tenantId,
-        } satisfies IssuerRegistrationCertificateInputsChangedEvent);
 
         if (actorToken) {
             const after = this.sanitizeIssuanceConfigForLog(saved);
@@ -620,13 +477,6 @@ export class IssuanceService {
               }
             : config.registrationCertificate;
 
-        const registrationCertificateCache = config.registrationCertificateCache
-            ? {
-                  ...config.registrationCertificateCache,
-                  jwt: "[REDACTED]",
-              }
-            : config.registrationCertificateCache;
-
         return {
             display: config.display,
             batchSize: config.batchSize,
@@ -638,7 +488,6 @@ export class IssuanceService {
             authorizationServers,
             federation: config.federation,
             registrationCertificate,
-            registrationCertificateCache,
             notificationEndpointEnabled: config.notificationEndpointEnabled,
             credentialResponseEncryption: config.credentialResponseEncryption,
             credentialRequestEncryption: config.credentialRequestEncryption,
