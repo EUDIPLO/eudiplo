@@ -164,6 +164,7 @@ export class StartSignIn {
         const unusable = await this.presentations.unusableReason(
             client.tenantId,
             request.presentationConfigId,
+            client.subject?.credentialId,
         );
         if (unusable) {
             throw new OidcError("invalid_scope", unusable).redirectTo(

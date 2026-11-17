@@ -9,6 +9,7 @@ import {
     generateOpaqueSecret,
     hashOpaqueSecret,
 } from "../domain/opaque-secret.js";
+import { topLevelClaims } from "../domain/presented-claims.js";
 import { oidcIssuer } from "../oidc-provider-settings.js";
 import type { IdTokenSigner } from "../ports/id-token-signer.js";
 import type { OidcSignInRepository } from "../ports/oidc-sign-in.repository.js";
@@ -110,9 +111,13 @@ export class RedeemAuthorizationCode {
 
         const iat = Math.floor(now.getTime() / 1000);
         const claims: Record<string, unknown> = {
+            // The token's own claims below always win over presented ones.
+            ...(client.claimsFrom &&
+                topLevelClaims(result.credentials, client.claimsFrom)),
             iss: oidcIssuer(this.publicUrl, client.tenantId),
-            // New for every sign-in: EUDIPLO keeps no account of the user.
-            sub: signIn.presentationSessionId,
+            // A pairwise hash of the client's subject claim; without one,
+            // new for every sign-in, since EUDIPLO keeps no account.
+            sub: signIn.subject ?? signIn.presentationSessionId,
             aud: client.id,
             iat,
             exp: iat + ID_TOKEN_LIFETIME_SECONDS,

@@ -29,10 +29,16 @@ export interface SignInPresentationResult {
  * for a presentation config and read its result.
  */
 export interface SignInPresentation {
-    /** Why the config cannot verify a sign-in, or undefined when it can. */
+    /**
+     * Why the config cannot verify a sign-in, or undefined when it can. With
+     * `subjectCredentialId`, the config must also have that credential query
+     * with `trusted_authorities`: a stable subject must not rest on a claim
+     * any issuer could have signed.
+     */
     unusableReason(
         tenantId: string,
         presentationConfigId: string,
+        subjectCredentialId?: string,
     ): Promise<string | undefined>;
     start(
         tenantId: string,

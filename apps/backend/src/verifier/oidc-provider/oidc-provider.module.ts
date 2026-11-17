@@ -1,3 +1,4 @@
+import { hkdfSync } from "node:crypto";
 import { Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { getRepositoryToken, TypeOrmModule } from "@nestjs/typeorm";
@@ -102,13 +103,15 @@ const useCaseProviders = [
         inject: [
             OIDC_SIGN_IN_REPOSITORY,
             SIGN_IN_PRESENTATION,
+            OIDC_CLIENT_REPOSITORY,
             OIDC_PROVIDER_SETTINGS,
         ],
         useFactory: (
             signIns: OidcSignInRepository,
             presentations: SignInPresentation,
+            clients: OidcClientRepository,
             settings: OidcProviderSettings,
-        ) => new FinishSignIn(signIns, presentations, settings.publicUrl),
+        ) => new FinishSignIn(signIns, presentations, clients, settings),
     },
     {
         provide: RedeemAuthorizationCode,
@@ -150,11 +153,26 @@ const useCaseProviders = [
         {
             provide: OIDC_PROVIDER_SETTINGS,
             inject: [ConfigService],
-            useFactory: (config: ConfigService): OidcProviderSettings => ({
-                publicUrl: config
-                    .getOrThrow<string>("PUBLIC_URL")
-                    .replace(/\/+$/, ""),
-            }),
+            useFactory: (config: ConfigService): OidcProviderSettings => {
+                const masterSecret = config.get<string>("MASTER_SECRET");
+                return {
+                    publicUrl: config
+                        .getOrThrow<string>("PUBLIC_URL")
+                        .replace(/\/+$/, ""),
+                    // Changing MASTER_SECRET changes every pairwise subject.
+                    subjectKey: masterSecret
+                        ? new Uint8Array(
+                              hkdfSync(
+                                  "sha256",
+                                  masterSecret,
+                                  "",
+                                  "eudiplo-oidc-pairwise-subject",
+                                  32,
+                              ),
+                          )
+                        : undefined,
+                };
+            },
         },
         {
             provide: OIDC_CLIENT_REPOSITORY,

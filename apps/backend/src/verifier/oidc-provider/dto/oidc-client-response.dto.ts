@@ -9,6 +9,14 @@ export class OidcClientScopeDto {
     presentationConfigId!: string;
 }
 
+export class OidcSubjectClaimDto {
+    @ApiProperty({ description: "Credential query (DCQL) ID" })
+    credentialId!: string;
+
+    @ApiProperty({ description: "Dot-separated path to the claim" })
+    claim!: string;
+}
+
 /** A client secret without its value, which is only shown once. */
 export class OidcClientSecretDto {
     @ApiProperty()
@@ -47,6 +55,22 @@ export class OidcClientResponseDto {
 
     @ApiProperty({ type: [OidcClientSecretDto] })
     secrets!: OidcClientSecretDto[];
+
+    @ApiPropertyOptional({
+        type: OidcSubjectClaimDto,
+        nullable: true,
+        description:
+            "Claim whose hash becomes `sub`; null for a new `sub` per sign-in",
+    })
+    subject?: OidcSubjectClaimDto | null;
+
+    @ApiPropertyOptional({
+        type: String,
+        nullable: true,
+        description:
+            "Credential query whose claims are also at the ID token's top level",
+    })
+    claimsFrom?: string | null;
 
     @ApiProperty({
         description:
@@ -97,6 +121,8 @@ export function toClientDto(
         profile: client.profile,
         scopes: client.scopes,
         secrets: client.secrets.map(toSecretDto),
+        subject: client.subject ?? null,
+        claimsFrom: client.claimsFrom ?? null,
         issuer,
         createdAt: client.createdAt?.toISOString(),
         updatedAt: client.updatedAt?.toISOString(),

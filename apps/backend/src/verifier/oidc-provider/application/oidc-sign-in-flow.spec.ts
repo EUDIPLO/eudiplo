@@ -8,6 +8,7 @@ import {
     type OidcSignIn,
     OidcSignInStatus,
 } from "../domain/oidc-sign-in.js";
+import { pairwiseSubject } from "../domain/presented-claims.js";
 import type { IdTokenSigner } from "../ports/id-token-signer.js";
 import type { OidcClientRepository } from "../ports/oidc-client.repository.js";
 import type {
@@ -30,6 +31,7 @@ const ISSUER = `${PUBLIC_URL}/verifiers/tenant/oidc`;
 const REDIRECT = "https://rp.example.com/cb";
 const VERIFIER = "a-code-verifier-that-is-long-enough-1234567890";
 const CHALLENGE = createHash("sha256").update(VERIFIER).digest("base64url");
+const SUBJECT_KEY = new Uint8Array(32).fill(7);
 
 class InMemoryClients
     implements Pick<OidcClientRepository, "findForTenant" | "recordSecretUse">
@@ -106,7 +108,12 @@ class FakePresentation implements SignInPresentation {
             status: "completed",
             crossDevice,
             responseCode: "response-code",
-            credentials: [{ id: "pid", values: [{ given_name: "Ada" }] }],
+            credentials: [
+                {
+                    id: "pid",
+                    values: [{ given_name: "Ada", iss: "https://issuer" }],
+                },
+            ],
         };
     }
 }
@@ -191,7 +198,13 @@ describe("OpenID Provider sign-in", () => {
             PUBLIC_URL,
             clock,
         );
-        finish = new FinishSignIn(signIns, presentation, PUBLIC_URL, clock);
+        finish = new FinishSignIn(
+            signIns,
+            presentation,
+            clients,
+            { publicUrl: PUBLIC_URL, subjectKey: SUBJECT_KEY },
+            clock,
+        );
         redeem = new RedeemAuthorizationCode(
             signIns,
             presentation,
@@ -501,6 +514,97 @@ describe("OpenID Provider sign-in", () => {
             (result) => result.status === "rejected",
         ) as PromiseRejectedResult;
         expect(rejected.reason).toBeInstanceOf(SignInNotUsable);
+    });
+
+    describe("client claim options", () => {
+        async function tokenClaims() {
+            const { signInId, browserSecret } = await pushedSignIn();
+            presentation.completed(true);
+            const step = await finish.fromBrowser(
+                "tenant",
+                signInId,
+                browserSecret,
+            );
+            if (
+                step.type !== "redirect" ||
+                new URL(step.url).searchParams.has("error")
+            ) {
+                return { step };
+            }
+            const tokens = await redeem.execute(client, {
+                grant_type: "authorization_code",
+                code: codeOf(step),
+                redirect_uri: REDIRECT,
+                code_verifier: VERIFIER,
+            });
+            return { step, claims: claimsOf(tokens.id_token) };
+        }
+
+        test("a subject claim gives the same sub on every sign-in", async () => {
+            client.subject = { credentialId: "pid", claim: "given_name" };
+            const first = await tokenClaims();
+            const second = await tokenClaims();
+            expect(first.claims?.sub).toBe(
+                pairwiseSubject(SUBJECT_KEY, "tenant", "client-1", "Ada"),
+            );
+            expect(second.claims?.sub).toBe(first.claims?.sub);
+        });
+
+        test("a presentation without the subject claim is refused", async () => {
+            client.subject = { credentialId: "pid", claim: "missing" };
+            const { step } = await tokenClaims();
+            const url = new URL((step as { url: string }).url);
+            expect(url.searchParams.get("error")).toBe("access_denied");
+            expect(url.searchParams.get("error_description")).toContain(
+                "missing",
+            );
+        });
+
+        test("without the instance key a subject claim fails the sign-in", async () => {
+            client.subject = { credentialId: "pid", claim: "given_name" };
+            finish = new FinishSignIn(
+                signIns,
+                presentation,
+                clients,
+                { publicUrl: PUBLIC_URL },
+                () => now,
+            );
+            const { step } = await tokenClaims();
+            expect(
+                new URL((step as { url: string }).url).searchParams.get(
+                    "error",
+                ),
+            ).toBe("access_denied");
+        });
+
+        test("a client deleted during the sign-in ends it with access_denied", async () => {
+            const { signInId, browserSecret } = await pushedSignIn();
+            clients.clients.delete("client-1");
+            presentation.completed(true);
+            const step = await finish.fromBrowser(
+                "tenant",
+                signInId,
+                browserSecret,
+            );
+            expect(
+                new URL((step as { url: string }).url).searchParams.get(
+                    "error",
+                ),
+            ).toBe("access_denied");
+            expect(signIns.rows.get(signInId)?.status).toBe(
+                OidcSignInStatus.Failed,
+            );
+        });
+
+        test("claimsFrom copies the claims to the top level", async () => {
+            client.claimsFrom = "pid";
+            const { claims } = await tokenClaims();
+            expect(claims).toMatchObject({
+                given_name: "Ada",
+                iss: ISSUER,
+                aud: "client-1",
+            });
+        });
     });
 
     describe("pushed authorization request", () => {

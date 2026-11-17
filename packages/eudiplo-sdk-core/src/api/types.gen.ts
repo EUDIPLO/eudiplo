@@ -6628,6 +6628,17 @@ export type OidcClientSecretDto = {
     lastUsedAt?: string | null;
 };
 
+export type OidcSubjectClaimDto = {
+    /**
+     * Credential query (DCQL) ID
+     */
+    credentialId: string;
+    /**
+     * Dot-separated path to the claim
+     */
+    claim: string;
+};
+
 export type OidcClientResponseDto = {
     /**
      * The client_id
@@ -6638,6 +6649,14 @@ export type OidcClientResponseDto = {
     profile: 'secure' | 'basic';
     scopes: Array<OidcClientScopeDto>;
     secrets: Array<OidcClientSecretDto>;
+    /**
+     * Claim whose hash becomes `sub`; null for a new `sub` per sign-in
+     */
+    subject?: OidcSubjectClaimDto | null;
+    /**
+     * Credential query whose claims are also at the ID token's top level
+     */
+    claimsFrom?: string | null;
     /**
      * Issuer of the tenant's OpenID Provider; discovery is at <issuer>/.well-known/openid-configuration
      */
@@ -6675,6 +6694,23 @@ export type CreateOidcClientDto = {
          */
         presentationConfigId: string;
     }>;
+    /**
+     * Claim that identifies a user across sign-ins. `sub` becomes a hash of it, the same for each sign-in of that user with this client; a sign-in whose presentation lacks it fails. Without it, `sub` is new for every sign-in.
+     */
+    subject?: {
+        /**
+         * ID of the credential query (DCQL) that holds the claim.
+         */
+        credentialId: string;
+        /**
+         * Dot-separated path to the claim, e.g. `personal_administrative_number`. A string or number.
+         */
+        claim: string;
+    } | null;
+    /**
+     * ID of a credential query (DCQL) whose claims are also put at the top level of the ID token, next to `credentials`, so a relying party can map `given_name` directly. The token's own claims (`iss`, `sub`, `aud` and so on) are never replaced.
+     */
+    claimsFrom?: string | null;
 };
 
 export type CreatedOidcClientResponseDto = {
@@ -6687,6 +6723,14 @@ export type CreatedOidcClientResponseDto = {
     profile: 'secure' | 'basic';
     scopes: Array<OidcClientScopeDto>;
     secrets: Array<OidcClientSecretDto>;
+    /**
+     * Claim whose hash becomes `sub`; null for a new `sub` per sign-in
+     */
+    subject?: OidcSubjectClaimDto | null;
+    /**
+     * Credential query whose claims are also at the ID token's top level
+     */
+    claimsFrom?: string | null;
     /**
      * Issuer of the tenant's OpenID Provider; discovery is at <issuer>/.well-known/openid-configuration
      */
@@ -6728,6 +6772,23 @@ export type UpdateOidcClientDto = {
          */
         presentationConfigId: string;
     }>;
+    /**
+     * Claim that identifies a user across sign-ins. `sub` becomes a hash of it, the same for each sign-in of that user with this client; a sign-in whose presentation lacks it fails. Without it, `sub` is new for every sign-in.
+     */
+    subject?: {
+        /**
+         * ID of the credential query (DCQL) that holds the claim.
+         */
+        credentialId: string;
+        /**
+         * Dot-separated path to the claim, e.g. `personal_administrative_number`. A string or number.
+         */
+        claim: string;
+    } | null;
+    /**
+     * ID of a credential query (DCQL) whose claims are also put at the top level of the ID token, next to `credentials`, so a relying party can map `given_name` directly. The token's own claims (`iss`, `sub`, `aud` and so on) are never replaced.
+     */
+    claimsFrom?: string | null;
 };
 
 export type CreatedOidcClientSecretResponseDto = {

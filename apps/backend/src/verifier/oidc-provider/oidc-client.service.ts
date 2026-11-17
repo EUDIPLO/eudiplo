@@ -22,6 +22,11 @@ import {
     redirectUriProblem,
     scopesProblem,
 } from "./domain/oidc-client.js";
+import type { SubjectClaim } from "./domain/presented-claims.js";
+import {
+    OIDC_PROVIDER_SETTINGS,
+    type OidcProviderSettings,
+} from "./oidc-provider-settings.js";
 import {
     OIDC_CLIENT_REPOSITORY,
     type OidcClientRepository,
@@ -80,6 +85,8 @@ export class OidcClientService {
             "unusableReason"
         >,
         private readonly auditLog: AuditLogService,
+        @Inject(OIDC_PROVIDER_SETTINGS)
+        private readonly settings: Pick<OidcProviderSettings, "subjectKey">,
     ) {}
 
     list(tenantId: string): Promise<OidcClient[]> {
@@ -98,7 +105,7 @@ export class OidcClientService {
         actor?: OidcClientActor,
     ): Promise<{ client: OidcClient; clientSecret: string }> {
         this.assertRedirectUris(input.redirectUris);
-        await this.assertScopes(tenantId, input.scopes);
+        await this.assertScopes(tenantId, input.scopes, input.subject);
         const clientSecret = generateClientSecret();
         const client = await this.clients.save({
             id: v4(),
@@ -108,6 +115,8 @@ export class OidcClientService {
             profile: input.profile,
             scopes: input.scopes,
             secrets: [newSecret(clientSecret)],
+            subject: input.subject ?? null,
+            claimsFrom: input.claimsFrom ?? null,
         });
         await this.record(tenantId, "oidc_client_created", actor, {
             after: forLog(client),
@@ -123,13 +132,26 @@ export class OidcClientService {
     ): Promise<OidcClient> {
         const existing = await this.get(tenantId, id);
         if (input.redirectUris) this.assertRedirectUris(input.redirectUris);
-        if (input.scopes) await this.assertScopes(tenantId, input.scopes);
+        const subject =
+            input.subject === undefined ? existing.subject : input.subject;
+        if (input.scopes || input.subject) {
+            await this.assertScopes(
+                tenantId,
+                input.scopes ?? existing.scopes,
+                subject,
+            );
+        }
         const saved = await this.clients.save({
             ...existing,
             name: input.name ?? existing.name,
             redirectUris: input.redirectUris ?? existing.redirectUris,
             profile: input.profile ?? existing.profile,
             scopes: input.scopes ?? existing.scopes,
+            subject,
+            claimsFrom:
+                input.claimsFrom === undefined
+                    ? existing.claimsFrom
+                    : input.claimsFrom,
         });
         await this.record(tenantId, "oidc_client_updated", actor, {
             before: forLog(existing),
@@ -236,13 +258,20 @@ export class OidcClientService {
     private async assertScopes(
         tenantId: string,
         scopes: OidcClientScope[],
+        subject: SubjectClaim | null | undefined,
     ): Promise<void> {
         const problem = scopesProblem(scopes);
         if (problem) throw new InvalidOidcClient(problem);
+        if (subject && !this.settings.subjectKey) {
+            throw new InvalidOidcClient(
+                "subject needs MASTER_SECRET, from which the key of the pairwise subjects is derived",
+            );
+        }
         for (const { presentationConfigId } of scopes) {
             const unusable = await this.presentations.unusableReason(
                 tenantId,
                 presentationConfigId,
+                subject?.credentialId,
             );
             if (unusable) throw new InvalidOidcClient(unusable);
         }
@@ -288,6 +317,8 @@ function forLog(client: OidcClient): Record<string, unknown> {
         redirectUris: client.redirectUris,
         profile: client.profile,
         scopes: client.scopes,
+        subject: client.subject ?? null,
+        claimsFrom: client.claimsFrom ?? null,
         secrets: client.secrets.map((secret) => ({
             id: secret.id,
             expiresAt: secret.expiresAt?.toISOString() ?? null,

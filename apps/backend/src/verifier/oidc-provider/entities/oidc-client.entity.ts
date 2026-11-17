@@ -7,6 +7,7 @@ import {
     UpdateDateColumn,
 } from "typeorm";
 import { TenantEntity } from "../../../auth/tenant/entities/tenant.entity.js";
+import type { SubjectClaim } from "../domain/presented-claims.js";
 
 /** A client secret as stored: only its hash, dates as ISO strings. */
 export interface StoredOidcClientSecret {
@@ -50,6 +51,14 @@ export class OidcClientEntity {
      */
     @Column("json", { nullable: true })
     secretLastUsed?: Record<string, string> | null;
+
+    /** Claim whose pairwise hash becomes `sub`; null for a new one per sign-in. */
+    @Column("json", { nullable: true })
+    subject?: SubjectClaim | null;
+
+    /** Credential query whose claims are copied to the token's top level. */
+    @Column("varchar", { nullable: true })
+    claimsFrom?: string | null;
 
     @CreateDateColumn()
     createdAt!: Date;

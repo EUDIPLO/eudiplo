@@ -408,6 +408,101 @@ describe("OpenID Provider", () => {
         expect(res.body.error).toBe("invalid_grant");
     });
 
+    test("a subject claim keeps sub stable and claimsFrom flattens the claims", async () => {
+        const auth = `Bearer ${authToken}`;
+        const patched = await request(app.getHttpServer())
+            .patch(`/verifier/oidc-clients/${clientId}`)
+            .set("Authorization", auth)
+            .send({
+                subject: { credentialId: "pid", claim: "birthdate" },
+                claimsFrom: "pid",
+            })
+            .expect(200);
+        expect(patched.body).toMatchObject({
+            subject: { credentialId: "pid", claim: "birthdate" },
+            claimsFrom: "pid",
+        });
+        // A change of another field keeps the options.
+        const renamed = await request(app.getHttpServer())
+            .patch(`/verifier/oidc-clients/${clientId}`)
+            .set("Authorization", auth)
+            .send({ name: "Customer Portal" })
+            .expect(200);
+        expect(renamed.body.subject).toEqual(patched.body.subject);
+
+        const signIn = async () => {
+            const { verifier, cookie, sameDevice } = await startSignIn();
+            const { redirect_uri } = await present(sameDevice);
+            const callback = await request(app.getHttpServer())
+                .get(local(redirect_uri!))
+                .set("Cookie", cookie)
+                .expect(303);
+            const tokens = await redeem(
+                codeFrom(callback.headers.location),
+                verifier,
+            ).expect(200);
+            return verifyIdToken(tokens.body.id_token);
+        };
+        const first = await signIn();
+        const second = await signIn();
+        expect(first.sub).toBe(second.sub);
+        expect(first.sub).not.toBe("1990-01-01");
+        expect(first).toMatchObject({
+            birthdate: "1990-01-01",
+            address: { country: "DE" },
+        });
+        expect(first.vct).toBeUndefined();
+
+        await request(app.getHttpServer())
+            .patch(`/verifier/oidc-clients/${clientId}`)
+            .set("Authorization", auth)
+            .send({ subject: null, claimsFrom: null })
+            .expect(200)
+            .expect(({ body }) => {
+                expect(body.subject).toBeNull();
+                expect(body.claimsFrom).toBeNull();
+            });
+    });
+
+    test("a subject needs a credential query of every scope's config", async () => {
+        const auth = `Bearer ${authToken}`;
+        // EUDIPLO refuses a config without trusted_authorities unless
+        // SKIP_TRUST_AUTHORITY is set; a query the config lacks is refused too.
+        const refused = await request(app.getHttpServer())
+            .post("/verifier/oidc-clients")
+            .set("Authorization", auth)
+            .send({
+                name: "Unknown subject query",
+                redirectUris: [REDIRECT],
+                scopes: [{ scope: "pid", presentationConfigId: "pid-no-hook" }],
+                subject: { credentialId: "membership", claim: "member_id" },
+            })
+            .expect(400);
+        expect(JSON.stringify(refused.body)).toContain(
+            "no credential query 'membership'",
+        );
+
+        const created = await request(app.getHttpServer())
+            .post("/verifier/oidc-clients")
+            .set("Authorization", auth)
+            .send({
+                name: "Trusted subject",
+                redirectUris: [REDIRECT],
+                scopes: [{ scope: "pid", presentationConfigId: "pid-no-hook" }],
+                subject: { credentialId: "pid", claim: "birthdate" },
+                claimsFrom: "pid",
+            })
+            .expect(201);
+        expect(created.body).toMatchObject({
+            subject: { credentialId: "pid", claim: "birthdate" },
+            claimsFrom: "pid",
+        });
+        await request(app.getHttpServer())
+            .delete(`/verifier/oidc-clients/${created.body.id}`)
+            .set("Authorization", auth)
+            .expect(204);
+    });
+
     test("rotates secrets: at most two, never none", async () => {
         const auth = `Bearer ${authToken}`;
         const client = await request(app.getHttpServer())

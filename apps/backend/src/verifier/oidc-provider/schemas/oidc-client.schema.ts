@@ -39,12 +39,44 @@ const scopes = z
         "Scopes the client may request, each with one presentation config.",
     );
 
+const subject = z
+    .object({
+        credentialId: z
+            .string()
+            .min(1)
+            .describe(
+                "ID of the credential query (DCQL) that holds the claim.",
+            ),
+        claim: z
+            .string()
+            .min(1)
+            .max(200)
+            .describe(
+                "Dot-separated path to the claim, e.g. `personal_administrative_number`. A string or number.",
+            ),
+    })
+    .strict()
+    .nullable()
+    .describe(
+        "Claim that identifies a user across sign-ins. `sub` becomes a hash of it, the same for each sign-in of that user with this client; a sign-in whose presentation lacks it fails. Without it, `sub` is new for every sign-in.",
+    );
+const claimsFrom = z
+    .string()
+    .min(1)
+    .max(200)
+    .nullable()
+    .describe(
+        "ID of a credential query (DCQL) whose claims are also put at the top level of the ID token, next to `credentials`, so a relying party can map `given_name` directly. The token's own claims (`iss`, `sub`, `aud` and so on) are never replaced.",
+    );
+
 export const CreateOidcClientSchema = z
     .object({
         name,
         redirectUris,
         profile: profile.default("secure"),
         scopes: scopes.default([]),
+        subject: subject.optional(),
+        claimsFrom: claimsFrom.optional(),
     })
     .strict()
     .describe("Payload for creating an OpenID Connect client.");
@@ -55,6 +87,8 @@ export const UpdateOidcClientSchema = z
         redirectUris: redirectUris.optional(),
         profile: profile.optional(),
         scopes: scopes.optional(),
+        subject: subject.optional(),
+        claimsFrom: claimsFrom.optional(),
     })
     .strict()
     .describe(

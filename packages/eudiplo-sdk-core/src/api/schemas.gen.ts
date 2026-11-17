@@ -13973,6 +13973,24 @@ export const OidcClientSecretDtoSchema = {
     ]
 } as const;
 
+export const OidcSubjectClaimDtoSchema = {
+    type: 'object',
+    properties: {
+        credentialId: {
+            type: 'string',
+            description: 'Credential query (DCQL) ID'
+        },
+        claim: {
+            type: 'string',
+            description: 'Dot-separated path to the claim'
+        }
+    },
+    required: [
+        'credentialId',
+        'claim'
+    ]
+} as const;
+
 export const OidcClientResponseDtoSchema = {
     type: 'object',
     properties: {
@@ -14007,6 +14025,24 @@ export const OidcClientResponseDtoSchema = {
             items: {
                 $ref: '#/components/schemas/OidcClientSecretDto'
             }
+        },
+        subject: {
+            description: 'Claim whose hash becomes `sub`; null for a new `sub` per sign-in',
+            anyOf: [
+                {
+                    $ref: '#/components/schemas/OidcSubjectClaimDto'
+                },
+                {
+                    type: 'null'
+                }
+            ]
+        },
+        claimsFrom: {
+            type: [
+                'string',
+                'null'
+            ],
+            description: 'Credential query whose claims are also at the ID token\'s top level'
         },
         issuer: {
             type: 'string',
@@ -14086,6 +14122,48 @@ export const CreateOidcClientDtoSchema = {
                 description: 'A scope of the client and the presentation config behind it.'
             },
             description: 'Scopes the client may request, each with one presentation config.'
+        },
+        subject: {
+            anyOf: [
+                {
+                    type: 'object',
+                    properties: {
+                        credentialId: {
+                            type: 'string',
+                            minLength: 1,
+                            description: 'ID of the credential query (DCQL) that holds the claim.'
+                        },
+                        claim: {
+                            type: 'string',
+                            minLength: 1,
+                            maxLength: 200,
+                            description: 'Dot-separated path to the claim, e.g. `personal_administrative_number`. A string or number.'
+                        }
+                    },
+                    required: [
+                        'credentialId',
+                        'claim'
+                    ],
+                    additionalProperties: false
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            description: 'Claim that identifies a user across sign-ins. `sub` becomes a hash of it, the same for each sign-in of that user with this client; a sign-in whose presentation lacks it fails. Without it, `sub` is new for every sign-in.'
+        },
+        claimsFrom: {
+            anyOf: [
+                {
+                    type: 'string',
+                    minLength: 1,
+                    maxLength: 200
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            description: 'ID of a credential query (DCQL) whose claims are also put at the top level of the ID token, next to `credentials`, so a relying party can map `given_name` directly. The token\'s own claims (`iss`, `sub`, `aud` and so on) are never replaced.'
         }
     },
     required: [
@@ -14130,6 +14208,24 @@ export const CreatedOidcClientResponseDtoSchema = {
             items: {
                 $ref: '#/components/schemas/OidcClientSecretDto'
             }
+        },
+        subject: {
+            description: 'Claim whose hash becomes `sub`; null for a new `sub` per sign-in',
+            anyOf: [
+                {
+                    $ref: '#/components/schemas/OidcSubjectClaimDto'
+                },
+                {
+                    type: 'null'
+                }
+            ]
+        },
+        claimsFrom: {
+            type: [
+                'string',
+                'null'
+            ],
+            description: 'Credential query whose claims are also at the ID token\'s top level'
         },
         issuer: {
             type: 'string',
@@ -14212,6 +14308,48 @@ export const UpdateOidcClientDtoSchema = {
                 description: 'A scope of the client and the presentation config behind it.'
             },
             description: 'Scopes the client may request, each with one presentation config.'
+        },
+        subject: {
+            anyOf: [
+                {
+                    type: 'object',
+                    properties: {
+                        credentialId: {
+                            type: 'string',
+                            minLength: 1,
+                            description: 'ID of the credential query (DCQL) that holds the claim.'
+                        },
+                        claim: {
+                            type: 'string',
+                            minLength: 1,
+                            maxLength: 200,
+                            description: 'Dot-separated path to the claim, e.g. `personal_administrative_number`. A string or number.'
+                        }
+                    },
+                    required: [
+                        'credentialId',
+                        'claim'
+                    ],
+                    additionalProperties: false
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            description: 'Claim that identifies a user across sign-ins. `sub` becomes a hash of it, the same for each sign-in of that user with this client; a sign-in whose presentation lacks it fails. Without it, `sub` is new for every sign-in.'
+        },
+        claimsFrom: {
+            anyOf: [
+                {
+                    type: 'string',
+                    minLength: 1,
+                    maxLength: 200
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            description: 'ID of a credential query (DCQL) whose claims are also put at the top level of the ID token, next to `credentials`, so a relying party can map `given_name` directly. The token\'s own claims (`iss`, `sub`, `aud` and so on) are never replaced.'
         }
     },
     description: 'Payload for changing an OpenID Connect client. Scopes are replaced as a whole.',

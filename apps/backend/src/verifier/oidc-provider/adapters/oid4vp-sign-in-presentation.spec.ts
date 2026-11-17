@@ -64,6 +64,40 @@ describe("Oid4vpSignInPresentation", () => {
         ).toContain("does not exist");
     });
 
+    test("the subject's credential query must exist and name trusted issuers", async () => {
+        const configs = [
+            {
+                id: "trusted",
+                dcql_query: {
+                    credentials: [
+                        {
+                            id: "pid",
+                            trusted_authorities: [
+                                { type: "aki", values: ["x"] },
+                            ],
+                        },
+                    ],
+                },
+            },
+            {
+                id: "open",
+                dcql_query: { credentials: [{ id: "pid" }] },
+            },
+        ];
+        expect(
+            await adapter({ configs }).unusableReason("t", "trusted", "pid"),
+        ).toBeUndefined();
+        expect(
+            await adapter({ configs }).unusableReason("t", "trusted", "other"),
+        ).toContain("no credential query 'other'");
+        expect(
+            await adapter({ configs }).unusableReason("t", "open", "pid"),
+        ).toContain("trusted_authorities");
+        expect(
+            await adapter({ configs }).unusableReason("t", "open"),
+        ).toBeUndefined();
+    });
+
     test("a database error is not reported as a missing config", async () => {
         await expect(
             adapter({ configs: new Error("database down") }).unusableReason(

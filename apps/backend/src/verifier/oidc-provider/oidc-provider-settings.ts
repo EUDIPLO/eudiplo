@@ -2,6 +2,11 @@
 export interface OidcProviderSettings {
     /** Public base URL of EUDIPLO, without trailing slash. */
     publicUrl: string;
+    /**
+     * Key of the pairwise subjects, derived from MASTER_SECRET; absent
+     * without one, and then no client can derive `sub` from a claim.
+     */
+    subjectKey?: Uint8Array;
 }
 
 export const OIDC_PROVIDER_SETTINGS = Symbol("OIDC_PROVIDER_SETTINGS");

@@ -72,9 +72,29 @@ The ID token is signed by the tenant's [authorization server key chain](../trust
 }
 ```
 
-- `sub` is the ID of the presentation session and new for every sign-in: EUDIPLO keeps no account of the user. Never use it as a key; identify the user by a claim in `credentials`.
+- `sub` is the ID of the presentation session and new for every sign-in: EUDIPLO keeps no account of the user. Never use it as a key; identify the user by a claim in `credentials`, or set `subject` on the client (below).
 - There is no userinfo endpoint, refresh token or logout. The access token is opaque and accepted nowhere.
 - The sign-in is an ordinary presentation session of the tenant: it appears in the session list, triggers the configuration's webhook and follows the tenant's retention. A webhook that answers with a `redirectUri` replaces the sign-in's callback, so a same-device sign-in can no longer finish; leave it out for configurations used here.
+
+### Stable subject and top-level claims
+
+Identity brokers such as Keycloak recognize a returning user by `sub` and map claims from the top level of the ID token. Two client fields support this:
+
+- `subject`: `{ "credentialId": "pid", "claim": "personal_administrative_number" }` makes `sub` a hash of that claim, the same for every sign-in of the user with this client and different for each client. `claim` is a dot-separated path to a string or number; if the claim is missing, empty or of another type, the sign-in fails with `access_denied`. Choose a claim that does not change for the person. The query must name `trusted_authorities` in every scope's presentation configuration, so nobody can present a self-issued credential with another person's value.
+
+  `sub` is an HMAC of tenant, client and value, keyed with a secret derived from `MASTER_SECRET`: without it, nobody can compute a user's `sub` at another client or guess the value. `subject` therefore needs `MASTER_SECRET`, and changing `MASTER_SECRET` changes every such `sub`, so relying parties would see all users as new.
+- `claimsFrom`: `"pid"` also copies the claims of the first presented credential of that query to the top level, so `given_name` sits next to `iss`. Nested claims such as `address` keep their structure; a query that was not presented adds nothing. The token's own claims (`iss`, `sub`, `aud`, `exp`, `iat`, `nonce`, `acr` and so on) and technical claims such as `vct` and `cnf` are never replaced.
+
+```json
+{
+  "sub": "Xq3m…pairwise hash…",
+  "given_name": "Ada",
+  "family_name": "Lovelace",
+  "credentials": [{ "id": "pid", "values": [{ "given_name": "Ada", "family_name": "Lovelace" }] }]
+}
+```
+
+Set them when you create the client or with `PATCH /api/verifier/oidc-clients/{id}`; `null` removes them.
 
 ## Same device and cross device
 
@@ -91,7 +111,7 @@ A same-device sign-in waits for the wallet's redirect. A wallet that does not re
 
 ## Errors
 
-If the presentation fails or the sign-in expires (15 minutes), the browser returns to your `redirect_uri` with `error=access_denied`, a short `error_description` for your logs, and your `state`.
+If the presentation fails, the sign-in expires (15 minutes), the subject claim is missing, or the client was deleted meanwhile, the browser returns to your `redirect_uri` with `error=access_denied`, a short `error_description` for your logs, and your `state`.
 
 An invalid request (unknown scope, missing PKCE or a `code_challenge` that is not a 43-character S256 hash, `prompt=none`, a `state` over 1024 characters) is answered where it was sent: with the `secure` profile in the pushed request's response (HTTP 400 with `error` and `error_description`); with `basic` at your `redirect_uri` with the matching OAuth error, except an over-long `state`, which cannot be returned and shows an error page.
 

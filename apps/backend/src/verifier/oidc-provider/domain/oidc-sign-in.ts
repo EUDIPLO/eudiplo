@@ -71,6 +71,8 @@ export interface OidcSignIn {
     codeExpiresAt?: Date | null;
     acr?: string | null;
     authTime?: Date | null;
+    /** `sub` of the ID token, when the client derives it from a claim. */
+    subject?: string | null;
     expiresAt: Date;
     createdAt?: Date;
 }

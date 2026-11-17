@@ -77,6 +77,9 @@ export class OidcSignInEntity implements OidcSignIn {
     @Column({ type: Date, nullable: true })
     authTime?: Date | null;
 
+    @Column("varchar", { nullable: true })
+    subject?: string | null;
+
     @Column({ type: Date })
     expiresAt!: Date;
 

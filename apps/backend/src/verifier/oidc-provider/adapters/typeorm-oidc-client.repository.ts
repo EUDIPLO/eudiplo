@@ -41,6 +41,8 @@ export class TypeOrmOidcClientRepository implements OidcClientRepository {
                 profile: client.profile,
                 scopes: client.scopes,
                 secrets: client.secrets.map(toStored),
+                subject: client.subject ?? null,
+                claimsFrom: client.claimsFrom ?? null,
             }),
         );
         // Read back, so the result carries the last use of each secret,
@@ -104,6 +106,8 @@ function toDomain(entity: OidcClientEntity): OidcClient {
             expiresAt: toDate(secret.expiresAt),
             lastUsedAt: toDate(entity.secretLastUsed?.[secret.id]),
         })),
+        subject: entity.subject ?? null,
+        claimsFrom: entity.claimsFrom ?? null,
         createdAt: entity.createdAt,
         updatedAt: entity.updatedAt,
     };

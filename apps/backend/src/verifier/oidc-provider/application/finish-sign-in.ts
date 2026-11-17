@@ -17,7 +17,12 @@ import {
     hashOpaqueSecret,
     matchesOpaqueSecret,
 } from "../domain/opaque-secret.js";
-import { oidcIssuer } from "../oidc-provider-settings.js";
+import { subjectFromPresentation } from "../domain/presented-claims.js";
+import {
+    type OidcProviderSettings,
+    oidcIssuer,
+} from "../oidc-provider-settings.js";
+import type { OidcClientRepository } from "../ports/oidc-client.repository.js";
 import type { OidcSignInRepository } from "../ports/oidc-sign-in.repository.js";
 import type {
     SignInPresentation,
@@ -60,7 +65,11 @@ export class FinishSignIn {
             "findForTenant" | "transition"
         >,
         private readonly presentations: Pick<SignInPresentation, "result">,
-        private readonly publicUrl: string,
+        private readonly clients: Pick<OidcClientRepository, "findForTenant">,
+        private readonly settings: Pick<
+            OidcProviderSettings,
+            "publicUrl" | "subjectKey"
+        >,
         private readonly now: () => Date = () => new Date(),
     ) {}
 
@@ -107,7 +116,7 @@ export class FinishSignIn {
             // The wallet will return the holder here; wait for it.
             return { type: "waiting" };
         }
-        return this.authorize(signIn, ACR_CROSS_DEVICE);
+        return this.authorize(signIn, ACR_CROSS_DEVICE, result);
     }
 
     /** The wallet returned the holder to the callback (same device). */
@@ -153,7 +162,7 @@ export class FinishSignIn {
                 "The wallet's response does not belong to this sign-in.",
             );
         }
-        return this.authorize(signIn, ACR_SAME_DEVICE);
+        return this.authorize(signIn, ACR_SAME_DEVICE, result);
     }
 
     private async boundPendingSignIn(
@@ -195,12 +204,43 @@ export class FinishSignIn {
     private async authorize(
         signIn: OidcSignIn,
         acr: string,
+        result: SignInPresentationResult,
     ): Promise<SignInStep> {
         if (signIn.requireSameDevice && acr !== ACR_SAME_DEVICE) {
             return this.fail(
                 signIn,
                 "The sign-in required a wallet on the same device",
             );
+        }
+        const client = await this.clients.findForTenant(
+            signIn.tenantId,
+            signIn.clientId,
+        );
+        if (!client) {
+            return this.fail(signIn, "The application is no longer registered");
+        }
+        let subject: string | null = null;
+        if (client.subject) {
+            if (!this.settings.subjectKey) {
+                return this.fail(
+                    signIn,
+                    "The application needs a stable subject, which this instance cannot derive",
+                );
+            }
+            subject =
+                subjectFromPresentation(
+                    this.settings.subjectKey,
+                    signIn.tenantId,
+                    client.id,
+                    client.subject,
+                    result.credentials,
+                ) ?? null;
+            if (!subject) {
+                return this.fail(
+                    signIn,
+                    `The presentation has no '${client.subject.claim}' in credential '${client.subject.credentialId}' to identify the user`,
+                );
+            }
         }
         const now = this.now();
         const code = generateOpaqueSecret();
@@ -216,6 +256,7 @@ export class FinishSignIn {
                 ),
                 acr,
                 authTime: now,
+                subject,
                 browserBindingHash: null,
             },
         );
@@ -225,7 +266,7 @@ export class FinishSignIn {
             url: authorizationCodeRedirect(
                 signIn.redirectUri,
                 code,
-                oidcIssuer(this.publicUrl, signIn.tenantId),
+                oidcIssuer(this.settings.publicUrl, signIn.tenantId),
                 signIn.state,
             ),
         };
@@ -248,7 +289,7 @@ export class FinishSignIn {
                 signIn.redirectUri,
                 "access_denied",
                 reason,
-                oidcIssuer(this.publicUrl, signIn.tenantId),
+                oidcIssuer(this.settings.publicUrl, signIn.tenantId),
                 signIn.state,
             ),
         };

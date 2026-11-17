@@ -25,6 +25,7 @@ export class Oid4vpSignInPresentation implements SignInPresentation {
     async unusableReason(
         tenantId: string,
         presentationConfigId: string,
+        subjectCredentialId?: string,
     ): Promise<string | undefined> {
         // The list, not getPresentationConfig: that one turns every failure
         // into a 409, so a database error would read as a missing config.
@@ -37,6 +38,17 @@ export class Oid4vpSignInPresentation implements SignInPresentation {
         if ((config.transaction_data?.length ?? 0) > 0) {
             // An authorization request cannot supply transaction data.
             return `Presentation config '${presentationConfigId}' defines transaction data and cannot verify a sign-in`;
+        }
+        if (subjectCredentialId !== undefined) {
+            const query = config.dcql_query?.credentials?.find(
+                (credential) => credential.id === subjectCredentialId,
+            );
+            if (!query) {
+                return `Presentation config '${presentationConfigId}' has no credential query '${subjectCredentialId}' for the subject`;
+            }
+            if ((query.trusted_authorities?.length ?? 0) === 0) {
+                return `Credential query '${subjectCredentialId}' of presentation config '${presentationConfigId}' must name trusted_authorities to identify users by one of its claims`;
+            }
         }
         return undefined;
     }

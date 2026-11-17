@@ -3,6 +3,7 @@ import {
     hashOpaqueSecret,
     matchesOpaqueSecret,
 } from "./opaque-secret.js";
+import type { SubjectClaim } from "./presented-claims.js";
 
 /**
  * How strictly a client's authorization requests are made:
@@ -42,6 +43,13 @@ export interface OidcClient {
     profile: OidcClientProfile;
     scopes: OidcClientScope[];
     secrets: OidcClientSecret[];
+    /**
+     * The claim that identifies a user across sign-ins; `sub` is then a
+     * pairwise hash of it. Without it, `sub` is new for every sign-in.
+     */
+    subject?: SubjectClaim | null;
+    /** Credential query whose claims are also put at the token's top level. */
+    claimsFrom?: string | null;
     createdAt?: Date;
     updatedAt?: Date;
 }
