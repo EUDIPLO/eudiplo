@@ -37,6 +37,7 @@ describe('NavSectionsService', () => {
   it.each([
     ['/credential-config/pid', 'issuance'],
     ['/offer/presentation?requestId=pid', 'verification'],
+    ['/oidc-clients/c7d1/edit', 'verification'],
     ['/session-management/config', 'sessions'],
     ['/settings/connection', 'settings'],
     ['/keys', 'crypto'],
