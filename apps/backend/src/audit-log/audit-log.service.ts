@@ -81,13 +81,13 @@ export class AuditLogService {
     }
 
     /** The newest entries of the tenant that match the filter, at most `limit`. */
-    async listByTenant(
+    listByTenant(
         tenantId: string,
         filter: AuditLogFilter,
         limit: number,
     ): Promise<AuditLogEntity[]> {
         const where = whereFor(tenantId, filter);
-        if (!where) return [];
+        if (!where) return Promise.resolve([]);
         return this.auditLogRepository.find({
             where,
             order: NEWEST_FIRST,

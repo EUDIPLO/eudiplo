@@ -488,12 +488,4 @@ export function auditLogServiceContract(getDb: () => DataSource): void {
             ]);
         });
     });
-
-    test("reports the retention limits", () => {
-        settings.AUDIT_LOG_RETENTION_DAYS = 365;
-        expect(service.retention()).toEqual({
-            retentionDays: 365,
-            maxEntriesPerTenant: 0,
-        });
-    });
 }

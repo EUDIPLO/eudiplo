@@ -264,7 +264,7 @@ export class AdminActivityLogsComponent implements OnInit {
       .subscribe((page) => {
         // A bookmark or Refresh can point past the last page, for example
         // after the nightly pruning: show the last page instead.
-        if (page && page.items.length === 0 && page.total > 0 && this.pageIndex > 0) {
+        if (page?.items.length === 0 && page.total > 0 && this.pageIndex > 0) {
           this.pageIndex = Math.max(0, page.totalPages - 1);
           this.reload$.next();
           return;

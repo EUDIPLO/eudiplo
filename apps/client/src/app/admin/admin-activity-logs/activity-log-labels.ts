@@ -7,11 +7,18 @@ export type AuditObjectType = NonNullable<
 >;
 
 /**
- * Every action the backend records. The compile-time check below fails when
- * the SDK gains an action type that is not listed, so the filters always
- * offer all of them.
+ * Accepts only a list that names every action type of the SDK, so the
+ * compiler reports an action the backend has added but the page has not.
  */
-export const ACTION_TYPES = [
+function everyActionType<const T extends readonly AuditActionType[]>(
+  actions: T &
+    ([Exclude<AuditActionType, T[number]>] extends [never] ? unknown : 'lists every action type')
+): T {
+  return actions;
+}
+
+/** Every action the backend records; the filters offer all of them. */
+export const ACTION_TYPES = everyActionType([
   'tenant_created',
   'tenant_updated',
   'tenant_deleted',
@@ -47,12 +54,7 @@ export const ACTION_TYPES = [
   'config_resource_exported',
   'session_cancelled',
   'audit_log_pruned',
-] as const satisfies readonly AuditActionType[];
-
-type UnlistedActionType = Exclude<AuditActionType, (typeof ACTION_TYPES)[number]>;
-// Fails to compile while an action type of the SDK is missing above.
-const everyActionListed: [UnlistedActionType] extends [never] ? true : never = true;
-void everyActionListed;
+]);
 
 export const ACTOR_LABELS: Record<AuditActorType, string> = {
   user: 'User',
