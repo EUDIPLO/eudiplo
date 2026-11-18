@@ -1,97 +1,97 @@
-<div fxLayout="column" fxFlex fxLayoutGap="24px">
+<div class="page form-page">
+  <a class="back-link" matButton [routerLink]="['../']">
+    <mat-icon>arrow_back</mat-icon>
+    {{ keyChain?.description || keyChainId }}
+  </a>
+
   <app-config-ownership-notice kind="KeyChain" [resourceId]="keyChainId || ''" />
-  <!-- Header -->
-  <div fxLayout="row" fxLayoutAlign="space-between center">
-    <h2>Edit Key Chain</h2>
-    <button
-      mat-icon-button
-      [routerLink]="['../']"
-      matTooltip="Back to details"
-      aria-label="Back to details"
-    >
-      <mat-icon>arrow_back</mat-icon>
-    </button>
-  </div>
+
+  <header class="page-header">
+    <div class="heading">
+      <span class="form-avatar" aria-hidden="true"
+        ><mat-icon>{{ usageIcon }}</mat-icon></span
+      >
+      <div>
+        <h1>Edit Key Chain</h1>
+        <p>Change the description, and the rotation of a key chain with its own root CA.</p>
+      </div>
+    </div>
+  </header>
 
   @if (isLoading) {
-    <div fxLayout="row" fxLayoutAlign="center center" class="loading-container">
-      <mat-spinner diameter="40"></mat-spinner>
+    <div class="loading-state">
+      <mat-spinner diameter="40" aria-label="Loading key chain"></mat-spinner>
     </div>
   } @else if (keyChain) {
-    <form [formGroup]="form" (ngSubmit)="onSubmit()" fxLayout="column" fxLayoutGap="24px">
-      <!-- Key Chain Info (read-only) -->
-      <mat-card>
-        <mat-card-header>
-          <mat-card-title>
-            <mat-icon class="title-icon">info</mat-icon>
-            Key Chain Information
-          </mat-card-title>
-        </mat-card-header>
-
-        <mat-card-content>
-          <div fxLayout="column" fxLayoutGap="8px" class="info-grid">
-            <div fxLayout="row" fxLayoutGap="16px">
-              <span class="info-label">ID:</span>
-              <code>{{ keyChain.id }}</code>
-            </div>
-            <div fxLayout="row" fxLayoutGap="16px">
-              <span class="info-label">Type:</span>
-              <span>{{
-                keyChain.type === 'internalChain'
-                  ? 'Internal Chain (Root CA + Signing Key)'
-                  : 'Standalone (Self-signed)'
-              }}</span>
-            </div>
-            <div fxLayout="row" fxLayoutGap="16px">
-              <span class="info-label">Usage:</span>
-              <span>{{ keyChain.usageType }}</span>
-            </div>
-          </div>
-        </mat-card-content>
-      </mat-card>
-
-      <!-- Editable Description -->
-      <mat-card>
-        <mat-card-header>
-          <mat-card-title>
-            <mat-icon class="title-icon">edit</mat-icon>
-            Description
-          </mat-card-title>
-        </mat-card-header>
-
-        <mat-card-content>
-          <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Description</mat-label>
-            <input
-              matInput
-              formControlName="description"
-              placeholder="Describe the purpose of this key chain"
-            />
-            <mat-icon matSuffix>description</mat-icon>
-          </mat-form-field>
-        </mat-card-content>
-      </mat-card>
-
-      <!-- Rotation Policy Card (only for internal chain) -->
-      @if (isInternalChain) {
-        <mat-card>
-          <mat-card-header>
-            <mat-card-title>
-              <mat-icon class="title-icon">autorenew</mat-icon>
-              Rotation Policy
-            </mat-card-title>
-            <mat-card-subtitle>Configure automatic key rotation</mat-card-subtitle>
-          </mat-card-header>
-
+    <form [formGroup]="form" (ngSubmit)="onSubmit()">
+      <!-- Each section: what it is for on the left, its fields on the right -->
+      <section class="form-section" aria-labelledby="key-info-heading">
+        <div class="section-intro">
+          <h2 id="key-info-heading">Key Chain Information</h2>
+          <p>Fixed once the key chain exists. Create a new key chain to change them.</p>
+        </div>
+        <mat-card appearance="outlined">
           <mat-card-content>
-            <div fxLayout="column" fxLayoutGap="16px">
+            <dl class="info-grid">
+              <div>
+                <dt>ID</dt>
+                <dd>
+                  <code>{{ keyChain.id }}</code>
+                </dd>
+              </div>
+              <div>
+                <dt>Type</dt>
+                <dd>
+                  {{
+                    keyChain.type === 'internalChain'
+                      ? 'Internal Chain (Root CA + Signing Key)'
+                      : 'Standalone (Self-signed)'
+                  }}
+                </dd>
+              </div>
+              <div>
+                <dt>Usage</dt>
+                <dd>{{ usageLabel }}</dd>
+              </div>
+            </dl>
+          </mat-card-content>
+        </mat-card>
+      </section>
+
+      <section class="form-section" aria-labelledby="key-description-heading">
+        <div class="section-intro">
+          <h2 id="key-description-heading">Description</h2>
+          <p>The name the key pages and configuration forms show for this key chain.</p>
+        </div>
+        <mat-card appearance="outlined">
+          <mat-card-content class="field-stack">
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+              <mat-label>Description</mat-label>
+              <input
+                matInput
+                formControlName="description"
+                placeholder="Describe the purpose of this key chain"
+              />
+            </mat-form-field>
+          </mat-card-content>
+        </mat-card>
+      </section>
+
+      @if (isInternalChain) {
+        <section class="form-section" aria-labelledby="key-rotation-heading">
+          <div class="section-intro">
+            <h2 id="key-rotation-heading">Rotation Policy</h2>
+            <p>Configure automatic key rotation</p>
+          </div>
+          <mat-card appearance="outlined">
+            <mat-card-content class="field-stack">
               <mat-slide-toggle formControlName="rotationEnabled" color="primary">
                 Enable automatic key rotation
               </mat-slide-toggle>
 
               @if (form.get('rotationEnabled')?.value) {
-                <div fxLayout="row" fxLayoutGap="16px" fxLayout.lt-md="column">
-                  <mat-form-field appearance="outline" fxFlex>
+                <div class="field-row">
+                  <mat-form-field appearance="outline" subscriptSizing="dynamic">
                     <mat-label>Rotation Interval (days)</mat-label>
                     <input
                       matInput
@@ -100,11 +100,10 @@
                       min="1"
                       placeholder="30"
                     />
-                    <mat-icon matSuffix>schedule</mat-icon>
                     <mat-hint>How often the signing key will be rotated</mat-hint>
                   </mat-form-field>
 
-                  <mat-form-field appearance="outline" fxFlex>
+                  <mat-form-field appearance="outline" subscriptSizing="dynamic">
                     <mat-label>Certificate Validity (days)</mat-label>
                     <input
                       matInput
@@ -113,23 +112,24 @@
                       min="1"
                       placeholder="365"
                     />
-                    <mat-icon matSuffix>event</mat-icon>
                     <mat-hint>Validity period for generated certificates</mat-hint>
                   </mat-form-field>
                 </div>
               }
-            </div>
-          </mat-card-content>
-        </mat-card>
+            </mat-card-content>
+          </mat-card>
+        </section>
       }
 
-      <!-- Action Buttons -->
-      <div fxLayout="row" fxLayoutGap="16px" fxLayoutAlign="end center">
-        <button mat-button type="button" [routerLink]="['../']">Cancel</button>
+      <!-- Stays in view at the bottom while the form scrolls -->
+      <div class="action-bar">
+        <output class="change-state" [class.dirty]="form.dirty">
+          {{ form.dirty ? 'Unsaved changes' : 'No changes' }}
+        </output>
+        <button matButton type="button" [routerLink]="['../']">Cancel</button>
         <button
-          mat-flat-button
+          matButton="filled"
           type="submit"
-          color="primary"
           appConfigManaged
           managedKind="KeyChain"
           [managedResourceId]="keyChainId || ''"

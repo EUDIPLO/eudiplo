@@ -1,16 +1,15 @@
 import { CommonModule } from '@angular/common';
 import { Component, type OnInit, ChangeDetectionStrategy } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
-import { MatSelectModule } from '@angular/material/select';
 import { MatTableModule } from '@angular/material/table';
+import { MatCardModule } from '@angular/material/card';
+import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { RouterModule } from '@angular/router';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { type DefaultAccessKeyChainDto, KeyChainResponseDto } from '@eudiplo/sdk-core';
 import { KeyChainService } from '../key-chain.service';
 import { ConfigOwnershipDirective } from '../../config-portability/config-ownership.directive';
@@ -28,9 +27,7 @@ import {
   loadDefaultAccess,
   missingDefaultAccessMessage,
 } from '../default-access-key-chain';
-
-type KeyUsageType =
-  'attestation' | 'statusList' | 'access' | 'authorizationServer' | 'trustList' | 'federation';
+import { keyUsages, type KeyUsageType } from '../key-usage';
 
 /**
  * Display item for key chains.
@@ -54,13 +51,12 @@ interface KeyDisplayItem {
     MatButtonModule,
     MatSnackBarModule,
     MatTooltipModule,
-    MatFormFieldModule,
-    MatSelectModule,
+    MatCardModule,
+    MatMenuModule,
     MatTableModule,
     MatChipsModule,
     MatProgressSpinnerModule,
     RouterModule,
-    FlexLayoutModule,
     ConfigOwnershipDirective,
     LoadErrorComponent,
   ],
@@ -83,14 +79,13 @@ export class KeyManagementListComponent implements OnInit {
   /** True while a request that changes the default access key chain runs. */
   updatingDefault = false;
   filteredItems: KeyDisplayItem[] = [];
-  displayedColumns: string[] = [
-    'usage',
-    'name',
-    'type',
-    'kmsProvider',
-    'rotation',
-    'id',
-    'actions',
+  /** The name column also shows the ID and the default mark. */
+  displayedColumns: string[] = ['name', 'usage', 'type', 'kmsProvider', 'rotation', 'actions'];
+  /** The usage filter chips with the number of key chains of each usage; only usages in use. */
+  usageFilters: { value: KeyUsageType; label: string; count: number }[] = [];
+  readonly keyTypes: { value: KeyDisplayItem['type']; label: string }[] = [
+    { value: 'internalChain', label: 'Internal Chain' },
+    { value: 'standalone', label: 'Standalone' },
   ];
 
   selectedUsageType = '';
@@ -98,44 +93,7 @@ export class KeyManagementListComponent implements OnInit {
   selectedKmsProvider = '';
   availableKmsProviders: string[] = [];
 
-  private readonly usageConfig: Record<
-    KeyUsageType,
-    { label: string; icon: string; description: string }
-  > = {
-    attestation: {
-      label: 'Credential Signing Keys',
-      icon: 'verified_user',
-      description:
-        'Keys for signing Electronic Attestations of Attributes (EAAs) issued to wallets. Each credential type has its own isolated key chain.',
-    },
-    access: {
-      label: 'EUDI Wallet Access Certificate Keys',
-      icon: 'vpn_key',
-      description: 'Keys for EUDI Wallet Access Certificates to authenticate to the wallet.',
-    },
-    authorizationServer: {
-      label: 'Authorization Server Keys',
-      icon: 'key',
-      description:
-        'Keys that sign the OAuth access tokens of the authorization servers. They never sign credentials or requests to wallets.',
-    },
-    statusList: {
-      label: 'Status List Keys',
-      icon: 'fact_check',
-      description: 'Keys for signing credential status lists (revocation/suspension).',
-    },
-    trustList: {
-      label: 'Trust List Keys',
-      icon: 'shield',
-      description: 'Keys for signing trust list entries.',
-    },
-    federation: {
-      label: 'OpenID Federation Entity Keys',
-      icon: 'hub',
-      description:
-        'Keys for signing the entity configuration of the OpenID Federation entity. They never sign credentials or requests.',
-    },
-  };
+  private readonly usageConfig = keyUsages;
 
   constructor(
     private readonly keyChainService: KeyChainService,
@@ -160,6 +118,7 @@ export class KeyManagementListComponent implements OnInit {
       this.availableKmsProviders = [...new Set(this.displayItems.map((item) => item.kmsProvider))]
         .filter(Boolean)
         .sort((a, b) => a.localeCompare(b));
+      this.usageFilters = this.countUsages();
       this.applyFilters();
     } catch (error) {
       console.error('Error loading keys:', error);
@@ -186,6 +145,41 @@ export class KeyManagementListComponent implements OnInit {
     this.applyFilters();
   }
 
+  selectUsage(value: string): void {
+    this.selectedUsageType = value;
+    this.applyFilters();
+  }
+
+  selectKeyType(value: string): void {
+    this.selectedKeyType = value;
+    this.applyFilters();
+  }
+
+  selectKmsProvider(value: string): void {
+    this.selectedKmsProvider = value;
+    this.applyFilters();
+  }
+
+  get hasFilters(): boolean {
+    return !!(this.selectedUsageType || this.selectedKeyType || this.selectedKmsProvider);
+  }
+
+  /** The chosen key type for its menu button, such as "Standalone", or "All". */
+  get keyTypeFilterLabel(): string {
+    return this.keyTypes.find((type) => type.value === this.selectedKeyType)?.label ?? 'All';
+  }
+
+  /** The usages in use, in the order of the usage configuration, with their counts. */
+  private countUsages(): { value: KeyUsageType; label: string; count: number }[] {
+    return (Object.keys(this.usageConfig) as KeyUsageType[])
+      .map((value) => ({
+        value,
+        label: this.usageConfig[value].short,
+        count: this.displayItems.filter((item) => item.usageType === value).length,
+      }))
+      .filter((usage) => usage.count > 0);
+  }
+
   clearFilters(): void {
     this.selectedUsageType = '';
     this.selectedKeyType = '';
@@ -209,6 +203,11 @@ export class KeyManagementListComponent implements OnInit {
 
   getUsageLabel(item: KeyDisplayItem): string {
     return this.usageConfig[item.usageType]?.label ?? item.usageType;
+  }
+
+  /** The usage with "Keys" left out, as the table shows it next to the usage icon. */
+  getUsageShortLabel(item: KeyDisplayItem): string {
+    return this.usageConfig[item.usageType]?.short ?? item.usageType;
   }
 
   getUsageIcon(item: KeyDisplayItem): string {
