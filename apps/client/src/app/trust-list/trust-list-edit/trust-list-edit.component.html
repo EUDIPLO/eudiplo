@@ -1,13 +1,21 @@
-<div fxLayout="column" fxFlex fxLayoutGap="24px">
+<div class="page form-page">
   @if (isEditMode && trustListId) {
     <app-config-ownership-notice kind="TrustList" [resourceId]="trustListId" />
   }
   <!-- Header -->
-  <div fxLayout="row" fxLayoutAlign="space-between center">
-    <h2 #pageHeading tabindex="-1">{{ isEditMode ? 'Edit' : 'Create' }} Trust List</h2>
-    <div fxLayout="row" fxLayoutGap="8px">
+  <header class="page-header">
+    <div class="heading">
+      <span class="form-avatar" aria-hidden="true"><mat-icon>shield</mat-icon></span>
+      <div>
+        <h2 #pageHeading tabindex="-1" class="page-title">
+          {{ isEditMode ? 'Edit' : 'Create' }} Trust List
+        </h2>
+        <p>The issuers and wallet providers the list names, and the key chain that signs it.</p>
+      </div>
+    </div>
+    <div class="header-actions">
       <a
-        mat-stroked-button
+        matButton="outlined"
         href="https://docs.eudiplo.dev/trust/trust-lists"
         target="_blank"
         rel="noopener"
@@ -24,10 +32,10 @@
         <mat-icon>arrow_back</mat-icon>
       </button>
     </div>
-  </div>
+  </header>
 
   @if (loading) {
-    <p><output>Loading trust list…</output></p>
+    <p class="loading-state"><output>Loading trust list…</output></p>
   } @else if (loadError) {
     <app-load-error
       [message]="loadError"
@@ -37,20 +45,12 @@
       <a mat-button routerLink="/trust-list">Back to the list</a>
     </app-load-error>
   } @else {
-    <form
-      #trustListForm
-      [formGroup]="form"
-      (ngSubmit)="onSubmit()"
-      fxLayout="column"
-      fxLayoutGap="24px"
-    >
+    <form #trustListForm [formGroup]="form" (ngSubmit)="onSubmit()">
       <!-- Basic Information Card -->
-      <mat-card>
+      <mat-card appearance="outlined">
         <mat-card-header>
-          <mat-card-title>
-            <mat-icon class="title-icon">info</mat-icon>
-            Basic Information
-          </mat-card-title>
+          <mat-icon mat-card-avatar>info</mat-icon>
+          <mat-card-title>Basic Information</mat-card-title>
           <mat-card-subtitle>Trust list identifier and description</mat-card-subtitle>
         </mat-card-header>
 
@@ -118,12 +118,10 @@
       </mat-card>
 
       <!-- Trusted Entities Card -->
-      <mat-card>
+      <mat-card appearance="outlined">
         <mat-card-header>
-          <mat-card-title>
-            <mat-icon class="title-icon">groups</mat-icon>
-            Trusted Entities
-          </mat-card-title>
+          <mat-icon mat-card-avatar>groups</mat-icon>
+          <mat-card-title>Trusted Entities</mat-card-title>
           <mat-card-subtitle
             >Add issuers that are authorized to issue credentials</mat-card-subtitle
           >
@@ -134,9 +132,8 @@
           <div fxLayout="row" fxLayoutGap="12px">
             <button
               #addEntityButton
-              mat-stroked-button
+              matButton="tonal"
               type="button"
-              color="primary"
               (click)="addInternalEntity()"
               matTooltip="Add entity using certificates already in the system"
             >
@@ -144,9 +141,8 @@
               Add Internal Entity
             </button>
             <button
-              mat-stroked-button
+              matButton="outlined"
               type="button"
-              color="accent"
               (click)="addExternalEntity()"
               matTooltip="Add entity using external PEM certificates"
             >
@@ -158,7 +154,7 @@
           @if (entitiesArray.length === 0) {
             <mat-card class="info-card">
               <mat-card-content>
-                <div fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="12px">
+                <div class="info-row">
                   <mat-icon class="info-icon">info</mat-icon>
                   <div>
                     <strong>No Entities Added</strong>
@@ -306,8 +302,8 @@
 
                   <!-- Entity Information (common for both internal and external) -->
                   <h4>Entity Information</h4>
-                  <div fxLayout="row" fxLayoutGap="16px">
-                    <mat-form-field appearance="outline" fxFlex>
+                  <div class="field-row name-row">
+                    <mat-form-field appearance="outline">
                       <mat-label>Entity Name</mat-label>
                       <input
                         matInput
@@ -319,7 +315,7 @@
                         fieldError('entities.' + i + '.infoName', 'Entity name is required')
                       }}</mat-error>
                     </mat-form-field>
-                    <mat-form-field appearance="outline" fxFlex="120px">
+                    <mat-form-field appearance="outline">
                       <mat-label>Language</mat-label>
                       <input matInput formControlName="infoLang" placeholder="e.g., en" />
                       <mat-icon matSuffix>language</mat-icon>
@@ -338,14 +334,14 @@
                     <mat-error>{{ fieldError('entities.' + i + '.infoUri') }}</mat-error>
                   </mat-form-field>
 
-                  <div fxLayout="row" fxLayoutGap="16px">
-                    <mat-form-field appearance="outline" fxFlex>
+                  <div class="field-row">
+                    <mat-form-field appearance="outline">
                       <mat-label>Country</mat-label>
                       <input matInput formControlName="infoCountry" placeholder="e.g., DE" />
                       <mat-icon matSuffix>flag</mat-icon>
                       <mat-error>{{ fieldError('entities.' + i + '.infoCountry') }}</mat-error>
                     </mat-form-field>
-                    <mat-form-field appearance="outline" fxFlex>
+                    <mat-form-field appearance="outline">
                       <mat-label>Locality</mat-label>
                       <input matInput formControlName="infoLocality" placeholder="e.g., BERLIN" />
                       <mat-icon matSuffix>location_city</mat-icon>
@@ -353,14 +349,14 @@
                     </mat-form-field>
                   </div>
 
-                  <div fxLayout="row" fxLayoutGap="16px">
-                    <mat-form-field appearance="outline" fxFlex>
+                  <div class="field-row">
+                    <mat-form-field appearance="outline">
                       <mat-label>Postal Code</mat-label>
                       <input matInput formControlName="infoPostalCode" placeholder="e.g., 10117" />
                       <mat-icon matSuffix>markunread_mailbox</mat-icon>
                       <mat-error>{{ fieldError('entities.' + i + '.infoPostalCode') }}</mat-error>
                     </mat-form-field>
-                    <mat-form-field appearance="outline" fxFlex>
+                    <mat-form-field appearance="outline">
                       <mat-label>Street Address</mat-label>
                       <input
                         matInput
@@ -374,8 +370,8 @@
                     </mat-form-field>
                   </div>
 
-                  <div fxLayout="row" fxLayoutGap="16px">
-                    <mat-form-field appearance="outline" fxFlex>
+                  <div class="field-row">
+                    <mat-form-field appearance="outline">
                       <mat-label>E-mail Address *</mat-label>
                       <input
                         matInput
@@ -386,7 +382,7 @@
                       <mat-icon matSuffix>contact_mail</mat-icon>
                       <mat-error>{{ electronicAddressError(i, 'infoContactUri') }}</mat-error>
                     </mat-form-field>
-                    <mat-form-field appearance="outline" fxFlex>
+                    <mat-form-field appearance="outline">
                       <mat-label>Website *</mat-label>
                       <input
                         matInput
@@ -455,7 +451,7 @@
                   }
 
                   <div fxLayout="row" fxLayoutAlign="end center">
-                    <button mat-button type="button" color="warn" (click)="removeEntity(i)">
+                    <button matButton type="button" class="remove-entity" (click)="removeEntity(i)">
                       <mat-icon>delete</mat-icon>
                       Remove Entity
                     </button>
@@ -467,13 +463,19 @@
         </mat-card-content>
       </mat-card>
 
-      <!-- Action Buttons -->
-      <div fxLayout="row" fxLayoutAlign="end center" fxLayoutGap="12px">
-        <button mat-button type="button" routerLink="/trust-list">Cancel</button>
+      <!-- Stays in view at the bottom while the form scrolls -->
+      <div class="action-bar">
+        <output class="change-state" [class.dirty]="form.dirty">
+          @if (form.dirty) {
+            Unsaved changes
+          } @else if (isEditMode) {
+            No changes
+          }
+        </output>
+        <button matButton type="button" routerLink="/trust-list">Cancel</button>
         <!-- Usable with an incomplete form: a click shows what is missing (onSubmit). -->
         <button
-          mat-raised-button
-          color="primary"
+          matButton="filled"
           type="submit"
           [disabled]="saving"
           disabledInteractive

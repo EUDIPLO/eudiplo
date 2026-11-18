@@ -1,0 +1,107 @@
+@use '../../tenants/tenant-page' as page;
+
+// Page heading and outlined cards, as on the key and tenant pages
+@include page.base;
+
+.page-header .page-title {
+  margin: 0;
+  font: var(--mat-sys-headline-medium);
+  color: var(--mat-sys-on-surface);
+}
+
+.table-card {
+  overflow: hidden;
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+table {
+  @include page.data-table;
+
+  th.mat-mdc-header-cell {
+    border-top: 0;
+  }
+
+  .mat-column-sequenceNumber,
+  .mat-column-updatedAt {
+    width: 1%;
+    white-space: nowrap;
+  }
+}
+
+.id-cell {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  // Wraps at the hyphens of an ID, not after any letter
+  overflow-wrap: break-word;
+}
+
+.description {
+  font: var(--mat-sys-title-small);
+  color: var(--mat-sys-on-surface);
+}
+
+.version {
+  padding: 2px 10px;
+  border-radius: var(--mat-sys-corner-full);
+  background: var(--mat-sys-secondary-container);
+  font: var(--mat-sys-label-medium);
+  color: var(--mat-sys-on-secondary-container);
+}
+
+.updated {
+  font: var(--mat-sys-body-medium);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.row-actions {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.list-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 48px 24px;
+
+  &.empty {
+    border: 1px dashed var(--mat-sys-outline-variant);
+    border-radius: var(--mat-sys-corner-large);
+    text-align: center;
+
+    p {
+      margin: 0;
+      font: var(--mat-sys-title-medium);
+      color: var(--mat-sys-on-surface);
+    }
+  }
+}
+
+.empty-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--mat-sys-corner-full);
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+}
+
+// Narrow pages: the ID, description and actions
+@container (max-width: 700px) {
+  .mat-column-sequenceNumber,
+  .mat-column-updatedAt {
+    display: none;
+  }
+}
+
+// Phone width: the ID names the list, so the description gives way to the actions
+@container (max-width: 480px) {
+  .mat-column-description {
+    display: none;
+  }
+}

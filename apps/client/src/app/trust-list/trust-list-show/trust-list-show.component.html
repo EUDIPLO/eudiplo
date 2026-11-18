@@ -1,10 +1,10 @@
 @if (trustList) {
-  <div fxLayout="column" fxFlex fxLayoutGap="24px">
+  <div class="page">
     <app-config-ownership-notice kind="TrustList" [resourceId]="trustList.id" />
-    <!-- Header -->
-    <div fxLayout="row" fxLayoutAlign="space-between center">
-      <h2 #pageHeading tabindex="-1">Trust List Details</h2>
-      <div>
+    <!-- Header: the heading and its actions, which the tests find in one container -->
+    <header class="page-header">
+      <h2 #pageHeading tabindex="-1" class="page-title">Trust List Details</h2>
+      <div class="header-actions">
         <button
           mat-icon-button
           [routerLink]="['../']"
@@ -14,7 +14,7 @@
           <mat-icon>arrow_back</mat-icon>
         </button>
         <button
-          mat-icon-button
+          matButton="tonal"
           [routerLink]="['edit']"
           matTooltip="Edit list"
           aria-label="Edit list"
@@ -23,6 +23,7 @@
           [managedResourceId]="trustList.id"
         >
           <mat-icon>edit</mat-icon>
+          Edit
         </button>
         <button
           mat-icon-button
@@ -42,19 +43,20 @@
           aria-label="Delete list"
           [disabled]="deleting"
           disabledInteractive
-          color="warn"
+          class="delete-action"
           appConfigManaged
           managedKind="TrustList"
           [managedResourceId]="trustList.id"
         >
-          <mat-icon>delete</mat-icon>
+          <mat-icon>delete_outline</mat-icon>
         </button>
       </div>
-    </div>
+    </header>
 
-    <!-- Overview Card -->
-    <mat-card>
+    <!-- Overview: what the list is, its numbers and where it is published -->
+    <mat-card appearance="outlined" class="hero">
       <mat-card-header>
+        <mat-icon mat-card-avatar class="hero-avatar">shield</mat-icon>
         <mat-card-title>{{ trustList.description || 'Untitled Trust List' }}</mat-card-title>
         <mat-card-subtitle>ID: {{ trustList.id }}</mat-card-subtitle>
       </mat-card-header>
@@ -85,7 +87,7 @@
         <!-- Public URL Section -->
         @if (publicUrl) {
           <div class="public-url-section">
-            <h4>Public URL</h4>
+            <h3>Public URL</h3>
             <p class="url-description">
               Wallets and other verifiers fetch the signed trust list from this URL. It starts with
               the backend's public URL (PUBLIC_URL):
@@ -124,88 +126,94 @@
       </mat-card-content>
     </mat-card>
 
-    <mat-card>
-      <mat-card-header>
-        <mat-card-title>Referenced by Credential Configs</mat-card-title>
-      </mat-card-header>
-      <mat-card-content>
-        @if (!canReadCredentialConfigs) {
-          <p class="url-description">
-            You need the <code>issuance:manage</code> role to see which credential configs reference
-            this trust list.
-          </p>
-        } @else if (relatedCredentialConfigsLoading) {
-          <p class="url-description"><output>Loading credential configs…</output></p>
-        } @else if (relatedCredentialConfigsFailed) {
-          <p class="url-description" role="alert">
-            Could not load the credential configs that reference this trust list.
-          </p>
-        } @else if (relatedCredentialConfigs.length) {
-          <div fxLayout="column" fxLayoutGap="4px" class="card-content-top">
-            @for (cc of relatedCredentialConfigs; track cc.id) {
-              <div fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px">
-                <mat-icon class="label-icon">description</mat-icon>
-                <span class="value">{{ cc.description || cc.id }}</span>
-                <a
-                  mat-icon-button
-                  [routerLink]="['/credential-config', cc.id]"
-                  matTooltip="Open credential config"
-                  [attr.aria-label]="'Open credential config ' + (cc.description || cc.id)"
-                >
-                  <mat-icon>open_in_new</mat-icon>
-                </a>
-              </div>
-            }
-          </div>
-        } @else {
-          <p class="url-description">No credential configs reference this trust list.</p>
-        }
-      </mat-card-content>
-    </mat-card>
+    <div class="references">
+      <mat-card appearance="outlined">
+        <mat-card-header>
+          <mat-icon mat-card-avatar>description</mat-icon>
+          <mat-card-title>Referenced by Credential Configs</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          @if (!canReadCredentialConfigs) {
+            <p class="url-description">
+              You need the <code>issuance:manage</code> role to see which credential configs
+              reference this trust list.
+            </p>
+          } @else if (relatedCredentialConfigsLoading) {
+            <p class="url-description"><output>Loading credential configs…</output></p>
+          } @else if (relatedCredentialConfigsFailed) {
+            <p class="url-description" role="alert">
+              Could not load the credential configs that reference this trust list.
+            </p>
+          } @else if (relatedCredentialConfigs.length) {
+            <div class="reference-list card-content-top">
+              @for (cc of relatedCredentialConfigs; track cc.id) {
+                <div class="reference">
+                  <mat-icon class="label-icon">description</mat-icon>
+                  <span class="value">{{ cc.description || cc.id }}</span>
+                  <a
+                    mat-icon-button
+                    [routerLink]="['/credential-config', cc.id]"
+                    matTooltip="Open credential config"
+                    [attr.aria-label]="'Open credential config ' + (cc.description || cc.id)"
+                  >
+                    <mat-icon>open_in_new</mat-icon>
+                  </a>
+                </div>
+              }
+            </div>
+          } @else {
+            <p class="url-description">No credential configs reference this trust list.</p>
+          }
+        </mat-card-content>
+      </mat-card>
 
-    <mat-card>
-      <mat-card-header>
-        <mat-card-title>Referenced by Presentation Configs</mat-card-title>
-      </mat-card-header>
-      <mat-card-content>
-        @if (!canReadPresentationConfigs) {
-          <p class="url-description">
-            You need the <code>presentation:manage</code> or <code>presentation:request</code> role
-            to see which presentation configs reference this trust list.
-          </p>
-        } @else if (relatedPresentationConfigsLoading) {
-          <p class="url-description"><output>Loading presentation configs…</output></p>
-        } @else if (relatedPresentationConfigsFailed) {
-          <p class="url-description" role="alert">
-            Could not load the presentation configs that reference this trust list.
-          </p>
-        } @else if (relatedPresentationConfigs.length) {
-          <div fxLayout="column" fxLayoutGap="4px" class="card-content-top">
-            @for (pc of relatedPresentationConfigs; track pc.id) {
-              <div fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px">
-                <mat-icon class="label-icon">verified_user</mat-icon>
-                <span class="value">{{ pc.description || pc.id }}</span>
-                <a
-                  mat-icon-button
-                  [routerLink]="['/presentation-config', pc.id]"
-                  matTooltip="Open presentation config"
-                  [attr.aria-label]="'Open presentation config ' + (pc.description || pc.id)"
-                >
-                  <mat-icon>open_in_new</mat-icon>
-                </a>
-              </div>
-            }
-          </div>
-        } @else {
-          <p class="url-description">No presentation configs reference this trust list.</p>
-        }
-      </mat-card-content>
-    </mat-card>
+      <mat-card appearance="outlined">
+        <mat-card-header>
+          <mat-icon mat-card-avatar>verified_user</mat-icon>
+          <mat-card-title>Referenced by Presentation Configs</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          @if (!canReadPresentationConfigs) {
+            <p class="url-description">
+              You need the <code>presentation:manage</code> or
+              <code>presentation:request</code> role to see which presentation configs reference
+              this trust list.
+            </p>
+          } @else if (relatedPresentationConfigsLoading) {
+            <p class="url-description"><output>Loading presentation configs…</output></p>
+          } @else if (relatedPresentationConfigsFailed) {
+            <p class="url-description" role="alert">
+              Could not load the presentation configs that reference this trust list.
+            </p>
+          } @else if (relatedPresentationConfigs.length) {
+            <div class="reference-list card-content-top">
+              @for (pc of relatedPresentationConfigs; track pc.id) {
+                <div class="reference">
+                  <mat-icon class="label-icon">verified_user</mat-icon>
+                  <span class="value">{{ pc.description || pc.id }}</span>
+                  <a
+                    mat-icon-button
+                    [routerLink]="['/presentation-config', pc.id]"
+                    matTooltip="Open presentation config"
+                    [attr.aria-label]="'Open presentation config ' + (pc.description || pc.id)"
+                  >
+                    <mat-icon>open_in_new</mat-icon>
+                  </a>
+                </div>
+              }
+            </div>
+          } @else {
+            <p class="url-description">No presentation configs reference this trust list.</p>
+          }
+        </mat-card-content>
+      </mat-card>
+    </div>
 
     <!-- Entities Card -->
     @if (entities.length > 0) {
-      <mat-card>
+      <mat-card appearance="outlined">
         <mat-card-header>
+          <mat-icon mat-card-avatar>groups</mat-icon>
           <mat-card-title>Trusted Entities</mat-card-title>
           <mat-card-subtitle
             >{{ entities.length }} configured entit{{
@@ -225,21 +233,19 @@
                     {{ entity.info.name }}
                   </mat-panel-title>
                   <mat-panel-description>
-                    <mat-chip-set>
-                      <mat-chip [highlighted]="isInternalEntity(entity)">
-                        {{ entity.type }}
-                      </mat-chip>
-                      @if (entity.info.country) {
-                        <mat-chip>{{ entity.info.country }}</mat-chip>
-                      }
-                    </mat-chip-set>
+                    <span class="tag" [class.internal]="isInternalEntity(entity)">{{
+                      entity.type
+                    }}</span>
+                    @if (entity.info.country) {
+                      <span class="tag">{{ entity.info.country }}</span>
+                    }
                   </mat-panel-description>
                 </mat-expansion-panel-header>
 
                 <div class="entity-details">
                   <!-- Entity Info Section -->
                   <div class="entity-info-section">
-                    <h4>Entity Information</h4>
+                    <h3>Entity Information</h3>
                     <div class="info-grid">
                       <div class="info-item">
                         <span class="label">Name</span>
@@ -317,7 +323,7 @@
 
                   <!-- Certificate References Section -->
                   <div class="entity-certs-section">
-                    <h4>Certificate References</h4>
+                    <h3>Certificate References</h3>
                     @if (isInternalEntity(entity)) {
                       <div class="info-grid">
                         <div class="info-item">
@@ -356,8 +362,9 @@
 
     <!-- Version History Card -->
     @if (versions.length > 0) {
-      <mat-card>
+      <mat-card appearance="outlined">
         <mat-card-header>
+          <mat-icon mat-card-avatar>history</mat-icon>
           <mat-card-title>Version History</mat-card-title>
           <mat-card-subtitle
             >{{ versions.length }} previous version{{
@@ -385,5 +392,5 @@
     <a mat-button [routerLink]="['../']">Back to the list</a>
   </app-load-error>
 } @else {
-  <p><output>Loading trust list…</output></p>
+  <p class="loading-state"><output>Loading trust list…</output></p>
 }

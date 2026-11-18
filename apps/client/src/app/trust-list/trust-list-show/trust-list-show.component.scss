@@ -1,34 +1,88 @@
-:host {
-  display: block;
+@use '@angular/material' as mat;
+@use '../../tenants/tenant-page' as page;
+
+// Page heading and outlined cards, as on the key and tenant pages
+@include page.base;
+
+.page {
+  gap: 16px;
+}
+
+.page-header .page-title {
+  margin: 0;
+  font: var(--mat-sys-headline-medium);
+  color: var(--mat-sys-on-surface);
+}
+
+.header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+
+  .delete-action:not([disabled]) mat-icon {
+    color: var(--mat-sys-error);
+  }
+}
+
+// The ownership notice shows only when it applies; without content it takes no gap
+app-config-ownership-notice {
+  display: contents;
 }
 
 mat-card {
-  width: 100%;
   box-sizing: border-box;
+  width: 100%;
 }
 
-mat-card-content {
+mat-card-header {
+  padding: 20px 20px 12px;
+}
+
+// More specific than Material's own :last-child padding rule of the card content
+mat-card mat-card-content {
   max-width: 100%;
+  padding: 0 20px 20px;
   overflow-x: auto;
-  padding: 16px;
 }
 
 h3 {
-  margin: 12px 0 6px 0;
+  margin: 16px 0 8px;
+  font: var(--mat-sys-title-small);
+  color: var(--mat-sys-on-surface);
 }
 
-h4 {
-  margin: 10px 0 8px 0;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--mat-sys-on-surface-variant);
+// Overview card with a tinted header, the figures as tiles and the public URL
+.hero {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--mat-sys-primary) 7%, var(--mat-sys-surface)) 0%,
+    var(--mat-sys-surface) 60%
+  );
+
+  .hero-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: var(--mat-sys-corner-large);
+    background: color-mix(in srgb, var(--mat-sys-primary) 16%, var(--mat-sys-surface));
+    font-size: 26px;
+    color: var(--mat-sys-primary);
+  }
+
+  mat-card-title {
+    font: var(--mat-sys-title-large);
+  }
+
+  mat-card-subtitle {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 13px;
+  }
 }
 
-// Metadata grid for overview
 .metadata-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
   margin-top: 8px;
 }
 
@@ -36,28 +90,159 @@ h4 {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  padding: 12px 16px;
+  border-radius: var(--mat-sys-corner-medium);
+  background: var(--mat-sys-surface-container-low);
 
   .label {
-    font-size: 12px;
-    font-weight: 500;
+    font: var(--mat-sys-label-medium);
     color: var(--mat-sys-on-surface-variant);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
   }
 
   .value {
-    font-size: 14px;
-    color: var(--mat-sys-on-surface-variant);
+    font: var(--mat-sys-title-small);
+    color: var(--mat-sys-on-surface);
+    overflow-wrap: anywhere;
   }
 }
 
-// Entity styling
+.public-url-section {
+  margin-top: 8px;
+
+  .url-description {
+    margin: 0 0 12px;
+    font: var(--mat-sys-body-medium);
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  .url-field {
+    width: 100%;
+  }
+
+  .url-hint {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 4px 0 0;
+    font: var(--mat-sys-body-small);
+    color: var(--mat-sys-on-surface-variant);
+
+    .hint-icon {
+      flex: none;
+      width: 18px;
+      height: 18px;
+      font-size: 18px;
+    }
+
+    code {
+      overflow-wrap: anywhere;
+    }
+  }
+}
+
+// Credential and presentation configs side by side
+.references {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.url-description {
+  margin: 0;
+  font: var(--mat-sys-body-medium);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.reference-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.reference {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 2px 4px 2px 12px;
+  border-radius: var(--mat-sys-corner-medium);
+  background: var(--mat-sys-surface-container-low);
+
+  .label-icon {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    font-size: 20px;
+    color: var(--mat-sys-primary);
+  }
+
+  .value {
+    flex: 1;
+    min-width: 0;
+    font: var(--mat-sys-body-medium);
+    color: var(--mat-sys-on-surface);
+    overflow-wrap: anywhere;
+  }
+}
+
+// Trusted entities, one expansion panel each
+// An entity's header grows with a long name instead of overflowing it
+:host {
+  @include mat.expansion-overrides(
+    (
+      header-collapsed-state-height: auto,
+      header-expanded-state-height: auto,
+    )
+  );
+}
+
+mat-expansion-panel-header {
+  min-height: 56px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+mat-expansion-panel {
+  box-shadow: none;
+  border: 1px solid var(--mat-sys-outline-variant);
+
+  & + & {
+    margin-top: 8px;
+  }
+}
+
+mat-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+// The tags take their own width, the name the rest of the header
+mat-panel-description {
+  flex: none;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
 .entity-icon {
-  margin-right: 8px;
-  font-size: 20px;
+  flex: none;
   width: 20px;
   height: 20px;
-  vertical-align: middle;
+  font-size: 20px;
+  color: var(--mat-sys-primary);
+}
+
+.tag {
+  padding: 2px 10px;
+  border-radius: var(--mat-sys-corner-small);
+  background: var(--mat-sys-surface-container-high);
+  font: var(--mat-sys-label-medium);
+  color: var(--mat-sys-on-surface-variant);
+
+  &.internal {
+    background: var(--mat-sys-secondary-container);
+    color: var(--mat-sys-on-secondary-container);
+  }
 }
 
 .entity-details {
@@ -85,160 +270,79 @@ h4 {
   gap: 2px;
 
   .label {
-    font-size: 11px;
-    font-weight: 500;
+    font: var(--mat-sys-label-medium);
     color: var(--mat-sys-on-surface-variant);
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
   }
 
   .value {
-    font-size: 13px;
-    color: var(--mat-sys-on-surface-variant);
+    font: var(--mat-sys-body-medium);
+    color: var(--mat-sys-on-surface);
+    overflow-wrap: anywhere;
 
     &.mono {
-      font-family: 'Roboto Mono', monospace;
-      font-size: 12px;
-      background: var(--mat-sys-surface-container-high);
-      padding: 4px 8px;
-      border-radius: 4px;
-      word-break: break-all;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 13px;
     }
 
     &.link {
-      color: var(--eudiplo-info);
-      text-decoration: none;
-
-      &:hover {
-        text-decoration: underline;
-      }
+      color: var(--mat-sys-primary);
     }
   }
 }
 
 .pem-content {
+  max-height: 240px;
+  margin: 0;
+  padding: 12px 16px;
+  overflow: auto;
+  border-radius: var(--mat-sys-corner-medium);
   background: var(--mat-sys-surface-container-high);
-  padding: 12px;
-  border-radius: 4px;
-  font-family: 'Roboto Mono', monospace;
-  font-size: 11px;
-  overflow-x: auto;
+  font-size: 12px;
   white-space: pre-wrap;
   word-break: break-all;
-  margin: 0;
 }
 
-// Version history
+// Version history as a timeline, newest first
 .version-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
 }
 
 .version-item {
-  display: flex;
-  align-items: center;
-  padding: 8px 12px;
-  background: var(--mat-sys-surface-container-low);
-  border-radius: 4px;
-  border-left: 3px solid var(--eudiplo-info);
+  position: relative;
+  padding: 8px 0 8px 24px;
+  border-left: 2px solid var(--mat-sys-outline-variant);
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 14px;
+    left: -6px;
+    width: 10px;
+    height: 10px;
+    border-radius: var(--mat-sys-corner-full);
+    background: var(--mat-sys-primary);
+  }
 }
 
 .version-info {
   display: flex;
-  align-items: center;
-  gap: 16px;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 12px;
 }
 
 .version-number {
-  font-weight: 500;
-  font-size: 14px;
-  color: var(--eudiplo-info);
-}
-
-.version-date {
-  font-size: 13px;
-  color: var(--mat-sys-on-surface-variant);
-}
-
-// Expansion panel improvements
-mat-expansion-panel {
-  margin-bottom: 8px;
-
-  &:last-child {
-    margin-bottom: 0;
-  }
-}
-
-mat-panel-title {
-  display: flex;
-  align-items: center;
-}
-
-mat-chip-set {
-  margin-left: auto;
-}
-
-// Public URL section
-.public-url-section {
-  margin-top: 24px;
-  padding-top: 16px;
-  border-top: 1px solid var(--mat-sys-outline-variant);
-
-  .url-description {
-    font-size: 13px;
-    color: var(--mat-sys-on-surface-variant);
-    margin: 0 0 12px 0;
-  }
-
-  .url-field {
-    width: 100%;
-
-    input {
-      font-family: 'Roboto Mono', monospace;
-      font-size: 13px;
-    }
-  }
-
-  .url-hint {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    margin-top: 8px;
-    font-size: 12px;
-    color: var(--mat-sys-on-surface-variant);
-
-    .hint-icon {
-      font-size: 16px;
-      width: 16px;
-      height: 16px;
-      color: var(--eudiplo-warning);
-    }
-
-    code {
-      background-color: var(--mat-sys-surface-container-high);
-      padding: 2px 6px;
-      border-radius: 4px;
-      font-family: 'Roboto Mono', monospace;
-      font-size: 11px;
-    }
-  }
-}
-
-/* make long cert strings break instead of forcing horizontal overflow */
-/* certificate value styling */
-.cert {
-  word-break: break-all;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, 'Roboto Mono', 'Courier New', monospace;
-  font-size: 0.85em;
+  font: var(--mat-sys-title-small);
   color: var(--mat-sys-on-surface);
 }
 
-@media (max-width: 600px) {
-  strong {
-    min-width: 120px;
-  }
-  mat-card-content {
-    padding: 12px;
-  }
+.version-date {
+  font: var(--mat-sys-body-small);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.loading-state {
+  margin: 0;
+  color: var(--mat-sys-on-surface-variant);
 }
