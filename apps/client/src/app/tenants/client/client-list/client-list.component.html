@@ -1,65 +1,119 @@
-<!-- Embedded in another page, such as a tenant's, that page gives the heading. -->
-@if (!embedded) {
-  <div fxLayout="row" fxLayoutAlign="space-between center">
-    <h2>Clients</h2>
-    @if (!loadedClients && !unavailableMessage) {
-      <button
-        matIconButton
-        [routerLink]="['create']"
-        matTooltip="Create New Client"
-        aria-label="Create New Client"
-      >
-        <mat-icon>add</mat-icon>
-      </button>
-    }
-  </div>
-}
-
-@if (unavailableMessage) {
-  <app-unavailable-card heading="Client management is unavailable" [message]="unavailableMessage" />
-} @else if (loadError) {
-  <app-load-error [message]="loadError" (retry)="loadClients()" />
-} @else if (!loading) {
-  @if (loadedClients && !rotatesSecrets) {
-    <p class="section-hint">
-      The identity provider manages this tenant's clients. These records are left from an earlier
-      mode.
-    </p>
+<div [class.page]="!embedded">
+  <!-- Embedded in another page, such as a tenant's, that page gives the heading. -->
+  @if (!embedded) {
+    <header class="page-header">
+      <div>
+        <h1>API Clients</h1>
+        <p>Services sign in with a client ID and secret and act with the client's roles.</p>
+      </div>
+      @if (!loadedClients && !unavailableMessage) {
+        <a matButton="filled" class="create-client" [routerLink]="['create']">
+          <mat-icon>add</mat-icon>
+          Create client
+        </a>
+      }
+    </header>
   }
-  <table
-    mat-table
-    [dataSource]="clients"
-    [class.mat-elevation-z8]="!embedded"
-    [class.embedded]="embedded"
-  >
-    <ng-container matColumnDef="clientId">
-      <th mat-header-cell *matHeaderCellDef>{{ embedded ? 'Client' : 'Client ID' }}</th>
-      <td mat-cell *matCellDef="let client">
-        @if (embedded) {
+
+  @if (unavailableMessage) {
+    <app-unavailable-card
+      heading="Client management is unavailable"
+      [message]="unavailableMessage"
+    />
+  } @else if (loadError) {
+    <app-load-error [message]="loadError" (retry)="loadClients()" />
+  } @else if (loading) {
+    <div class="loading-state">
+      <mat-spinner diameter="40" aria-label="Loading clients"></mat-spinner>
+    </div>
+  } @else {
+    @if (loadedClients && !rotatesSecrets) {
+      <p class="section-hint">
+        The identity provider manages this tenant's clients. These records are left from an earlier
+        mode.
+      </p>
+    }
+    @if (embedded) {
+      <ng-container *ngTemplateOutlet="clientTable" />
+    } @else if (clients.length === 0) {
+      <div class="empty-state">
+        <span class="empty-icon"><mat-icon>key</mat-icon></span>
+        <strong>No clients yet</strong>
+        <p>Create a client for each service that calls this tenant's API.</p>
+        <a matButton="filled" [routerLink]="['create']">
+          <mat-icon>add</mat-icon>
+          Create client
+        </a>
+      </div>
+    } @else {
+      <mat-card appearance="outlined" class="table-card">
+        <div class="table-header">
+          <div class="table-title">
+            <h2>All clients</h2>
+            <output>
+              @if (search.trim()) {
+                {{ shownClients.length }} of {{ clients.length }} clients
+              } @else {
+                {{ clients.length }} {{ clients.length === 1 ? 'client' : 'clients' }}
+              }
+            </output>
+          </div>
+          <div class="search-bar" role="search">
+            <mat-icon class="search-icon" aria-hidden="true">search</mat-icon>
+            <input
+              type="search"
+              [(ngModel)]="search"
+              placeholder="Search clients"
+              aria-label="Search clients by ID, description or role"
+            />
+            @if (search) {
+              <button
+                matIconButton
+                type="button"
+                class="clear-search"
+                aria-label="Clear search"
+                matTooltip="Clear search"
+                (click)="clearSearch()"
+              >
+                <mat-icon>close</mat-icon>
+              </button>
+            }
+          </div>
+        </div>
+        <ng-container *ngTemplateOutlet="clientTable" />
+      </mat-card>
+    }
+  }
+</div>
+
+<ng-template #clientTable>
+  <div class="table-scroll">
+    <table mat-table [dataSource]="shownClients" [class.linked]="!loadedClients">
+      <ng-container matColumnDef="clientId">
+        <th mat-header-cell *matHeaderCellDef>Client</th>
+        <td mat-cell *matCellDef="let client">
           <span class="client-cell">
             <span class="client-icon" aria-hidden="true"><mat-icon>key</mat-icon></span>
             <span class="client-copy">
-              <code>{{ client.clientId }}</code>
+              <!-- On the list, the ID links to the client and its link covers the row -->
+              @if (loadedClients) {
+                <code>{{ client.clientId }}</code>
+              } @else {
+                <a class="client-link" [routerLink]="client.clientId"
+                  ><code>{{ client.clientId }}</code></a
+                >
+              }
               @if (client.description) {
                 <small>{{ client.description }}</small>
               }
             </span>
           </span>
-        } @else {
-          {{ client.clientId }}
-        }
-      </td>
-    </ng-container>
+        </td>
+      </ng-container>
 
-    <ng-container matColumnDef="description">
-      <th mat-header-cell *matHeaderCellDef>Description</th>
-      <td mat-cell *matCellDef="let client">{{ client.description || 'No description' }}</td>
-    </ng-container>
-
-    <ng-container matColumnDef="roles">
-      <th mat-header-cell *matHeaderCellDef>Roles</th>
-      <td mat-cell *matCellDef="let client">
-        @if (embedded) {
+      <ng-container matColumnDef="roles">
+        <th mat-header-cell *matHeaderCellDef>Roles</th>
+        <td mat-cell *matCellDef="let client">
           @let roles = uniqueRoles(client);
           <span class="role-badges">
             @for (role of roles.slice(0, visibleRoleCount); track role) {
@@ -81,87 +135,84 @@
               </button>
             }
           </span>
-        } @else {
-          <mat-chip-set>
-            @for (role of client.roles; track role) {
-              <span>
-                <mat-chip>{{ role }}</mat-chip>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="actions">
+        <th mat-header-cell *matHeaderCellDef>
+          <span class="visually-hidden">Actions</span>
+        </th>
+        <td mat-cell *matCellDef="let client">
+          @let manageable = canManage(client);
+          <span class="row-actions">
+            @if (!loadedClients) {
+              <span [matTooltip]="manageDeniedHint" [matTooltipDisabled]="manageable">
+                <button
+                  matIconButton
+                  [routerLink]="[client.clientId, 'edit']"
+                  [disabled]="!manageable"
+                  matTooltip="Edit Client"
+                  [attr.aria-label]="
+                    manageable ? 'Edit Client' : 'Edit Client: ' + manageDeniedHint
+                  "
+                  appConfigManaged
+                  managedKind="Client"
+                  [managedResourceId]="client.clientId"
+                >
+                  <mat-icon>edit</mat-icon>
+                </button>
               </span>
             }
-          </mat-chip-set>
-        }
-      </td>
-    </ng-container>
-
-    <ng-container matColumnDef="actions">
-      <th mat-header-cell *matHeaderCellDef>Actions</th>
-      <td mat-cell *matCellDef="let client">
-        @let manageable = canManage(client);
-        @if (!loadedClients) {
-          <button
-            matIconButton
-            [routerLink]="client.clientId"
-            matTooltip="View Client Details"
-            [attr.aria-label]="'View client ' + client.clientId"
-          >
-            <mat-icon>visibility</mat-icon>
-          </button>
-
-          <span [matTooltip]="manageDeniedHint" [matTooltipDisabled]="manageable">
-            <button
-              matIconButton
-              [routerLink]="[client.clientId, 'edit']"
-              [disabled]="!manageable"
-              matTooltip="Edit Client"
-              [attr.aria-label]="manageable ? 'Edit Client' : 'Edit Client: ' + manageDeniedHint"
-              appConfigManaged
-              managedKind="Client"
-              [managedResourceId]="client.clientId"
-            >
-              <mat-icon>edit</mat-icon>
-            </button>
+            @if (rotatesSecrets) {
+              <span [matTooltip]="manageDeniedHint" [matTooltipDisabled]="manageable">
+                <button
+                  matIconButton
+                  [disabled]="!manageable"
+                  matTooltip="Rotate Secret - Generate a new secret (invalidates current)"
+                  [attr.aria-label]="
+                    manageable ? 'Rotate Secret' : 'Rotate Secret: ' + manageDeniedHint
+                  "
+                  (click)="rotateSecret(client)"
+                  appConfigManaged
+                  managedKind="Client"
+                  [managedResourceId]="client.clientId"
+                >
+                  <mat-icon>autorenew</mat-icon>
+                </button>
+              </span>
+            }
+            @if (!loadedClients) {
+              <span [matTooltip]="manageDeniedHint" [matTooltipDisabled]="manageable">
+                <button
+                  matIconButton
+                  class="delete-action"
+                  (click)="deleteClient(client)"
+                  [disabled]="!manageable"
+                  matTooltip="Delete Client"
+                  [attr.aria-label]="
+                    manageable ? 'Delete Client' : 'Delete Client: ' + manageDeniedHint
+                  "
+                  appConfigManaged
+                  managedKind="Client"
+                  [managedResourceId]="client.clientId"
+                >
+                  <mat-icon>delete_outline</mat-icon>
+                </button>
+              </span>
+            }
           </span>
-        }
-        @if (rotatesSecrets) {
-          <span [matTooltip]="manageDeniedHint" [matTooltipDisabled]="manageable">
-            <button
-              matIconButton
-              [disabled]="!manageable"
-              matTooltip="Rotate Secret - Generate a new secret (invalidates current)"
-              [attr.aria-label]="
-                manageable ? 'Rotate Secret' : 'Rotate Secret: ' + manageDeniedHint
-              "
-              (click)="rotateSecret(client)"
-              appConfigManaged
-              managedKind="Client"
-              [managedResourceId]="client.clientId"
-            >
-              <mat-icon>refresh</mat-icon>
-            </button>
-          </span>
-        }
-        @if (!loadedClients) {
-          <span [matTooltip]="manageDeniedHint" [matTooltipDisabled]="manageable">
-            <button
-              matIconButton
-              (click)="deleteClient(client)"
-              [disabled]="!manageable"
-              matTooltip="Delete Client"
-              [attr.aria-label]="
-                manageable ? 'Delete Client' : 'Delete Client: ' + manageDeniedHint
-              "
-              appConfigManaged
-              managedKind="Client"
-              [managedResourceId]="client.clientId"
-            >
-              <mat-icon>delete</mat-icon>
-            </button>
-          </span>
-        }
-      </td>
-    </ng-container>
+        </td>
+      </ng-container>
 
-    <tr mat-header-row *matHeaderRowDef="columns"></tr>
-    <tr mat-row *matRowDef="let row; columns: columns"></tr>
-  </table>
-}
+      <tr mat-header-row *matHeaderRowDef="columns"></tr>
+      <tr mat-row *matRowDef="let row; columns: columns"></tr>
+      <tr class="mat-mdc-row no-match" *matNoDataRow>
+        <td class="mat-mdc-cell" [attr.colspan]="columns.length">
+          <mat-icon aria-hidden="true">search_off</mat-icon>
+          <span>No client matches "{{ search.trim() }}".</span>
+          <button matButton type="button" (click)="clearSearch()">Clear search</button>
+        </td>
+      </tr>
+    </table>
+  </div>
+</ng-template>

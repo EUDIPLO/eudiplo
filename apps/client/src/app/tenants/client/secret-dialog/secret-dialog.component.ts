@@ -3,8 +3,8 @@ import { CommonModule } from '@angular/common';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { Router } from '@angular/router';
 import { ApiService } from '../../../core';
 import { copyToClipboard } from '../../../utils/copy-to-clipboard';
@@ -18,7 +18,7 @@ export interface SecretDialogData {
 @Component({
   selector: 'app-secret-dialog',
   standalone: true,
-  imports: [CommonModule, MatDialogModule, MatButtonModule, MatIconModule, FlexLayoutModule],
+  imports: [CommonModule, MatDialogModule, MatButtonModule, MatIconModule, MatTooltipModule],
   templateUrl: './secret-dialog.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './secret-dialog.component.scss',
@@ -31,6 +31,15 @@ export class SecretDialogComponent {
     private router: Router,
     private apiService: ApiService
   ) {}
+
+  async copyClientId(): Promise<void> {
+    await copyToClipboard(
+      this.snackBar,
+      this.data.clientId,
+      'Client ID copied to clipboard',
+      'Could not copy the client ID. Select it and copy it by hand.'
+    );
+  }
 
   async copySecret(): Promise<void> {
     await copyToClipboard(

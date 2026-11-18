@@ -463,8 +463,8 @@ describe('ClientCreateComponent back button', () => {
     }).compileComponents();
     const fixture = TestBed.createComponent(ClientCreateComponent);
     fixture.detectChanges();
-    const back = [...(fixture.nativeElement as HTMLElement).querySelectorAll('button')].find(
-      (button) => button.querySelector('mat-icon')?.textContent?.trim() === 'arrow_back'
+    const back = [...(fixture.nativeElement as HTMLElement).querySelectorAll('a, button')].find(
+      (element) => element.querySelector('mat-icon')?.textContent?.trim() === 'arrow_back'
     );
     return back?.getAttribute('aria-label') ?? null;
   }
@@ -705,6 +705,6 @@ describe('ClientCreateComponent Save', () => {
       );
     });
     expect(page.querySelector('[role="alert"]')).toBeNull();
-    await vi.waitFor(() => expect(document.activeElement).toBe(page.querySelector('h2')));
+    await vi.waitFor(() => expect(document.activeElement).toBe(page.querySelector('h1')));
   });
 });

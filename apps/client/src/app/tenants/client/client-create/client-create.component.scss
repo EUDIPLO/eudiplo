@@ -1,0 +1,29 @@
+@use '../../tenant-page' as page;
+
+@include page.base;
+
+@include page.form-page;
+
+.form-avatar mat-icon {
+  width: 28px;
+  height: 28px;
+  font-size: 28px;
+}
+
+// A config select with its Retry button below when its list could not be loaded
+.config-source {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+
+  mat-form-field {
+    width: 100%;
+  }
+}
+
+// The notices show only when they apply; without content they take no gap in the page
+app-config-ownership-notice,
+app-role-lock-notice {
+  display: contents;
+}

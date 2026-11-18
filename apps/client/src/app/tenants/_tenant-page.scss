@@ -102,3 +102,366 @@
     }
   }
 }
+
+// Material 3 search bar: 56dp high, fully rounded, on the high surface container, no outline.
+// Markup: a container with a leading .search-icon, an <input type="search">, and a .clear-search
+// button while there is text.
+@mixin search-bar {
+  display: flex;
+  flex: 0 1 400px;
+  align-items: center;
+  gap: 4px;
+  box-sizing: border-box;
+  height: 56px;
+  padding: 0 4px 0 16px;
+  border-radius: var(--mat-sys-corner-full);
+  background: var(--mat-sys-surface-container-high);
+  color: var(--mat-sys-on-surface);
+  transition:
+    background-color 150ms ease,
+    box-shadow 150ms ease;
+
+  &:hover {
+    background: color-mix(
+      in srgb,
+      var(--mat-sys-on-surface) 8%,
+      var(--mat-sys-surface-container-high)
+    );
+  }
+
+  &:focus-within {
+    box-shadow: inset 0 0 0 2px var(--mat-sys-primary);
+  }
+
+  .search-icon {
+    flex: none;
+    margin-right: 12px;
+    color: var(--mat-sys-on-surface);
+  }
+
+  input {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    outline: none;
+    background: transparent;
+    font: var(--mat-sys-body-large);
+    color: var(--mat-sys-on-surface);
+
+    &::placeholder {
+      color: var(--mat-sys-on-surface-variant);
+    }
+
+    // The clear button replaces the browser's own
+    &::-webkit-search-cancel-button {
+      appearance: none;
+    }
+  }
+
+  .clear-search {
+    flex: none;
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+// A table inside an outlined card: a tinted header row, inset first and last cells, and no line
+// under the last row, where the card edge or a footer ends it.
+@mixin data-table {
+  width: 100%;
+  background: transparent;
+
+  th.mat-mdc-header-cell {
+    height: 48px;
+    border-top: 1px solid var(--mat-sys-outline-variant);
+    background: var(--mat-sys-surface-container-low);
+    font: var(--mat-sys-label-large);
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  th.mat-mdc-header-cell:first-child,
+  td.mat-mdc-cell:first-child {
+    padding-left: 20px;
+  }
+
+  th.mat-mdc-header-cell:last-child,
+  td.mat-mdc-cell:last-child {
+    padding-right: 12px;
+  }
+
+  td.mat-mdc-cell {
+    border-bottom-color: var(--mat-sys-outline-variant);
+  }
+
+  tr.mat-mdc-row:last-child td {
+    border-bottom: 0;
+  }
+
+  tr.mat-mdc-row:hover {
+    background: var(--mat-sys-surface-container-low);
+  }
+
+  .mat-column-actions {
+    width: 1%;
+    white-space: nowrap;
+    text-align: right;
+  }
+}
+
+// Detail page of one resource: a back link, a header card with an avatar, the title, details and
+// actions, and cards below it. Markup: .back-link, .hero > .hero-avatar + .hero-copy (h1,
+// .hero-meta, .hero-description) + .hero-actions.
+@mixin detail-page {
+  .page {
+    gap: 16px;
+  }
+
+  .back-link {
+    align-self: flex-start;
+    margin-left: -12px;
+  }
+
+  .hero {
+    // mat-card lays out in a column; the header reads left to right
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 20px 24px;
+    padding: 24px;
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--mat-sys-primary) 7%, var(--mat-sys-surface)) 0%,
+      var(--mat-sys-surface) 60%
+    );
+  }
+
+  .hero-avatar {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 72px;
+    height: 72px;
+    border-radius: var(--mat-sys-corner-large);
+    // A tint of the primary colour, soft in both themes
+    background: color-mix(in srgb, var(--mat-sys-primary) 16%, var(--mat-sys-surface));
+    font: var(--mat-sys-headline-medium);
+    color: var(--mat-sys-primary);
+    text-transform: uppercase;
+  }
+
+  .hero-copy {
+    flex: 1 1 320px;
+    min-width: 0;
+
+    h1 {
+      margin: 0;
+      font: var(--mat-sys-headline-medium);
+      color: var(--mat-sys-on-surface);
+      overflow-wrap: anywhere;
+    }
+  }
+
+  .hero-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    margin-top: 8px;
+  }
+
+  .hero-description {
+    max-width: 72ch;
+    margin: 12px 0 0;
+    font: var(--mat-sys-body-large);
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  .hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+
+  // A page sets its columns with --content-columns on .page; narrow screens get one column
+  .content-grid {
+    display: grid;
+    grid-template-columns: var(--content-columns, minmax(0, 1fr));
+    gap: 16px;
+    align-items: start;
+    margin-top: 8px;
+  }
+
+  mat-card-header {
+    padding: 20px 20px 16px;
+  }
+
+  .loading-state {
+    display: flex;
+    justify-content: center;
+    padding: 48px;
+  }
+
+  @container (max-width: 960px) {
+    .content-grid {
+      --content-columns: minmax(0, 1fr);
+    }
+  }
+
+  @container (max-width: 600px) {
+    .hero {
+      padding: 20px;
+    }
+
+    .hero-avatar {
+      width: 56px;
+      height: 56px;
+      font: var(--mat-sys-headline-small);
+    }
+
+    .hero-copy h1 {
+      font: var(--mat-sys-headline-small);
+    }
+  }
+}
+
+// Create or edit form: a back link, a heading with an avatar, sections with their explanation
+// on the left and their fields in a card on the right, and a sticky action bar. Markup:
+// .back-link, .page-header .heading > .form-avatar, form > .form-section > .section-intro +
+// mat-card (.field-stack), and .action-bar with an .change-state output.
+@mixin form-page {
+  // A form reads best at a moderate width
+  .form-page {
+    max-width: 1040px;
+    gap: 16px;
+  }
+
+  .back-link {
+    align-self: flex-start;
+    margin-left: -12px;
+  }
+
+  .page-header .heading {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .form-avatar {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 56px;
+    height: 56px;
+    border-radius: var(--mat-sys-corner-large);
+    background: color-mix(in srgb, var(--mat-sys-primary) 16%, var(--mat-sys-surface));
+    font: var(--mat-sys-headline-small);
+    color: var(--mat-sys-primary);
+  }
+
+  form {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    margin-top: 8px;
+  }
+
+  // What the section is for on the left, its fields on the right
+  .form-section {
+    display: grid;
+    grid-template-columns: minmax(200px, 1fr) minmax(0, 2fr);
+    gap: 16px 32px;
+    align-items: start;
+
+    & + & {
+      padding-top: 24px;
+      border-top: 1px solid var(--mat-sys-outline-variant);
+    }
+  }
+
+  .section-intro {
+    h2 {
+      margin: 0;
+      font: var(--mat-sys-title-medium);
+      color: var(--mat-sys-on-surface);
+    }
+
+    p {
+      margin: 6px 0 0;
+      font: var(--mat-sys-body-medium);
+      color: var(--mat-sys-on-surface-variant);
+    }
+  }
+
+  // More specific than Material's own :first-child padding rule of the card content
+  mat-card mat-card-content {
+    padding: 20px;
+  }
+
+  .field-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  // Sticks to the bottom of the content while the form scrolls
+  .action-bar {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    margin: 0 -4px;
+    padding: 12px 16px;
+    border: 1px solid var(--mat-sys-outline-variant);
+    border-radius: var(--mat-sys-corner-large);
+    background: var(--mat-sys-surface-container-low);
+    box-shadow: 0 -4px 12px color-mix(in srgb, var(--mat-sys-shadow) 8%, transparent);
+  }
+
+  .change-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-right: auto;
+    font: var(--mat-sys-body-medium);
+    color: var(--mat-sys-on-surface-variant);
+
+    &.dirty {
+      color: var(--mat-sys-on-surface);
+
+      &::before {
+        content: '';
+        width: 8px;
+        height: 8px;
+        border-radius: var(--mat-sys-corner-full);
+        background: var(--eudiplo-warning);
+      }
+    }
+  }
+
+  .loading-state {
+    margin: 0;
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  @container (max-width: 760px) {
+    .form-section {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  @container (max-width: 480px) {
+    .action-bar {
+      flex-wrap: wrap;
+
+      .change-state {
+        flex-basis: 100%;
+      }
+    }
+  }
+}
