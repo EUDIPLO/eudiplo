@@ -107,6 +107,8 @@ describe('ConnectionSettingsComponent', () => {
       )
     ).not.toBeNull();
     expect(page.textContent).toContain('Automatic token refresh: enabled');
+    // Marked as fine only while the token renews itself
+    expect(page.querySelector('.hint-row.ok')).not.toBeNull();
     expect(page.textContent).not.toContain('keeps the client secret only until');
   });
 
@@ -114,6 +116,8 @@ describe('ConnectionSettingsComponent', () => {
     rejected = true;
 
     const page = await render();
+
+    expect(page.querySelector('.hint-row.ok')).toBeNull();
 
     expect(page.textContent).toContain(
       'Automatic token refresh: disabled. The token endpoint rejected the credentials; log in again.'
