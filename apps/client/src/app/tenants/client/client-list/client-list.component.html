@@ -66,9 +66,9 @@
               <span class="role-badge">{{ role }}</span>
             }
             @if (roles.length > visibleRoleCount) {
-              <span
+              <button
+                type="button"
                 class="role-badge more"
-                tabindex="0"
                 [matTooltip]="roles.slice(visibleRoleCount).join(', ')"
                 [attr.aria-label]="
                   roles.length -
@@ -76,8 +76,9 @@
                   ' more roles: ' +
                   roles.slice(visibleRoleCount).join(', ')
                 "
-                >+{{ roles.length - visibleRoleCount }} more</span
               >
+                +{{ roles.length - visibleRoleCount }} more
+              </button>
             }
           </span>
         } @else {

@@ -65,8 +65,9 @@ form {
   }
 }
 
-mat-card-content {
-  padding: 20px !important;
+// More specific than Material's own :first-child padding rule of the card content
+mat-card mat-card-content {
+  padding: 20px;
 }
 
 .field-stack {

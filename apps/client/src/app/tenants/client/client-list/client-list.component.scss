@@ -155,10 +155,17 @@ table.embedded {
   color: var(--mat-sys-on-surface-variant);
   white-space: nowrap;
 
+  // A button only to reach the tooltip with the other roles by keyboard
   &.more {
+    border: 0;
     background: var(--mat-sys-secondary-container);
     color: var(--mat-sys-on-secondary-container);
     cursor: default;
+
+    &:focus-visible {
+      outline: 2px solid var(--mat-sys-primary);
+      outline-offset: 2px;
+    }
   }
 }
 

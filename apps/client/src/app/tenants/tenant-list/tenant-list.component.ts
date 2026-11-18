@@ -126,17 +126,10 @@ export class TenantListComponent implements OnInit {
     );
   }
 
-  /** Opens the tenant of a clicked row, unless the click was on a button or link in it. */
-  openRow(event: MouseEvent): void {
-    const target = event.target as HTMLElement;
-    if (target.closest('a, button')) return;
-    (event.currentTarget as HTMLElement).querySelector<HTMLAnchorElement>('a.tenant-link')?.click();
-  }
-
   /** One of three tonal colours per tenant, the same on every visit. */
   avatarTone(tenant: TenantResponseDto): string {
     let hash = 0;
-    for (const char of tenant.id) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+    for (const char of tenant.id) hash = (hash * 31 + (char.codePointAt(0) ?? 0)) >>> 0;
     return ['tone-primary', 'tone-secondary', 'tone-tertiary'][hash % 3];
   }
 

@@ -135,13 +135,8 @@
           </ng-container>
 
           <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-          <!-- The whole row opens the tenant; the link in it serves the keyboard. -->
-          <tr
-            mat-row
-            *matRowDef="let row; columns: displayedColumns"
-            class="clickable"
-            (click)="openRow($event)"
-          ></tr>
+          <!-- The name link stretches over the row, so a click anywhere in it opens the tenant. -->
+          <tr mat-row *matRowDef="let row; columns: displayedColumns" class="clickable"></tr>
           <tr class="mat-mdc-row no-match" *matNoDataRow>
             <td class="mat-mdc-cell" [attr.colspan]="displayedColumns.length">
               <mat-icon aria-hidden="true">search_off</mat-icon>

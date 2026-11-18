@@ -123,12 +123,23 @@ export class TenantShowComponent implements OnInit {
   }
 }
 
+/** What happens to a session once it is no longer kept. */
+const cleanupLabels: Record<'full' | 'anonymize', string> = {
+  full: 'Deleted completely',
+  anonymize: 'Personal data removed, metadata kept',
+};
+
+/** One of two labels for a setting that is on or off; undefined while unset. */
+function booleanLabel(value: boolean | undefined, on: string, off: string): string | undefined {
+  if (value === undefined) return undefined;
+  return value ? on : off;
+}
+
 /** The tenant's own session, status list and key chain settings, as the detail page lists them. */
 export function buildSettingGroups(tenant: TenantResponseDto): SettingGroup[] {
   const sessions = tenant.sessionConfig ?? {};
   const statusLists = tenant.statusListConfig ?? {};
   const keyChains = tenant.defaultKeyChains ?? {};
-  const onOff = (value?: boolean) => (value === undefined ? undefined : value ? 'On' : 'Off');
   return [
     {
       title: 'Sessions',
@@ -140,12 +151,7 @@ export function buildSettingGroups(tenant: TenantResponseDto): SettingGroup[] {
         },
         {
           label: 'Afterwards',
-          value:
-            sessions.cleanupMode === 'anonymize'
-              ? 'Personal data removed, metadata kept'
-              : sessions.cleanupMode === 'full'
-                ? 'Deleted completely'
-                : undefined,
+          value: sessions.cleanupMode ? cleanupLabels[sessions.cleanupMode] : undefined,
         },
       ],
     },
@@ -164,14 +170,9 @@ export function buildSettingGroups(tenant: TenantResponseDto): SettingGroup[] {
         },
         {
           label: 'New token after a change',
-          value:
-            statusLists.immediateUpdate === undefined
-              ? undefined
-              : statusLists.immediateUpdate
-                ? 'Immediately'
-                : 'When the token expires',
+          value: booleanLabel(statusLists.immediateUpdate, 'Immediately', 'When the token expires'),
         },
-        { label: 'Aggregation', value: onOff(statusLists.enableAggregation) },
+        { label: 'Aggregation', value: booleanLabel(statusLists.enableAggregation, 'On', 'Off') },
       ],
     },
     {

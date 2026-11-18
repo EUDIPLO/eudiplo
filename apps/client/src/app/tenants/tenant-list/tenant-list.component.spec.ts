@@ -200,27 +200,15 @@ describe('TenantListComponent search and pages', () => {
     expect(ids()[0]).toBe('tenant-1');
   });
 
-  it('opens a tenant from a click anywhere in its row', async () => {
+  it('opens a tenant through the link in its row, which keyboard and mouse share', async () => {
     const { page } = await render(3);
     const row = page.querySelector('tr.mat-mdc-row') as HTMLElement;
-    const link = row.querySelector('a.tenant-link') as HTMLAnchorElement;
-    const follow = vi.spyOn(link, 'click').mockImplementation(() => undefined);
 
-    (row.querySelector('td.mat-column-description') as HTMLElement).click();
-
-    expect(follow).toHaveBeenCalledOnce();
-  });
-
-  it('does not open the tenant when the actions menu in its row is used', async () => {
-    const { page } = await render(3);
-    const row = page.querySelector('tr.mat-mdc-row') as HTMLElement;
-    const follow = vi
-      .spyOn(row.querySelector('a.tenant-link') as HTMLAnchorElement, 'click')
-      .mockImplementation(() => undefined);
-
-    (row.querySelector('button[aria-label="Actions for tenant tenant-1"]') as HTMLElement).click();
-
-    expect(follow).not.toHaveBeenCalled();
+    // The link stretches over the row in CSS; the row itself has no click handler of its own
+    expect(row.querySelector('a.tenant-link')?.getAttribute('href')).toBe('/tenant-1');
+    // The actions button is not part of the link, so it opens its menu instead
+    expect(row.querySelector('a.tenant-link button')).toBeNull();
+    expect(row.querySelector('button[aria-label="Actions for tenant tenant-1"]')).not.toBeNull();
   });
 
   it('stays on a page that still has tenants after a delete', async () => {
