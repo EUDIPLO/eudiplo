@@ -1,3 +1,33 @@
+// Config list styling
+.config-list {
+  padding: 0;
+
+  mat-list-item {
+    height: auto !important;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--mat-sys-outline-variant);
+
+    // Long values (ids, URLs, free text) wrap instead of widening the page
+    // or ending in an ellipsis. Nested so it outranks Material's nowrap rule.
+    [matListItemLine] {
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+
+    &:last-child {
+      border-bottom: none;
+    }
+  }
+}
+
+// The title holds the description or id; it takes the space the actions leave
+// and wraps there instead of pushing them off the page.
+.page-title {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .delete-button {
   color: var(--eudiplo-danger);
 }
