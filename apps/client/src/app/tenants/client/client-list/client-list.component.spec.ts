@@ -365,6 +365,76 @@ describe('ClientListComponent with another identity provider', () => {
   });
 });
 
+describe('ClientListComponent embedded in a tenant page', () => {
+  const text = (element: Element | null) => element?.textContent?.replace(/\s+/g, ' ').trim();
+
+  async function render(embedded: boolean) {
+    await TestBed.configureTestingModule({
+      imports: [ClientListComponent],
+      providers: [
+        provideRouter([]),
+        {
+          provide: JwtService,
+          useValue: { getRoles: () => ['tenants:manage'], getTenantId: () => 'acme' },
+        },
+        { provide: ConfigOwnershipService, useValue: { get: async () => undefined } },
+        { provide: FrontendConfigService, useValue: { authMode: null } },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ClientListComponent);
+    fixture.componentInstance.loadedClients = [
+      {
+        clientId: 'acme-admin',
+        description: 'First client',
+        // Stored records may name a role twice
+        roles: [
+          'clients:manage',
+          'issuance:offer',
+          'issuance:manage',
+          'presentation:request',
+          'clients:manage',
+          'audit:read',
+          'keys:manage',
+        ],
+      },
+    ] as ClientEntity[];
+    fixture.componentInstance.embedded = embedded;
+    fixture.detectChanges();
+    return fixture.nativeElement as HTMLElement;
+  }
+
+  it('leaves the heading to the page and shows the description under the client ID', async () => {
+    const page = await render(true);
+
+    expect(page.querySelector('h2')).toBeNull();
+    expect(page.querySelector('th.mat-column-description')).toBeNull();
+    expect(text(page.querySelector('.client-copy code'))).toBe('acme-admin');
+    expect(text(page.querySelector('.client-copy small'))).toBe('First client');
+  });
+
+  it('shows four roles once each and names the others in "+N more"', async () => {
+    const page = await render(true);
+
+    expect(Array.from(page.querySelectorAll('.role-badge:not(.more)'), text)).toEqual([
+      'clients:manage',
+      'issuance:offer',
+      'issuance:manage',
+      'presentation:request',
+    ]);
+    const more = page.querySelector('.role-badge.more');
+    expect(text(more)).toBe('+2 more');
+    expect(more?.getAttribute('aria-label')).toBe('2 more roles: audit:read, keys:manage');
+  });
+
+  it('keeps its heading, description column and role chips when not embedded', async () => {
+    const page = await render(false);
+
+    expect(text(page.querySelector('h2'))).toBe('Clients');
+    expect(page.querySelector('th.mat-column-description')).not.toBeNull();
+    expect(page.querySelectorAll('mat-chip')).toHaveLength(7);
+  });
+});
+
 describe('ClientListComponent Config Portability lock', () => {
   let get: Mock;
 

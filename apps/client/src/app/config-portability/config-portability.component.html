@@ -1,12 +1,15 @@
 <div class="page">
-  <div class="page-header">
+  <header class="page-header">
     <div>
-      <h2>Configuration Portability</h2>
+      <h1>Configuration Portability</h1>
       <p>Export, validate, migrate, and import tenant configuration as code.</p>
     </div>
-    <div fxLayout="row" fxLayoutAlign="center center" fxLayoutGap="12px">
+    <div class="header-actions">
+      @if (busy) {
+        <mat-spinner diameter="24" aria-label="Working"></mat-spinner>
+      }
       <a
-        mat-stroked-button
+        matButton="outlined"
         href="https://docs.eudiplo.dev/operate/configuration-as-code"
         target="_blank"
         rel="noopener"
@@ -14,42 +17,42 @@
         <mat-icon>open_in_new</mat-icon>
         Documentation
       </a>
-      @if (busy) {
-        <mat-spinner diameter="32"></mat-spinner>
-      }
     </div>
-  </div>
+  </header>
 
   <div class="card-grid">
-    <mat-card>
+    <mat-card appearance="outlined" class="export-card">
       <mat-card-header>
         <mat-icon mat-card-avatar>archive</mat-icon>
-        <mat-card-title>Export configuration</mat-card-title>
+        <h2 mat-card-title>Export configuration</h2>
         <mat-card-subtitle>Download the current tenant configuration.</mat-card-subtitle>
       </mat-card-header>
       <mat-card-content>
-        <p>
-          Secrets and private keys are never exported. The bundle contains environment placeholders,
-          external KMS references, and a manifest of values that must be supplied by the target
-          environment or secret manager.
-        </p>
+        <div class="note">
+          <mat-icon aria-hidden="true">lock</mat-icon>
+          <p>
+            Secrets and private keys are never exported. The bundle contains environment
+            placeholders, external KMS references, and a manifest of values that must be supplied by
+            the target environment or secret manager.
+          </p>
+        </div>
       </mat-card-content>
       <mat-card-actions>
-        <button mat-flat-button (click)="exportBundle()" [disabled]="busy">
+        <button matButton="filled" (click)="exportBundle()" [disabled]="busy">
           <mat-icon>download</mat-icon>
           Download bundle
         </button>
-        <button mat-button (click)="exportEditableJson()" [disabled]="busy">
+        <button matButton="outlined" (click)="exportEditableJson()" [disabled]="busy">
           <mat-icon>edit_document</mat-icon>
           Download editable JSON
         </button>
       </mat-card-actions>
     </mat-card>
 
-    <mat-card>
+    <mat-card appearance="outlined" class="import-card">
       <mat-card-header>
         <mat-icon mat-card-avatar>upload_file</mat-icon>
-        <mat-card-title>Import configuration</mat-card-title>
+        <h2 mat-card-title>Import configuration</h2>
         <mat-card-subtitle>Planning is read-only and always runs before apply.</mat-card-subtitle>
       </mat-card-header>
       <mat-card-content class="import-controls">
@@ -64,11 +67,21 @@
           hidden
           (change)="selectBundle($event)"
         />
-        <button mat-stroked-button (click)="bundleInput.click()" [disabled]="busy">
-          <mat-icon>folder_open</mat-icon>
-          Choose bundle or document
-        </button>
-        <span>{{ bundleFileName || 'No bundle selected' }}</span>
+        <div class="file-picker" [class.selected]="bundleFileName">
+          <span class="file-icon">
+            <mat-icon aria-hidden="true">{{
+              bundleFileName ? 'description' : 'note_add'
+            }}</mat-icon>
+          </span>
+          <span class="file-copy">
+            <strong>{{ bundleFileName || 'No bundle selected' }}</strong>
+            <small>A bundle (.zip) or a configuration document (.json)</small>
+          </span>
+          <button matButton="outlined" (click)="bundleInput.click()" [disabled]="busy">
+            <mat-icon>folder_open</mat-icon>
+            Choose bundle or document
+          </button>
+        </div>
         <mat-form-field appearance="outline">
           <mat-label>Import mode</mat-label>
           <mat-select [(ngModel)]="mode" (selectionChange)="onModeChange()">
@@ -76,11 +89,25 @@
             <mat-option value="upsert">Upsert</mat-option>
             <mat-option value="replace">Replace managed resources</mat-option>
           </mat-select>
+          <mat-hint>
+            @switch (mode) {
+              @case ('create') {
+                Creates missing resources and leaves existing ones untouched
+              }
+              @case ('upsert') {
+                Creates missing resources and updates existing ones
+              }
+              @case ('replace') {
+                Like upsert, and deletes resources this bundle source created earlier but no longer
+                contains
+              }
+            }
+          </mat-hint>
         </mat-form-field>
       </mat-card-content>
       <mat-card-actions>
         <button
-          mat-flat-button
+          matButton="filled"
           (click)="planImport()"
           [disabled]="busy || (!bundle && !bundleArchive)"
         >
@@ -88,7 +115,7 @@
           Plan and validate
         </button>
         <button
-          mat-button
+          matButton="outlined"
           (click)="applyImport()"
           [disabled]="
             busy ||
@@ -109,10 +136,16 @@
   </div>
 
   @if (plan) {
-    <mat-card id="config-plan">
+    <mat-card appearance="outlined" id="config-plan" class="plan-card">
       <mat-card-header>
-        <mat-icon mat-card-avatar>{{ plan.applicable ? 'check_circle' : 'error' }}</mat-icon>
-        <mat-card-title>
+        <mat-icon
+          mat-card-avatar
+          class="plan-status"
+          [class.tone-success]="plan.applicable"
+          [class.tone-danger]="!plan.applicable"
+          >{{ plan.applicable ? 'check_circle' : 'error' }}</mat-icon
+        >
+        <h2 mat-card-title>
           {{
             reattachTarget
               ? reappliesFileVersion
@@ -120,7 +153,7 @@
                 : 'Reset ' + resourceKey(reattachTarget) + ' to file'
               : 'Import plan'
           }}
-        </mat-card-title>
+        </h2>
         <mat-card-subtitle>
           {{
             plan.operationId
@@ -142,7 +175,9 @@
           <ng-container matColumnDef="version">
             <th mat-header-cell *matHeaderCellDef>Version</th>
             <td mat-cell *matCellDef="let item">
-              {{ item.sourceVersion }} → {{ item.targetVersion }}
+              <span [title]="item.sourceVersion + ' → ' + item.targetVersion">{{
+                versionLabel(item)
+              }}</span>
               @if (item.migrations.length) {
                 <div class="muted">{{ item.migrations.join(', ') }}</div>
               }
@@ -151,7 +186,7 @@
           <ng-container matColumnDef="action">
             <th mat-header-cell *matHeaderCellDef>Action</th>
             <td mat-cell *matCellDef="let item">
-              <mat-chip>{{ item.action }}</mat-chip>
+              <span class="badge" [class]="'action-' + item.action">{{ item.action }}</span>
               @if (item.changes?.length) {
                 <div class="muted">{{ changeSummary(item) }}</div>
               }
@@ -254,7 +289,7 @@
       @if (reattachTarget) {
         <mat-card-actions>
           <button
-            mat-flat-button
+            matButton="filled"
             (click)="applyReattach()"
             [disabled]="busy || !plan.applicable || !plan.planFingerprint || !!plan.operationId"
           >
@@ -267,10 +302,10 @@
   }
 
   @if (generatedSecrets.length) {
-    <mat-card class="generated-secrets">
+    <mat-card appearance="outlined" class="generated-secrets">
       <mat-card-header>
         <mat-icon mat-card-avatar>key</mat-icon>
-        <mat-card-title>Generated client secrets</mat-card-title>
+        <h2 mat-card-title>Generated client secrets</h2>
         <mat-card-subtitle>
           These values are shown once. Save them before leaving this page.
         </mat-card-subtitle>
@@ -291,7 +326,7 @@
         }
       </mat-card-content>
       <mat-card-actions>
-        <button mat-flat-button (click)="downloadImportResult()">
+        <button matButton="filled" (click)="downloadImportResult()">
           <mat-icon>download</mat-icon>
           Download secrets
         </button>
@@ -300,10 +335,12 @@
     </mat-card>
   }
 
-  <mat-card>
+  <mat-card appearance="outlined" class="resources-card">
     <mat-card-header>
       <mat-icon mat-card-avatar>policy</mat-icon>
-      <mat-card-title #resourcesTitle tabindex="-1">Resource ownership</mat-card-title>
+      <mat-card-title #resourcesTitle tabindex="-1" role="heading" aria-level="2"
+        >Resource ownership</mat-card-title
+      >
       <mat-card-subtitle
         >File-managed resources are read-only until explicitly detached. Startup imports skip
         detached resources until you reset them to the file version.</mat-card-subtitle
@@ -380,13 +417,13 @@
             </button>
           }
         </div>
-        <p class="muted">
+        <p class="summary">
           <output>{{ resourceSummary }}</output>
         </p>
         @if (selected.size) {
           <div class="bulk-actions">
-            <span class="muted">{{ selected.size }} selected</span>
-            <button mat-button (click)="detachSelected()" [disabled]="busy || !canApply">
+            <span>{{ selected.size }} selected</span>
+            <button matButton="tonal" (click)="detachSelected()" [disabled]="busy || !canApply">
               <mat-icon>link_off</mat-icon>
               Detach selected
             </button>
@@ -433,7 +470,9 @@
           <ng-container matColumnDef="ownership">
             <th mat-header-cell *matHeaderCellDef>Ownership</th>
             <td mat-cell *matCellDef="let item">
-              <mat-chip>{{ item.ownership }}</mat-chip>
+              <span class="badge" [class]="'ownership-' + item.ownership">{{
+                item.ownership
+              }}</span>
             </td>
           </ng-container>
           <ng-container matColumnDef="generation">
@@ -446,41 +485,44 @@
           </ng-container>
           <ng-container matColumnDef="actions">
             <th mat-header-cell *matHeaderCellDef></th>
-            <td mat-cell *matCellDef="let item">
-              @if (resourceLink(item); as link) {
-                <button
-                  mat-icon-button
-                  [routerLink]="link"
-                  matTooltip="View resource"
-                  [attr.aria-label]="'View ' + item.kind + '/' + item.resourceId"
-                >
-                  <mat-icon>open_in_new</mat-icon>
-                </button>
-              }
-              @if (item.ownership === 'file-managed') {
-                @if (canApplyFromFile(item)) {
+            <td mat-cell *matCellDef="let item" class="row-actions">
+              <!-- The view button comes last, so it lines up in every row. -->
+              <div class="row-actions-inner">
+                @if (item.ownership === 'file-managed') {
+                  @if (canApplyFromFile(item)) {
+                    <button
+                      mat-button
+                      (click)="planReattach(item)"
+                      [disabled]="busy || !canApply"
+                      matTooltip='Apply the version from the config folder again. A client with "secret": "!generate" gets a new secret, shown once.'
+                    >
+                      Apply from file
+                    </button>
+                  }
+                  <button mat-button (click)="detach(item)" [disabled]="busy || !canApply">
+                    Detach
+                  </button>
+                } @else if (canResetToFile(item)) {
                   <button
                     mat-button
                     (click)="planReattach(item)"
                     [disabled]="busy || !canApply"
-                    matTooltip='Apply the version from the config folder again. A client with "secret": "!generate" gets a new secret, shown once.'
+                    matTooltip="Discard API and UI changes and apply the version from the config folder"
                   >
-                    Apply from file
+                    Reset to file
                   </button>
                 }
-                <button mat-button (click)="detach(item)" [disabled]="busy || !canApply">
-                  Detach
-                </button>
-              } @else if (canResetToFile(item)) {
-                <button
-                  mat-button
-                  (click)="planReattach(item)"
-                  [disabled]="busy || !canApply"
-                  matTooltip="Discard API and UI changes and apply the version from the config folder"
-                >
-                  Reset to file
-                </button>
-              }
+                @if (resourceLink(item); as link) {
+                  <button
+                    mat-icon-button
+                    [routerLink]="link"
+                    matTooltip="View resource"
+                    [attr.aria-label]="'View ' + item.kind + '/' + item.resourceId"
+                  >
+                    <mat-icon>chevron_right</mat-icon>
+                  </button>
+                }
+              </div>
             </td>
           </ng-container>
           <tr mat-header-row *matHeaderRowDef="resourceColumns"></tr>
@@ -494,50 +536,68 @@
       }
     </mat-card-content>
   </mat-card>
-</div>
 
-@if (canApply) {
-  <mat-card>
-    <mat-card-header
-      ><mat-card-title #operationsTitle tabindex="-1"
-        >Recent configuration operations</mat-card-title
-      ></mat-card-header
-    >
-    <mat-card-content>
-      <button mat-button (click)="refreshOperations()" [disabled]="busy">Refresh history</button>
-      @if (operationsLoading && !operations.length) {
-        <div class="loading-state">
-          <mat-spinner diameter="40" aria-label="Loading configuration operations"></mat-spinner>
-        </div>
-      } @else if (operationsLoadError) {
-        <app-load-error [message]="operationsLoadError" (retry)="retryOperations()" />
-      } @else {
-        @for (operation of operations; track operation.id) {
-          <details>
-            <summary>
-              {{ operation.createdAt | date: 'short' }} · {{ operation.mode }} ·
-              {{ operation.status }}
-            </summary>
-            <p>
-              Operation <code>{{ operation.id }}</code>
-            </p>
-            @for (step of operation.operations; track $index) {
-              <p>
-                {{ step.path || (step.kind || '') + '/' + (step.id || '') }} · {{ step.stage }} ·
-                {{ step.status }}
-              </p>
+  @if (canApply) {
+    <mat-card appearance="outlined" class="operations-card">
+      <mat-card-header>
+        <mat-icon mat-card-avatar>history</mat-icon>
+        <mat-card-title #operationsTitle tabindex="-1" role="heading" aria-level="2"
+          >Recent configuration operations</mat-card-title
+        >
+        <button matButton class="header-action" (click)="refreshOperations()" [disabled]="busy">
+          <mat-icon>refresh</mat-icon>
+          Refresh history
+        </button>
+      </mat-card-header>
+      <mat-card-content>
+        @if (operationsLoading && !operations.length) {
+          <div class="loading-state">
+            <mat-spinner diameter="40" aria-label="Loading configuration operations"></mat-spinner>
+          </div>
+        } @else if (operationsLoadError) {
+          <app-load-error [message]="operationsLoadError" (retry)="retryOperations()" />
+        } @else {
+          <div class="operation-list">
+            @for (operation of operations; track operation.id) {
+              <details class="operation">
+                <summary>
+                  <mat-icon class="operation-chevron" aria-hidden="true">chevron_right</mat-icon>
+                  <time [attr.datetime]="operation.createdAt">{{
+                    operation.createdAt | date: 'short'
+                  }}</time>
+                  <span class="operation-mode">{{ operation.mode }}</span>
+                  <span class="badge" [class]="'status-' + operation.status">{{
+                    operation.status
+                  }}</span>
+                </summary>
+                <div class="operation-body">
+                  <p>
+                    Operation <code>{{ operation.id }}</code>
+                  </p>
+                  @if (operation.operations.length) {
+                    <ul class="operation-steps">
+                      @for (step of operation.operations; track $index) {
+                        <li>
+                          <code>{{ step.path || (step.kind || '') + '/' + (step.id || '') }}</code>
+                          <span>{{ step.stage }} · {{ step.status }}</span>
+                        </li>
+                      }
+                    </ul>
+                  }
+                  @if (operation.status === 'running') {
+                    <p class="operation-warning">
+                      This operation may still be running. If its worker crashed, stop that worker
+                      before acknowledging the interruption with the CLI.
+                    </p>
+                  }
+                </div>
+              </details>
+            } @empty {
+              <p class="muted">No configuration operations recorded.</p>
             }
-            @if (operation.status === 'running') {
-              <p>
-                This operation may still be running. If its worker crashed, stop that worker before
-                acknowledging the interruption with the CLI.
-              </p>
-            }
-          </details>
-        } @empty {
-          <p>No configuration operations recorded.</p>
+          </div>
         }
-      }
-    </mat-card-content>
-  </mat-card>
-}
+      </mat-card-content>
+    </mat-card>
+  }
+</div>

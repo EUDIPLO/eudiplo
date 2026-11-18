@@ -65,7 +65,9 @@ async function expectImportsUnchanged(page: Page, file: string) {
   await page.locator('#bundleInput').setInputFiles(file);
   await page.getByRole('button', { name: 'Plan and validate' }).click();
   await expect(page.getByText('Ready to apply')).toBeVisible();
-  await expect(page.locator('mat-chip').filter({ hasText: 'unchanged' })).toHaveCount(1);
+  await expect(page.locator('td.mat-column-action').filter({ hasText: 'unchanged' })).toHaveCount(
+    1
+  );
 }
 
 test('downloads a webhook endpoint as a document that imports unchanged', async ({ page }) => {

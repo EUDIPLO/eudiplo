@@ -1,16 +1,19 @@
-<div fxLayout="row" fxLayoutAlign="space-between center">
-  <h2>Clients</h2>
-  @if (!loadedClients && !unavailableMessage) {
-    <button
-      matIconButton
-      [routerLink]="['create']"
-      matTooltip="Create New Client"
-      aria-label="Create New Client"
-    >
-      <mat-icon>add</mat-icon>
-    </button>
-  }
-</div>
+<!-- Embedded in another page, such as a tenant's, that page gives the heading. -->
+@if (!embedded) {
+  <div fxLayout="row" fxLayoutAlign="space-between center">
+    <h2>Clients</h2>
+    @if (!loadedClients && !unavailableMessage) {
+      <button
+        matIconButton
+        [routerLink]="['create']"
+        matTooltip="Create New Client"
+        aria-label="Create New Client"
+      >
+        <mat-icon>add</mat-icon>
+      </button>
+    }
+  </div>
+}
 
 @if (unavailableMessage) {
   <app-unavailable-card heading="Client management is unavailable" [message]="unavailableMessage" />
@@ -23,10 +26,29 @@
       mode.
     </p>
   }
-  <table mat-table [dataSource]="clients" class="mat-elevation-z8">
+  <table
+    mat-table
+    [dataSource]="clients"
+    [class.mat-elevation-z8]="!embedded"
+    [class.embedded]="embedded"
+  >
     <ng-container matColumnDef="clientId">
-      <th mat-header-cell *matHeaderCellDef>Client ID</th>
-      <td mat-cell *matCellDef="let client">{{ client.clientId }}</td>
+      <th mat-header-cell *matHeaderCellDef>{{ embedded ? 'Client' : 'Client ID' }}</th>
+      <td mat-cell *matCellDef="let client">
+        @if (embedded) {
+          <span class="client-cell">
+            <span class="client-icon" aria-hidden="true"><mat-icon>key</mat-icon></span>
+            <span class="client-copy">
+              <code>{{ client.clientId }}</code>
+              @if (client.description) {
+                <small>{{ client.description }}</small>
+              }
+            </span>
+          </span>
+        } @else {
+          {{ client.clientId }}
+        }
+      </td>
     </ng-container>
 
     <ng-container matColumnDef="description">
@@ -37,13 +59,37 @@
     <ng-container matColumnDef="roles">
       <th mat-header-cell *matHeaderCellDef>Roles</th>
       <td mat-cell *matCellDef="let client">
-        <mat-chip-set>
-          @for (role of client.roles; track role) {
-            <span>
-              <mat-chip>{{ role }}</mat-chip>
-            </span>
-          }
-        </mat-chip-set>
+        @if (embedded) {
+          @let roles = uniqueRoles(client);
+          <span class="role-badges">
+            @for (role of roles.slice(0, visibleRoleCount); track role) {
+              <span class="role-badge">{{ role }}</span>
+            }
+            @if (roles.length > visibleRoleCount) {
+              <button
+                type="button"
+                class="role-badge more"
+                [matTooltip]="roles.slice(visibleRoleCount).join(', ')"
+                [attr.aria-label]="
+                  roles.length -
+                  visibleRoleCount +
+                  ' more roles: ' +
+                  roles.slice(visibleRoleCount).join(', ')
+                "
+              >
+                +{{ roles.length - visibleRoleCount }} more
+              </button>
+            }
+          </span>
+        } @else {
+          <mat-chip-set>
+            @for (role of client.roles; track role) {
+              <span>
+                <mat-chip>{{ role }}</mat-chip>
+              </span>
+            }
+          </mat-chip-set>
+        }
       </td>
     </ng-container>
 

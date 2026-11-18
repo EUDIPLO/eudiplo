@@ -5,7 +5,6 @@ import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatCheckboxModule } from '@angular/material/checkbox';
-import { MatChipsModule } from '@angular/material/chips';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
@@ -84,7 +83,6 @@ const resourceCount = (count: number) => `${count} ${count === 1 ? 'resource' : 
     MatButtonModule,
     MatCardModule,
     MatCheckboxModule,
-    MatChipsModule,
     MatFormFieldModule,
     MatIconModule,
     MatInputModule,
@@ -439,6 +437,18 @@ export class ConfigPortabilityComponent implements OnInit {
   /** True while the shown plan applies the file version of a resource that is still file-managed. */
   get reappliesFileVersion(): boolean {
     return this.reattachTarget?.ownership === 'file-managed';
+  }
+
+  /**
+   * The schema version of a plan item, such as "v2", or "v1 → v2" when the import migrates it.
+   * Values that are not schema URLs are shown as they are.
+   */
+  versionLabel(item: { sourceVersion: string; targetVersion: string }): string {
+    const short = (version: string) =>
+      /\/schemas\/(v\d+)\/[^/]+\.schema\.json$/.exec(version)?.[1] ?? version;
+    const source = short(item.sourceVersion);
+    const target = short(item.targetVersion);
+    return source === target ? target : `${source} → ${target}`;
   }
 
   /** The field changes of an item at a glance, for example "3 fields, 1 removed". */
