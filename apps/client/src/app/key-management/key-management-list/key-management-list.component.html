@@ -1,82 +1,28 @@
-<div class="key-list-container">
-  <div fxLayout="row" fxLayoutAlign="space-between center" class="header">
-    <h2>Key Management</h2>
-    <div fxLayout="row" fxLayoutGap="8px">
-      <button
-        mat-icon-button
-        [routerLink]="['/kms']"
-        matTooltip="KMS Providers"
-        aria-label="KMS Providers"
-      >
+<div class="page">
+  <header class="page-header">
+    <div>
+      <h1>Keys</h1>
+      <p>Key chains sign credentials, wallet requests, status lists, trust lists and tokens.</p>
+    </div>
+    <div class="header-actions">
+      <a matButton="outlined" [routerLink]="['/kms']">
         <mat-icon>dns</mat-icon>
-      </button>
-      <button
-        mat-icon-button
-        color="primary"
-        [routerLink]="['create']"
-        matTooltip="Create Key"
-        aria-label="Create Key"
-      >
+        KMS Providers
+      </a>
+      <!-- The cookbook and its E2E test name this button by its tooltip. -->
+      <button matButton="filled" [routerLink]="['create']" matTooltip="Create Key">
         <mat-icon>add</mat-icon>
+        Create key
       </button>
     </div>
-  </div>
-
-  <div class="filters" fxLayout="row" fxLayoutGap="12px" fxLayoutAlign="start center">
-    <mat-form-field appearance="outline" class="filter-field">
-      <mat-label>Usage</mat-label>
-      <mat-select [(value)]="selectedUsageType" (selectionChange)="onFilterChange()">
-        <mat-option value="">All usages</mat-option>
-        <mat-option value="attestation">Credential Signing</mat-option>
-        <mat-option value="access">Access Certificate</mat-option>
-        <mat-option value="authorizationServer">Authorization Server</mat-option>
-        <mat-option value="statusList">Status List</mat-option>
-        <mat-option value="trustList">Trust List</mat-option>
-        <mat-option value="federation">OpenID Federation Entity Key</mat-option>
-      </mat-select>
-    </mat-form-field>
-
-    <mat-form-field appearance="outline" class="filter-field">
-      <mat-label>Key Type</mat-label>
-      <mat-select [(value)]="selectedKeyType" (selectionChange)="onFilterChange()">
-        <mat-option value="">All types</mat-option>
-        <mat-option value="internalChain">Internal Chain</mat-option>
-        <mat-option value="standalone">Standalone</mat-option>
-      </mat-select>
-    </mat-form-field>
-
-    <mat-form-field appearance="outline" class="filter-field">
-      <mat-label>KMS Provider</mat-label>
-      <mat-select [(value)]="selectedKmsProvider" (selectionChange)="onFilterChange()">
-        <mat-option value="">All providers</mat-option>
-        @for (provider of availableKmsProviders; track provider) {
-          <mat-option [value]="provider">{{ provider }}</mat-option>
-        }
-      </mat-select>
-    </mat-form-field>
-
-    <button
-      mat-icon-button
-      (click)="clearFilters()"
-      matTooltip="Clear filters"
-      aria-label="Clear filters"
-    >
-      <mat-icon>filter_alt_off</mat-icon>
-    </button>
-  </div>
+  </header>
 
   @if (missingDefaultMessage; as message) {
-    <div
-      class="missing-default"
-      role="alert"
-      fxLayout="row"
-      fxLayoutAlign="start center"
-      fxLayoutGap="12px"
-    >
+    <div class="missing-default" role="alert">
       <mat-icon aria-hidden="true">warning</mat-icon>
-      <span fxFlex>{{ message }}</span>
+      <span>{{ message }}</span>
       <button
-        mat-stroked-button
+        matButton="outlined"
         (click)="setDefault(null)"
         [disabled]="updatingDefault"
         [attr.aria-busy]="updatingDefault"
@@ -91,171 +37,287 @@
   }
 
   @if (isLoading && displayItems.length === 0) {
-    <div class="loading-state" fxLayout="row" fxLayoutAlign="center center">
+    <div class="loading-state">
       <mat-spinner diameter="40" aria-label="Loading keys"></mat-spinner>
     </div>
   } @else if (loadError) {
     <app-load-error [message]="loadError" (retry)="loadAllKeys()" />
   } @else if (displayItems.length === 0) {
-    <div class="empty-state" fxLayout="column" fxLayoutAlign="center center" fxLayoutGap="16px">
-      <mat-icon class="empty-icon">vpn_key</mat-icon>
-      <h3>No keys configured</h3>
+    <div class="empty-state">
+      <span class="empty-icon"><mat-icon>vpn_key</mat-icon></span>
+      <h2>No keys configured</h2>
       <p>Create your first key to get started with credential issuance.</p>
-      <button mat-flat-button color="primary" [routerLink]="['create']">
+      <button matButton="filled" [routerLink]="['create']">
         <mat-icon>add</mat-icon>
         Create Key
       </button>
     </div>
-  } @else if (filteredItems.length === 0) {
-    <div class="empty-state" fxLayout="column" fxLayoutAlign="center center" fxLayoutGap="16px">
-      <mat-icon class="empty-icon">filter_alt</mat-icon>
-      <h3>No matching keys</h3>
-      <p>Try adjusting or clearing the current filters.</p>
-      <button mat-stroked-button (click)="clearFilters()">
-        <mat-icon>filter_alt_off</mat-icon>
-        Clear Filters
-      </button>
-    </div>
   } @else {
-    <div class="table-container">
-      <table mat-table [dataSource]="filteredItems" class="keys-table mat-elevation-z8">
-        <ng-container matColumnDef="usage">
-          <th mat-header-cell *matHeaderCellDef>Usage</th>
-          <td mat-cell *matCellDef="let item">
-            <span>{{ getUsageLabel(item) }}</span>
-          </td>
-        </ng-container>
-
-        <ng-container matColumnDef="name">
-          <th mat-header-cell *matHeaderCellDef>Name</th>
-          <td mat-cell *matCellDef="let item">
-            <span class="key-name">{{ getDisplayName(item) }}</span>
-            @if (defaultChip(item); as chip) {
-              <mat-chip class="default-chip" [matTooltip]="chip.tooltip"
-                >{{ chip.label }}<span class="visually-hidden">: {{ chip.tooltip }}</span></mat-chip
-              >
-            }
-          </td>
-        </ng-container>
-
-        <ng-container matColumnDef="type">
-          <th mat-header-cell *matHeaderCellDef>Type</th>
-          <td mat-cell *matCellDef="let item">
-            <div fxLayout="row" fxLayoutGap="6px" fxLayoutAlign="start center" class="type-meta">
-              <mat-chip>{{ getTypeLabel(item) }}</mat-chip>
-              @if (item.hasRootCa) {
-                <mat-chip class="ca-chip">Internal CA</mat-chip>
-              }
-            </div>
-          </td>
-        </ng-container>
-
-        <ng-container matColumnDef="kmsProvider">
-          <th mat-header-cell *matHeaderCellDef>KMS</th>
-          <td mat-cell *matCellDef="let item">
-            <mat-chip>{{ item.kmsProvider }}</mat-chip>
-          </td>
-        </ng-container>
-
-        <ng-container matColumnDef="rotation">
-          <th mat-header-cell *matHeaderCellDef>Rotation</th>
-          <td mat-cell *matCellDef="let item">
-            @if (item.rotationEnabled) {
-              <span
-                class="rotation-enabled"
-                fxLayout="row"
-                fxLayoutAlign="start center"
-                fxLayoutGap="4px"
-              >
-                <mat-icon>autorenew</mat-icon>
-                Enabled
-              </span>
+    <mat-card appearance="outlined" class="table-card">
+      <div class="card-header">
+        <div class="card-title">
+          <h2>All key chains</h2>
+          <output>
+            @if (hasFilters) {
+              {{ filteredItems.length }} of {{ displayItems.length }} key chains
             } @else {
-              <span class="rotation-disabled">Disabled</span>
+              {{ displayItems.length }} {{ displayItems.length === 1 ? 'key chain' : 'key chains' }}
             }
-          </td>
-        </ng-container>
+          </output>
+        </div>
+        <!-- Key type and KMS provider as menu buttons, as Material 3 filters -->
+        <div class="filter-menus">
+          <button
+            matButton="outlined"
+            type="button"
+            class="filter-trigger"
+            [class.active]="selectedKeyType"
+            [matMenuTriggerFor]="typeMenu"
+            [attr.aria-label]="'Key type: ' + keyTypeFilterLabel"
+          >
+            Type: {{ keyTypeFilterLabel }}
+            <mat-icon iconPositionEnd>arrow_drop_down</mat-icon>
+          </button>
+          @if (availableKmsProviders.length > 1) {
+            <button
+              matButton="outlined"
+              type="button"
+              class="filter-trigger"
+              [class.active]="selectedKmsProvider"
+              [matMenuTriggerFor]="kmsMenu"
+              [attr.aria-label]="'KMS provider: ' + (selectedKmsProvider || 'All')"
+            >
+              KMS: {{ selectedKmsProvider || 'All' }}
+              <mat-icon iconPositionEnd>arrow_drop_down</mat-icon>
+            </button>
+          }
+          @if (hasFilters) {
+            <button matButton type="button" (click)="clearFilters()">
+              <mat-icon>filter_alt_off</mat-icon>
+              Clear filters
+            </button>
+          }
+        </div>
+      </div>
 
-        <ng-container matColumnDef="id">
-          <th mat-header-cell *matHeaderCellDef>ID</th>
-          <td mat-cell *matCellDef="let item">
-            <span class="key-id">{{ item.id }}</span>
-          </td>
-        </ng-container>
+      <!-- Usage as filter chips, with the number of key chains of each usage -->
+      <mat-chip-listbox
+        class="usage-filters"
+        aria-label="Filter by usage"
+        [value]="selectedUsageType"
+        (change)="selectUsage($event.value ?? '')"
+      >
+        <mat-chip-option value="">All · {{ displayItems.length }}</mat-chip-option>
+        @for (usage of usageFilters; track usage.value) {
+          <mat-chip-option [value]="usage.value"
+            >{{ usage.label }} · {{ usage.count }}</mat-chip-option
+          >
+        }
+      </mat-chip-listbox>
 
-        <ng-container matColumnDef="actions">
-          <th mat-header-cell *matHeaderCellDef>Actions</th>
-          <td mat-cell *matCellDef="let item">
-            <div class="key-actions" fxLayout="row" fxLayoutGap="4px">
-              <button
-                mat-icon-button
-                [routerLink]="getViewRoute(item)"
-                matTooltip="View details"
-                aria-label="View details"
-              >
-                <mat-icon>visibility</mat-icon>
-              </button>
-              <button
-                mat-icon-button
-                [routerLink]="[item.id, 'edit']"
-                matTooltip="Edit"
-                aria-label="Edit"
-                appConfigManaged
-                managedKind="KeyChain"
-                [managedResourceId]="item.id"
-              >
-                <mat-icon>edit</mat-icon>
-              </button>
-              @if (canToggleDefault(item)) {
-                <button
-                  mat-icon-button
-                  (click)="toggleDefault(item, $event)"
-                  [disabled]="updatingDefault"
-                  [attr.aria-busy]="updatingDefault"
-                  disabledInteractive
-                  [matTooltip]="defaultToggleTooltip(item)"
-                  [attr.aria-label]="defaultToggleLabel(item)"
-                  appConfigManaged
-                  managedKind="KeyChainDefaults"
-                  managedResourceId="defaults"
-                >
-                  <mat-icon>{{ isDefault(item) ? 'star' : 'star_outline' }}</mat-icon>
-                </button>
-              }
-              @if (item.rotationEnabled) {
-                <button
-                  mat-icon-button
-                  (click)="rotateItem(item, $event)"
-                  matTooltip="Rotate key now"
-                  aria-label="Rotate key now"
-                  appConfigManaged
-                  managedKind="KeyChain"
-                  [managedResourceId]="item.id"
-                >
-                  <mat-icon>refresh</mat-icon>
-                </button>
-              }
-              <button
-                mat-icon-button
-                (click)="deleteItem(item, $event)"
-                [disabled]="deletingIds.has(item.id)"
-                disabledInteractive
-                matTooltip="Delete"
-                [attr.aria-label]="'Delete key chain ' + getDisplayName(item)"
-                color="warn"
-                appConfigManaged
-                managedKind="KeyChain"
-                [managedResourceId]="item.id"
-              >
-                <mat-icon>delete</mat-icon>
-              </button>
-            </div>
-          </td>
-        </ng-container>
+      @if (filteredItems.length === 0) {
+        <div class="no-match">
+          <mat-icon aria-hidden="true">filter_alt</mat-icon>
+          <strong>No matching keys</strong>
+          <span>Try adjusting or clearing the current filters.</span>
+          <button matButton type="button" (click)="clearFilters()">
+            <mat-icon>filter_alt_off</mat-icon>
+            Clear Filters
+          </button>
+        </div>
+      } @else {
+        <div class="table-scroll">
+          <table mat-table [dataSource]="filteredItems" class="keys-table">
+            <ng-container matColumnDef="name">
+              <th mat-header-cell *matHeaderCellDef>Key chain</th>
+              <td mat-cell *matCellDef="let item">
+                <span class="key-cell">
+                  <span class="usage-icon" [class]="'usage-' + item.usageType" aria-hidden="true">
+                    <mat-icon>{{ getUsageIcon(item) }}</mat-icon>
+                  </span>
+                  <span class="key-copy">
+                    <!-- The name links to the key chain; its link covers the row -->
+                    <a class="key-link" [routerLink]="getViewRoute(item)">{{
+                      getDisplayName(item)
+                    }}</a>
+                    <span class="key-sub">
+                      <code class="key-id">{{ item.id }}</code>
+                      @if (defaultChip(item); as chip) {
+                        <span class="default-chip" [matTooltip]="chip.tooltip"
+                          >{{ chip.label
+                          }}<span class="visually-hidden">: {{ chip.tooltip }}</span></span
+                        >
+                      }
+                    </span>
+                  </span>
+                </span>
+              </td>
+            </ng-container>
 
-        <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-        <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
-      </table>
-    </div>
+            <ng-container matColumnDef="usage">
+              <th mat-header-cell *matHeaderCellDef>Usage</th>
+              <td mat-cell *matCellDef="let item" [title]="getUsageLabel(item)">
+                {{ getUsageShortLabel(item) }}
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="type">
+              <th mat-header-cell *matHeaderCellDef>Type</th>
+              <td mat-cell *matCellDef="let item">
+                <span class="badges">
+                  <span class="tag">{{ getTypeLabel(item) }}</span>
+                  @if (item.hasRootCa) {
+                    <span class="tag ca">Internal CA</span>
+                  }
+                </span>
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="kmsProvider">
+              <th mat-header-cell *matHeaderCellDef>KMS</th>
+              <td mat-cell *matCellDef="let item">
+                <span class="tag kms">
+                  <mat-icon aria-hidden="true">dns</mat-icon>
+                  {{ item.kmsProvider }}
+                </span>
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="rotation">
+              <th mat-header-cell *matHeaderCellDef>Rotation</th>
+              <td mat-cell *matCellDef="let item">
+                @if (item.rotationEnabled) {
+                  <span class="rotation-enabled">
+                    <mat-icon aria-hidden="true">autorenew</mat-icon>
+                    Enabled
+                  </span>
+                } @else {
+                  <span class="rotation-disabled">Disabled</span>
+                }
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="actions">
+              <th mat-header-cell *matHeaderCellDef>
+                <span class="visually-hidden">Actions</span>
+              </th>
+              <td mat-cell *matCellDef="let item">
+                <div class="key-actions">
+                  <button
+                    mat-icon-button
+                    [routerLink]="[item.id, 'edit']"
+                    matTooltip="Edit"
+                    aria-label="Edit"
+                    appConfigManaged
+                    managedKind="KeyChain"
+                    [managedResourceId]="item.id"
+                  >
+                    <mat-icon>edit</mat-icon>
+                  </button>
+                  @if (canToggleDefault(item)) {
+                    <button
+                      mat-icon-button
+                      class="default-toggle"
+                      [class.on]="isDefault(item)"
+                      (click)="toggleDefault(item, $event)"
+                      [disabled]="updatingDefault"
+                      [attr.aria-busy]="updatingDefault"
+                      disabledInteractive
+                      [matTooltip]="defaultToggleTooltip(item)"
+                      [attr.aria-label]="defaultToggleLabel(item)"
+                      appConfigManaged
+                      managedKind="KeyChainDefaults"
+                      managedResourceId="defaults"
+                    >
+                      <mat-icon>{{ isDefault(item) ? 'star' : 'star_outline' }}</mat-icon>
+                    </button>
+                  }
+                  @if (item.rotationEnabled) {
+                    <button
+                      mat-icon-button
+                      (click)="rotateItem(item, $event)"
+                      matTooltip="Rotate key now"
+                      aria-label="Rotate key now"
+                      appConfigManaged
+                      managedKind="KeyChain"
+                      [managedResourceId]="item.id"
+                    >
+                      <mat-icon>autorenew</mat-icon>
+                    </button>
+                  }
+                  <button
+                    mat-icon-button
+                    class="delete-action"
+                    (click)="deleteItem(item, $event)"
+                    [disabled]="deletingIds.has(item.id)"
+                    disabledInteractive
+                    matTooltip="Delete"
+                    [attr.aria-label]="'Delete key chain ' + getDisplayName(item)"
+                    appConfigManaged
+                    managedKind="KeyChain"
+                    [managedResourceId]="item.id"
+                  >
+                    <mat-icon>delete_outline</mat-icon>
+                  </button>
+                </div>
+              </td>
+            </ng-container>
+
+            <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+            <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+          </table>
+        </div>
+      }
+    </mat-card>
   }
 </div>
+
+<mat-menu #typeMenu="matMenu" class="m3-menu">
+  <button
+    mat-menu-item
+    role="menuitemradio"
+    [attr.aria-checked]="!selectedKeyType"
+    [class.selected]="!selectedKeyType"
+    (click)="selectKeyType('')"
+  >
+    <mat-icon>{{ !selectedKeyType ? 'check' : '' }}</mat-icon>
+    <span>All types</span>
+  </button>
+  @for (type of keyTypes; track type.value) {
+    <button
+      mat-menu-item
+      role="menuitemradio"
+      [attr.aria-checked]="selectedKeyType === type.value"
+      [class.selected]="selectedKeyType === type.value"
+      (click)="selectKeyType(type.value)"
+    >
+      <mat-icon>{{ selectedKeyType === type.value ? 'check' : '' }}</mat-icon>
+      <span>{{ type.label }}</span>
+    </button>
+  }
+</mat-menu>
+
+<mat-menu #kmsMenu="matMenu" class="m3-menu">
+  <button
+    mat-menu-item
+    role="menuitemradio"
+    [attr.aria-checked]="!selectedKmsProvider"
+    [class.selected]="!selectedKmsProvider"
+    (click)="selectKmsProvider('')"
+  >
+    <mat-icon>{{ !selectedKmsProvider ? 'check' : '' }}</mat-icon>
+    <span>All providers</span>
+  </button>
+  @for (provider of availableKmsProviders; track provider) {
+    <button
+      mat-menu-item
+      role="menuitemradio"
+      [attr.aria-checked]="selectedKmsProvider === provider"
+      [class.selected]="selectedKmsProvider === provider"
+      (click)="selectKmsProvider(provider)"
+    >
+      <mat-icon>{{ selectedKmsProvider === provider ? 'check' : '' }}</mat-icon>
+      <span>{{ provider }}</span>
+    </button>
+  }
+</mat-menu>

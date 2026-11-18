@@ -1,26 +1,44 @@
+@use '../../tenants/tenant-page' as page;
+
+// Heading as on the key chain form; the steps sit below
+@include page.base;
+@include page.form-page;
+
 .wizard-container {
-  padding: 24px;
-  max-width: 800px;
-  margin: 0 auto;
+  max-width: 880px;
+  gap: 16px;
 }
 
-.wizard-header {
-  margin-bottom: 16px;
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 
-  h2 {
-    margin: 0;
-  }
+.form-avatar mat-icon {
+  width: 28px;
+  height: 28px;
+  font-size: 28px;
+}
+
+// The stepper sits in an outlined card on the page surface
+mat-stepper {
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: var(--mat-sys-corner-large);
+  background: var(--mat-sys-surface);
 }
 
 .step-description {
   h3 {
-    margin: 0 0 8px 0;
-    font-size: 1.25rem;
+    margin: 0 0 6px;
+    font: var(--mat-sys-title-large);
+    color: var(--mat-sys-on-surface);
   }
 
   .hint {
-    color: var(--mat-sys-on-surface-variant);
     margin: 0;
+    font: var(--mat-sys-body-medium);
+    color: var(--mat-sys-on-surface-variant);
   }
 }
 
@@ -32,18 +50,25 @@
 .usage-options,
 .key-type-options,
 .ca-source-options {
+  // Selectable cards: outlined, tinted on hover, and in the secondary container when chosen
   .option-card {
+    border: 1px solid var(--mat-sys-outline-variant);
+    border-radius: var(--mat-sys-corner-large);
+    background: var(--mat-sys-surface);
+    box-shadow: none;
     cursor: pointer;
-    transition: all 0.2s ease;
-    border: 2px solid transparent;
+    transition:
+      background-color 150ms ease,
+      border-color 150ms ease;
 
     &:hover {
-      background-color: var(--mat-sys-surface-container-high);
+      border-color: var(--mat-sys-outline);
+      background-color: var(--mat-sys-surface-container-low);
     }
 
     &.selected {
       border-color: var(--mat-sys-primary);
-      background-color: var(--mat-sys-primary-container);
+      background-color: color-mix(in srgb, var(--mat-sys-primary) 8%, var(--mat-sys-surface));
     }
 
     &.disabled {
@@ -72,30 +97,35 @@
     }
   }
 
+  // The option's icon in a tonal circle
   .option-icon {
-    font-size: 32px;
-    width: 32px;
-    height: 32px;
+    box-sizing: content-box;
+    flex: none;
+    width: 24px;
+    height: 24px;
+    padding: 10px;
+    border-radius: var(--mat-sys-corner-full);
+    background: color-mix(in srgb, var(--mat-sys-primary) 12%, var(--mat-sys-surface));
+    font-size: 24px;
     color: var(--mat-sys-primary);
   }
 
   .option-label {
-    font-weight: 500;
-    font-size: 1.1rem;
+    font: var(--mat-sys-title-medium);
+    color: var(--mat-sys-on-surface);
   }
 
   .option-description {
+    margin-top: 2px;
+    font: var(--mat-sys-body-medium);
     color: var(--mat-sys-on-surface-variant);
-    font-size: 0.9rem;
-    margin-top: 4px;
   }
 
   .option-hint,
   .option-recommended {
-    color: var(--mat-sys-primary);
-    font-size: 0.85rem;
     margin-top: 4px;
-    font-style: italic;
+    font: var(--mat-sys-body-small);
+    color: var(--mat-sys-primary);
   }
 
   .option-warning {
@@ -157,7 +187,8 @@
 }
 
 .step-actions {
-  margin-top: 16px;
+  gap: 8px;
+  margin-top: 8px;
   padding-top: 16px;
   border-top: 1px solid var(--mat-sys-outline-variant);
 }
@@ -177,13 +208,14 @@ mat-card-header {
 }
 
 .summary-card {
-  background-color: var(--mat-sys-surface-container);
+  background-color: var(--mat-sys-surface-container-low);
 
+  // What happens after the key chain is created, as tonal notes
   .next-steps-hint {
     margin-top: 16px;
-    padding: 12px;
-    background-color: var(--mat-sys-primary-container);
-    border-radius: 8px;
+    padding: 12px 16px;
+    background-color: color-mix(in srgb, var(--mat-sys-primary) 10%, var(--mat-sys-surface));
+    border-radius: var(--mat-sys-corner-medium);
     display: flex;
     align-items: flex-start;
     gap: 8px;
@@ -194,18 +226,14 @@ mat-card-header {
     }
 
     span {
-      color: var(--mat-sys-on-primary-container);
+      color: var(--mat-sys-on-surface);
     }
 
     &.success {
-      background-color: var(--mat-sys-tertiary-container, #d4edda);
+      background-color: color-mix(in srgb, var(--eudiplo-success) 10%, var(--mat-sys-surface));
 
       mat-icon {
-        color: var(--mat-sys-tertiary, #28a745);
-      }
-
-      span {
-        color: var(--mat-sys-on-tertiary-container, #155724);
+        color: var(--eudiplo-success);
       }
     }
   }
@@ -221,19 +249,6 @@ mat-card-header {
   }
   to {
     transform: rotate(360deg);
-  }
-}
-
-// Stepper customization
-::ng-deep .mat-stepper-horizontal {
-  .mat-horizontal-stepper-header-container {
-    margin-bottom: 24px;
-  }
-}
-
-::ng-deep .mat-step-header {
-  .mat-step-icon {
-    background-color: var(--mat-sys-primary);
   }
 }
 
