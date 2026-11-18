@@ -32,9 +32,7 @@
   }
 }
 
-.search-bar {
-  @include page.search-bar;
-}
+@include page.search-bar;
 
 .table-scroll {
   overflow-x: auto;

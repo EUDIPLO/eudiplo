@@ -1,5 +1,5 @@
 <div class="page">
-  <a class="back-link" matButton routerLink="../" aria-label="Back to Clients List">
+  <a class="back-link" matButton routerLink="../" aria-label="Back to API Clients">
     <mat-icon>arrow_back</mat-icon>
     API Clients
   </a>
@@ -15,15 +15,9 @@
         <h1>{{ client.clientId }}</h1>
         <div class="hero-meta">
           <span class="badge">{{ roleCount }} {{ roleCount === 1 ? 'role' : 'roles' }}</span>
-          <button
-            matButton
-            type="button"
-            class="copy-id"
-            aria-label="Copy client ID"
-            (click)="copyId()"
-          >
+          <button matButton type="button" class="copy-id" (click)="copyId()">
             <mat-icon>content_copy</mat-icon>
-            Copy ID
+            Copy client ID
           </button>
         </div>
         <p class="hero-description" [class.muted]="!client.description">

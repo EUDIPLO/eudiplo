@@ -470,11 +470,11 @@ describe('ClientCreateComponent back button', () => {
   }
 
   it('names the client list it leads to when creating a client', async () => {
-    expect(await backLabel({})).toBe('Back to Clients List');
+    expect(await backLabel({})).toBe('Back to API Clients');
   });
 
   it('names the client page it leads to when editing a client', async () => {
-    expect(await backLabel({ id: 'some-client' })).toBe('Back to Client Details');
+    expect(await backLabel({ id: 'some-client' })).toBe('Back to some-client');
   });
 });
 

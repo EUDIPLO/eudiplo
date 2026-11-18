@@ -3,7 +3,7 @@
     class="back-link"
     matButton
     [routerLink]="['../']"
-    [attr.aria-label]="loaded ? 'Back to Client Details' : 'Back to Clients List'"
+    [attr.aria-label]="'Back to ' + (loaded ? id : 'API Clients')"
   >
     <mat-icon>arrow_back</mat-icon>
     {{ loaded ? id : 'API Clients' }}

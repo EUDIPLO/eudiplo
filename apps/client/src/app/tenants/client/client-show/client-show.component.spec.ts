@@ -44,7 +44,9 @@ describe('ClientShowComponent', () => {
 
   it('names the back link for assistive technology', () => {
     const back = (fixture.nativeElement as HTMLElement).querySelector('a.back-link');
-    expect(back?.getAttribute('aria-label')).toBe('Back to Clients List');
+    // The name contains the visible label "API Clients"
+    expect(back?.getAttribute('aria-label')).toBe('Back to API Clients');
+    expect(back?.textContent).toContain('API Clients');
   });
 });
 

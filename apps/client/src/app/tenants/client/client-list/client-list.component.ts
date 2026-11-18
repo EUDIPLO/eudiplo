@@ -29,6 +29,9 @@ import { UnavailableCardComponent } from '../../../common/unavailable-card.compo
 import { LoadErrorComponent } from '../../../common/load-error.component';
 import { FrontendConfigService } from '../../../services/frontend-config.service';
 
+/** Columns of the client table. */
+type ClientColumn = 'clientId' | 'roles' | 'actions';
+
 @Component({
   selector: 'app-client-list',
   imports: [
@@ -67,7 +70,7 @@ export class ClientListComponent implements OnInit {
   hasPermission = false;
 
   /** The client column also shows the description. */
-  displayedColumns: (keyof ClientEntity | 'actions')[] = ['clientId', 'roles', 'actions'];
+  displayedColumns: ClientColumn[] = ['clientId', 'roles', 'actions'];
   /** Text to find in a client's ID, description or roles. */
   search = '';
   /** The last search result, kept until the clients or the search change. */
@@ -79,7 +82,7 @@ export class ClientListComponent implements OnInit {
   }
 
   /** A tenant's records without an action to offer get no Actions column. */
-  get columns(): (keyof ClientEntity | 'actions')[] {
+  get columns(): ClientColumn[] {
     return this.loadedClients && !this.rotatesSecrets
       ? this.displayedColumns.filter((column) => column !== 'actions')
       : this.displayedColumns;
