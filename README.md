@@ -182,7 +182,7 @@ EUDIPLO is developed in several repositories under the
 
 | Repository                                          | Description                                                                                      |
 | --------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| [eudiplo](https://github.com/EUDIPLO/eudiplo)       | Backend, web client, CLI, SDKs and documentation (this repository)                               |
+| [eudiplo](https://github.com/EUDIPLO/eudiplo)       | Backend, web client, CLI, SDK and documentation (this repository)                                |
 | [website](https://github.com/EUDIPLO/website)       | [eudiplo.dev](https://eudiplo.dev): landing page, CLI installer and published config schemas     |
 | [wallet-qa](https://github.com/EUDIPLO/wallet-qa)   | Manual test bench for EUDI wallets: run a test with a real wallet against EUDIPLO, get a verdict |
 | [governance](https://github.com/EUDIPLO/governance) | Teams and project governance                                                                     |
