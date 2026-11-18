@@ -4,7 +4,14 @@
   mat-list-item {
     height: auto !important;
     padding: 12px 0;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid var(--mat-sys-outline-variant);
+
+    // Long values (ids, URLs, free text) wrap instead of widening the page
+    // or ending in an ellipsis. Nested so it outranks Material's nowrap rule.
+    [matListItemLine] {
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
 
     &:last-child {
       border-bottom: none;

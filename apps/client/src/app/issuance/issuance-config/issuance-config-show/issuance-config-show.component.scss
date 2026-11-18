@@ -66,9 +66,11 @@
     height: auto !important;
     padding: 12px 0;
 
-    // Long values wrap instead of ending in an ellipsis.
+    // Long values (ids, URLs, free text) wrap instead of widening the page
+    // or ending in an ellipsis. Nested so it outranks Material's nowrap rule.
     [matListItemLine] {
       white-space: normal;
+      overflow-wrap: anywhere;
     }
 
     border-bottom: 1px solid var(--mat-sys-outline-variant);
