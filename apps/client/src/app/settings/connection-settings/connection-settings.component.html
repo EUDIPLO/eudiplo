@@ -1,134 +1,130 @@
-<div fxLayout="column" fxLayoutAlign="start center" class="settings-container">
-  <mat-card class="settings-card">
+<div class="settings-page">
+  <header class="page-header">
+    <h1>Connection Settings</h1>
+    <p>The instance, client and build this Web Client is connected to.</p>
+  </header>
+
+  <mat-card appearance="outlined">
     <mat-card-header>
-      <mat-icon mat-card-avatar>settings_ethernet</mat-icon>
-      <mat-card-title>Connection Details</mat-card-title>
-      <mat-card-subtitle>Current API, authentication and version information</mat-card-subtitle>
+      <mat-icon mat-card-avatar>dns</mat-icon>
+      <h2 mat-card-title>Instance</h2>
+      <mat-card-subtitle
+        >Where the Web Client sends API calls and requests tokens</mat-card-subtitle
+      >
     </mat-card-header>
+    <mat-card-content class="field-grid">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>API Base URL</mat-label>
+        <input matInput [value]="currentBaseUrl" readonly aria-label="API Base URL" />
+        <button
+          mat-icon-button
+          matSuffix
+          (click)="copyField(currentBaseUrl, 'API Base URL')"
+          matTooltip="Copy to clipboard"
+          aria-label="Copy API Base URL to clipboard"
+        >
+          <mat-icon>content_copy</mat-icon>
+        </button>
+      </mat-form-field>
 
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>OAuth URL</mat-label>
+        <input matInput [value]="currentOidcUrl" readonly aria-label="OAuth URL" />
+        <button
+          mat-icon-button
+          matSuffix
+          (click)="copyField(currentOidcUrl, 'OAuth URL')"
+          matTooltip="Copy to clipboard"
+          aria-label="Copy OAuth URL to clipboard"
+        >
+          <mat-icon>content_copy</mat-icon>
+        </button>
+      </mat-form-field>
+    </mat-card-content>
+  </mat-card>
+
+  <mat-card appearance="outlined">
+    <mat-card-header>
+      <mat-icon mat-card-avatar>key</mat-icon>
+      <h2 mat-card-title>Client</h2>
+      <mat-card-subtitle>The credentials this tab signed in with</mat-card-subtitle>
+    </mat-card-header>
     <mat-card-content>
-      <div fxLayout="column" fxLayoutGap="12px" class="config-content">
-        <div fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px" class="config-row">
-          <mat-form-field appearance="outline" fxFlex>
-            <mat-label>API Base URL</mat-label>
-            <input matInput [value]="currentBaseUrl" readonly aria-label="API Base URL" />
-            <button
-              mat-icon-button
-              matSuffix
-              (click)="copyField(currentBaseUrl, 'API Base URL')"
-              matTooltip="Copy to clipboard"
-              aria-label="Copy API Base URL to clipboard"
-            >
-              <mat-icon>content_copy</mat-icon>
-            </button>
-          </mat-form-field>
-        </div>
-
-        <div fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px" class="config-row">
-          <mat-form-field appearance="outline" fxFlex>
-            <mat-label>OAuth URL</mat-label>
-            <input matInput [value]="currentOidcUrl" readonly aria-label="OAuth URL" />
-            <button
-              mat-icon-button
-              matSuffix
-              (click)="copyField(currentOidcUrl, 'OAuth URL')"
-              matTooltip="Copy to clipboard"
-              aria-label="Copy OAuth URL to clipboard"
-            >
-              <mat-icon>content_copy</mat-icon>
-            </button>
-          </mat-form-field>
-        </div>
-
-        <div fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px" class="config-row">
-          <mat-form-field appearance="outline" fxFlex>
-            <mat-label>Client ID</mat-label>
-            <input matInput [value]="currentClientId" readonly aria-label="Client ID" />
-            <button
-              mat-icon-button
-              matSuffix
-              (click)="copyField(currentClientId, 'Client ID')"
-              matTooltip="Copy to clipboard"
-              aria-label="Copy Client ID to clipboard"
-            >
-              <mat-icon>content_copy</mat-icon>
-            </button>
-          </mat-form-field>
-        </div>
-
-        <div fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px" class="config-row">
-          <mat-form-field appearance="outline" fxFlex>
-            <mat-label>Client Secret</mat-label>
-            @if (currentClientSecret; as secret) {
-              <input
-                matInput
-                [value]="secret"
-                readonly
-                type="password"
-                aria-label="Client Secret"
-              />
-            } @else {
-              <input matInput [value]="missingSecretText" readonly aria-label="Client Secret" />
-            }
-            <!-- Own @if: a block with one root node lets matSuffix project the button. -->
-            @if (currentClientSecret; as secret) {
-              <button
-                mat-icon-button
-                matSuffix
-                (click)="copySecret(secret)"
-                matTooltip="Copy to clipboard"
-                aria-label="Copy Client Secret to clipboard"
-              >
-                <mat-icon>content_copy</mat-icon>
-              </button>
-            }
-          </mat-form-field>
-        </div>
-
-        <div class="hint-row" fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px">
-          <mat-icon>info</mat-icon>
-          @if (canAutoRefresh) {
-            <span>Automatic token refresh: enabled</span>
-          } @else if (apiService.areCredentialsRejected()) {
-            <span>
-              Automatic token refresh: disabled. The token endpoint rejected the credentials; log in
-              again.
-            </span>
-          } @else {
-            <span>
-              Automatic token refresh: disabled. The Web Client keeps the client secret only until
-              the page reloads; log in again when the session expires.
-            </span>
-          }
-        </div>
-
-        <div fxLayout="row wrap" fxLayoutGap="8px" class="config-row">
-          <mat-form-field appearance="outline" fxFlex>
-            <mat-label>Backend version</mat-label>
-            <input matInput [value]="backendVersion" readonly aria-label="Backend version" />
-          </mat-form-field>
-          <mat-form-field appearance="outline" fxFlex>
-            <mat-label>Client version</mat-label>
-            <input matInput [value]="clientVersion" readonly aria-label="Client version" />
-          </mat-form-field>
-        </div>
-
-        @if (versionService.compatibility === 'mismatch') {
-          <div
-            class="hint-row warning"
-            fxLayout="row"
-            fxLayoutAlign="start center"
-            fxLayoutGap="8px"
+      <div class="field-grid">
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Client ID</mat-label>
+          <input matInput [value]="currentClientId" readonly aria-label="Client ID" />
+          <button
+            mat-icon-button
+            matSuffix
+            (click)="copyField(currentClientId, 'Client ID')"
+            matTooltip="Copy to clipboard"
+            aria-label="Copy Client ID to clipboard"
           >
-            <mat-icon>warning</mat-icon>
-            <span
-              >Client and backend come from different builds. Use the client image with the same tag
-              as the backend.</span
-            >
-          </div>
-        }
+            <mat-icon>content_copy</mat-icon>
+          </button>
+        </mat-form-field>
 
-        <mat-form-field appearance="outline">
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Client Secret</mat-label>
+          @if (currentClientSecret; as secret) {
+            <input matInput [value]="secret" readonly type="password" aria-label="Client Secret" />
+          } @else {
+            <input matInput [value]="missingSecretText" readonly aria-label="Client Secret" />
+          }
+          <!-- Own @if: a block with one root node lets matSuffix project the button. -->
+          @if (currentClientSecret; as secret) {
+            <button
+              mat-icon-button
+              matSuffix
+              (click)="copySecret(secret)"
+              matTooltip="Copy to clipboard"
+              aria-label="Copy Client Secret to clipboard"
+            >
+              <mat-icon>content_copy</mat-icon>
+            </button>
+          }
+        </mat-form-field>
+      </div>
+
+      <div class="hint-row" [class.ok]="canAutoRefresh">
+        <mat-icon aria-hidden="true">{{ canAutoRefresh ? 'autorenew' : 'sync_disabled' }}</mat-icon>
+        @if (canAutoRefresh) {
+          <span>Automatic token refresh: enabled</span>
+        } @else if (apiService.areCredentialsRejected()) {
+          <span>
+            Automatic token refresh: disabled. The token endpoint rejected the credentials; log in
+            again.
+          </span>
+        } @else {
+          <span>
+            Automatic token refresh: disabled. The Web Client keeps the client secret only until the
+            page reloads; log in again when the session expires.
+          </span>
+        }
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  <mat-card appearance="outlined">
+    <mat-card-header>
+      <mat-icon mat-card-avatar>layers</mat-icon>
+      <h2 mat-card-title>Build</h2>
+      <mat-card-subtitle
+        >Versions of both sides and how the backend imports configuration</mat-card-subtitle
+      >
+    </mat-card-header>
+    <mat-card-content>
+      <div class="field-grid three">
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Backend version</mat-label>
+          <input matInput [value]="backendVersion" readonly aria-label="Backend version" />
+        </mat-form-field>
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Client version</mat-label>
+          <input matInput [value]="clientVersion" readonly aria-label="Client version" />
+        </mat-form-field>
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
           <mat-label>Startup configuration import</mat-label>
           <input
             matInput
@@ -138,13 +134,16 @@
           />
         </mat-form-field>
       </div>
-    </mat-card-content>
 
-    <mat-card-actions>
-      <a mat-button color="primary" routerLink="/dashboard">
-        <mat-icon>arrow_back</mat-icon>
-        Back to Dashboard
-      </a>
-    </mat-card-actions>
+      @if (versionService.compatibility === 'mismatch') {
+        <div class="hint-row warning">
+          <mat-icon aria-hidden="true">warning</mat-icon>
+          <span
+            >Client and backend come from different builds. Use the client image with the same tag
+            as the backend.</span
+          >
+        </div>
+      }
+    </mat-card-content>
   </mat-card>
 </div>

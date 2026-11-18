@@ -6,8 +6,6 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { RouterModule } from '@angular/router';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { ApiService } from '../../core';
 import { OidcService } from '../../core/oidc.service';
 import { FrontendConfigService } from '../../services/frontend-config.service';
@@ -18,7 +16,6 @@ import { copyToClipboard } from '../../utils/copy-to-clipboard';
   selector: 'app-connection-settings',
   standalone: true,
   imports: [
-    FlexLayoutModule,
     MatCardModule,
     MatButtonModule,
     MatFormFieldModule,
@@ -26,7 +23,6 @@ import { copyToClipboard } from '../../utils/copy-to-clipboard';
     MatIconModule,
     MatTooltipModule,
     MatSnackBarModule,
-    RouterModule,
   ],
   templateUrl: './connection-settings.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,

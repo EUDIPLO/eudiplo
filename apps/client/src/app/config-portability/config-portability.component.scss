@@ -1,48 +1,284 @@
+@use '@angular/material' as mat;
+
+// Material 3 page: outlined cards on the page surface, tonal badges for states. Colours come
+// from the theme (--mat-sys-*) and the status colours in styles.scss (--eudiplo-*).
+:host {
+  display: block;
+
+  @include mat.card-overrides(
+    (
+      outlined-container-color: var(--mat-sys-surface),
+      outlined-outline-color: var(--mat-sys-outline-variant),
+      outlined-container-shape: var(--mat-sys-corner-large),
+      title-text-font: var(--mat-sys-title-medium-font),
+      title-text-size: var(--mat-sys-title-medium-size),
+      title-text-weight: var(--mat-sys-title-medium-weight),
+      title-text-line-height: var(--mat-sys-title-medium-line-height),
+      subtitle-text-font: var(--mat-sys-body-medium-font),
+      subtitle-text-size: var(--mat-sys-body-medium-size),
+      subtitle-text-weight: var(--mat-sys-body-medium-weight),
+      subtitle-text-line-height: var(--mat-sys-body-medium-line-height),
+      subtitle-text-color: var(--mat-sys-on-surface-variant),
+    )
+  );
+}
+
 .page {
+  container-type: inline-size;
   display: flex;
   flex-direction: column;
   gap: 24px;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 4px 4px 16px;
+  box-sizing: border-box;
 }
 
 .page-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
+  gap: 16px;
 
-  h2,
-  p {
+  h1 {
     margin: 0;
+    font: var(--mat-sys-headline-medium);
+    color: var(--mat-sys-on-surface);
   }
 
   p {
+    margin: 4px 0 0;
+    font: var(--mat-sys-body-medium);
     color: var(--mat-sys-on-surface-variant);
-    margin-top: 4px;
   }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+}
+
+// Card parts shared by every section
+mat-card-header {
+  align-items: flex-start;
+  padding: 20px 20px 0;
+
+  .header-action {
+    flex: none;
+    margin: -4px -8px 0 auto;
+  }
+}
+
+h2[mat-card-title] {
+  margin: 0;
+}
+
+mat-icon[mat-card-avatar] {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--mat-sys-corner-full);
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+  font-size: 22px;
+
+  &.plan-status {
+    background: color-mix(in srgb, var(--tone) 14%, transparent);
+    color: var(--tone);
+  }
+}
+
+mat-card-content {
+  padding: 16px 20px 20px !important;
+}
+
+mat-card-actions {
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 20px 20px !important;
+}
+
+.tone-success {
+  --tone: var(--eudiplo-success);
+}
+
+.tone-danger {
+  --tone: var(--eudiplo-danger);
 }
 
 .card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
   gap: 24px;
-}
 
-mat-card-content {
-  padding-top: 20px;
-}
+  // Export and import end with their buttons on one line
+  mat-card {
+    display: flex;
+    flex-direction: column;
+  }
 
-.import-controls {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: center;
-  gap: 16px;
-
-  mat-form-field {
-    grid-column: 1 / -1;
+  mat-card-content {
+    flex: 1;
   }
 }
 
+// Tinted note, such as what an export leaves out
+.note {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: var(--mat-sys-corner-medium);
+  background: var(--mat-sys-surface-container-low);
+
+  mat-icon {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    font-size: 20px;
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  p {
+    margin: 0;
+    font: var(--mat-sys-body-medium);
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+// File selection: the chosen file, or what may be chosen, next to the button
+.import-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.file-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  padding: 16px;
+  border: 1px dashed var(--mat-sys-outline);
+  border-radius: var(--mat-sys-corner-medium);
+  background: var(--mat-sys-surface-container-lowest);
+
+  &.selected {
+    border-style: solid;
+    border-color: var(--mat-sys-outline-variant);
+    background: var(--mat-sys-surface-container-low);
+
+    .file-icon {
+      background: var(--mat-sys-primary-container);
+      color: var(--mat-sys-on-primary-container);
+    }
+  }
+
+  .file-icon {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--mat-sys-corner-medium);
+    background: var(--mat-sys-surface-container-high);
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  .file-copy {
+    display: flex;
+    flex: 1 1 180px;
+    flex-direction: column;
+    min-width: 0;
+
+    strong {
+      overflow: hidden;
+      font: var(--mat-sys-title-small);
+      color: var(--mat-sys-on-surface);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    small {
+      font: var(--mat-sys-body-small);
+      color: var(--mat-sys-on-surface-variant);
+    }
+  }
+}
+
+// Small label for a state: plan action, ownership, operation status
+.badge {
+  --tone: var(--mat-sys-on-surface-variant);
+
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: var(--mat-sys-corner-full);
+  background: color-mix(in srgb, var(--tone) 14%, transparent);
+  font: var(--mat-sys-label-medium);
+  color: var(--mat-sys-on-surface);
+  white-space: nowrap;
+
+  &.action-create,
+  &.status-completed {
+    --tone: var(--eudiplo-success);
+  }
+
+  &.action-update,
+  &.ownership-file-managed,
+  &.status-running {
+    --tone: var(--mat-sys-primary);
+  }
+
+  &.action-delete,
+  &.ownership-detached,
+  &.status-interrupted {
+    --tone: var(--eudiplo-warning);
+  }
+
+  &.action-blocked,
+  &.status-failed {
+    --tone: var(--eudiplo-danger);
+  }
+}
+
+// Tables
 .table-scroll {
   overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  background: transparent;
+
+  th.mat-mdc-header-cell {
+    font: var(--mat-sys-label-large);
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  tr.mat-mdc-row:hover {
+    background: var(--mat-sys-surface-container-low);
+  }
+
+  a {
+    color: var(--mat-sys-primary);
+    text-decoration: none;
+
+    &:hover,
+    &:focus-visible {
+      text-decoration: underline;
+    }
+  }
+}
+
+.row-actions-inner {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  white-space: nowrap;
 }
 
 .filters {
@@ -56,15 +292,22 @@ mat-card-content {
   }
 }
 
+.summary {
+  margin: 0 0 8px;
+  font: var(--mat-sys-label-large);
+  color: var(--mat-sys-on-surface-variant);
+}
+
 .bulk-actions {
   display: flex;
   align-items: center;
   gap: 12px;
   margin-bottom: 12px;
-}
-
-table {
-  width: 100%;
+  padding: 8px 8px 8px 16px;
+  border-radius: var(--mat-sys-corner-medium);
+  background: var(--mat-sys-secondary-container);
+  font: var(--mat-sys-label-large);
+  color: var(--mat-sys-on-secondary-container);
 }
 
 .muted {
@@ -82,9 +325,41 @@ table {
   color: var(--mat-sys-on-surface-variant);
 }
 
+// Import plan
+.plan-card {
+  // Schema URLs and issue texts are long; they wrap so the table fits the card
+  td.mat-column-issues {
+    overflow-wrap: anywhere;
+  }
+
+  td.mat-column-version {
+    white-space: nowrap;
+
+    .muted {
+      font: var(--mat-sys-body-small);
+      white-space: normal;
+    }
+  }
+
+  td.mat-column-issues {
+    min-width: 240px;
+  }
+
+  td.mat-mdc-cell {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  h3 {
+    margin: 24px 0 8px;
+    font: var(--mat-sys-title-small);
+    color: var(--mat-sys-on-surface);
+  }
+}
+
 .issue {
-  color: var(--mat-sys-error);
   margin: 6px 0;
+  color: var(--mat-sys-error);
 
   &.warning {
     color: var(--eudiplo-warning);
@@ -125,32 +400,143 @@ table {
 
 .source {
   max-width: 320px;
+  color: var(--mat-sys-on-surface-variant);
   overflow-wrap: anywhere;
 }
 
+// Shown once, so marked with the error colour
 .generated-secrets {
-  border: 1px solid var(--mat-sys-error);
+  --mat-card-outlined-outline-color: var(--mat-sys-error);
+
+  mat-icon[mat-card-avatar] {
+    background: var(--mat-sys-error-container);
+    color: var(--mat-sys-on-error-container);
+  }
 
   .generated-secret {
     display: flex;
-    align-items: center;
     flex-wrap: wrap;
-    gap: 4px;
+    align-items: center;
+    gap: 8px 12px;
+    padding: 8px 8px 8px 16px;
+    border-radius: var(--mat-sys-corner-medium);
+    background: var(--mat-sys-surface-container-low);
+
+    & + & {
+      margin-top: 8px;
+    }
   }
 
   code {
-    display: inline-block;
-    margin: 6px;
+    flex: 1 1 240px;
     overflow-wrap: anywhere;
   }
 }
 
-@media (max-width: 600px) {
-  .import-controls {
-    grid-template-columns: 1fr;
+// Configuration operations: one expandable row per operation
+.operation-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0 -8px;
+}
 
-    mat-form-field {
-      grid-column: auto;
+.operation {
+  border-radius: var(--mat-sys-corner-medium);
+
+  & + & {
+    border-top: 1px solid var(--mat-sys-outline-variant);
+  }
+
+  summary {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 48px;
+    padding: 0 8px;
+    border-radius: var(--mat-sys-corner-medium);
+    font: var(--mat-sys-body-medium);
+    color: var(--mat-sys-on-surface);
+    cursor: pointer;
+    list-style: none;
+
+    &::-webkit-details-marker {
+      display: none;
     }
+
+    &:hover {
+      background: var(--mat-sys-surface-container-low);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--mat-sys-primary);
+      outline-offset: -2px;
+    }
+  }
+
+  .operation-chevron {
+    color: var(--mat-sys-on-surface-variant);
+    transition: transform 150ms ease;
+  }
+
+  &[open] .operation-chevron {
+    transform: rotate(90deg);
+  }
+
+  time {
+    min-width: 140px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .operation-mode {
+    flex: 1;
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  .operation-body {
+    padding: 4px 8px 16px 44px;
+    font: var(--mat-sys-body-medium);
+    color: var(--mat-sys-on-surface-variant);
+
+    p {
+      margin: 0 0 8px;
+    }
+
+    code {
+      overflow-wrap: anywhere;
+      color: var(--mat-sys-on-surface);
+    }
+  }
+
+  .operation-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 0 0 8px;
+    padding: 0;
+    list-style: none;
+
+    li {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 4px 16px;
+      padding: 6px 12px;
+      border-radius: var(--mat-sys-corner-small);
+      background: var(--mat-sys-surface-container-low);
+    }
+  }
+
+  .operation-warning {
+    color: var(--eudiplo-warning);
+  }
+}
+
+@container (max-width: 600px) {
+  .page-header h1 {
+    font: var(--mat-sys-headline-small);
+  }
+
+  .operation time {
+    min-width: 0;
   }
 }

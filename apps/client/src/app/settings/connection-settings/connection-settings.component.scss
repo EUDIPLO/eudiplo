@@ -1,29 +1,123 @@
+@use '@angular/material' as mat;
+
+// Material 3 settings page: outlined cards on the page surface, grouped by what they describe.
 :host {
   display: block;
+
+  @include mat.card-overrides(
+    (
+      outlined-container-color: var(--mat-sys-surface),
+      outlined-outline-color: var(--mat-sys-outline-variant),
+      outlined-container-shape: var(--mat-sys-corner-large),
+      title-text-font: var(--mat-sys-title-medium-font),
+      title-text-size: var(--mat-sys-title-medium-size),
+      title-text-weight: var(--mat-sys-title-medium-weight),
+      title-text-line-height: var(--mat-sys-title-medium-line-height),
+      subtitle-text-font: var(--mat-sys-body-medium-font),
+      subtitle-text-size: var(--mat-sys-body-medium-size),
+      subtitle-text-weight: var(--mat-sys-body-medium-weight),
+      subtitle-text-line-height: var(--mat-sys-body-medium-line-height),
+      subtitle-text-color: var(--mat-sys-on-surface-variant),
+    )
+  );
 }
 
-.settings-container {
-  width: 100%;
-  padding: 24px;
-}
-
-.settings-card {
-  width: 100%;
+.settings-page {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
   max-width: 980px;
+  margin: 0 auto;
+  padding: 4px 4px 16px;
+  box-sizing: border-box;
 }
 
+.page-header {
+  h1 {
+    margin: 0;
+    font: var(--mat-sys-headline-medium);
+    color: var(--mat-sys-on-surface);
+  }
+
+  p {
+    margin: 4px 0 0;
+    font: var(--mat-sys-body-medium);
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+mat-card-header {
+  padding: 20px 20px 0;
+}
+
+h2[mat-card-title] {
+  margin: 0;
+}
+
+mat-icon[mat-card-avatar] {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--mat-sys-corner-full);
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+  font-size: 22px;
+}
+
+mat-card-content {
+  padding: 20px !important;
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+
+  &.three {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+// Status line below the fields: neutral by default, green when the token renews itself
 .hint-row {
-  margin-top: 8px;
-  color: var(--eudiplo-info);
-  font-size: 14px;
+  --tone: var(--mat-sys-on-surface-variant);
+
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 12px 16px;
+  border-radius: var(--mat-sys-corner-medium);
+  background: color-mix(in srgb, var(--tone) 8%, var(--mat-sys-surface));
+  font: var(--mat-sys-body-medium);
+  color: var(--mat-sys-on-surface);
 
   mat-icon {
-    font-size: 18px;
-    width: 18px;
-    height: 18px;
+    flex: none;
+    width: 20px;
+    height: 20px;
+    font-size: 20px;
+    color: var(--tone);
+  }
+
+  &.ok {
+    --tone: var(--eudiplo-success);
   }
 
   &.warning {
-    color: var(--eudiplo-warning);
+    --tone: var(--eudiplo-warning);
+  }
+}
+
+@container (max-width: 640px) {
+  .field-grid,
+  .field-grid.three {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .page-header h1 {
+    font: var(--mat-sys-headline-small);
   }
 }

@@ -260,6 +260,33 @@ describe('ConfigPortabilityComponent import plan', () => {
     expect(element.textContent).not.toContain('Secret values');
   });
 
+  it('shows the schema version of each item and the version a migration leads to', async () => {
+    const schema = (version: string) =>
+      `https://eudiplo.dev/schemas/${version}/IssuanceConfigFile.schema.json`;
+    const element = await planImport(
+      planWith(
+        { ...issuanceUpdate([]), sourceVersion: schema('v6'), targetVersion: schema('v7') },
+        {
+          ...issuanceUpdate([]),
+          id: 'other',
+          sourceVersion: schema('v7'),
+          targetVersion: schema('v7'),
+        }
+      )
+    );
+
+    const versions = [...element.querySelectorAll('td.mat-column-version > span')];
+    expect(versions.map((version) => version.textContent?.trim())).toEqual(['v6 → v7', 'v7']);
+    // The full schema URLs stay available on hover
+    expect(versions[0].getAttribute('title')).toBe(`${schema('v6')} → ${schema('v7')}`);
+  });
+
+  it('shows a version that is not a schema URL as it is', async () => {
+    const element = await planImport(planWith(issuanceUpdate([])));
+
+    expect(element.querySelector('td.mat-column-version > span')?.textContent?.trim()).toBe('v1');
+  });
+
   it('shows null as a value, not as a removal', async () => {
     const element = await planImport(
       planWith(
