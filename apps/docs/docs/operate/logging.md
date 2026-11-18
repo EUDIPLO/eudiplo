@@ -131,13 +131,14 @@ AUDIT_LOG_RETENTION_DAYS=365          # delete entries older than this, 0 = keep
 AUDIT_LOG_MAX_ENTRIES_PER_TENANT=10000  # keep only the newest N per tenant, 0 = all
 ```
 
-Each tenant whose entries the job deletes gets an `audit_log_pruned` entry from
-the `system` actor with the number of deleted entries and the limit that applied
-(`after.reason` is `retention_days` or `max_entries_per_tenant`). With
+Each run writes one `audit_log_pruned` entry from the `system` actor for each
+tenant whose entries it deleted. `after.deletedEntries` is the number of deleted
+entries, and `after` names the limits that deleted them: `retentionDays` with
+`olderThan`, `maxEntriesPerTenant`, or both. With
 `AUDIT_LOG_MAX_ENTRIES_PER_TENANT`, that entry counts towards the limit. Earlier
-`audit_log_pruned` entries older than `AUDIT_LOG_RETENTION_DAYS` are deleted
-without a new record and are not counted in `deletedEntries`, so a tenant without
-other activity does not get a new record every retention period.
+`audit_log_pruned` entries are deleted like any other entry but are not counted,
+and a run that deletes only those writes no new entry, so a tenant without other
+activity does not get a new entry every night.
 
 Use session logs to answer "what happened in this flow?" and the audit log for
 "who changed the configuration, and when?".

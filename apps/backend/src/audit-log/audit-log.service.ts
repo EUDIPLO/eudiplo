@@ -77,8 +77,8 @@ export class AuditLogService {
     /** The newest entries of the tenant that match the filter, at most `limit`. */
     async listByTenant(
         tenantId: string,
-        filter: AuditLogFilter = {},
-        limit = 100,
+        filter: AuditLogFilter,
+        limit: number,
     ): Promise<AuditLogEntity[]> {
         const where = whereFor(tenantId, filter);
         if (!where) return [];
@@ -134,36 +134,54 @@ export class AuditLogService {
      * AUDIT_LOG_RETENTION_DAYS — delete entries older than N days (0 = disabled).
      * AUDIT_LOG_MAX_ENTRIES_PER_TENANT — keep only the last N entries per tenant (0 = disabled).
      *
-     * Each tenant whose entries were deleted gets an `audit_log_pruned` entry,
-     * so a gap in its log can be told from a quiet period.
+     * Each tenant whose entries were deleted gets one `audit_log_pruned`
+     * entry per run, so a gap in its log can be told from a quiet period.
+     * Earlier pruning records are deleted like other entries but never
+     * counted, and deleting only those writes no new record: otherwise a
+     * quiet tenant would get a new record every run.
      *
      * Runs daily at 03:00.
      */
     @Cron(CronExpression.EVERY_DAY_AT_3AM)
     async pruneOldLogs(): Promise<void> {
         const { retentionDays, maxEntriesPerTenant } = this.retention();
-        if (retentionDays > 0) {
-            await this.pruneByAge(retentionDays);
-        }
-        if (maxEntriesPerTenant > 0) {
-            await this.pruneByMaxEntries(maxEntriesPerTenant);
-        }
-    }
+        if (retentionDays <= 0 && maxEntriesPerTenant <= 0) return;
 
-    private async pruneByAge(retentionDays: number): Promise<void> {
-        const cutoff = new Date();
-        cutoff.setDate(cutoff.getDate() - retentionDays);
+        let cutoff: Date | undefined;
+        if (retentionDays > 0) {
+            cutoff = new Date();
+            cutoff.setDate(cutoff.getDate() - retentionDays);
+        }
         const tenants = await this.auditLogRepository
             .createQueryBuilder("log")
             .select("DISTINCT log.tenantId", "tenantId")
-            .where("log.timestamp < :cutoff", { cutoff })
             .getRawMany<{ tenantId: string }>();
 
         let total = 0;
         for (const { tenantId } of tenants) {
-            // Earlier pruning records age out too. Deleting only those is not
-            // worth a record of its own, or a quiet tenant would get one per
-            // retention period forever.
+            total += await this.pruneTenant(
+                tenantId,
+                retentionDays,
+                cutoff,
+                maxEntriesPerTenant,
+            );
+        }
+        if (total > 0) {
+            this.logger.log(`Pruned ${total} audit log entries`);
+        }
+    }
+
+    /** Apply both limits to one tenant; returns the counted deletions. */
+    private async pruneTenant(
+        tenantId: string,
+        retentionDays: number,
+        cutoff: Date | undefined,
+        maxEntries: number,
+    ): Promise<number> {
+        const applied: Record<string, unknown> = {};
+        let deleted = 0;
+
+        if (cutoff) {
             await this.auditLogRepository.delete({
                 tenantId,
                 actionType: "audit_log_pruned",
@@ -173,95 +191,71 @@ export class AuditLogService {
                 tenantId,
                 timestamp: LessThan(cutoff),
             });
-            const deleted = result.affected ?? 0;
-            if (deleted === 0) continue;
-            total += deleted;
-            await this.recordPruned(tenantId, deleted, {
-                reason: "retention_days",
-                retentionDays,
-                olderThan: cutoff.toISOString(),
-            });
+            if (result.affected) {
+                deleted += result.affected;
+                applied.retentionDays = retentionDays;
+                applied.olderThan = cutoff.toISOString();
+            }
         }
-        this.logger.log(
-            `Pruned ${total} audit log entries older than ${retentionDays} days`,
-        );
-    }
 
-    private async pruneByMaxEntries(maxEntries: number): Promise<void> {
-        // Fetch distinct tenant IDs that have logs
-        const tenants = await this.auditLogRepository
-            .createQueryBuilder("log")
-            .select("DISTINCT log.tenantId", "tenantId")
-            .getRawMany<{ tenantId: string }>();
-
-        let total = 0;
-        for (const { tenantId } of tenants) {
+        if (maxEntries > 0) {
             const count = await this.auditLogRepository.count({
                 where: { tenantId },
             });
-            if (count <= maxEntries) continue;
+            // The record of this run takes one place, so the next run finds
+            // the tenant within the limit.
+            const keep =
+                deleted > 0 || count > maxEntries ? maxEntries - 1 : maxEntries;
+            if (count > keep) {
+                const overLimit = await this.deleteAllButNewest(tenantId, keep);
+                if (overLimit > 0) {
+                    deleted += overLimit;
+                    applied.maxEntriesPerTenant = maxEntries;
+                }
+            }
+        }
 
-            // Keep one entry less than allowed: the record of this pruning
-            // takes the last place, so the next run has nothing to prune.
-            const deleted = await this.deleteAllButNewest(
+        if (deleted > 0) {
+            await this.record({
                 tenantId,
-                maxEntries - 1,
-            );
-            if (deleted === 0) continue;
-            total += deleted;
-            await this.recordPruned(tenantId, deleted, {
-                reason: "max_entries_per_tenant",
-                maxEntriesPerTenant: maxEntries,
+                actionType: "audit_log_pruned",
+                actor: { type: "system", display: "Audit log retention" },
+                after: { deletedEntries: deleted, ...applied },
             });
         }
-
-        if (total > 0) {
-            this.logger.log(
-                `Pruned ${total} audit log entries exceeding per-tenant limit of ${maxEntries}`,
-            );
-        }
+        return deleted;
     }
 
     /**
      * Delete a tenant's entries after the newest `keep`, in batches by id: the
      * list order breaks timestamp ties by id, which a timestamp comparison
-     * cannot reproduce on SQLite.
+     * cannot reproduce on SQLite. Returns the number of deleted entries that
+     * are not earlier pruning records.
      */
     private async deleteAllButNewest(
         tenantId: string,
         keep: number,
     ): Promise<number> {
-        let deleted = 0;
+        let counted = 0;
         for (;;) {
             const batch = await this.auditLogRepository.find({
-                select: { id: true },
+                select: { id: true, actionType: true },
                 where: { tenantId },
                 order: NEWEST_FIRST,
                 skip: keep,
                 take: PRUNE_BATCH_SIZE,
             });
-            if (batch.length === 0) return deleted;
+            if (batch.length === 0) return counted;
             const result = await this.auditLogRepository.delete({
                 tenantId,
                 id: In(batch.map((entry) => entry.id)),
             });
             // Another instance pruned these meanwhile: stop rather than loop.
-            if (result.affected === 0) return deleted;
-            deleted += result.affected ?? batch.length;
+            if (result.affected === 0) return counted;
+            counted += batch.filter(
+                (entry) => entry.actionType !== "audit_log_pruned",
+            ).length;
         }
-    }
-
-    private recordPruned(
-        tenantId: string,
-        deletedEntries: number,
-        details: Record<string, unknown>,
-    ): Promise<void> {
-        return this.record({
-            tenantId,
-            actionType: "audit_log_pruned",
-            actor: { type: "system", display: "Audit log retention" },
-            after: { deletedEntries, ...details },
-        });
     }
 }
 

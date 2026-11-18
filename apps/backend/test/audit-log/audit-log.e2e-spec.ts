@@ -162,10 +162,7 @@ describe("Audit log filters, search and retention", () => {
             expect.objectContaining({
                 actionType: "audit_log_pruned",
                 actorType: "system",
-                after: expect.objectContaining({
-                    reason: "max_entries_per_tenant",
-                    maxEntriesPerTenant: 2,
-                }),
+                after: expect.objectContaining({ maxEntriesPerTenant: 2 }),
             }),
         ]);
         // The other tenant had one entry, within the limit.

@@ -144,6 +144,32 @@ describe('AdminActivityLogsComponent', () => {
     expect(text()).not.toContain('Tenant Updated');
   });
 
+  it('re-checks the range when From changes after To', async () => {
+    await setup();
+    component.filters.controls.time.setValue('custom');
+    component.filters.controls.to.setValue('2026-11-18T14:00');
+    await settle();
+    search.mockClear();
+
+    component.filters.controls.from.setValue('2026-11-18T15:00');
+    await settle();
+    expect(search).not.toHaveBeenCalled();
+    expect(text()).toContain('Must not be before From');
+
+    component.filters.controls.from.setValue('2026-11-18T13:00');
+    await settle();
+    expect(search).toHaveBeenCalledTimes(1);
+    expect(text()).not.toContain('Must not be before From');
+  });
+
+  it('measures an id without surrounding spaces, as the backend does', async () => {
+    await setup();
+    search.mockClear();
+    component.filters.controls.actorId.setValue(` ${'x'.repeat(255)} `);
+    await settle();
+    expect(search).toHaveBeenCalledWith(expect.objectContaining({ actorId: 'x'.repeat(255) }));
+  });
+
   it('does not send an id longer than the backend accepts and says why', async () => {
     await setup();
     search.mockClear();
@@ -211,7 +237,7 @@ describe('AdminActivityLogsComponent', () => {
     clear.focus();
     clear.click();
     await settle();
-    expect(document.activeElement?.textContent).toContain('Activity Logs');
+    expect(document.activeElement?.tagName).toBe('H2');
   });
 
   it('tells an empty filter result from an empty log', async () => {

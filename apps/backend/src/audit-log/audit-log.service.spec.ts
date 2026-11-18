@@ -2,7 +2,7 @@ import type { ConfigService } from "@nestjs/config";
 import { DataSource, Repository } from "typeorm";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import type { AuditActionType } from "./audit-action-types.js";
-import { AuditLogService } from "./audit-log.service.js";
+import { type AuditLogFilter, AuditLogService } from "./audit-log.service.js";
 import { AuditLogEntity } from "./entities/audit-log.entity.js";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -47,6 +47,9 @@ describe("AuditLogService", () => {
             ...extra,
         });
 
+    const list = (tenantId: string, filter: AuditLogFilter = {}) =>
+        service.listByTenant(tenantId, filter, 500);
+
     const actions = (entries: AuditLogEntity[]) =>
         entries.map((entry) => entry.actionType);
 
@@ -89,7 +92,7 @@ describe("AuditLogService", () => {
         });
 
         test("lists only the tenant's entries, newest first", async () => {
-            expect(actions(await service.listByTenant("t1"))).toEqual([
+            expect(actions(await list("t1"))).toEqual([
                 "config_bundle_imported",
                 "tenant_updated",
                 "oidc_client_secret_added",
@@ -98,7 +101,7 @@ describe("AuditLogService", () => {
         });
 
         test("filters by time range, inclusive", async () => {
-            const entries = await service.listByTenant("t1", {
+            const entries = await list("t1", {
                 from: new Date("2026-01-01T10:30:00Z"),
                 to: new Date("2026-01-01T12:30:00Z"),
             });
@@ -108,14 +111,14 @@ describe("AuditLogService", () => {
             ]);
             expect(
                 actions(
-                    await service.listByTenant("t1", {
+                    await list("t1", {
                         from: new Date("2026-01-01T12:30:00Z"),
                     }),
                 ),
             ).toEqual(["config_bundle_imported"]);
             expect(
                 actions(
-                    await service.listByTenant("t1", {
+                    await list("t1", {
                         to: new Date("2026-01-01T10:30:00Z"),
                     }),
                 ),
@@ -123,7 +126,7 @@ describe("AuditLogService", () => {
         });
 
         test("filters by several action types", async () => {
-            const entries = await service.listByTenant("t1", {
+            const entries = await list("t1", {
                 actionType: ["tenant_updated", "oidc_client_created"],
             });
             expect(actions(entries)).toEqual([
@@ -135,14 +138,14 @@ describe("AuditLogService", () => {
         test("an object type matches its own actions only", async () => {
             expect(
                 actions(
-                    await service.listByTenant("t1", {
+                    await list("t1", {
                         objectType: "oidc_client",
                     }),
                 ),
             ).toEqual(["oidc_client_created"]);
             expect(
                 actions(
-                    await service.listByTenant("t1", {
+                    await list("t1", {
                         objectType: "config_bundle",
                     }),
                 ),
@@ -151,7 +154,7 @@ describe("AuditLogService", () => {
 
         test("object type and action type must both match", async () => {
             expect(
-                await service.listByTenant("t1", {
+                await list("t1", {
                     objectType: "tenant",
                     actionType: ["oidc_client_created"],
                 }),
@@ -178,21 +181,21 @@ describe("AuditLogService", () => {
         test("filters by actor and request id", async () => {
             expect(
                 actions(
-                    await service.listByTenant("t1", {
+                    await list("t1", {
                         actorType: "user",
                     }),
                 ),
             ).toEqual(["tenant_updated"]);
             expect(
                 actions(
-                    await service.listByTenant("t1", {
+                    await list("t1", {
                         actorId: "alice",
                     }),
                 ),
             ).toEqual(["tenant_updated", "oidc_client_created"]);
             expect(
                 actions(
-                    await service.listByTenant("t1", {
+                    await list("t1", {
                         requestId: "req-1",
                     }),
                 ),
@@ -202,7 +205,7 @@ describe("AuditLogService", () => {
         test("a filter never reaches another tenant", async () => {
             expect(
                 (
-                    await service.listByTenant("t2", {
+                    await list("t2", {
                         actorId: "alice",
                     })
                 ).length,
@@ -246,7 +249,7 @@ describe("AuditLogService", () => {
 
             await service.pruneOldLogs();
 
-            expect(actions(await service.listByTenant("t1")).sort()).toEqual([
+            expect(actions(await list("t1")).sort()).toEqual([
                 "audit_log_pruned",
                 "tenant_created",
             ]);
@@ -255,8 +258,8 @@ describe("AuditLogService", () => {
                 actorType: "system",
                 after: {
                     deletedEntries: 2,
-                    reason: "retention_days",
                     retentionDays: 30,
+                    olderThan: expect.any(String),
                 },
             });
             // A tenant without old entries gets no record.
@@ -279,7 +282,7 @@ describe("AuditLogService", () => {
 
             await service.pruneOldLogs();
 
-            const remaining = await service.listByTenant("t1");
+            const remaining = await list("t1");
             expect(remaining).toHaveLength(3);
             expect(remaining.slice(1).map((entry) => entry.actorId)).toEqual([
                 "actor-1",
@@ -287,11 +290,7 @@ describe("AuditLogService", () => {
             ]);
             expect(remaining[0]).toMatchObject({
                 actionType: "audit_log_pruned",
-                after: {
-                    deletedEntries: 3,
-                    reason: "max_entries_per_tenant",
-                    maxEntriesPerTenant: 3,
-                },
+                after: { deletedEntries: 3, maxEntriesPerTenant: 3 },
             });
             expect(await repository.count({ where: { tenantId: "t2" } })).toBe(
                 1,
@@ -308,11 +307,11 @@ describe("AuditLogService", () => {
             for (let i = 0; i < 4; i++) {
                 await add("t1", "tenant_updated", sameSecond);
             }
-            const [newest] = await service.listByTenant("t1");
+            const [newest] = await list("t1");
 
             await service.pruneOldLogs();
 
-            const remaining = await service.listByTenant("t1");
+            const remaining = await list("t1");
             expect(remaining.map((entry) => entry.actionType)).toEqual([
                 "audit_log_pruned",
                 "tenant_updated",
@@ -322,7 +321,7 @@ describe("AuditLogService", () => {
     });
 
     describe("pruning edge cases", () => {
-        const all = (tenantId: string) => service.listByTenant(tenantId);
+        const all = (tenantId: string) => list(tenantId);
 
         test("an aged pruning record alone is removed without a new record", async () => {
             settings.AUDIT_LOG_RETENTION_DAYS = 30;
@@ -352,11 +351,11 @@ describe("AuditLogService", () => {
             expect(rest).toEqual([]);
             expect(record).toMatchObject({
                 actionType: "audit_log_pruned",
-                after: { deletedEntries: 1, reason: "retention_days" },
+                after: { deletedEntries: 1, retentionDays: 30 },
             });
         });
 
-        test("both limits together leave at most the allowed number", async () => {
+        test("both limits together write one record and keep the newest entry", async () => {
             settings.AUDIT_LOG_RETENTION_DAYS = 30;
             settings.AUDIT_LOG_MAX_ENTRIES_PER_TENANT = 2;
             await add("t1", "tenant_updated", new Date(Date.now() - 40 * DAY));
@@ -365,16 +364,39 @@ describe("AuditLogService", () => {
                     "t1",
                     "tenant_updated",
                     new Date(Date.now() - i * DAY),
+                    {
+                        actorId: `actor-${i}`,
+                    },
                 );
             }
 
             await service.pruneOldLogs();
 
-            const remaining = await all("t1");
-            expect(remaining).toHaveLength(2);
-            expect(remaining.map((entry) => entry.actionType)).toContain(
-                "audit_log_pruned",
-            );
+            const [record, ...rest] = await all("t1");
+            expect(record).toMatchObject({
+                actionType: "audit_log_pruned",
+                after: {
+                    deletedEntries: 3,
+                    retentionDays: 30,
+                    maxEntriesPerTenant: 2,
+                },
+            });
+            expect(rest.map((entry) => entry.actorId)).toEqual(["actor-1"]);
+        });
+
+        test("earlier pruning records over the limit are deleted but not counted", async () => {
+            settings.AUDIT_LOG_MAX_ENTRIES_PER_TENANT = 1;
+            await add("t1", "audit_log_pruned", new Date(Date.now() - 2 * DAY));
+            await add("t1", "tenant_updated", new Date(Date.now() - DAY));
+
+            await service.pruneOldLogs();
+
+            expect(await all("t1")).toEqual([
+                expect.objectContaining({
+                    actionType: "audit_log_pruned",
+                    after: { deletedEntries: 1, maxEntriesPerTenant: 1 },
+                }),
+            ]);
         });
 
         test("a limit of one keeps only the pruning record", async () => {

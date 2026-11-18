@@ -16,7 +16,6 @@ import {
   FormGroup,
   ReactiveFormsModule,
   type ValidationErrors,
-  Validators,
 } from '@angular/forms';
 import type { ErrorStateMatcher } from '@angular/material/core';
 import { MatButtonModule } from '@angular/material/button';
@@ -71,6 +70,12 @@ const LOCAL_DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
 /** The longest id the backend accepts as a filter. */
 const MAX_ID_LENGTH = 255;
 
+/** An id the backend accepts: it trims before it checks the length. */
+function idLength(control: AbstractControl): ValidationErrors | null {
+  const length = String(control.value ?? '').trim().length;
+  return length > MAX_ID_LENGTH ? { maxlength: { requiredLength: MAX_ID_LENGTH, length } } : null;
+}
+
 /** On `to`: a custom range must not end before it starts. */
 function endsAfterStart(control: AbstractControl): ValidationErrors | null {
   const time = control.parent?.get('time')?.value;
@@ -121,11 +126,11 @@ export class AdminActivityLogsComponent implements OnInit {
     actorType: new FormControl<AuditActorType | ''>('', { nonNullable: true }),
     actorId: new FormControl('', {
       nonNullable: true,
-      validators: Validators.maxLength(MAX_ID_LENGTH),
+      validators: idLength,
     }),
     requestId: new FormControl('', {
       nonNullable: true,
-      validators: Validators.maxLength(MAX_ID_LENGTH),
+      validators: idLength,
     }),
     time: new FormControl<TimeFilter>('', { nonNullable: true }),
     from: new FormControl('', { nonNullable: true }),
