@@ -1,3 +1,4 @@
+import { setTimeout as sleep } from "node:timers/promises";
 import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import type { TokenPayload } from "../../auth/token.decorator.js";
 import type { IssuedCertificate } from "../issued-certificate.js";
@@ -34,6 +35,12 @@ import {
     eudiHubHttpException,
     isEudiHubFailure,
 } from "./eudi-hub-errors.js";
+
+/**
+ * Pause between two credential issuance creations at the EUDI Hub, which
+ * refuses creations that arrive at the same time.
+ */
+const CREATION_PAUSE_MS = 300;
 
 /** The organization and token of a request to the EUDI Hub. */
 type HubTarget = { token: string; organizationId: string };
@@ -243,11 +250,11 @@ export class EudiHubRegistrationService {
 
     /**
      * The ID of the EUDI Hub credential issuance of each type, in the order
-     * of the types. Existing ones are reused; missing ones are created in
-     * parallel. When the EUDI Hub does not register a type, the error names
-     * it, and the issuances created for the other types stay at the EUDI Hub
-     * for the next request to reuse. Its 502s say that no certificate was
-     * requested.
+     * of the types. Existing ones are reused; missing ones are created one
+     * after another. When the EUDI Hub does not register a type, the error
+     * names it, and the issuances created for the other types stay at the
+     * EUDI Hub for the next request to reuse. Its 502s say that no
+     * certificate was requested.
      */
     private async credentialIssuanceIds(
         tenantId: string,
@@ -271,36 +278,43 @@ export class EudiHubRegistrationService {
             );
         }
 
-        // allSettled, not all: creations still running when one is refused
-        // finish before the answer, so a retry finds and reuses them.
-        const results = await Promise.allSettled(
-            types.map(
-                async ({ format, type }): Promise<string> =>
-                    (
-                        existing.find(
-                            ({ credential }) =>
-                                credential?.format === format &&
-                                credential?.type === type,
-                        ) ??
-                        (await this.client.createCredentialIssuance(
-                            dto.token,
-                            dto.organizationId,
-                            {
-                                name: type,
-                                credential: { format, type },
-                                environments: [dto.environment],
-                            },
-                        ))
-                    ).id,
-            ),
-        );
+        // One creation at a time, with a pause between them: the EUDI Hub
+        // answers concurrent creations with a false 409 ("already exists in
+        // the registry"), a bug its maintainers are fixing. Every type is
+        // tried even after a refusal, so the error names all of them and a
+        // retry reuses the ones created.
+        const ids: string[] = [];
+        const refused: { type: string; reason: unknown }[] = [];
+        let attempts = 0;
+        for (const { format, type } of types) {
+            const found = existing.find(
+                ({ credential }) =>
+                    credential?.format === format && credential?.type === type,
+            );
+            if (found) {
+                ids.push(found.id);
+                continue;
+            }
+            // Also after a refusal: it may be such a false 409.
+            if (attempts++ > 0) {
+                await sleep(CREATION_PAUSE_MS);
+            }
+            try {
+                const issuance = await this.client.createCredentialIssuance(
+                    dto.token,
+                    dto.organizationId,
+                    {
+                        name: type,
+                        credential: { format, type },
+                        environments: [dto.environment],
+                    },
+                );
+                ids.push(issuance.id);
+            } catch (reason) {
+                refused.push({ type, reason });
+            }
+        }
 
-        const refused = types.flatMap(({ type }, index) => {
-            const result = results[index];
-            return result.status === "rejected"
-                ? [{ type, reason: result.reason as unknown }]
-                : [];
-        });
         if (refused.length > 0) {
             // A failure of the EUDI Hub itself decides the answer over a
             // refusal, so it is a 502 whenever the EUDI Hub failed.
@@ -330,9 +344,7 @@ export class EudiHubRegistrationService {
                 { beforeCertificate: true },
             );
         }
-        return results.map(
-            (result) => (result as PromiseFulfilledResult<string>).value,
-        );
+        return ids;
     }
 
     private certificateBase(
