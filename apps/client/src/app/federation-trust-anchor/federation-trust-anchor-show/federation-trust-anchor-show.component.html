@@ -1,19 +1,14 @@
 @if (anchor) {
-  <div fxLayout="column" fxFlex fxLayoutGap="24px">
+  <div class="page">
     <app-config-ownership-notice kind="FederationTrustAnchor" [resourceId]="anchor.id" />
-    <div fxLayout="row" fxLayoutAlign="space-between center">
-      <h2 #pageHeading tabindex="-1">Federation Trust Anchor</h2>
-      <div>
-        <a
-          mat-icon-button
-          [routerLink]="['../']"
-          matTooltip="Back to list"
-          aria-label="Back to list"
-        >
+    <header class="page-header">
+      <h2 #pageHeading tabindex="-1" class="page-title">Federation Trust Anchor</h2>
+      <div class="header-actions">
+        <a matIconButton [routerLink]="['../']" matTooltip="Back to list" aria-label="Back to list">
           <mat-icon>arrow_back</mat-icon>
         </a>
         <a
-          mat-icon-button
+          matButton="tonal"
           [routerLink]="['edit']"
           matTooltip="Edit trust anchor"
           aria-label="Edit trust anchor"
@@ -22,9 +17,10 @@
           [managedResourceId]="anchor.id"
         >
           <mat-icon>edit</mat-icon>
+          Edit
         </a>
         <button
-          mat-icon-button
+          matIconButton
           matTooltip="Download configuration"
           aria-label="Download configuration"
           [disabled]="downloadingConfig"
@@ -35,7 +31,8 @@
           <mat-icon>download</mat-icon>
         </button>
         <button
-          mat-icon-button
+          matIconButton
+          class="delete-action"
           (click)="delete()"
           [matTooltip]="
             references.loading
@@ -45,28 +42,29 @@
           aria-label="Delete trust anchor"
           [disabled]="deleting || references.loading"
           disabledInteractive
-          color="warn"
           appConfigManaged
           managedKind="FederationTrustAnchor"
           [managedResourceId]="anchor.id"
         >
-          <mat-icon>delete</mat-icon>
+          <mat-icon>delete_outline</mat-icon>
         </button>
       </div>
-    </div>
+    </header>
 
-    <mat-card>
+    <!-- Overview: what the trust anchor is called and the entity ID configurations name -->
+    <mat-card appearance="outlined" class="hero">
       <mat-card-header>
+        <mat-icon mat-card-avatar class="hero-avatar">account_tree</mat-icon>
         <mat-card-title>{{ anchor.description || anchor.id }}</mat-card-title>
         <mat-card-subtitle>ID: {{ anchor.id }}</mat-card-subtitle>
       </mat-card-header>
       <mat-card-content>
-        <div class="metadata-item">
+        <div class="entity-id-tile">
           <span class="label">Entity ID</span>
-          <span class="value entity-id">
+          <span class="entity-id">
             <code>{{ anchor.entityId }}</code>
             <button
-              mat-icon-button
+              matIconButton
               matTooltip="Copy entity ID"
               aria-label="Copy entity ID"
               (click)="copyEntityId(anchor.entityId)"
@@ -75,124 +73,139 @@
             </button>
           </span>
         </div>
-        <p class="hint">
-          Issuance configurations name this entity ID under OpenID Federation trust anchors,
-          presentation configurations under Issuer trust of a credential query.
+        <p class="hint with-icon">
+          <mat-icon class="hint-icon" aria-hidden="true">lightbulb</mat-icon>
+          <span>
+            Issuance configurations name this entity ID under OpenID Federation trust anchors,
+            presentation configurations under Issuer trust of a credential query.
+          </span>
         </p>
       </mat-card-content>
     </mat-card>
 
-    <mat-card>
-      <mat-card-header>
-        <mat-card-title>Pinned Federation Keys</mat-card-title>
-        <mat-card-subtitle
-          >The trust anchor's entity configuration must be signed with one of these
-          keys</mat-card-subtitle
-        >
-      </mat-card-header>
-      <mat-card-content>
-        <table mat-table [dataSource]="keys" aria-label="Pinned federation keys">
-          <ng-container matColumnDef="kid">
-            <th mat-header-cell *matHeaderCellDef>Key ID</th>
-            <td mat-cell *matCellDef="let key">{{ key.kid }}</td>
-          </ng-container>
-          <ng-container matColumnDef="kty">
-            <th mat-header-cell *matHeaderCellDef>Type</th>
-            <td mat-cell *matCellDef="let key">{{ key.kty }}</td>
-          </ng-container>
-          <ng-container matColumnDef="crv">
-            <th mat-header-cell *matHeaderCellDef>Curve</th>
-            <td mat-cell *matCellDef="let key">{{ key.crv || '—' }}</td>
-          </ng-container>
-          <ng-container matColumnDef="alg">
-            <th mat-header-cell *matHeaderCellDef>Algorithm</th>
-            <td mat-cell *matCellDef="let key">{{ key.alg || '—' }}</td>
-          </ng-container>
-          <ng-container matColumnDef="use">
-            <th mat-header-cell *matHeaderCellDef>Use</th>
-            <td mat-cell *matCellDef="let key">{{ key.use || '—' }}</td>
-          </ng-container>
-          <tr mat-header-row *matHeaderRowDef="keyColumns"></tr>
-          <tr mat-row *matRowDef="let row; columns: keyColumns"></tr>
-        </table>
-        <details class="jwks">
-          <summary>JWK set</summary>
-          <button mat-button type="button" (click)="copyJwks()" aria-label="Copy JWK set">
-            <mat-icon>content_copy</mat-icon>
-            Copy
-          </button>
-          <pre>{{ jwksJson }}</pre>
-        </details>
-      </mat-card-content>
-    </mat-card>
-
-    <mat-card>
-      <mat-card-header>
-        <mat-card-title>Named by Configurations</mat-card-title>
-      </mat-card-header>
-      <mat-card-content fxLayout="column" fxLayoutGap="8px">
-        @if (!references.canReadIssuanceConfig) {
-          <p class="hint">
-            You need the <code>issuance:manage</code> role to see whether the issuance configuration
-            names this trust anchor.
-          </p>
-        } @else if (references.issuance.loading) {
-          <p class="hint"><output>Loading the issuance configuration…</output></p>
-        } @else if (references.issuance.failed) {
-          <p class="hint" role="alert">Could not load the issuance configuration.</p>
-        } @else if (references.issuance.found) {
-          <div fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px">
-            <mat-icon>badge</mat-icon>
-            <span>Issuance configuration</span>
-            <a
-              mat-icon-button
-              routerLink="/issuance-config"
-              matTooltip="Open issuance configuration"
-              aria-label="Open issuance configuration"
-            >
-              <mat-icon>open_in_new</mat-icon>
-            </a>
+    <div class="content-grid">
+      <mat-card appearance="outlined">
+        <mat-card-header>
+          <mat-icon mat-card-avatar>key</mat-icon>
+          <mat-card-title>Pinned Federation Keys</mat-card-title>
+          <mat-card-subtitle
+            >The trust anchor's entity configuration must be signed with one of these
+            keys</mat-card-subtitle
+          >
+        </mat-card-header>
+        <mat-card-content>
+          <div class="table-scroll">
+            <table mat-table [dataSource]="keys" aria-label="Pinned federation keys">
+              <ng-container matColumnDef="kid">
+                <th mat-header-cell *matHeaderCellDef>Key ID</th>
+                <td mat-cell *matCellDef="let key" class="mono">{{ key.kid }}</td>
+              </ng-container>
+              <ng-container matColumnDef="kty">
+                <th mat-header-cell *matHeaderCellDef>Type</th>
+                <td mat-cell *matCellDef="let key">{{ key.kty }}</td>
+              </ng-container>
+              <ng-container matColumnDef="crv">
+                <th mat-header-cell *matHeaderCellDef>Curve</th>
+                <td mat-cell *matCellDef="let key">{{ key.crv || '—' }}</td>
+              </ng-container>
+              <ng-container matColumnDef="alg">
+                <th mat-header-cell *matHeaderCellDef>Algorithm</th>
+                <td mat-cell *matCellDef="let key">{{ key.alg || '—' }}</td>
+              </ng-container>
+              <ng-container matColumnDef="use">
+                <th mat-header-cell *matHeaderCellDef>Use</th>
+                <td mat-cell *matCellDef="let key">{{ key.use || '—' }}</td>
+              </ng-container>
+              <tr mat-header-row *matHeaderRowDef="keyColumns"></tr>
+              <tr mat-row *matRowDef="let row; columns: keyColumns"></tr>
+            </table>
           </div>
-        } @else {
-          <p class="hint">The issuance configuration does not name this trust anchor.</p>
-        }
+          <details class="jwks">
+            <summary>
+              <mat-icon class="chevron" aria-hidden="true">chevron_right</mat-icon>
+              JWK set
+            </summary>
+            <div class="jwks-body">
+              <button matButton type="button" (click)="copyJwks()" aria-label="Copy JWK set">
+                <mat-icon>content_copy</mat-icon>
+                Copy
+              </button>
+              <pre>{{ jwksJson }}</pre>
+            </div>
+          </details>
+        </mat-card-content>
+      </mat-card>
 
-        @if (!references.canReadPresentationConfigs) {
-          <p class="hint">
-            You need the <code>presentation:manage</code> role to see which presentation
-            configurations name this trust anchor.
-          </p>
-        } @else if (references.presentations.loading) {
-          <p class="hint"><output>Loading presentation configurations…</output></p>
-        } @else if (references.presentations.failed) {
-          <p class="hint" role="alert">Could not load the presentation configurations.</p>
-        } @else if (references.presentations.found.length) {
-          @for (config of references.presentations.found; track config.id) {
-            <div fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px">
-              <mat-icon>verified_user</mat-icon>
-              <span>{{ config.description || config.id }}</span>
+      <mat-card appearance="outlined">
+        <mat-card-header>
+          <mat-icon mat-card-avatar>link</mat-icon>
+          <mat-card-title>Named by Configurations</mat-card-title>
+          <mat-card-subtitle>Configurations that trust this federation</mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content class="reference-list">
+          @if (!references.canReadIssuanceConfig) {
+            <p class="hint">
+              You need the <code>issuance:manage</code> role to see whether the issuance
+              configuration names this trust anchor.
+            </p>
+          } @else if (references.issuance.loading) {
+            <p class="hint"><output>Loading the issuance configuration…</output></p>
+          } @else if (references.issuance.failed) {
+            <p class="hint" role="alert">Could not load the issuance configuration.</p>
+          } @else if (references.issuance.found) {
+            <div class="reference">
+              <mat-icon class="label-icon" aria-hidden="true">badge</mat-icon>
+              <span class="value">Issuance configuration</span>
               <a
-                mat-icon-button
-                [routerLink]="['/presentation-config', config.id]"
-                matTooltip="Open presentation configuration"
-                [attr.aria-label]="
-                  'Open presentation configuration ' + (config.description || config.id)
-                "
+                matIconButton
+                routerLink="/issuance-config"
+                matTooltip="Open issuance configuration"
+                aria-label="Open issuance configuration"
               >
                 <mat-icon>open_in_new</mat-icon>
               </a>
             </div>
+          } @else {
+            <p class="hint">The issuance configuration does not name this trust anchor.</p>
           }
-        } @else {
-          <p class="hint">No presentation configuration names this trust anchor.</p>
-        }
-      </mat-card-content>
-    </mat-card>
+
+          @if (!references.canReadPresentationConfigs) {
+            <p class="hint">
+              You need the <code>presentation:manage</code> role to see which presentation
+              configurations name this trust anchor.
+            </p>
+          } @else if (references.presentations.loading) {
+            <p class="hint"><output>Loading presentation configurations…</output></p>
+          } @else if (references.presentations.failed) {
+            <p class="hint" role="alert">Could not load the presentation configurations.</p>
+          } @else if (references.presentations.found.length) {
+            @for (config of references.presentations.found; track config.id) {
+              <div class="reference">
+                <mat-icon class="label-icon" aria-hidden="true">verified_user</mat-icon>
+                <span class="value">{{ config.description || config.id }}</span>
+                <a
+                  matIconButton
+                  [routerLink]="['/presentation-config', config.id]"
+                  matTooltip="Open presentation configuration"
+                  [attr.aria-label]="
+                    'Open presentation configuration ' + (config.description || config.id)
+                  "
+                >
+                  <mat-icon>open_in_new</mat-icon>
+                </a>
+              </div>
+            }
+          } @else {
+            <p class="hint">No presentation configuration names this trust anchor.</p>
+          }
+        </mat-card-content>
+      </mat-card>
+    </div>
   </div>
 } @else if (loadError) {
   <app-load-error [message]="loadError" (retry)="load()">
-    <a mat-button [routerLink]="['../']">Back to the list</a>
+    <a matButton [routerLink]="['../']">Back to the list</a>
   </app-load-error>
 } @else {
-  <p><output>Loading trust anchor…</output></p>
+  <p class="loading-state"><output>Loading trust anchor…</output></p>
 }

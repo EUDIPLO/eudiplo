@@ -1,0 +1,103 @@
+@use '../../tenants/tenant-page' as page;
+
+// Page heading and outlined cards, as on the key and tenant pages
+@include page.base;
+
+.page-header .page-title {
+  margin: 0;
+  font: var(--mat-sys-headline-medium);
+  color: var(--mat-sys-on-surface);
+}
+
+.page-header p {
+  max-width: 72ch;
+}
+
+.table-card {
+  overflow: hidden;
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+table {
+  @include page.data-table;
+
+  th.mat-mdc-header-cell {
+    border-top: 0;
+  }
+
+  .mat-column-keys {
+    width: 1%;
+    white-space: nowrap;
+  }
+}
+
+.id-cell,
+.entity-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  // Wraps at the dots, slashes and hyphens of an ID or URL, not after any letter
+  overflow-wrap: break-word;
+}
+
+.id-cell {
+  font-weight: 500;
+  color: var(--mat-sys-on-surface);
+}
+
+.entity-id {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.description {
+  font: var(--mat-sys-body-medium);
+  color: var(--mat-sys-on-surface);
+}
+
+.row-actions {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.list-state.empty {
+  border: 1px dashed var(--mat-sys-outline-variant);
+  border-radius: var(--mat-sys-corner-large);
+
+  p {
+    margin: 0;
+    font: var(--mat-sys-title-medium);
+    color: var(--mat-sys-on-surface);
+  }
+
+  .muted {
+    margin-top: -8px;
+    font: var(--mat-sys-body-medium);
+  }
+}
+
+.empty-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--mat-sys-corner-full);
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+}
+
+// Narrow pages: the ID, entity ID and actions
+@container (max-width: 760px) {
+  .mat-column-description,
+  .mat-column-keys {
+    display: none;
+  }
+}
+
+// Phone width: the ID names the anchor, so the entity ID gives way to the actions
+@container (max-width: 480px) {
+  .mat-column-entityId {
+    display: none;
+  }
+}

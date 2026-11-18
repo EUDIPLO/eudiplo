@@ -1,29 +1,111 @@
-:host {
-  display: block;
+@use '../../tenants/tenant-page' as page;
+
+// Page heading and outlined cards, as on the key and trust list pages
+@include page.base;
+
+.page {
+  --content-columns: minmax(0, 3fr) minmax(0, 2fr);
+
+  gap: 16px;
+}
+
+.page-header .page-title {
+  margin: 0;
+  font: var(--mat-sys-headline-medium);
+  color: var(--mat-sys-on-surface);
+}
+
+.header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+
+  .delete-action:not([disabled]) mat-icon {
+    color: var(--mat-sys-error);
+  }
+}
+
+// The ownership notice shows only when it applies; without content it takes no gap
+app-config-ownership-notice {
+  display: contents;
 }
 
 mat-card {
-  width: 100%;
   box-sizing: border-box;
+  width: 100%;
 }
 
-mat-card-content {
+mat-card-header {
+  padding: 20px 20px 12px;
+}
+
+// More specific than Material's own :last-child padding rule of the card content
+mat-card mat-card-content {
   max-width: 100%;
-  overflow-x: auto;
-  padding: 16px;
+  padding: 4px 20px 20px;
 }
 
-.metadata-item {
+.hint {
+  margin: 0;
+  font: var(--mat-sys-body-medium);
+  color: var(--mat-sys-on-surface-variant);
+
+  &.with-icon {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .hint-icon {
+    flex: none;
+    width: 18px;
+    height: 18px;
+    font-size: 18px;
+  }
+}
+
+// Overview card with a tinted header and the entity ID as a tile
+.hero {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--mat-sys-primary) 7%, var(--mat-sys-surface)) 0%,
+    var(--mat-sys-surface) 60%
+  );
+
+  .hero-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: var(--mat-sys-corner-large);
+    background: color-mix(in srgb, var(--mat-sys-primary) 16%, var(--mat-sys-surface));
+    font-size: 26px;
+    color: var(--mat-sys-primary);
+  }
+
+  mat-card-title {
+    font: var(--mat-sys-title-large);
+    overflow-wrap: anywhere;
+  }
+
+  mat-card-subtitle {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 13px;
+  }
+}
+
+.entity-id-tile {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
+  margin-top: 8px;
+  padding: 12px 8px 8px 16px;
+  border-radius: var(--mat-sys-corner-medium);
+  background: var(--mat-sys-surface-container-low);
 
   .label {
-    font-size: 12px;
-    font-weight: 500;
+    font: var(--mat-sys-label-medium);
     color: var(--mat-sys-on-surface-variant);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
   }
 }
 
@@ -31,22 +113,148 @@ mat-card-content {
   display: flex;
   align-items: center;
   gap: 4px;
-  font-family: monospace;
-  word-break: break-all;
+
+  code {
+    flex: 1;
+    min-width: 0;
+    font: var(--mat-sys-title-small);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: var(--mat-sys-on-surface);
+    overflow-wrap: anywhere;
+  }
 }
 
-.hint {
-  color: var(--mat-sys-on-surface-variant);
-  margin: 0;
+// Pinned keys and the configurations naming the anchor side by side
+.content-grid {
+  display: grid;
+  grid-template-columns: var(--content-columns);
+  gap: 16px;
+  align-items: start;
 }
 
+.table-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: var(--mat-sys-corner-medium);
+}
+
+table {
+  @include page.data-table;
+
+  th.mat-mdc-header-cell {
+    border-top: 0;
+  }
+
+  // Key values stay whole; a narrow card scrolls the table instead
+  th.mat-mdc-header-cell,
+  td.mat-mdc-cell {
+    white-space: nowrap;
+  }
+
+  .mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 13px;
+  }
+}
+
+// The JWK set folds out below the keys, with Copy above the JSON
 .jwks {
   margin-top: 16px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: var(--mat-sys-corner-medium);
+
+  summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    border-radius: var(--mat-sys-corner-medium);
+    font: var(--mat-sys-title-small);
+    color: var(--mat-sys-on-surface);
+    cursor: pointer;
+    list-style: none;
+
+    &::-webkit-details-marker {
+      display: none;
+    }
+
+    &:hover {
+      background: var(--mat-sys-surface-container-low);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--mat-sys-primary);
+      outline-offset: -2px;
+    }
+  }
+
+  .chevron {
+    transition: transform 150ms ease;
+  }
+
+  &[open] .chevron {
+    transform: rotate(90deg);
+  }
+
+  .jwks-body {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: 0 16px 16px;
+  }
 
   pre {
-    background: var(--mat-sys-surface-container);
-    padding: 12px;
-    border-radius: 4px;
-    overflow-x: auto;
+    box-sizing: border-box;
+    width: 100%;
+    max-height: 320px;
+    margin: 0;
+    padding: 12px 16px;
+    overflow: auto;
+    border-radius: var(--mat-sys-corner-medium);
+    background: var(--mat-sys-surface-container-high);
+    font-size: 12px;
+  }
+}
+
+.reference-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.reference {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 2px 4px 2px 12px;
+  border-radius: var(--mat-sys-corner-medium);
+  background: var(--mat-sys-surface-container-low);
+
+  .label-icon {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    font-size: 20px;
+    color: var(--mat-sys-primary);
+  }
+
+  .value {
+    flex: 1;
+    min-width: 0;
+    font: var(--mat-sys-body-medium);
+    color: var(--mat-sys-on-surface);
+    overflow-wrap: anywhere;
+  }
+}
+
+.loading-state {
+  margin: 0;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+@container (max-width: 960px) {
+  .content-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

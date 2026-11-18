@@ -1,75 +1,217 @@
-.providers-container {
-  margin: 0 auto;
-}
+@use '../../tenants/tenant-page' as page;
 
-.header {
+// Page heading, outlined cards and badges, as on the key and tenant pages
+@include page.base;
+
+.header-actions {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
   flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
 
-.tenant-config {
-  margin-top: 4px;
+// The ownership notice shows only when it applies; without content it takes no gap
+app-config-ownership-notice {
+  display: contents;
+}
 
-  h3 {
-    margin: 0;
-    font-size: 1rem;
-    font-weight: 500;
+mat-card-header {
+  padding: 20px 20px 12px;
+}
+
+// More specific than Material's own :first-child and :last-child padding rules of the card
+mat-card mat-card-content {
+  padding: 0 20px;
+}
+
+mat-card mat-card-actions {
+  padding: 12px 20px 20px;
+}
+
+// Tenant configuration: what it holds, whether it is set, and the JSON editor
+.tenant-config {
+  .badge.set {
+    --tone: var(--mat-sys-primary);
   }
 
   .tenant-config-subtitle {
-    margin: 4px 0 12px;
+    max-width: 90ch;
+    margin: 0;
+    font: var(--mat-sys-body-medium);
     color: var(--mat-sys-on-surface-variant);
   }
+}
 
-  .tenant-config-actions {
-    flex-wrap: wrap;
+// One card per provider
+.provider-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  > li {
+    display: flex;
   }
 }
 
-.loading {
-  padding: 32px;
-  color: var(--mat-sys-on-surface-variant);
-}
-
-.table-container {
-  overflow-x: auto;
-}
-
-.providers-table {
+.provider {
+  box-sizing: border-box;
   width: 100%;
+
+  &.default {
+    border-color: color-mix(in srgb, var(--mat-sys-primary) 40%, var(--mat-sys-outline-variant));
+  }
+
+  mat-card-title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+  }
+
+  .provider-name {
+    overflow-wrap: anywhere;
+  }
+
+  .badge.default {
+    --tone: var(--mat-sys-primary);
+  }
+
+  .type {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 13px;
+  }
+
+  mat-card-content {
+    flex: 1;
+  }
+
+  h3 {
+    margin: 16px 0 8px;
+    font: var(--mat-sys-label-large);
+    color: var(--mat-sys-on-surface-variant);
+  }
 }
 
-.default-chip {
-  background: var(--mat-sys-primary-container);
-  color: var(--mat-sys-on-primary-container);
-}
-
-.caps,
-.algs {
-  flex-wrap: wrap;
-}
-
-.cap-ok {
-  background: var(--mat-sys-tertiary-container);
-  color: var(--mat-sys-on-tertiary-container);
-}
-
-.cap-off {
-  opacity: 0.6;
-}
-
-.health.ok {
-  color: var(--mat-sys-tertiary);
-}
-
-.health.err {
-  color: var(--mat-sys-error);
-}
-
-.latency,
-.muted {
+// Health as a pill in the colour of its state
+.health {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px 4px 8px;
+  border-radius: var(--mat-sys-corner-full);
+  background: var(--mat-sys-surface-container-high);
+  font: var(--mat-sys-label-large);
   color: var(--mat-sys-on-surface-variant);
+
+  mat-icon {
+    width: 18px;
+    height: 18px;
+    font-size: 18px;
+  }
+
+  &.ok {
+    background: color-mix(in srgb, var(--eudiplo-success) 14%, transparent);
+    color: var(--mat-sys-on-surface);
+
+    mat-icon {
+      color: var(--eudiplo-success);
+    }
+  }
+
+  &.err {
+    background: var(--mat-sys-error-container);
+    color: var(--mat-sys-on-error-container);
+  }
+
+  .latency {
+    font: var(--mat-sys-body-small);
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+.health-error {
+  margin: 8px 0 0;
+  font: var(--mat-sys-body-small);
+  color: var(--mat-sys-error);
+  overflow-wrap: anywhere;
+}
+
+.capabilities,
+.algorithms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.capabilities li {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px 4px 6px;
+  border-radius: var(--mat-sys-corner-small);
+  background: var(--mat-sys-secondary-container);
+  font: var(--mat-sys-label-medium);
+  color: var(--mat-sys-on-secondary-container);
+
+  mat-icon {
+    width: 16px;
+    height: 16px;
+    font-size: 16px;
+  }
+
+  &.off {
+    background: transparent;
+    box-shadow: inset 0 0 0 1px var(--mat-sys-outline-variant);
+    color: var(--mat-sys-on-surface-variant);
+    text-decoration: line-through;
+  }
+}
+
+.tag {
+  padding: 4px 10px;
+  border-radius: var(--mat-sys-corner-small);
+  background: var(--mat-sys-surface-container-high);
+  font: var(--mat-sys-label-medium);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--mat-sys-on-surface-variant);
+
+  // A soft primary tint; the primary container is too loud in the dark theme
+  &.default {
+    background: color-mix(in srgb, var(--mat-sys-primary) 26%, transparent);
+    color: var(--mat-sys-on-surface);
+    font-weight: 600;
+  }
+}
+
+.list-state.empty {
+  border: 1px dashed var(--mat-sys-outline-variant);
+  border-radius: var(--mat-sys-corner-large);
+
+  p {
+    margin: 0;
+    font: var(--mat-sys-title-medium);
+    color: var(--mat-sys-on-surface);
+  }
+}
+
+.empty-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--mat-sys-corner-full);
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+}
+
+@container (max-width: 480px) {
+  .provider-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

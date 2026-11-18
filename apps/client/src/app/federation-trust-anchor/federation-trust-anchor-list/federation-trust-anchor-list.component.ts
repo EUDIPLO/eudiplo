@@ -1,11 +1,11 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
+import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTableModule } from '@angular/material/table';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { RouterModule } from '@angular/router';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { BaseAsyncListComponent } from '../../common/base-async-list.component';
 import { LoadErrorComponent } from '../../common/load-error.component';
 import { ConfigDocumentService } from '../../config-portability/config-document.service';
@@ -24,11 +24,12 @@ import {
     MatTooltipModule,
     MatProgressSpinnerModule,
     RouterModule,
-    FlexLayoutModule,
+    MatCardModule,
     ConfigOwnershipDirective,
     LoadErrorComponent,
   ],
   templateUrl: './federation-trust-anchor-list.component.html',
+  styleUrl: './federation-trust-anchor-list.component.scss',
   changeDetection: ChangeDetectionStrategy.Eager,
 })
 export class FederationTrustAnchorListComponent extends BaseAsyncListComponent<FederationTrustAnchor> {

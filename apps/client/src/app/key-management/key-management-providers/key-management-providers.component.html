@@ -1,14 +1,53 @@
-<div class="providers-container" fxLayout="column" fxLayoutGap="16px">
+<div class="page">
   <app-config-ownership-notice kind="KmsConfig" resourceId="kms" />
-  <div fxLayout="row" fxLayoutAlign="space-between center" class="header">
+
+  <header class="page-header">
     <div>
-      <h2>KMS Providers</h2>
+      <h1>KMS Providers</h1>
+      <p>Key management systems that create and hold the private keys of key chains.</p>
     </div>
-    <div fxLayout="row" fxLayoutGap="8px">
-      @if (canManageTenantConfig) {
+    <div class="header-actions">
+      <a matButton="outlined" [routerLink]="['/keys']">
+        <mat-icon>key</mat-icon>
+        Keys
+      </a>
+      <button
+        matIconButton
+        type="button"
+        (click)="refresh()"
+        [disabled]="isLoading"
+        matTooltip="Refresh providers"
+        aria-label="Refresh providers"
+      >
+        <mat-icon>refresh</mat-icon>
+      </button>
+    </div>
+  </header>
+
+  @if (canManageTenantConfig) {
+    <mat-card appearance="outlined" class="tenant-config">
+      <mat-card-header>
+        <mat-icon mat-card-avatar>tune</mat-icon>
+        <mat-card-title>Tenant KMS Configuration</mat-card-title>
+        <mat-card-subtitle>
+          @if (!isLoading) {
+            <span class="badge" [class.set]="hasTenantConfig">{{
+              hasTenantConfig ? 'Tenant providers set' : 'Global configuration'
+            }}</span>
+          }
+        </mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <p class="tenant-config-subtitle">
+          Manage tenant-scoped providers (stored in assets/config/&lt;tenant&gt;/kms.json). If
+          unset, global configuration is used. Credentials are shown as &lt;redacted&gt; and kept
+          when saved unchanged. Enter a credential again when you change the URL or library it is
+          sent to.
+        </p>
+      </mat-card-content>
+      <mat-card-actions>
         <button
-          mat-icon-button
-          color="primary"
+          matButton="tonal"
           type="button"
           [disabled]="isSavingConfig"
           disabledInteractive
@@ -22,135 +61,106 @@
           managedResourceId="kms"
         >
           <mat-icon>edit_note</mat-icon>
+          Show tenant config JSON
         </button>
-      }
-      <button
-        mat-icon-button
-        color="primary"
-        type="button"
-        (click)="refresh()"
-        [disabled]="isLoading"
-        matTooltip="Refresh providers"
-        aria-label="Refresh providers"
-      >
-        <mat-icon>refresh</mat-icon>
-      </button>
-    </div>
-  </div>
+      </mat-card-actions>
+    </mat-card>
+  }
 
   @if (isLoading) {
-    <div class="loading" fxLayout="row" fxLayoutAlign="center center" fxLayoutGap="8px">
-      <mat-spinner diameter="28"></mat-spinner>
-      <span>Loading KMS providers...</span>
+    <div class="list-state">
+      <mat-spinner diameter="40" aria-label="Loading KMS providers"></mat-spinner>
     </div>
   } @else {
-    @if (canManageTenantConfig) {
-      <div class="tenant-config">
-        <h3>Tenant KMS Configuration</h3>
-        <p class="tenant-config-subtitle">
-          Manage tenant-scoped providers (stored in assets/config/&lt;tenant&gt;/kms.json). If
-          unset, global configuration is used. Credentials are shown as &lt;redacted&gt; and kept
-          when saved unchanged. Enter a credential again when you change the URL or library it is
-          sent to.
-        </p>
+    @if (rows.length === 0) {
+      <div class="list-state empty">
+        <span class="empty-icon"><mat-icon>dns</mat-icon></span>
+        <p>No KMS providers could be loaded.</p>
+        <button matButton="tonal" type="button" (click)="refresh()">
+          <mat-icon>refresh</mat-icon>
+          Try again
+        </button>
       </div>
-    }
-    <div class="table-container">
-      <table mat-table [dataSource]="rows" class="providers-table mat-elevation-z8">
-        <ng-container matColumnDef="name">
-          <th mat-header-cell *matHeaderCellDef>Provider</th>
-          <td mat-cell *matCellDef="let row">
-            <div fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px">
-              <span>{{ row.name }}</span>
-              @if (row.isDefault) {
-                <mat-chip class="default-chip">Default</mat-chip>
-              }
-            </div>
-          </td>
-        </ng-container>
+    } @else {
+      <ul class="provider-grid" aria-label="KMS providers">
+        @for (row of rows; track row.name) {
+          <li>
+            <mat-card appearance="outlined" class="provider" [class.default]="row.isDefault">
+              <mat-card-header>
+                <mat-icon mat-card-avatar>dns</mat-icon>
+                <mat-card-title>
+                  <span class="provider-name">{{ row.name }}</span>
+                  @if (row.isDefault) {
+                    <span class="badge default">Default</span>
+                  }
+                </mat-card-title>
+                <mat-card-subtitle>
+                  <span class="type">{{ row.type }}</span>
+                </mat-card-subtitle>
+              </mat-card-header>
 
-        <ng-container matColumnDef="type">
-          <th mat-header-cell *matHeaderCellDef>Type</th>
-          <td mat-cell *matCellDef="let row">
-            <mat-chip>{{ row.type }}</mat-chip>
-          </td>
-        </ng-container>
-
-        <ng-container matColumnDef="capabilities">
-          <th mat-header-cell *matHeaderCellDef>Capabilities</th>
-          <td mat-cell *matCellDef="let row">
-            <div fxLayout="row" fxLayoutGap="6px" class="caps">
-              <mat-chip [class.cap-ok]="row.canCreate" [class.cap-off]="!row.canCreate"
-                >create</mat-chip
-              >
-              <mat-chip [class.cap-ok]="row.canImport" [class.cap-off]="!row.canImport"
-                >import</mat-chip
-              >
-              <mat-chip [class.cap-ok]="row.canDelete" [class.cap-off]="!row.canDelete"
-                >delete</mat-chip
-              >
-            </div>
-          </td>
-        </ng-container>
-
-        <ng-container matColumnDef="algorithms">
-          <th mat-header-cell *matHeaderCellDef>Algorithms</th>
-          <td mat-cell *matCellDef="let row">
-            <div fxLayout="row" fxLayoutGap="6px" class="algs">
-              @for (alg of row.supportedAlgs; track alg) {
-                <mat-chip>{{ alg }}{{ alg === row.defaultAlg ? ' (default)' : '' }}</mat-chip>
-              }
-            </div>
-          </td>
-        </ng-container>
-
-        <ng-container matColumnDef="health">
-          <th mat-header-cell *matHeaderCellDef>Health</th>
-          <td mat-cell *matCellDef="let row">
-            @if (row.healthOk === true) {
-              <div fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="6px" class="health ok">
-                <mat-icon>check_circle</mat-icon>
-                <span>OK</span>
-                @if (row.latencyMs !== null) {
-                  <span class="latency">({{ row.latencyMs }} ms)</span>
+              <mat-card-content>
+                <div
+                  class="health"
+                  [class.ok]="row.healthOk === true"
+                  [class.err]="row.healthOk === false"
+                >
+                  @if (row.healthOk === true) {
+                    <mat-icon aria-hidden="true">check_circle</mat-icon>
+                    <span>OK</span>
+                    @if (row.latencyMs !== null && row.latencyMs !== undefined) {
+                      <span class="latency">{{ row.latencyMs }} ms</span>
+                    }
+                  } @else if (row.healthOk === false) {
+                    <mat-icon aria-hidden="true">error</mat-icon>
+                    <span>Unavailable</span>
+                  } @else {
+                    <mat-icon aria-hidden="true">help_outline</mat-icon>
+                    <span>Health unknown</span>
+                  }
+                </div>
+                @if (row.healthOk === false && row.healthError) {
+                  <p class="health-error">{{ row.healthError }}</p>
                 }
-              </div>
-            } @else if (row.healthOk === false) {
-              <div
-                fxLayout="row"
-                fxLayoutAlign="start center"
-                fxLayoutGap="6px"
-                class="health err"
-                [matTooltip]="row.healthError || ''"
-              >
-                <mat-icon>error</mat-icon>
-                <span>Unavailable</span>
-              </div>
-            } @else {
-              <span class="muted">Unknown</span>
-            }
-          </td>
-        </ng-container>
 
-        <ng-container matColumnDef="actions">
-          <th mat-header-cell *matHeaderCellDef>Use</th>
-          <td mat-cell *matCellDef="let row">
-            <button
-              mat-icon-button
-              type="button"
-              [routerLink]="['/keys/create']"
-              [queryParams]="{ kmsProvider: row.name }"
-              matTooltip="Create key with this provider"
-              [attr.aria-label]="'Create key with provider ' + row.name"
-            >
-              <mat-icon>add</mat-icon>
-            </button>
-          </td>
-        </ng-container>
+                <h3>Capabilities</h3>
+                <ul class="capabilities">
+                  @for (cap of capabilities(row); track cap.label) {
+                    <li [class.off]="!cap.enabled">
+                      <mat-icon aria-hidden="true">{{ cap.enabled ? 'check' : 'block' }}</mat-icon>
+                      {{ cap.label }}
+                      <span class="visually-hidden">{{
+                        cap.enabled ? 'supported' : 'not supported'
+                      }}</span>
+                    </li>
+                  }
+                </ul>
 
-        <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-        <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
-      </table>
-    </div>
+                <h3>Algorithms</h3>
+                <ul class="algorithms">
+                  @for (alg of row.supportedAlgs; track alg) {
+                    <li class="tag" [class.default]="alg === row.defaultAlg">
+                      {{ alg }}{{ alg === row.defaultAlg ? ' (default)' : '' }}
+                    </li>
+                  }
+                </ul>
+              </mat-card-content>
+
+              <mat-card-actions>
+                <a
+                  matButton="tonal"
+                  [routerLink]="['/keys/create']"
+                  [queryParams]="{ kmsProvider: row.name }"
+                  [attr.aria-label]="'Create key with provider ' + row.name"
+                >
+                  <mat-icon>add</mat-icon>
+                  Create key
+                </a>
+              </mat-card-actions>
+            </mat-card>
+          </li>
+        }
+      </ul>
+    }
   }
 </div>

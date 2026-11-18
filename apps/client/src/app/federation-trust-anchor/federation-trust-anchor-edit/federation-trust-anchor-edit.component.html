@@ -1,39 +1,45 @@
-<div fxLayout="column" fxFlex fxLayoutGap="24px">
+<div class="page form-page">
+  <a
+    class="back-link"
+    matButton
+    [routerLink]="
+      isEditMode ? ['/federation-trust-anchor', anchorId] : ['/federation-trust-anchor']
+    "
+  >
+    <mat-icon>arrow_back</mat-icon>
+    {{ isEditMode ? 'Trust anchor ' + anchorId : 'Federation trust anchors' }}
+  </a>
+
   @if (isEditMode && anchorId) {
     <app-config-ownership-notice kind="FederationTrustAnchor" [resourceId]="anchorId" />
   }
-  <div fxLayout="row" fxLayoutAlign="space-between center">
-    <h2 #pageHeading tabindex="-1">
-      {{ isEditMode ? 'Edit' : 'Register' }} Federation Trust Anchor
-    </h2>
-    <div fxLayout="row" fxLayoutGap="8px">
-      <a
-        mat-stroked-button
-        href="https://docs.eudiplo.dev/trust/federation"
-        target="_blank"
-        rel="noopener"
-      >
-        <mat-icon>open_in_new</mat-icon>
-        Documentation
-      </a>
-      <a
-        mat-icon-button
-        [routerLink]="
-          isEditMode ? ['/federation-trust-anchor', anchorId] : ['/federation-trust-anchor']
-        "
-        matTooltip="Back"
-        aria-label="Back"
-      >
-        <mat-icon>arrow_back</mat-icon>
-      </a>
+
+  <header class="page-header">
+    <div class="heading">
+      <span class="form-avatar" aria-hidden="true"><mat-icon>account_tree</mat-icon></span>
+      <div>
+        <h2 #pageHeading tabindex="-1" class="page-title">
+          {{ isEditMode ? 'Edit' : 'Register' }} Federation Trust Anchor
+        </h2>
+        <p>The entity ID of an OpenID Federation trust anchor and the keys it signs with.</p>
+      </div>
     </div>
-  </div>
+    <a
+      matButton="outlined"
+      href="https://docs.eudiplo.dev/trust/federation"
+      target="_blank"
+      rel="noopener"
+    >
+      <mat-icon>open_in_new</mat-icon>
+      Documentation
+    </a>
+  </header>
 
   @if (loading) {
-    <p><output>Loading trust anchor…</output></p>
+    <p class="loading-state"><output>Loading trust anchor…</output></p>
   } @else if (loadError) {
     <app-load-error [message]="loadError" (retry)="load()">
-      <a mat-button routerLink="/federation-trust-anchor">Back to the list</a>
+      <a matButton routerLink="/federation-trust-anchor">Back to the list</a>
     </app-load-error>
   } @else if (registeredForForm) {
     <app-return-to-form
@@ -42,115 +48,115 @@
       linkLabel="Open trust anchor"
     />
   } @else {
-    <form
-      #formElement
-      [formGroup]="form"
-      (ngSubmit)="onSubmit()"
-      fxLayout="column"
-      fxLayoutGap="24px"
-    >
-      <mat-card>
-        <mat-card-header>
-          <mat-card-title>
-            <mat-icon class="title-icon">account_tree</mat-icon>
-            Trust Anchor
-          </mat-card-title>
-          <mat-card-subtitle
-            >The entity ID that configurations name, and an identifier in this
-            tenant</mat-card-subtitle
-          >
-        </mat-card-header>
-        <mat-card-content>
-          <div fxLayout="column" fxLayoutGap="16px">
-            <mat-form-field appearance="outline">
-              <mat-label>ID</mat-label>
-              <input matInput formControlName="id" placeholder="e.g., eu-federation" />
-              <mat-icon matSuffix>fingerprint</mat-icon>
-              <mat-hint>{{
-                isEditMode
-                  ? 'The ID cannot be changed.'
-                  : "Unique in this tenant: letters, digits, '.', '_' and '-'"
-              }}</mat-hint>
-              <mat-error>{{ idError }}</mat-error>
-            </mat-form-field>
+    <form #formElement [formGroup]="form" (ngSubmit)="onSubmit()">
+      <!-- Each section: what it is for on the left, its fields on the right -->
+      <section class="form-section" aria-labelledby="anchor-heading">
+        <div class="section-intro">
+          <h3 id="anchor-heading">Trust Anchor</h3>
+          <p>The entity ID that configurations name, and an identifier in this tenant.</p>
+        </div>
+        <mat-card appearance="outlined">
+          <mat-card-content>
+            <div class="field-stack">
+              <mat-form-field appearance="outline">
+                <mat-label>ID</mat-label>
+                <input matInput formControlName="id" placeholder="e.g., eu-federation" />
+                <mat-icon matSuffix>fingerprint</mat-icon>
+                <mat-hint>{{
+                  isEditMode
+                    ? 'The ID cannot be changed.'
+                    : "Unique in this tenant: letters, digits, '.', '_' and '-'"
+                }}</mat-hint>
+                <mat-error>{{ idError }}</mat-error>
+              </mat-form-field>
 
-            <mat-form-field appearance="outline">
-              <mat-label>Entity ID</mat-label>
-              <input
-                matInput
-                formControlName="entityId"
-                type="url"
-                placeholder="https://trust-anchor.example.org"
-              />
-              <mat-icon matSuffix>link</mat-icon>
-              <mat-hint
-                >Exactly as issuance and presentation configurations name the trust anchor</mat-hint
+              <mat-form-field appearance="outline">
+                <mat-label>Entity ID</mat-label>
+                <input
+                  matInput
+                  formControlName="entityId"
+                  type="url"
+                  placeholder="https://trust-anchor.example.org"
+                />
+                <mat-icon matSuffix>link</mat-icon>
+                <mat-hint
+                  >Exactly as issuance and presentation configurations name the trust
+                  anchor</mat-hint
+                >
+                <mat-error>{{ entityIdError }}</mat-error>
+              </mat-form-field>
+              @if (entityIdChangeWarning) {
+                <p class="entity-id-warning" role="status">
+                  <mat-icon>warning</mat-icon>
+                  <span>{{ entityIdChangeWarning }}</span>
+                </p>
+              }
+
+              <mat-form-field appearance="outline">
+                <mat-label>Description (optional)</mat-label>
+                <input
+                  matInput
+                  formControlName="description"
+                  placeholder="e.g., EU Digital Identity federation"
+                />
+                <mat-icon matSuffix>description</mat-icon>
+                <mat-error>{{
+                  fieldError('description', 'Use at most 1000 characters')
+                }}</mat-error>
+              </mat-form-field>
+            </div>
+          </mat-card-content>
+        </mat-card>
+      </section>
+
+      <section class="form-section" aria-labelledby="keys-heading">
+        <div class="section-intro">
+          <h3 id="keys-heading">Federation Keys</h3>
+          <p>Public keys only, as a JWK set.</p>
+        </div>
+        <mat-card appearance="outlined">
+          <mat-card-content>
+            <p class="field-hint">
+              Paste the trust anchor's federation keys that you obtained out of band, for example
+              from the federation operator. EUDIPLO trusts the trust anchor only when its entity
+              configuration is signed with one of these keys; it does not take them from the trust
+              anchor itself.
+            </p>
+            <p class="field-hint example">
+              <span>Example</span>
+              <code
+                >&#123; "keys": [&#123; "kty": "EC", "kid": "…", "crv": "P-256", "x": "…", "y": "…"
+                &#125;] &#125;</code
               >
-              <mat-error>{{ entityIdError }}</mat-error>
-            </mat-form-field>
-            @if (entityIdChangeWarning) {
-              <p class="entity-id-warning" role="status">
-                <mat-icon>warning</mat-icon>
-                <span>{{ entityIdChangeWarning }}</span>
-              </p>
+            </p>
+            <app-editor
+              formControlName="jwks"
+              [schema]="jwksSchema"
+              [editorOptions]="editorOptions"
+              [errors]="form.controls.jwks.touched ? form.controls.jwks.errors : null"
+            />
+            @if (jwksError) {
+              <p class="jwks-error" role="alert">{{ jwksError }}</p>
             }
+          </mat-card-content>
+        </mat-card>
+      </section>
 
-            <mat-form-field appearance="outline">
-              <mat-label>Description (optional)</mat-label>
-              <input
-                matInput
-                formControlName="description"
-                placeholder="e.g., EU Digital Identity federation"
-              />
-              <mat-icon matSuffix>description</mat-icon>
-              <mat-error>{{ fieldError('description', 'Use at most 1000 characters') }}</mat-error>
-            </mat-form-field>
-          </div>
-        </mat-card-content>
-      </mat-card>
-
-      <mat-card>
-        <mat-card-header>
-          <mat-card-title>
-            <mat-icon class="title-icon">key</mat-icon>
-            Federation Keys
-          </mat-card-title>
-          <mat-card-subtitle>Public keys only, as a JWK set</mat-card-subtitle>
-        </mat-card-header>
-        <mat-card-content>
-          <p class="field-hint">
-            Paste the trust anchor's federation keys that you obtained out of band, for example from
-            the federation operator. EUDIPLO trusts the trust anchor only when its entity
-            configuration is signed with one of these keys; it does not take them from the trust
-            anchor itself. Example:
-            <code
-              >&#123; "keys": [&#123; "kty": "EC", "kid": "…", "crv": "P-256", "x": "…", "y": "…"
-              &#125;] &#125;</code
-            >
-          </p>
-          <app-editor
-            formControlName="jwks"
-            [schema]="jwksSchema"
-            [editorOptions]="editorOptions"
-            [errors]="form.controls.jwks.touched ? form.controls.jwks.errors : null"
-          />
-          @if (jwksError) {
-            <p class="jwks-error" role="alert">{{ jwksError }}</p>
-          }
-        </mat-card-content>
-      </mat-card>
-
-      <div fxLayout="row" fxLayoutAlign="end center" fxLayoutGap="12px">
+      <div class="action-bar">
+        @if (isEditMode) {
+          <output class="change-state" [class.dirty]="form.dirty">
+            {{ form.dirty ? 'Unsaved changes' : 'No changes' }}
+          </output>
+        }
         <a
-          mat-button
+          matButton
           [routerLink]="
             isEditMode ? ['/federation-trust-anchor', anchorId] : ['/federation-trust-anchor']
           "
           >Cancel</a
         >
         <button
-          mat-raised-button
-          color="primary"
+          matButton="filled"
           type="submit"
           [disabled]="saving"
           disabledInteractive

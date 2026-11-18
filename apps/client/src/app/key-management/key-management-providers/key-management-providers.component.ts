@@ -2,15 +2,12 @@ import { CommonModule } from '@angular/common';
 import { Component, OnInit, ChangeDetectionStrategy } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
-import { MatChipsModule } from '@angular/material/chips';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
-import { MatTableModule } from '@angular/material/table';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { RouterModule } from '@angular/router';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { KmsConfigDto, KmsProviderInfoDto } from '@eudiplo/sdk-core';
 import { JsonViewDialogComponent } from '../../issuance/credential-config/credential-config-create/json-view-dialog/json-view-dialog.component';
 import { kmsConfigSchema } from '../../utils/schemas';
@@ -51,15 +48,12 @@ interface ProviderRow {
     CommonModule,
     MatButtonModule,
     MatCardModule,
-    MatChipsModule,
     MatDialogModule,
     MatIconModule,
     MatProgressSpinnerModule,
     MatSnackBarModule,
-    MatTableModule,
     MatTooltipModule,
     RouterModule,
-    FlexLayoutModule,
     ConfigOwnershipDirective,
     ConfigOwnershipNoticeComponent,
   ],
@@ -74,7 +68,6 @@ export class KeyManagementProvidersComponent implements OnInit {
   rows: ProviderRow[] = [];
   tenantConfig: KmsConfigDto = { providers: [] };
   hasTenantConfig = false;
-  displayedColumns = ['name', 'type', 'capabilities', 'algorithms', 'health', 'actions'];
 
   constructor(
     private readonly keyChainService: KeyChainService,
@@ -215,6 +208,15 @@ export class KeyManagementProvidersComponent implements OnInit {
    */
   private editableConfig(tenantConfig: unknown): KmsConfigDto {
     return (tenantConfig as KmsConfigDto | null | undefined) ?? { providers: [] };
+  }
+
+  /** What a provider can do with keys, in the order the card lists it. */
+  capabilities(row: ProviderRow): { label: string; enabled: boolean }[] {
+    return [
+      { label: 'Create keys', enabled: row.canCreate },
+      { label: 'Import keys', enabled: row.canImport },
+      { label: 'Delete keys', enabled: row.canDelete },
+    ];
   }
 
   private toRow(provider: KmsProviderInfoDto, health?: ProviderHealthItem): ProviderRow {
