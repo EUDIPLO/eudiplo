@@ -1,75 +1,212 @@
-<div fxLayout="row" fxLayoutAlign="space-between center">
-  <h2>Tenants</h2>
-  <button
-    matIconButton
-    [routerLink]="['create']"
-    matTooltip="Create New Tenant"
-    aria-label="Create tenant"
-  >
-    <mat-icon>add</mat-icon>
-  </button>
+<div class="page">
+  <header class="page-header">
+    <div>
+      <h1>Tenants</h1>
+      <p>Each tenant has its own configuration, keys, clients and sessions.</p>
+    </div>
+    <!-- The cookbook and its E2E test name this button by its tooltip. -->
+    <button
+      matButton="filled"
+      [routerLink]="['create']"
+      matTooltip="Create New Tenant"
+      aria-label="Create tenant"
+    >
+      <mat-icon>add</mat-icon>
+      Create tenant
+    </button>
+  </header>
+
+  @if (loading) {
+    <div class="list-state">
+      <mat-spinner diameter="40" aria-label="Loading tenants"></mat-spinner>
+    </div>
+  } @else if (loadError) {
+    <app-load-error [message]="loadError" (retry)="loadTenants()" />
+  } @else if (tenants.length === 0) {
+    <div class="list-state empty">
+      <span class="empty-icon"><mat-icon>domain</mat-icon></span>
+      <strong>No tenants yet</strong>
+      <p>Create a tenant to configure issuance or verification for an organization.</p>
+      <a matButton="filled" [routerLink]="['create']">
+        <mat-icon>add</mat-icon>
+        Create Tenant
+      </a>
+    </div>
+  } @else {
+    <mat-card appearance="outlined" class="table-card">
+      <div class="table-header">
+        <div class="table-title">
+          <h2>All tenants</h2>
+          <output>
+            @if (search.trim()) {
+              {{ filteredTenants.length }} of {{ tenants.length }} tenants
+            } @else {
+              {{ tenants.length }} {{ tenants.length === 1 ? 'tenant' : 'tenants' }}
+            }
+          </output>
+        </div>
+
+        <!-- Material 3 search bar: a filled, fully rounded field with a leading search icon -->
+        <div class="search-bar" role="search">
+          <mat-icon class="search-icon" aria-hidden="true">search</mat-icon>
+          <input
+            type="search"
+            [(ngModel)]="search"
+            (ngModelChange)="onSearchChange()"
+            placeholder="Search tenants"
+            aria-label="Search tenants by name, ID or description"
+          />
+          @if (search) {
+            <button
+              matIconButton
+              type="button"
+              class="clear-search"
+              aria-label="Clear search"
+              matTooltip="Clear search"
+              (click)="clearSearch()"
+            >
+              <mat-icon>close</mat-icon>
+            </button>
+          }
+        </div>
+      </div>
+
+      <div class="table-scroll">
+        <table
+          mat-table
+          [dataSource]="shownTenants"
+          matSort
+          [matSortActive]="sortActive"
+          [matSortDirection]="sortDirection"
+          (matSortChange)="onSortChange($event)"
+        >
+          <ng-container matColumnDef="name">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>Tenant</th>
+            <td mat-cell *matCellDef="let tenant">
+              <a class="tenant-link" [routerLink]="tenant.id">
+                <span class="tenant-avatar" [class]="avatarTone(tenant)" aria-hidden="true">{{
+                  initial(tenant)
+                }}</span>
+                <span class="tenant-copy">
+                  <strong>{{ tenant.name }}</strong>
+                  <code>{{ tenant.id }}</code>
+                </span>
+              </a>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="description">
+            <th mat-header-cell *matHeaderCellDef>Description</th>
+            <td mat-cell *matCellDef="let tenant" class="description">
+              @if (tenant.description) {
+                <span [title]="tenant.description">{{ tenant.description }}</span>
+              } @else {
+                <span class="muted">No description</span>
+              }
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="status">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>Status</th>
+            <td mat-cell *matCellDef="let tenant">
+              @if (tenant.status) {
+                <span class="badge" [class]="'status-' + tenant.status">{{ tenant.status }}</span>
+              } @else {
+                <span class="badge">Not set</span>
+              }
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="actions">
+            <th mat-header-cell *matHeaderCellDef>
+              <span class="visually-hidden">Actions</span>
+            </th>
+            <td mat-cell *matCellDef="let tenant">
+              <button
+                matIconButton
+                [matMenuTriggerFor]="tenantMenu"
+                [matMenuTriggerData]="{ tenant }"
+                [attr.aria-label]="'Actions for tenant ' + tenant.id"
+                matTooltip="More actions"
+              >
+                <mat-icon>more_vert</mat-icon>
+              </button>
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+          <!-- The name link stretches over the row, so a click anywhere in it opens the tenant. -->
+          <tr mat-row *matRowDef="let row; columns: displayedColumns" class="clickable"></tr>
+          <tr class="mat-mdc-row no-match" *matNoDataRow>
+            <td class="mat-mdc-cell" [attr.colspan]="displayedColumns.length">
+              <mat-icon aria-hidden="true">search_off</mat-icon>
+              <span>No tenant matches "{{ search.trim() }}".</span>
+              <button matButton type="button" (click)="clearSearch()">Clear search</button>
+            </td>
+          </tr>
+        </table>
+      </div>
+      @if (paginated) {
+        <div class="table-footer">
+          <!-- Page size as a Material 3 menu instead of the paginator's own select -->
+          <div class="page-size">
+            <span class="page-size-label" aria-hidden="true">Rows per page</span>
+            <button
+              matButton="tonal"
+              type="button"
+              class="page-size-trigger"
+              [class.open]="pageSizeTrigger.menuOpen"
+              [matMenuTriggerFor]="pageSizeMenu"
+              #pageSizeTrigger="matMenuTrigger"
+              [attr.aria-label]="'Rows per page: ' + pageSize"
+            >
+              {{ pageSize }}
+              <mat-icon iconPositionEnd>arrow_drop_down</mat-icon>
+            </button>
+          </div>
+          <mat-paginator
+            hidePageSize
+            [length]="filteredTenants.length"
+            [pageIndex]="pageIndex"
+            [pageSize]="pageSize"
+            (page)="onPageChange($event)"
+            aria-label="Select page of tenants"
+          ></mat-paginator>
+        </div>
+      }
+    </mat-card>
+  }
 </div>
 
-@if (loading) {
-  <div class="list-state">
-    <mat-spinner diameter="40" aria-label="Loading tenants"></mat-spinner>
-  </div>
-} @else if (loadError) {
-  <app-load-error [message]="loadError" (retry)="loadTenants()" />
-} @else if (tenants.length === 0) {
-  <div class="list-state">
-    <mat-icon class="empty-icon">domain</mat-icon>
-    <p>No tenants yet.</p>
-    <a mat-flat-button [routerLink]="['create']">
-      <mat-icon>add</mat-icon>
-      Create Tenant
+<mat-menu #pageSizeMenu="matMenu" class="m3-menu" yPosition="above">
+  @for (size of pageSizeOptions; track size) {
+    <button
+      mat-menu-item
+      role="menuitemradio"
+      [attr.aria-checked]="size === pageSize"
+      [class.selected]="size === pageSize"
+      (click)="setPageSize(size)"
+    >
+      <mat-icon>{{ size === pageSize ? 'check' : '' }}</mat-icon>
+      <span>{{ size }} rows</span>
+    </button>
+  }
+</mat-menu>
+
+<mat-menu #tenantMenu="matMenu" class="m3-menu" xPosition="before">
+  <ng-template matMenuContent let-tenant="tenant">
+    <a mat-menu-item [routerLink]="tenant.id">
+      <mat-icon>visibility</mat-icon>
+      <span>View details</span>
     </a>
-  </div>
-} @else {
-  <table mat-table [dataSource]="tenants" class="mat-elevation-z8">
-    <ng-container matColumnDef="id">
-      <th mat-header-cell *matHeaderCellDef>ID</th>
-      <td mat-cell *matCellDef="let tenant">{{ tenant.id }}</td>
-    </ng-container>
-
-    <ng-container matColumnDef="name">
-      <th mat-header-cell *matHeaderCellDef>Name</th>
-      <td mat-cell *matCellDef="let tenant">{{ tenant.name }}</td>
-    </ng-container>
-
-    <ng-container matColumnDef="description">
-      <th mat-header-cell *matHeaderCellDef>Description</th>
-      <td mat-cell *matCellDef="let tenant">{{ tenant.description || 'No description' }}</td>
-    </ng-container>
-
-    <ng-container matColumnDef="status">
-      <th mat-header-cell *matHeaderCellDef>Status</th>
-      <td mat-cell *matCellDef="let tenant">{{ tenant.status }}</td>
-    </ng-container>
-
-    <ng-container matColumnDef="actions">
-      <th mat-header-cell *matHeaderCellDef>Actions</th>
-      <td mat-cell *matCellDef="let tenant">
-        <button
-          [routerLink]="tenant.id"
-          matIconButton
-          matTooltip="View details"
-          [attr.aria-label]="'View tenant ' + tenant.id"
-        >
-          <mat-icon>visibility</mat-icon>
-        </button>
-        <button
-          matIconButton
-          (click)="deleteTenant(tenant)"
-          matTooltip="Delete tenant"
-          [attr.aria-label]="'Delete tenant ' + tenant.id"
-        >
-          <mat-icon>delete</mat-icon>
-        </button>
-      </td>
-    </ng-container>
-
-    <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-    <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
-  </table>
-}
+    <a mat-menu-item [routerLink]="[tenant.id, 'edit']">
+      <mat-icon>edit</mat-icon>
+      <span>Edit</span>
+    </a>
+    <mat-divider></mat-divider>
+    <button mat-menu-item class="danger" (click)="deleteTenant(tenant)">
+      <mat-icon>delete_outline</mat-icon>
+      <span>Delete tenant</span>
+    </button>
+  </ng-template>
+</mat-menu>

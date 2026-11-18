@@ -48,6 +48,14 @@ import { FrontendConfigService } from '../../../services/frontend-config.service
 })
 export class ClientListComponent implements OnInit {
   @Input() loadedClients?: ClientEntity[];
+  /**
+   * Shown inside another page's card, such as a tenant's: no heading of its own, the
+   * description under the client ID, and the roles as compact badges.
+   */
+  @Input() embedded = false;
+
+  /** Roles an embedded row shows before "+N more". */
+  readonly visibleRoleCount = 4;
 
   clients: ClientEntity[] = [];
   loading = false;
@@ -71,9 +79,17 @@ export class ClientListComponent implements OnInit {
 
   /** A tenant's records without an action to offer get no Actions column. */
   get columns(): (keyof ClientEntity | 'actions')[] {
-    return this.loadedClients && !this.rotatesSecrets
-      ? this.displayedColumns.filter((column) => column !== 'actions')
-      : this.displayedColumns;
+    return this.displayedColumns.filter(
+      (column) =>
+        !(column === 'actions' && this.loadedClients && !this.rotatesSecrets) &&
+        // Embedded, the description sits under the client ID
+        !(column === 'description' && this.embedded)
+    );
+  }
+
+  /** A client's roles without repeats, as stored records may name a role twice. */
+  uniqueRoles(client: ClientEntity): string[] {
+    return [...new Set(client.roles ?? [])];
   }
 
   readonly manageDeniedHint = 'This client has roles you neither hold nor may grant';

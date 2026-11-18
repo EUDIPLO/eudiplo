@@ -23,6 +23,7 @@ import {
   DashboardSection,
   DashboardSections,
 } from './dashboard-preferences.service';
+import { formatDuration } from '../utils/duration';
 
 /** Colour role of a status: the stylesheet maps each to a theme colour. */
 type Tone = 'tone-success' | 'tone-warning' | 'tone-danger' | 'tone-neutral';
@@ -404,20 +405,4 @@ export class DashboardComponent implements OnInit {
         return 'hourglass_empty';
     }
   }
-}
-
-/** A retention period in its largest whole unit, for example "24 hours" or "3 days". */
-function formatDuration(seconds: number): string {
-  const units: [number, string][] = [
-    [86_400, 'day'],
-    [3_600, 'hour'],
-    [60, 'minute'],
-  ];
-  for (const [size, unit] of units) {
-    if (seconds >= size && seconds % size === 0) {
-      const count = seconds / size;
-      return `${count} ${unit}${count === 1 ? '' : 's'}`;
-    }
-  }
-  return `${seconds} seconds`;
 }

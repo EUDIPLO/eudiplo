@@ -1,0 +1,104 @@
+@use '@angular/material' as mat;
+
+// Shared look of the tenant pages: a page heading, outlined Material 3 cards on the page surface,
+// and tonal badges for states, as on the dashboard. Colours come from the theme (--mat-sys-*)
+// and the status colours in styles.scss (--eudiplo-*).
+@mixin base {
+  :host {
+    display: block;
+
+    @include mat.card-overrides(
+      (
+        outlined-container-color: var(--mat-sys-surface),
+        outlined-outline-color: var(--mat-sys-outline-variant),
+        outlined-container-shape: var(--mat-sys-corner-large),
+        title-text-font: var(--mat-sys-title-medium-font),
+        title-text-size: var(--mat-sys-title-medium-size),
+        title-text-weight: var(--mat-sys-title-medium-weight),
+        title-text-line-height: var(--mat-sys-title-medium-line-height),
+        subtitle-text-font: var(--mat-sys-body-medium-font),
+        subtitle-text-size: var(--mat-sys-body-medium-size),
+        subtitle-text-weight: var(--mat-sys-body-medium-weight),
+        subtitle-text-line-height: var(--mat-sys-body-medium-line-height),
+        subtitle-text-color: var(--mat-sys-on-surface-variant),
+      )
+    );
+  }
+
+  .page {
+    container-type: inline-size;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 4px 4px 16px;
+    box-sizing: border-box;
+  }
+
+  .page-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+
+    h1 {
+      margin: 0;
+      font: var(--mat-sys-headline-medium);
+      color: var(--mat-sys-on-surface);
+    }
+
+    p {
+      margin: 4px 0 0;
+      font: var(--mat-sys-body-medium);
+      color: var(--mat-sys-on-surface-variant);
+    }
+  }
+
+  mat-card-header {
+    padding: 20px 20px 0;
+  }
+
+  h2[mat-card-title] {
+    margin: 0;
+  }
+
+  mat-icon[mat-card-avatar] {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--mat-sys-corner-full);
+    background: var(--mat-sys-secondary-container);
+    color: var(--mat-sys-on-secondary-container);
+    font-size: 22px;
+  }
+
+  // Small label for a state, such as a tenant's status
+  .badge {
+    --tone: var(--mat-sys-on-surface-variant);
+
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: var(--mat-sys-corner-full);
+    background: color-mix(in srgb, var(--tone) 14%, transparent);
+    font: var(--mat-sys-label-medium);
+    color: var(--mat-sys-on-surface);
+    white-space: nowrap;
+
+    &.status-active {
+      --tone: var(--eudiplo-success);
+    }
+  }
+
+  .muted {
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  @container (max-width: 600px) {
+    .page-header h1 {
+      font: var(--mat-sys-headline-small);
+    }
+  }
+}
