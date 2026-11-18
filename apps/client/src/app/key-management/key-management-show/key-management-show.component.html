@@ -1,462 +1,448 @@
-@if (keyChain) {
-  <div fxLayout="column" fxFlex fxLayoutGap="16px">
+<div class="page">
+  <a class="back-link" matButton [routerLink]="['../']">
+    <mat-icon>arrow_back</mat-icon>
+    Keys
+  </a>
+
+  @if (keyChain) {
     <app-config-ownership-notice kind="KeyChain" [resourceId]="keyId" />
-    <div fxLayout="row" fxLayoutAlign="space-between center">
-      <h2 class="page-title">Key Chain: {{ description || keyId }}</h2>
-      <div>
+
+    <!-- What the key chain is, and what can be done with it -->
+    <mat-card appearance="outlined" class="hero">
+      <span class="hero-avatar" [class]="'usage-' + usageType" aria-hidden="true">
+        <mat-icon>{{ usageIcon }}</mat-icon>
+      </span>
+      <div class="hero-copy">
+        <!-- Named "Key Chain: …" for assistive technology and the E2E tests -->
+        <h1 class="page-title">
+          <span class="visually-hidden">Key Chain: </span>{{ description || keyId }}
+        </h1>
+        <div class="hero-meta">
+          <span class="id-chip">
+            <code>{{ keyId }}</code>
+            <button
+              matIconButton
+              type="button"
+              class="copy-id"
+              matTooltip="Copy key chain ID"
+              aria-label="Copy key chain ID"
+              (click)="copyKeyId()"
+            >
+              <mat-icon>content_copy</mat-icon>
+            </button>
+          </span>
+          <span class="badge usage">{{ usageLabel }}</span>
+          <span class="badge">
+            <mat-icon aria-hidden="true">{{ getTypeIcon() }}</mat-icon>
+            {{ getTypeLabel() }}
+          </span>
+          @if (defaultChip; as chip) {
+            <span class="badge default-chip" [matTooltip]="chip.tooltip"
+              >{{ chip.label }}<span class="visually-hidden">: {{ chip.tooltip }}</span></span
+            >
+          }
+        </div>
+        <p class="hero-description">{{ getTypeDescription() }}</p>
+      </div>
+      <div class="hero-actions">
         <button
-          mat-icon-button
-          [routerLink]="['../']"
-          matTooltip="Back to list"
-          aria-label="Back to list"
-        >
-          <mat-icon>arrow_back</mat-icon>
-        </button>
-        <button
-          mat-icon-button
+          matButton="tonal"
           [routerLink]="['edit']"
-          matTooltip="Edit key chain"
-          aria-label="Edit key chain"
           appConfigManaged
           managedKind="KeyChain"
           [managedResourceId]="keyId"
         >
           <mat-icon>edit</mat-icon>
+          Edit
         </button>
-        @if (canRotate) {
+        <span class="icon-actions">
+          @if (canRotate) {
+            <button
+              mat-icon-button
+              (click)="rotateKey()"
+              matTooltip="Rotate key now"
+              aria-label="Rotate key now"
+              appConfigManaged
+              managedKind="KeyChain"
+              [managedResourceId]="keyId"
+            >
+              <mat-icon>autorenew</mat-icon>
+            </button>
+          }
           <button
             mat-icon-button
-            (click)="rotateKey()"
-            matTooltip="Rotate key now"
-            aria-label="Rotate key now"
+            (click)="viewAsJson()"
+            matTooltip="View as JSON"
+            aria-label="View as JSON"
+          >
+            <mat-icon>code</mat-icon>
+          </button>
+          @if (canDownloadConfig) {
+            <button
+              mat-icon-button
+              (click)="downloadConfig()"
+              [disabled]="downloadingConfig"
+              [attr.aria-busy]="downloadingConfig"
+              disabledInteractive
+              matTooltip="Download configuration (includes the private key)"
+              aria-label="Download configuration (includes the private key)"
+            >
+              <mat-icon>download</mat-icon>
+            </button>
+          }
+          @if (defaultAccess) {
+            <button
+              mat-icon-button
+              class="default-toggle"
+              [class.on]="isDefaultAccess"
+              (click)="toggleDefaultAccess()"
+              [disabled]="updatingDefault"
+              [attr.aria-busy]="updatingDefault"
+              disabledInteractive
+              [matTooltip]="defaultToggleTooltip"
+              [attr.aria-label]="defaultToggleLabel"
+              appConfigManaged
+              managedKind="KeyChainDefaults"
+              managedResourceId="defaults"
+            >
+              <mat-icon>{{ isDefaultAccess ? 'star' : 'star_outline' }}</mat-icon>
+            </button>
+          }
+          <button
+            mat-icon-button
+            class="delete-action"
+            (click)="deleteKey()"
+            [disabled]="deleting"
+            disabledInteractive
+            [matTooltip]="deleting ? 'Deleting the key chain…' : 'Delete key chain'"
+            aria-label="Delete key chain"
             appConfigManaged
             managedKind="KeyChain"
             [managedResourceId]="keyId"
           >
-            <mat-icon>autorenew</mat-icon>
+            <mat-icon>delete_outline</mat-icon>
           </button>
-        }
-        <button
-          mat-icon-button
-          (click)="viewAsJson()"
-          matTooltip="View as JSON"
-          aria-label="View as JSON"
-        >
-          <mat-icon>code</mat-icon>
-        </button>
-        @if (canDownloadConfig) {
-          <button
-            mat-icon-button
-            (click)="downloadConfig()"
-            [disabled]="downloadingConfig"
-            [attr.aria-busy]="downloadingConfig"
-            disabledInteractive
-            matTooltip="Download configuration (includes the private key)"
-            aria-label="Download configuration (includes the private key)"
-          >
-            <mat-icon>download</mat-icon>
-          </button>
-        }
-        @if (defaultAccess) {
-          <button
-            mat-icon-button
-            (click)="toggleDefaultAccess()"
-            [disabled]="updatingDefault"
-            [attr.aria-busy]="updatingDefault"
-            disabledInteractive
-            [matTooltip]="defaultToggleTooltip"
-            [attr.aria-label]="defaultToggleLabel"
-            appConfigManaged
-            managedKind="KeyChainDefaults"
-            managedResourceId="defaults"
-          >
-            <mat-icon>{{ isDefaultAccess ? 'star' : 'star_outline' }}</mat-icon>
-          </button>
-        }
-        <button
-          mat-icon-button
-          (click)="deleteKey()"
-          [disabled]="deleting"
-          disabledInteractive
-          color="warn"
-          [matTooltip]="deleting ? 'Deleting the key chain…' : 'Delete key chain'"
-          aria-label="Delete key chain"
-          appConfigManaged
-          managedKind="KeyChain"
-          [managedResourceId]="keyId"
-        >
-          <mat-icon>delete</mat-icon>
-        </button>
+        </span>
       </div>
-    </div>
-
-    <!-- Key Type Card -->
-    <mat-card class="key-type-card">
-      <mat-card-content>
-        <div fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="16px">
-          <div class="key-type-icon" [ngClass]="keyChain.type">
-            <mat-icon>{{ getTypeIcon() }}</mat-icon>
-          </div>
-          <div fxLayout="column" fxFlex>
-            <div fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px">
-              <span class="key-type-label">{{ getTypeLabel() }}</span>
-              <mat-chip>{{ usageType }}</mat-chip>
-              @if (defaultChip; as chip) {
-                <mat-chip class="default-chip" [matTooltip]="chip.tooltip"
-                  >{{ chip.label
-                  }}<span class="visually-hidden">: {{ chip.tooltip }}</span></mat-chip
-                >
-              }
-            </div>
-            <span class="key-type-description">{{ getTypeDescription() }}</span>
-          </div>
-        </div>
-      </mat-card-content>
     </mat-card>
 
-    <!-- Basic Info -->
-    <mat-card>
-      <mat-card-header>
-        <mat-card-title>Configuration</mat-card-title>
-      </mat-card-header>
-      <mat-card-content>
-        <mat-list class="config-list">
-          <mat-list-item>
-            <mat-icon matListItemIcon>fingerprint</mat-icon>
-            <span matListItemTitle>ID</span>
-            <span matListItemLine>{{ keyId }}</span>
-          </mat-list-item>
-          @if (description) {
-            <mat-list-item>
-              <mat-icon matListItemIcon>description</mat-icon>
-              <span matListItemTitle>Description</span>
-              <span matListItemLine>{{ description }}</span>
-            </mat-list-item>
-          }
-          <mat-list-item>
-            <mat-icon matListItemIcon>storage</mat-icon>
-            <span matListItemTitle>KMS Provider</span>
-            <span matListItemLine>{{ keyChain.kmsProvider }}</span>
-          </mat-list-item>
-          @if (keyChain.alg) {
-            <mat-list-item>
-              <mat-icon matListItemIcon>key</mat-icon>
-              <span matListItemTitle>Signing Algorithm</span>
-              <span matListItemLine
-                >{{ keyChain.alg }} (ECDSA {{ keyChain.activePublicKey.crv }})</span
-              >
-            </mat-list-item>
-          }
-          <mat-list-item>
-            <mat-icon matListItemIcon>event</mat-icon>
-            <span matListItemTitle>Created</span>
-            <span matListItemLine>{{ formatDate(keyChain.createdAt) }}</span>
-          </mat-list-item>
-        </mat-list>
-      </mat-card-content>
-    </mat-card>
-
-    <!-- Rotation Policy -->
-    <mat-card>
-      <mat-card-header>
-        <mat-card-title>Rotation Policy</mat-card-title>
-      </mat-card-header>
-      <mat-card-content>
-        <mat-list class="config-list">
-          <mat-list-item>
-            <mat-icon matListItemIcon>{{
-              keyChain.rotationPolicy.enabled ? 'autorenew' : 'block'
-            }}</mat-icon>
-            <span matListItemTitle>Status</span>
-            <span matListItemLine>
-              @if (keyChain.rotationPolicy.enabled) {
-                <mat-chip color="primary">Enabled</mat-chip>
-              } @else {
-                <mat-chip>Disabled</mat-chip>
-              }
-            </span>
-          </mat-list-item>
-          @if (keyChain.rotationPolicy.enabled) {
-            <mat-list-item>
-              <mat-icon matListItemIcon>schedule</mat-icon>
-              <span matListItemTitle>Rotation Interval</span>
-              <span matListItemLine>{{ keyChain.rotationPolicy.intervalDays }} days</span>
-            </mat-list-item>
-            @if (keyChain.rotationPolicy.nextRotationAt) {
-              <mat-list-item>
-                <mat-icon matListItemIcon>event_upcoming</mat-icon>
-                <span matListItemTitle>Next Rotation</span>
-                <span matListItemLine>{{
-                  formatDate(keyChain.rotationPolicy.nextRotationAt)
-                }}</span>
-              </mat-list-item>
-            }
-          }
-        </mat-list>
-      </mat-card-content>
-    </mat-card>
-
-    <!-- Root CA Certificate (if internal chain) -->
-    @if (hasRootCa() && keyChain.rootCertificate) {
-      <mat-card>
-        <mat-card-header>
-          <mat-card-title>
-            <mat-icon class="title-icon">security</mat-icon>
-            Root CA Certificate
-          </mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <mat-list class="config-list">
-            <mat-list-item>
-              <mat-icon matListItemIcon>subject</mat-icon>
-              <span matListItemTitle>Subject</span>
-              <span matListItemLine>{{ keyChain.rootCertificate.subject }}</span>
-            </mat-list-item>
-            <mat-list-item>
-              <mat-icon matListItemIcon>{{
-                isCertExpired(keyChain.rootCertificate) ? 'warning' : 'check_circle'
-              }}</mat-icon>
-              <span matListItemTitle>Valid Until</span>
-              <span matListItemLine>
-                {{
-                  keyChain.rootCertificate.notAfter
-                    ? formatDate(keyChain.rootCertificate.notAfter)
-                    : 'N/A'
-                }}
-                @if (isCertExpired(keyChain.rootCertificate)) {
-                  <mat-chip color="warn">Expired</mat-chip>
-                }
-              </span>
-            </mat-list-item>
-          </mat-list>
-          <div class="cert-actions" fxLayout="row" fxLayoutGap="8px">
-            <button
-              mat-stroked-button
-              (click)="copyCertificateToClipboard(keyChain.rootCertificate)"
-            >
-              <mat-icon>content_copy</mat-icon>
-              Copy PEM
-            </button>
-          </div>
-        </mat-card-content>
-      </mat-card>
-    }
-
-    @if (publishesJwk) {
-      <!-- Public Key: OpenID Federation and the authorization servers' JWKS publish the JWK, not a certificate -->
-      <mat-card class="federation-public-key">
-        <mat-card-header>
-          <mat-card-title>
-            <mat-icon class="title-icon">public</mat-icon>
-            Public Key
-          </mat-card-title>
-          @if (isAuthorizationServerKey) {
-            <mat-card-subtitle
-              >Published in the JWKS of the authorization servers that sign access tokens with this
-              key.</mat-card-subtitle
-            >
-          } @else {
-            <mat-card-subtitle
-              >Published in the jwks of your entity configuration. Your trust anchor or intermediate
-              lists it in the subordinate statement about your entity.</mat-card-subtitle
-            >
-          }
-        </mat-card-header>
-        <mat-card-content>
-          <mat-list class="config-list">
-            <mat-list-item>
-              <mat-icon matListItemIcon>fingerprint</mat-icon>
-              <span matListItemTitle>Key ID (kid)</span>
-              <span matListItemLine>{{ keyChain.activePublicKey.kid || 'N/A' }}</span>
-            </mat-list-item>
-          </mat-list>
-          <div class="pem-container">
-            <pre class="pem-certificate">{{ activePublicKeyJson }}</pre>
-          </div>
-          @if (keyChain.activeCertificate) {
-            <p class="unused-certificate-note">
-              EUDIPLO also keeps a self-signed certificate for this key.
-              {{ isAuthorizationServerKey ? 'Access tokens do not' : 'OpenID Federation does not' }}
-              use it.
-            </p>
-          }
-          <div class="cert-actions" fxLayout="row" fxLayoutGap="8px">
-            <button mat-stroked-button (click)="copyFederationPublicKey()">
-              <mat-icon>content_copy</mat-icon>
-              Copy Public Key (JWK)
-            </button>
-          </div>
-        </mat-card-content>
-      </mat-card>
-
-      @if (keyChain.previousPublicKey) {
-        <mat-card>
+    <div class="content-grid">
+      <!-- Settings of the key chain -->
+      <div class="column">
+        <mat-card appearance="outlined">
           <mat-card-header>
-            <mat-card-title>
-              <mat-icon class="title-icon">history</mat-icon>
-              Previous Public Key (Grace Period)
-            </mat-card-title>
-            @if (isAuthorizationServerKey) {
-              <mat-card-subtitle>
-                Published for one access token lifetime after the rotation.
-              </mat-card-subtitle>
-            } @else if (keyChain.previousKeyExpiry) {
-              <mat-card-subtitle>
-                Expires: {{ formatDate(keyChain.previousKeyExpiry) }}
-              </mat-card-subtitle>
-            }
+            <mat-icon mat-card-avatar>tune</mat-icon>
+            <h2 mat-card-title>Configuration</h2>
           </mat-card-header>
           <mat-card-content>
-            <mat-list class="config-list">
-              <mat-list-item>
-                <mat-icon matListItemIcon>fingerprint</mat-icon>
-                <span matListItemTitle>Key ID (kid)</span>
-                <span matListItemLine>{{ keyChain.previousPublicKey.kid || 'N/A' }}</span>
-              </mat-list-item>
-            </mat-list>
-            <div class="cert-actions" fxLayout="row" fxLayoutGap="8px">
-              <button
-                mat-stroked-button
-                (click)="copyPublicKeyToClipboard(keyChain.previousPublicKey)"
-              >
-                <mat-icon>content_copy</mat-icon>
-                Copy Public Key (JWK)
-              </button>
-            </div>
+            <dl class="details">
+              <div>
+                <dt>ID</dt>
+                <dd>
+                  <code>{{ keyId }}</code>
+                </dd>
+              </div>
+              @if (description) {
+                <div>
+                  <dt>Description</dt>
+                  <dd>{{ description }}</dd>
+                </div>
+              }
+              <div>
+                <dt>KMS Provider</dt>
+                <dd>{{ keyChain.kmsProvider }}</dd>
+              </div>
+              @if (keyChain.alg) {
+                <div>
+                  <dt>Signing Algorithm</dt>
+                  <dd>{{ keyChain.alg }} (ECDSA {{ keyChain.activePublicKey.crv }})</dd>
+                </div>
+              }
+              <div>
+                <dt>Created</dt>
+                <dd>{{ formatDate(keyChain.createdAt) }}</dd>
+              </div>
+            </dl>
           </mat-card-content>
         </mat-card>
-      }
-    } @else if (keyChain.activeCertificate) {
-      <!-- Active Certificate -->
-      <mat-card>
-        <mat-card-header>
-          <mat-card-title>
-            <mat-icon class="title-icon">verified</mat-icon>
-            Active Certificate
-          </mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <mat-list class="config-list">
-            <mat-list-item>
-              <mat-icon matListItemIcon>subject</mat-icon>
-              <span matListItemTitle>Subject</span>
-              <span matListItemLine>{{ keyChain.activeCertificate.subject }}</span>
-            </mat-list-item>
-            <mat-list-item>
-              <mat-icon matListItemIcon>business</mat-icon>
-              <span matListItemTitle>Issuer</span>
-              <span matListItemLine>{{ keyChain.activeCertificate.issuer }}</span>
-            </mat-list-item>
-            <mat-list-item>
-              <mat-icon matListItemIcon>{{
-                isCertExpired(keyChain.activeCertificate) ? 'warning' : 'check_circle'
-              }}</mat-icon>
-              <span matListItemTitle>Valid Until</span>
-              <span matListItemLine>
-                {{
-                  keyChain.activeCertificate.notAfter
-                    ? formatDate(keyChain.activeCertificate.notAfter)
-                    : 'N/A'
-                }}
-                @if (isCertExpired(keyChain.activeCertificate)) {
-                  <mat-chip color="warn">Expired</mat-chip>
+
+        <mat-card appearance="outlined">
+          <mat-card-header>
+            <mat-icon mat-card-avatar>autorenew</mat-icon>
+            <h2 mat-card-title>Rotation Policy</h2>
+          </mat-card-header>
+          <mat-card-content>
+            <dl class="details">
+              <div>
+                <dt>Status</dt>
+                <dd>
+                  @if (keyChain.rotationPolicy.enabled) {
+                    <span class="status tone-success">Enabled</span>
+                  } @else {
+                    <span class="status">Disabled</span>
+                  }
+                </dd>
+              </div>
+              @if (keyChain.rotationPolicy.enabled) {
+                <div>
+                  <dt>Rotation Interval</dt>
+                  <dd>{{ keyChain.rotationPolicy.intervalDays }} days</dd>
+                </div>
+                @if (keyChain.rotationPolicy.nextRotationAt) {
+                  <div>
+                    <dt>Next Rotation</dt>
+                    <dd>{{ formatDate(keyChain.rotationPolicy.nextRotationAt) }}</dd>
+                  </div>
                 }
-              </span>
-            </mat-list-item>
-          </mat-list>
-          <div class="cert-actions" fxLayout="row" fxLayoutGap="8px">
-            <button
-              mat-stroked-button
-              (click)="copyCertificateToClipboard(keyChain.activeCertificate)"
-            >
-              <mat-icon>content_copy</mat-icon>
-              Copy PEM
-            </button>
-            @if (canRequestFromEudiHub) {
-              <button
-                mat-stroked-button
-                (click)="requestFromEudiHub()"
-                matTooltip="Request a certificate for this key from the German EUDI Hub with a token from its portal"
-                appConfigManaged
-                managedKind="KeyChain"
-                [managedResourceId]="keyId"
-              >
-                <mat-icon>verified</mat-icon>
-                Request from EUDI Hub
-              </button>
-            }
-          </div>
-        </mat-card-content>
-      </mat-card>
-    }
+              }
+            </dl>
+          </mat-card-content>
+        </mat-card>
+      </div>
 
-    <!-- Certificate from an external CA, for a key that stays in EUDIPLO -->
-    @if (offersCertificateRequest) {
-      <app-key-certificate-request
-        [keyChain]="keyChain"
-        [startExpanded]="requestsCertificate"
-        (certificateSaved)="onCertificateSaved()"
-      />
-    }
+      <!-- Certificates and public keys -->
+      <div class="column">
+        @if (hasRootCa() && keyChain.rootCertificate) {
+          <mat-card appearance="outlined">
+            <mat-card-header>
+              <mat-icon mat-card-avatar>security</mat-icon>
+              <h2 mat-card-title>Root CA Certificate</h2>
+            </mat-card-header>
+            <mat-card-content>
+              <dl class="details">
+                <div>
+                  <dt>Subject</dt>
+                  <dd>{{ keyChain.rootCertificate.subject }}</dd>
+                </div>
+                <div>
+                  <dt>Valid Until</dt>
+                  <dd>
+                    {{
+                      keyChain.rootCertificate.notAfter
+                        ? formatDate(keyChain.rootCertificate.notAfter)
+                        : 'N/A'
+                    }}
+                    @if (isCertExpired(keyChain.rootCertificate)) {
+                      <span class="status tone-danger">Expired</span>
+                    }
+                  </dd>
+                </div>
+              </dl>
+              <div class="cert-actions">
+                <button
+                  matButton="outlined"
+                  (click)="copyCertificateToClipboard(keyChain.rootCertificate)"
+                >
+                  <mat-icon>content_copy</mat-icon>
+                  Copy PEM
+                </button>
+              </div>
+            </mat-card-content>
+          </mat-card>
+        }
 
-    <!-- Previous Certificate (if in grace period) -->
-    @if (!publishesJwk && hasPreviousKey() && keyChain.previousCertificate) {
-      <mat-card>
-        <mat-card-header>
-          <mat-card-title>
-            <mat-icon class="title-icon">history</mat-icon>
-            Previous Certificate (Grace Period)
-          </mat-card-title>
-          @if (keyChain.previousKeyExpiry) {
-            <mat-card-subtitle>
-              Expires: {{ formatDate(keyChain.previousKeyExpiry) }}
-            </mat-card-subtitle>
+        @if (publishesJwk) {
+          <!-- Public Key: OpenID Federation and the authorization servers' JWKS publish the JWK, not a certificate -->
+          <mat-card appearance="outlined" class="federation-public-key">
+            <mat-card-header>
+              <mat-icon mat-card-avatar>public</mat-icon>
+              <h2 mat-card-title>Public Key</h2>
+              @if (isAuthorizationServerKey) {
+                <mat-card-subtitle
+                  >Published in the JWKS of the authorization servers that sign access tokens with
+                  this key.</mat-card-subtitle
+                >
+              } @else {
+                <mat-card-subtitle
+                  >Published in the jwks of your entity configuration. Your trust anchor or
+                  intermediate lists it in the subordinate statement about your
+                  entity.</mat-card-subtitle
+                >
+              }
+            </mat-card-header>
+            <mat-card-content>
+              <dl class="details">
+                <div>
+                  <dt>Key ID (kid)</dt>
+                  <dd>
+                    <code>{{ keyChain.activePublicKey.kid || 'N/A' }}</code>
+                  </dd>
+                </div>
+              </dl>
+              <pre class="code-block">{{ activePublicKeyJson }}</pre>
+              @if (keyChain.activeCertificate) {
+                <p class="unused-certificate-note">
+                  EUDIPLO also keeps a self-signed certificate for this key.
+                  {{
+                    isAuthorizationServerKey ? 'Access tokens do not' : 'OpenID Federation does not'
+                  }}
+                  use it.
+                </p>
+              }
+              <div class="cert-actions">
+                <button matButton="outlined" (click)="copyFederationPublicKey()">
+                  <mat-icon>content_copy</mat-icon>
+                  Copy Public Key (JWK)
+                </button>
+              </div>
+            </mat-card-content>
+          </mat-card>
+
+          @if (keyChain.previousPublicKey) {
+            <mat-card appearance="outlined">
+              <mat-card-header>
+                <mat-icon mat-card-avatar>history</mat-icon>
+                <h2 mat-card-title>Previous Public Key (Grace Period)</h2>
+                @if (isAuthorizationServerKey) {
+                  <mat-card-subtitle>
+                    Published for one access token lifetime after the rotation.
+                  </mat-card-subtitle>
+                } @else if (keyChain.previousKeyExpiry) {
+                  <mat-card-subtitle>
+                    Expires: {{ formatDate(keyChain.previousKeyExpiry) }}
+                  </mat-card-subtitle>
+                }
+              </mat-card-header>
+              <mat-card-content>
+                <dl class="details">
+                  <div>
+                    <dt>Key ID (kid)</dt>
+                    <dd>
+                      <code>{{ keyChain.previousPublicKey.kid || 'N/A' }}</code>
+                    </dd>
+                  </div>
+                </dl>
+                <div class="cert-actions">
+                  <button
+                    matButton="outlined"
+                    (click)="copyPublicKeyToClipboard(keyChain.previousPublicKey)"
+                  >
+                    <mat-icon>content_copy</mat-icon>
+                    Copy Public Key (JWK)
+                  </button>
+                </div>
+              </mat-card-content>
+            </mat-card>
           }
-        </mat-card-header>
-        <mat-card-content>
-          <mat-list class="config-list">
-            <mat-list-item>
-              <mat-icon matListItemIcon>subject</mat-icon>
-              <span matListItemTitle>Subject</span>
-              <span matListItemLine>{{ keyChain.previousCertificate.subject }}</span>
-            </mat-list-item>
-            <mat-list-item>
-              <mat-icon matListItemIcon>{{
-                isCertExpired(keyChain.previousCertificate) ? 'warning' : 'check_circle'
-              }}</mat-icon>
-              <span matListItemTitle>Valid Until</span>
-              <span matListItemLine>
-                {{
-                  keyChain.previousCertificate.notAfter
-                    ? formatDate(keyChain.previousCertificate.notAfter)
-                    : 'N/A'
-                }}
-                @if (isCertExpired(keyChain.previousCertificate)) {
-                  <mat-chip color="warn">Expired</mat-chip>
+        } @else if (keyChain.activeCertificate) {
+          <mat-card appearance="outlined">
+            <mat-card-header>
+              <mat-icon mat-card-avatar>verified</mat-icon>
+              <h2 mat-card-title>Active Certificate</h2>
+            </mat-card-header>
+            <mat-card-content>
+              <dl class="details">
+                <div>
+                  <dt>Subject</dt>
+                  <dd>{{ keyChain.activeCertificate.subject }}</dd>
+                </div>
+                <div>
+                  <dt>Issuer</dt>
+                  <dd>{{ keyChain.activeCertificate.issuer }}</dd>
+                </div>
+                <div>
+                  <dt>Valid Until</dt>
+                  <dd>
+                    {{
+                      keyChain.activeCertificate.notAfter
+                        ? formatDate(keyChain.activeCertificate.notAfter)
+                        : 'N/A'
+                    }}
+                    @if (isCertExpired(keyChain.activeCertificate)) {
+                      <span class="status tone-danger">Expired</span>
+                    } @else {
+                      <span class="status tone-success">Valid</span>
+                    }
+                  </dd>
+                </div>
+              </dl>
+              <div class="cert-actions">
+                <button
+                  matButton="outlined"
+                  (click)="copyCertificateToClipboard(keyChain.activeCertificate)"
+                >
+                  <mat-icon>content_copy</mat-icon>
+                  Copy PEM
+                </button>
+                @if (canRequestFromEudiHub) {
+                  <button
+                    matButton="outlined"
+                    (click)="requestFromEudiHub()"
+                    matTooltip="Request a certificate for this key from the German EUDI Hub with a token from its portal"
+                    appConfigManaged
+                    managedKind="KeyChain"
+                    [managedResourceId]="keyId"
+                  >
+                    <mat-icon>verified</mat-icon>
+                    Request from EUDI Hub
+                  </button>
                 }
-              </span>
-            </mat-list-item>
-          </mat-list>
-          <div class="cert-actions" fxLayout="row" fxLayoutGap="8px">
-            <button
-              mat-stroked-button
-              (click)="copyCertificateToClipboard(keyChain.previousCertificate)"
-            >
-              <mat-icon>content_copy</mat-icon>
-              Copy PEM
-            </button>
-          </div>
-        </mat-card-content>
-      </mat-card>
-    }
-  </div>
-} @else if (loadError) {
-  <app-load-error [message]="loadError" (retry)="retryLoad()">
-    <a mat-button [routerLink]="['../']">Back to keys</a>
-  </app-load-error>
-} @else {
-  <div fxLayout="column" fxLayoutAlign="center center" fxLayoutGap="16px" class="loading">
-    <mat-icon class="empty-icon">vpn_key</mat-icon>
-    <p>Loading key chain...</p>
-  </div>
-}
+              </div>
+            </mat-card-content>
+          </mat-card>
+        }
+
+        <!-- Certificate from an external CA, for a key that stays in EUDIPLO -->
+        @if (offersCertificateRequest) {
+          <app-key-certificate-request
+            [keyChain]="keyChain"
+            [startExpanded]="requestsCertificate"
+            (certificateSaved)="onCertificateSaved()"
+          />
+        }
+
+        @if (!publishesJwk && hasPreviousKey() && keyChain.previousCertificate) {
+          <mat-card appearance="outlined">
+            <mat-card-header>
+              <mat-icon mat-card-avatar>history</mat-icon>
+              <h2 mat-card-title>Previous Certificate (Grace Period)</h2>
+              @if (keyChain.previousKeyExpiry) {
+                <mat-card-subtitle>
+                  Expires: {{ formatDate(keyChain.previousKeyExpiry) }}
+                </mat-card-subtitle>
+              }
+            </mat-card-header>
+            <mat-card-content>
+              <dl class="details">
+                <div>
+                  <dt>Subject</dt>
+                  <dd>{{ keyChain.previousCertificate.subject }}</dd>
+                </div>
+                <div>
+                  <dt>Valid Until</dt>
+                  <dd>
+                    {{
+                      keyChain.previousCertificate.notAfter
+                        ? formatDate(keyChain.previousCertificate.notAfter)
+                        : 'N/A'
+                    }}
+                    @if (isCertExpired(keyChain.previousCertificate)) {
+                      <span class="status tone-danger">Expired</span>
+                    }
+                  </dd>
+                </div>
+              </dl>
+              <div class="cert-actions">
+                <button
+                  matButton="outlined"
+                  (click)="copyCertificateToClipboard(keyChain.previousCertificate)"
+                >
+                  <mat-icon>content_copy</mat-icon>
+                  Copy PEM
+                </button>
+              </div>
+            </mat-card-content>
+          </mat-card>
+        }
+      </div>
+    </div>
+  } @else if (loadError) {
+    <app-load-error [message]="loadError" (retry)="retryLoad()">
+      <a mat-button [routerLink]="['../']">Back to keys</a>
+    </app-load-error>
+  } @else {
+    <div class="loading-state">
+      <mat-spinner diameter="40" aria-label="Loading key chain"></mat-spinner>
+    </div>
+  }
+</div>

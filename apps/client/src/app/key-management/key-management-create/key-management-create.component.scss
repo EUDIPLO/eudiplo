@@ -1,71 +1,63 @@
-.info-card {
-  background-color: var(--mat-sys-surface-container);
-  margin: 16px 0;
+@use '../../tenants/tenant-page' as page;
 
-  .info-icon {
-    color: var(--mat-sys-on-surface-variant);
-  }
+// Back link, heading, sections and action bar, as on the tenant and client forms
+@include page.base;
+@include page.form-page;
 
-  mat-card-content {
-    padding: 12px !important;
-  }
+.form-avatar mat-icon {
+  width: 28px;
+  height: 28px;
+  font-size: 28px;
 }
 
-::ng-deep {
-  .provider-type {
-    color: var(--mat-sys-on-surface-variant);
-    font-size: 0.9em;
-    margin-left: 4px;
-  }
+// The ownership notice shows only when it applies; without content it takes no gap
+app-config-ownership-notice {
+  display: contents;
+}
 
-  .provider-default {
-    color: var(--eudiplo-info);
-    font-weight: 500;
-  }
+// Fixed facts of the key chain: label left, value right
+.info-grid {
+  margin: 0;
 
-  .provider-option {
+  > div {
     display: flex;
-    flex-direction: column;
-    line-height: 1.4;
-    padding: 4px 0;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 4px 16px;
+    padding: 8px 0;
+
+    & + div {
+      border-top: 1px solid var(--mat-sys-outline-variant);
+    }
   }
 
-  .provider-name {
-    font-weight: 500;
-  }
-
-  .provider-description {
-    font-size: 0.85em;
+  dt {
+    font: var(--mat-sys-body-medium);
     color: var(--mat-sys-on-surface-variant);
-    margin-top: 2px;
+  }
+
+  dd {
+    margin: 0;
+    font: var(--mat-sys-body-medium);
+    font-weight: 500;
+    color: var(--mat-sys-on-surface);
+    overflow-wrap: anywhere;
+
+    code {
+      font-size: 13px;
+      font-weight: 400;
+    }
   }
 }
 
-.certificate-item {
-  border: 1px solid var(--mat-sys-outline-variant);
-  padding: 16px;
-  border-radius: 4px;
-  background-color: var(--mat-sys-surface-container);
+.field-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
 }
 
-.cert-header {
-  margin: 0;
-  color: var(--mat-sys-on-surface);
-  font-weight: 500;
-}
-
-.cert-pem-header {
-  margin: 8px 0 0 0;
-  color: var(--mat-sys-on-surface);
-  font-weight: 500;
-}
-
-.cert-divider {
-  margin: 16px 0;
-}
-
-.info-text {
-  color: var(--mat-sys-on-surface-variant);
-  font-style: italic;
-  margin: 0;
+.loading-state {
+  display: flex;
+  justify-content: center;
+  padding: 48px;
 }

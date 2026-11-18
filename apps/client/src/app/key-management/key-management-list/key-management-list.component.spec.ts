@@ -287,3 +287,83 @@ describe('KeyManagementListComponent default access key chain', () => {
     vi.restoreAllMocks();
   });
 });
+
+describe('KeyManagementListComponent filters', () => {
+  const chain = (
+    id: string,
+    usageType: string,
+    type: 'standalone' | 'internalChain',
+    kmsProvider = 'db'
+  ) => ({ id, description: `Key ${id}`, usageType, type, kmsProvider, activePublicKey: {} });
+
+  const text = (element: Element | null) => element?.textContent?.replace(/\s+/g, ' ').trim();
+
+  async function render() {
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [KeyManagementListComponent],
+      providers: [
+        provideRouter([]),
+        {
+          provide: KeyChainService,
+          useValue: {
+            getAll: vi
+              .fn()
+              .mockResolvedValue([
+                chain('a', 'attestation', 'internalChain'),
+                chain('b', 'attestation', 'standalone', 'vault'),
+                chain('c', 'statusList', 'standalone'),
+              ]),
+            getDefaultAccess: vi.fn().mockResolvedValue({}),
+          },
+        },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(KeyManagementListComponent);
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(fixture.componentInstance.isLoading).toBe(false));
+    fixture.detectChanges();
+    const page = fixture.nativeElement as HTMLElement;
+    const names = () => Array.from(page.querySelectorAll('tr.mat-mdc-row .key-link'), text);
+    return { fixture, component: fixture.componentInstance, page, names };
+  }
+
+  it('offers a chip per usage in use, with its number of key chains', async () => {
+    const { page } = await render();
+
+    expect(Array.from(page.querySelectorAll('mat-chip-option'), text)).toEqual([
+      'All · 3',
+      'Credential Signing · 2',
+      'Status List · 1',
+    ]);
+  });
+
+  it('limits the list by usage, key type and KMS provider, and counts what it shows', async () => {
+    const { fixture, component, page, names } = await render();
+
+    component.selectUsage('attestation');
+    fixture.detectChanges();
+    expect(names()).toEqual(['Key a', 'Key b']);
+    expect(text(page.querySelector('.card-title output'))).toBe('2 of 3 key chains');
+
+    component.selectKeyType('standalone');
+    fixture.detectChanges();
+    expect(names()).toEqual(['Key b']);
+    expect(component.keyTypeFilterLabel).toBe('Standalone');
+
+    component.clearFilters();
+    component.selectKmsProvider('vault');
+    fixture.detectChanges();
+    expect(names()).toEqual(['Key b']);
+  });
+
+  it('links each key chain by its name, which keyboard and mouse share', async () => {
+    const { page } = await render();
+
+    const row = page.querySelector('tr.mat-mdc-row')!;
+    expect(row.querySelector('a.key-link')?.getAttribute('href')).toBe('/a');
+    expect(text(row.querySelector('.key-id'))).toBe('a');
+    // The actions are not part of the link
+    expect(row.querySelector('a.key-link button')).toBeNull();
+  });
+});
