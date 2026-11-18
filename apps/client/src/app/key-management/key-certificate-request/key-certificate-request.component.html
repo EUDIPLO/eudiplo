@@ -1,16 +1,14 @@
-<mat-card>
+<mat-card appearance="outlined">
   <mat-card-header>
-    <mat-card-title>
-      <mat-icon class="title-icon">assignment</mat-icon>
-      Certificate from an External CA
-    </mat-card-title>
+    <mat-icon mat-card-avatar>assignment</mat-icon>
+    <h2 mat-card-title>Certificate from an External CA</h2>
     <mat-card-subtitle>
       Let a CA outside EUDIPLO issue the certificate for this key. The private key stays in EUDIPLO.
     </mat-card-subtitle>
   </mat-card-header>
   @if (!expanded()) {
     <mat-card-actions>
-      <button mat-stroked-button type="button" (click)="expand()">
+      <button matButton="tonal" type="button" (click)="expand()">
         <mat-icon>assignment</mat-icon>
         Request Certificate from External CA
       </button>
@@ -30,8 +28,14 @@
       }
 
       <section aria-labelledby="csr-step-title">
-        <h3 id="csr-step-title">1. Create a certificate signing request (CSR)</h3>
-        <mat-form-field appearance="outline" class="full-width">
+        <h3 id="csr-step-title">
+          <span class="step-number" aria-hidden="true">1</span>
+          <span
+            ><span class="visually-hidden">1. </span>Create a certificate signing request
+            (CSR)</span
+          >
+        </h3>
+        <mat-form-field appearance="outline" class="full-width" subscriptSizing="dynamic">
           <mat-label>Subject</mat-label>
           <input
             matInput
@@ -49,7 +53,7 @@
         </mat-form-field>
         <div class="actions">
           <button
-            mat-stroked-button
+            matButton="outlined"
             type="button"
             [disabled]="creatingCsr()"
             disabledInteractive
@@ -66,7 +70,7 @@
           </p>
         }
         @if (csr()) {
-          <mat-form-field appearance="outline" class="full-width">
+          <mat-form-field appearance="outline" class="full-width" subscriptSizing="dynamic">
             <mat-label>CSR (PEM)</mat-label>
             <textarea
               #csrText
@@ -82,11 +86,11 @@
             Send this CSR to your CA. It is signed by the key of this key chain.
           </p>
           <div class="actions">
-            <button mat-stroked-button type="button" (click)="copyCsr()">
+            <button matButton="outlined" type="button" (click)="copyCsr()">
               <mat-icon>content_copy</mat-icon>
               Copy CSR
             </button>
-            <button mat-stroked-button type="button" (click)="downloadCsr()">
+            <button matButton="outlined" type="button" (click)="downloadCsr()">
               <mat-icon>download</mat-icon>
               Download CSR
             </button>
@@ -95,7 +99,10 @@
       </section>
 
       <section aria-labelledby="certificate-step-title">
-        <h3 id="certificate-step-title">2. Store the issued certificate</h3>
+        <h3 id="certificate-step-title">
+          <span class="step-number" aria-hidden="true">2</span>
+          <span><span class="visually-hidden">2. </span>Store the issued certificate</span>
+        </h3>
         @if (managedBy(); as source) {
           <p class="managed-note" role="note">
             <mat-icon>lock</mat-icon>
@@ -105,7 +112,7 @@
             </span>
           </p>
         }
-        <mat-form-field appearance="outline" class="full-width">
+        <mat-form-field appearance="outline" class="full-width" subscriptSizing="dynamic">
           <mat-label>Certificate Chain (PEM)</mat-label>
           <textarea
             matInput
@@ -136,7 +143,7 @@
         }
         <div class="actions">
           <button
-            mat-button
+            matButton
             type="button"
             [disabled]="!!managedBy()"
             disabledInteractive
@@ -149,8 +156,7 @@
             Load Certificate Files
           </button>
           <button
-            mat-flat-button
-            color="primary"
+            matButton="filled"
             type="button"
             [disabled]="saving() || !certificate.value.trim()"
             disabledInteractive

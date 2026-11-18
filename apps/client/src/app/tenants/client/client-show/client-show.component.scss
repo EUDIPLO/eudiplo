@@ -1,0 +1,132 @@
+@use '../../tenant-page' as page;
+
+@include page.base;
+
+@include page.detail-page;
+
+// Roles beside the access restrictions
+.page {
+  --content-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.hero-avatar mat-icon {
+  width: 32px;
+  height: 32px;
+  font-size: 32px;
+}
+
+.hero-copy h1 {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 28px;
+}
+
+.copy-id {
+  --mat-button-text-container-height: 32px;
+}
+
+.danger:not([disabled]) {
+  --mat-button-outlined-label-text-color: var(--mat-sys-error);
+  --mat-button-outlined-outline-color: color-mix(in srgb, var(--mat-sys-error) 50%, transparent);
+}
+
+// More specific than Material's own :last-child padding rule of the card content
+mat-card mat-card-content {
+  padding: 0 20px 20px;
+}
+
+// Roles grouped by area
+.role-group,
+.restriction {
+  padding: 12px 0;
+
+  & + & {
+    border-top: 1px solid var(--mat-sys-outline-variant);
+  }
+
+  h3 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 10px;
+    font: var(--mat-sys-title-small);
+    color: var(--mat-sys-on-surface);
+
+    mat-icon {
+      width: 20px;
+      height: 20px;
+      font-size: 20px;
+      color: var(--mat-sys-primary);
+    }
+  }
+}
+
+.role-list,
+.config-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.role-badge {
+  padding: 4px 12px;
+  border-radius: var(--mat-sys-corner-small);
+  background: var(--mat-sys-secondary-container);
+  font: var(--mat-sys-label-large);
+  color: var(--mat-sys-on-secondary-container);
+}
+
+.config-list li {
+  padding: 4px 10px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: var(--mat-sys-corner-small);
+
+  code {
+    font-size: 13px;
+    color: var(--mat-sys-on-surface);
+  }
+}
+
+.unrestricted {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font: var(--mat-sys-body-medium);
+  color: var(--mat-sys-on-surface-variant);
+
+  mat-icon {
+    width: 20px;
+    height: 20px;
+    font-size: 20px;
+  }
+}
+
+.roles-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 12px;
+  font: var(--mat-sys-label-large);
+  color: var(--mat-sys-primary);
+  text-decoration: none;
+
+  &:hover,
+  &:focus-visible {
+    text-decoration: underline;
+  }
+
+  mat-icon {
+    width: 16px;
+    height: 16px;
+    font-size: 16px;
+  }
+}
+
+// The notices show only when they apply; without content they take no gap in the page
+app-config-ownership-notice,
+app-role-lock-notice {
+  display: contents;
+}

@@ -3,18 +3,22 @@ import { ConfigService } from "@nestjs/config";
 import { Cron, CronExpression } from "@nestjs/schedule";
 import { InjectRepository } from "@nestjs/typeorm";
 import {
+    And,
     Between,
+    Equal,
     FindOptionsWhere,
     In,
     LessThan,
     LessThanOrEqual,
     MoreThanOrEqual,
+    Raw,
     Repository,
 } from "typeorm";
 import {
     type AuditActionType,
     type AuditActorType,
     type AuditObjectType,
+    actionTypesMatching,
     actionTypesOf,
 } from "./audit-action-types.js";
 import { AuditLogEntity } from "./entities/audit-log.entity.js";
@@ -38,6 +42,8 @@ export interface AuditLogFilter {
     actorType?: AuditActorType;
     actorId?: string;
     requestId?: string;
+    /** Text to find in the action, the actor or a changed field's name. */
+    q?: string;
 }
 
 export interface RecordAuditLogInput {
@@ -276,14 +282,18 @@ export interface AuditLogRetention {
 }
 
 /**
- * The query for a filter, always scoped to the tenant. `undefined` when the
- * filter cannot match anything: an action type that does not belong to the
+ * The query for a filter, always scoped to the tenant: one condition, or
+ * several of which one must match (for `q`). `undefined` when the filter
+ * cannot match anything, such as an action type that does not belong to the
  * requested object type.
  */
 function whereFor(
     tenantId: string,
     filter: AuditLogFilter,
-): FindOptionsWhere<AuditLogEntity> | undefined {
+):
+    | FindOptionsWhere<AuditLogEntity>
+    | FindOptionsWhere<AuditLogEntity>[]
+    | undefined {
     const where: FindOptionsWhere<AuditLogEntity> = { tenantId };
 
     let actionTypes = filter.actionType;
@@ -308,5 +318,50 @@ function whereFor(
     if (filter.actorType) where.actorType = filter.actorType;
     if (filter.actorId) where.actorId = filter.actorId;
     if (filter.requestId) where.requestId = filter.requestId;
-    return where;
+
+    return filter.q ? textSearch(where, filter.q, actionTypes) : where;
+}
+
+/**
+ * Entries that match `where` and contain `q` in their action, the id or name
+ * of their actor, or the name of a changed field, ignoring case. The action
+ * is matched against the known action types in code, so "config created"
+ * or "openid connect" find their actions through the index.
+ */
+function textSearch(
+    where: FindOptionsWhere<AuditLogEntity>,
+    q: string,
+    actionTypes: AuditActionType[] | undefined,
+): FindOptionsWhere<AuditLogEntity>[] {
+    const pattern = `%${q.toLowerCase().replace(/[!%_]/g, "!$&")}%`;
+    const contains = (expression: (alias: string) => string) =>
+        Raw((alias) => `LOWER(${expression(alias)}) LIKE :q ESCAPE '!'`, {
+            q: pattern,
+        });
+
+    const branches: FindOptionsWhere<AuditLogEntity>[] = [
+        {
+            ...where,
+            // An exact actor id filter still applies.
+            actorId: where.actorId
+                ? And(
+                      Equal(where.actorId as string),
+                      contains((alias) => alias),
+                  )
+                : contains((alias) => alias),
+        },
+        { ...where, actorDisplay: contains((alias) => alias) },
+        // The JSON array as text; CAST works on SQLite and PostgreSQL.
+        {
+            ...where,
+            changedFields: contains((alias) => `CAST(${alias} AS TEXT)`),
+        },
+    ];
+    const matching = actionTypesMatching(q).filter(
+        (type) => !actionTypes || actionTypes.includes(type),
+    );
+    if (matching.length > 0) {
+        branches.push({ ...where, actionType: In(matching) });
+    }
+    return branches;
 }

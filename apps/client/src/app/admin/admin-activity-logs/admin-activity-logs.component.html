@@ -1,7 +1,8 @@
-<div class="activity-page">
-  <div class="header">
-    <div class="header-main">
-      <h2 #pageHeading tabindex="-1">Activity Logs</h2>
+<div class="page">
+  <header class="page-header">
+    <div>
+      <h1 #pageHeading tabindex="-1">Activity Logs</h1>
+      <p>Changes to this tenant's configuration, newest first.</p>
       @if (retentionNote()) {
         <p class="retention-note">
           <mat-icon aria-hidden="true">schedule</mat-icon>
@@ -9,212 +10,344 @@
         </p>
       }
     </div>
+    <button matButton="outlined" (click)="refresh()" [disabled]="loading">
+      <mat-icon>refresh</mat-icon>
+      Refresh
+    </button>
+  </header>
 
-    <div class="header-controls">
-      <button
-        mat-icon-button
-        color="primary"
-        (click)="refresh()"
-        [disabled]="loading"
-        matTooltip="Refresh activity logs"
-        aria-label="Refresh activity logs"
-      >
-        <mat-icon>refresh</mat-icon>
-      </button>
-    </div>
-  </div>
-
-  <form [formGroup]="filters" class="filters" aria-label="Filter activity logs">
-    <mat-form-field appearance="outline" class="filter-field">
-      <mat-label>Object</mat-label>
-      <mat-select formControlName="objectType">
-        <mat-option value="">All Objects</mat-option>
-        @for (option of objectOptions; track option.value) {
-          <mat-option [value]="option.value">{{ option.label }}</mat-option>
-        }
-      </mat-select>
-    </mat-form-field>
-
-    <mat-form-field appearance="outline" class="filter-field">
-      <mat-label>Action</mat-label>
-      <mat-select formControlName="actionType" multiple placeholder="All Actions">
-        @for (group of actionGroups(); track group.objectType) {
-          <mat-optgroup [label]="group.label">
-            @for (action of group.actions; track action.value) {
-              <mat-option [value]="action.value">{{ action.label }}</mat-option>
-            }
-          </mat-optgroup>
-        }
-      </mat-select>
-    </mat-form-field>
-
-    <mat-form-field appearance="outline" class="filter-field">
-      <mat-label>Time</mat-label>
-      <mat-select formControlName="time">
-        <mat-option value="">Any Time</mat-option>
-        @for (option of timeOptions; track option.value) {
-          <mat-option [value]="option.value">{{ option.label }}</mat-option>
-        }
-        <mat-option value="custom">Custom Range</mat-option>
-      </mat-select>
-    </mat-form-field>
-
-    @if (filters.controls.time.value === 'custom') {
-      <mat-form-field appearance="outline" class="filter-field">
-        <mat-label>From</mat-label>
-        <input matInput type="datetime-local" formControlName="from" />
-      </mat-form-field>
-      <mat-form-field appearance="outline" class="filter-field">
-        <mat-label>To</mat-label>
-        <input
-          matInput
-          type="datetime-local"
-          formControlName="to"
-          [errorStateMatcher]="showErrorsAtOnce"
-        />
-        @if (rangeReversed()) {
-          <mat-error>Must not be before From</mat-error>
-        }
-      </mat-form-field>
-    }
-
-    <mat-form-field appearance="outline" class="filter-field">
-      <mat-label>Actor Type</mat-label>
-      <mat-select formControlName="actorType">
-        <mat-option value="">All Actors</mat-option>
-        @for (option of actorOptions; track option.value) {
-          <mat-option [value]="option.value">{{ option.label }}</mat-option>
-        }
-      </mat-select>
-    </mat-form-field>
-
-    <mat-form-field appearance="outline" class="filter-field">
-      <mat-label>Actor ID</mat-label>
-      <input
-        matInput
-        formControlName="actorId"
-        placeholder="User or client id"
-        [errorStateMatcher]="showErrorsAtOnce"
-      />
-      @if (filters.controls.actorId.hasError('maxlength')) {
-        <mat-error>At most {{ maxIdLength }} characters</mat-error>
-      }
-    </mat-form-field>
-
-    <mat-form-field appearance="outline" class="filter-field">
-      <mat-label>Request ID</mat-label>
-      <input
-        matInput
-        formControlName="requestId"
-        placeholder="X-Request-Id of the call"
-        [errorStateMatcher]="showErrorsAtOnce"
-      />
-      @if (filters.controls.requestId.hasError('maxlength')) {
-        <mat-error>At most {{ maxIdLength }} characters</mat-error>
-      }
-    </mat-form-field>
-
-    @if (hasActiveFilters()) {
-      <button mat-button type="button" (click)="clearFilters()">
-        <mat-icon>filter_alt_off</mat-icon>
-        Clear Filters
-      </button>
-    }
-  </form>
-
-  @if (loading && logs.length === 0) {
-    <div class="loading-container">
+  @if (!loaded && loading) {
+    <div class="loading-state">
       <mat-spinner diameter="40" aria-label="Loading activity logs"></mat-spinner>
-      <p>Loading activity logs...</p>
     </div>
-  }
-
-  @if (loadError && !loading && !filters.invalid) {
+  } @else if (!loaded && loadError) {
     <app-load-error [message]="loadError" (retry)="retry()" />
-  }
-
-  @if (!loading && !loadError && total === 0 && !filters.invalid) {
+  } @else if (loaded && !loading && !loadError && total === 0 && !hasActiveFilters()) {
     <div class="empty-state">
-      <mat-icon aria-hidden="true">info</mat-icon>
-      @if (hasActiveFilters()) {
-        <p>No activity logs match these filters</p>
-      } @else {
-        <p>No activity logs found for your tenant</p>
-      }
+      <span class="empty-icon"><mat-icon>history</mat-icon></span>
+      <strong>No activity yet</strong>
+      <p>Changes to the tenant's configuration appear here.</p>
     </div>
-  }
-
-  @if (logs.length > 0 && !loadError && !filters.invalid) {
-    <div class="table-container" [class.reloading]="loading" [attr.aria-busy]="loading">
-      <table mat-table [dataSource]="logs" class="activity-table mat-elevation-z8">
-        <ng-container matColumnDef="timestamp">
-          <th mat-header-cell *matHeaderCellDef>Timestamp</th>
-          <td mat-cell *matCellDef="let element">
-            {{ formatTimestamp(element.timestamp) }}
-          </td>
-        </ng-container>
-
-        <ng-container matColumnDef="action">
-          <th mat-header-cell *matHeaderCellDef>Action</th>
-          <td mat-cell *matCellDef="let element">
-            <span class="action-badge" [ngClass]="'action-' + element.actionType">
-              {{ actionLabel(element.actionType) }}
-            </span>
-          </td>
-        </ng-container>
-
-        <ng-container matColumnDef="actor">
-          <th mat-header-cell *matHeaderCellDef>Actor</th>
-          <td mat-cell *matCellDef="let element">
-            {{ actorLabel(element) }}
-            @if (hiddenActorId(element)) {
-              <div class="actor-id">
-                {{ element.actorType === 'user' ? 'User ID' : 'ID' }} {{ hiddenActorId(element) }}
-              </div>
+  } @else {
+    <mat-card appearance="outlined" class="feed-card">
+      <div class="feed-header">
+        <div class="feed-title">
+          <h2>All activity</h2>
+          <output>
+            {{ total }} {{ total === 1 ? 'entry' : 'entries' }}
+            @if (hasActiveFilters()) {
+              match
             }
-          </td>
-        </ng-container>
-
-        <ng-container matColumnDef="details">
-          <th mat-header-cell *matHeaderCellDef>Details</th>
-          <td mat-cell *matCellDef="let element">
-            <span [matTooltip]="detailsOf(element)" matTooltipPosition="above">
-              {{ detailsOf(element) }}
-            </span>
-          </td>
-        </ng-container>
-
-        <ng-container matColumnDef="actions">
-          <th mat-header-cell *matHeaderCellDef>Actions</th>
-          <td mat-cell *matCellDef="let element">
+          </output>
+        </div>
+        <div class="search-bar" role="search">
+          <mat-icon class="search-icon" aria-hidden="true">search</mat-icon>
+          <input
+            type="search"
+            [formControl]="filters.controls.q"
+            placeholder="Search activity"
+            aria-label="Search activity by action, actor or changed field"
+            [attr.aria-invalid]="filters.controls.q.invalid"
+          />
+          @if (filters.controls.q.value) {
             <button
-              mat-icon-button
-              (click)="copyLog(element)"
-              matTooltip="Copy to clipboard"
-              matTooltipPosition="above"
-              [attr.aria-label]="copyLabel(element)"
+              matIconButton
+              type="button"
+              class="clear-search"
+              aria-label="Clear search"
+              matTooltip="Clear search"
+              (click)="filters.controls.q.setValue('')"
             >
-              <mat-icon>content_copy</mat-icon>
+              <mat-icon>close</mat-icon>
             </button>
-          </td>
-        </ng-container>
+          }
+        </div>
+      </div>
 
-        <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-        <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
-      </table>
-    </div>
-  }
+      @if (filters.controls.q.hasError('maxlength')) {
+        <p class="field-error" role="alert">Search for at most {{ maxTextLength }} characters</p>
+      }
 
-  @if (total > 0 && !loadError && !filters.invalid) {
-    <div class="table-footer">
-      <mat-paginator
-        [length]="total"
-        [pageIndex]="pageIndex"
-        [pageSize]="pageSize"
-        [pageSizeOptions]="pageSizeOptions"
-        (page)="onPageChange($event)"
-        aria-label="Select activity log page"
-      ></mat-paginator>
-    </div>
+      <!-- Object type as Material 3 filter chips -->
+      <mat-chip-listbox
+        class="type-filters"
+        aria-label="Filter by object type"
+        [value]="filters.controls.objectType.value"
+        (change)="filters.controls.objectType.setValue($event.value ?? '')"
+      >
+        <mat-chip-option value="">All</mat-chip-option>
+        @for (type of objectTypes; track type.value) {
+          <mat-chip-option [value]="type.value">{{ type.label }}</mat-chip-option>
+        }
+      </mat-chip-listbox>
+
+      <form [formGroup]="filters" class="filter-row" aria-label="More filters">
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Action</mat-label>
+          <mat-select formControlName="actionType" multiple placeholder="All actions">
+            @for (group of actionGroups(); track group.objectType) {
+              <mat-optgroup [label]="group.label">
+                @for (action of group.actions; track action.value) {
+                  <mat-option [value]="action.value">{{ action.label }}</mat-option>
+                }
+              </mat-optgroup>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Time</mat-label>
+          <mat-select formControlName="time">
+            <mat-option value="">Any time</mat-option>
+            @for (option of timeOptions; track option.value) {
+              <mat-option [value]="option.value">{{ option.label }}</mat-option>
+            }
+            <mat-option value="custom">Custom range</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        @if (filters.controls.time.value === 'custom') {
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>From</mat-label>
+            <input matInput type="datetime-local" formControlName="from" />
+          </mat-form-field>
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>To</mat-label>
+            <input
+              matInput
+              type="datetime-local"
+              formControlName="to"
+              [errorStateMatcher]="showErrorsAtOnce"
+            />
+            @if (rangeReversed()) {
+              <mat-error>Must not be before From</mat-error>
+            }
+          </mat-form-field>
+        }
+
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Actor type</mat-label>
+          <mat-select formControlName="actorType">
+            <mat-option value="">All actors</mat-option>
+            @for (option of actorOptions; track option.value) {
+              <mat-option [value]="option.value">{{ option.label }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Actor ID</mat-label>
+          <input
+            matInput
+            formControlName="actorId"
+            placeholder="User or client ID"
+            [errorStateMatcher]="showErrorsAtOnce"
+          />
+          @if (filters.controls.actorId.hasError('maxlength')) {
+            <mat-error>At most {{ maxTextLength }} characters</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Request ID</mat-label>
+          <input
+            matInput
+            formControlName="requestId"
+            placeholder="X-Request-Id of the call"
+            [errorStateMatcher]="showErrorsAtOnce"
+          />
+          @if (filters.controls.requestId.hasError('maxlength')) {
+            <mat-error>At most {{ maxTextLength }} characters</mat-error>
+          }
+        </mat-form-field>
+
+        @if (hasActiveFilters()) {
+          <button matButton type="button" (click)="clearFilters()">
+            <mat-icon>filter_alt_off</mat-icon>
+            Clear filters
+          </button>
+        }
+      </form>
+
+      @if (loadError) {
+        <app-load-error [message]="loadError" (retry)="retry()" />
+      } @else if (filters.invalid) {
+        <!-- The fields say what to fix; nothing is loaded until then. -->
+      } @else if (loading && logs.length === 0) {
+        <div class="loading-state">
+          <mat-spinner diameter="40" aria-label="Loading activity logs"></mat-spinner>
+        </div>
+      } @else if (total === 0) {
+        <div class="no-match">
+          <mat-icon aria-hidden="true">search_off</mat-icon>
+          <span>No activity matches the filters.</span>
+          <button matButton type="button" (click)="clearFilters()">Clear filters</button>
+        </div>
+      } @else {
+        <div class="feed-list" [class.reloading]="loading" [attr.aria-busy]="loading">
+          @for (group of dayGroups; track group.day) {
+            <section class="day" [attr.aria-label]="group.label">
+              <h3 class="day-label">{{ group.label }}</h3>
+              <ol class="entries">
+                @for (log of group.logs; track log.id) {
+                  @let action = describe(log);
+                  @let open = isExpanded(log);
+                  <li class="entry" [class.open]="open">
+                    <button
+                      type="button"
+                      class="entry-row"
+                      [attr.aria-expanded]="open"
+                      [attr.aria-controls]="'entry-' + log.id"
+                      (click)="toggle(log)"
+                    >
+                      <span class="entry-icon" [class]="action.tone" aria-hidden="true">
+                        <mat-icon>{{ action.icon }}</mat-icon>
+                      </span>
+                      <span class="entry-copy">
+                        <strong class="entry-action">{{ action.label }}</strong>
+                        <span class="entry-meta">
+                          <span class="actor">
+                            <mat-icon aria-hidden="true">{{ actorIcon(log) }}</mat-icon>
+                            {{ actorLabel(log) }}
+                          </span>
+                          <span class="actor-type">{{ log.actorType }}</span>
+                          @if (hiddenActorId(log)) {
+                            <span class="actor-id"
+                              >{{ log.actorType === 'user' ? 'User ID' : 'ID' }}
+                              {{ hiddenActorId(log) }}</span
+                            >
+                          }
+                          @if (log.changedFields?.length) {
+                            <span class="fields"
+                              >{{ log.changedFields!.length }}
+                              {{ log.changedFields!.length === 1 ? 'field' : 'fields' }}</span
+                            >
+                          }
+                        </span>
+                      </span>
+                      <time
+                        class="entry-time"
+                        [attr.datetime]="log.timestamp"
+                        [title]="log.timestamp | date: 'medium'"
+                        >{{ log.timestamp | date: 'HH:mm' }}</time
+                      >
+                      <mat-icon class="entry-chevron" aria-hidden="true">expand_more</mat-icon>
+                    </button>
+
+                    @if (open) {
+                      <div class="entry-details" [id]="'entry-' + log.id">
+                        @let changes = fieldChanges(log);
+                        <!-- A new object has no values before; then only its values show -->
+                        @let compare = hasBefore(changes);
+                        @if (changes.length) {
+                          <table class="changes">
+                            <caption class="visually-hidden">
+                              Changes of this entry
+                            </caption>
+                            <thead>
+                              <tr>
+                                <th scope="col">Field</th>
+                                @if (compare) {
+                                  <th scope="col">Before</th>
+                                  <th scope="col">After</th>
+                                } @else {
+                                  <th scope="col">Value</th>
+                                }
+                              </tr>
+                            </thead>
+                            <tbody>
+                              @for (change of changes; track change.field) {
+                                <tr>
+                                  <th scope="row">
+                                    <code>{{ change.field }}</code>
+                                  </th>
+                                  @if (compare) {
+                                    <td>
+                                      @if (change.before !== undefined) {
+                                        <code class="before">{{ change.before }}</code>
+                                      } @else {
+                                        <span class="none">—</span>
+                                      }
+                                    </td>
+                                  }
+                                  <td>
+                                    @if (change.after !== undefined) {
+                                      <code class="after">{{ change.after }}</code>
+                                    } @else {
+                                      <span class="none">—</span>
+                                    }
+                                  </td>
+                                </tr>
+                              }
+                            </tbody>
+                          </table>
+                        } @else {
+                          <p class="none">No field values were recorded for this entry.</p>
+                        }
+                        <div class="details-footer">
+                          <span class="detail-meta">
+                            {{ log.timestamp | date: 'medium' }}
+                            @if (log.requestId) {
+                              · Request <code>{{ log.requestId }}</code>
+                            }
+                          </span>
+                          <button matButton type="button" (click)="copyLog(log)">
+                            <mat-icon>content_copy</mat-icon>
+                            Copy as JSON
+                          </button>
+                        </div>
+                      </div>
+                    }
+                  </li>
+                }
+              </ol>
+            </section>
+          }
+        </div>
+      }
+
+      @if (total > pageSizeOptions[0] && !loadError && !filters.invalid) {
+        <div class="feed-footer">
+          <div class="page-size">
+            <span class="page-size-label" aria-hidden="true">Entries per page</span>
+            <button
+              matButton="tonal"
+              type="button"
+              class="page-size-trigger"
+              [class.open]="pageSizeTrigger.menuOpen"
+              [matMenuTriggerFor]="pageSizeMenu"
+              #pageSizeTrigger="matMenuTrigger"
+              [attr.aria-label]="'Entries per page: ' + pageSize"
+            >
+              {{ pageSize }}
+              <mat-icon iconPositionEnd>arrow_drop_down</mat-icon>
+            </button>
+          </div>
+          <mat-paginator
+            hidePageSize
+            [length]="total"
+            [pageIndex]="pageIndex"
+            [pageSize]="pageSize"
+            (page)="onPageChange($event)"
+            aria-label="Select activity log page"
+          ></mat-paginator>
+        </div>
+      }
+    </mat-card>
   }
 </div>
+
+<mat-menu #pageSizeMenu="matMenu" class="m3-menu" yPosition="above">
+  @for (size of pageSizeOptions; track size) {
+    <button
+      mat-menu-item
+      role="menuitemradio"
+      [attr.aria-checked]="size === pageSize"
+      [class.selected]="size === pageSize"
+      (click)="setPageSize(size)"
+    >
+      <mat-icon>{{ size === pageSize ? 'check' : '' }}</mat-icon>
+      <span>{{ size }} entries</span>
+    </button>
+  }
+</mat-menu>

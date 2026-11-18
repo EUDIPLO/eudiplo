@@ -2,27 +2,64 @@
   display: block;
 }
 
-.title-icon {
-  vertical-align: middle;
-  margin-right: 8px;
+// The card header as on the key chain page around it
+mat-card-header {
+  padding: 20px 20px 16px;
 }
 
-.steps {
+h2[mat-card-title] {
+  margin: 0;
+}
+
+mat-icon[mat-card-avatar] {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--mat-sys-corner-full);
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+  font-size: 22px;
+}
+
+mat-card-actions {
+  padding: 0 20px 20px;
+}
+
+// More specific than Material's own :last-child padding rule of the card content
+mat-card .steps {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding-top: 8px;
+  gap: 20px;
+  padding: 0 20px 20px;
 
   section {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
   }
 
   h3 {
+    display: flex;
+    align-items: center;
+    gap: 10px;
     margin: 0;
     font: var(--mat-sys-title-small);
+    color: var(--mat-sys-on-surface);
   }
+}
+
+// Step number in a tonal circle
+.step-number {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--mat-sys-corner-full);
+  background: var(--mat-sys-primary-container);
+  font: var(--mat-sys-label-medium);
+  color: var(--mat-sys-on-primary-container);
 }
 
 .full-width {
@@ -42,26 +79,42 @@
 
 .hint {
   margin: 0;
+  font: var(--mat-sys-body-small);
   color: var(--mat-sys-on-surface-variant);
 }
 
+// Tonal notes: rotation, file management and errors
 .rotation-warning,
 .managed-note,
 .error {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: 12px;
   margin: 0;
-  padding: 12px;
-  border-radius: 8px;
+  padding: 12px 16px;
+  border-radius: var(--mat-sys-corner-medium);
+  font: var(--mat-sys-body-medium);
+
+  mat-icon {
+    flex: none;
+  }
 }
 
-.rotation-warning,
+.rotation-warning {
+  background: color-mix(in srgb, var(--eudiplo-warning) 10%, var(--mat-sys-surface));
+  color: var(--mat-sys-on-surface);
+
+  mat-icon {
+    color: var(--eudiplo-warning);
+  }
+}
+
 .managed-note {
-  background-color: var(--mat-sys-surface-container-high);
+  background: var(--mat-sys-surface-container-high);
+  color: var(--mat-sys-on-surface);
 }
 
 .error {
-  background-color: var(--mat-sys-error-container);
+  background: var(--mat-sys-error-container);
   color: var(--mat-sys-on-error-container);
 }

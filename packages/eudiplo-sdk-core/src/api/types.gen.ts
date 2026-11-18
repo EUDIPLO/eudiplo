@@ -6814,6 +6814,10 @@ export type AuditLogControllerGetAuditLogsData = {
          * The `X-Request-Id` header of the call that caused the entry (exact match). Recorded only when the caller or a reverse proxy sets the header.
          */
         requestId?: string;
+        /**
+         * Text to find, ignoring case, in the action (as written, `credential_config_created`, or as the web client shows it, `Credential Config Created`), in the id or name of the actor, or in the name of a changed field
+         */
+        q?: string;
     };
     url: '/api/admin/audit-logs';
 };
@@ -6864,6 +6868,10 @@ export type AuditLogControllerSearchAuditLogsData = {
          * The `X-Request-Id` header of the call that caused the entry (exact match). Recorded only when the caller or a reverse proxy sets the header.
          */
         requestId?: string;
+        /**
+         * Text to find, ignoring case, in the action (as written, `credential_config_created`, or as the web client shows it, `Credential Config Created`), in the id or name of the actor, or in the name of a changed field
+         */
+        q?: string;
     };
     url: '/api/admin/audit-logs/search';
 };

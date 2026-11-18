@@ -1,10 +1,15 @@
-<div class="wizard-container" fxLayout="column" fxFlex>
-  <!-- Header -->
-  <div fxLayout="row" fxLayoutAlign="space-between center" class="wizard-header">
-    <h2>Create Key</h2>
-    <div fxLayout="row" fxLayoutGap="8px">
+<div class="page wizard-container">
+  <header class="page-header">
+    <div class="heading">
+      <span class="form-avatar" aria-hidden="true"><mat-icon>key</mat-icon></span>
+      <div>
+        <h1>Create Key</h1>
+        <p>A few questions lead to the key chain that fits its purpose.</p>
+      </div>
+    </div>
+    <div class="header-actions">
       <a
-        mat-stroked-button
+        matButton="outlined"
         href="https://docs.eudiplo.dev/trust/keys-and-certificates"
         target="_blank"
         rel="noopener"
@@ -24,7 +29,7 @@
         </button>
       }
     </div>
-  </div>
+  </header>
 
   @if (createdForForm) {
     <app-return-to-form
@@ -33,7 +38,7 @@
       linkLabel="Open key chain"
     />
   } @else {
-    <mat-stepper #stepper linear fxFlex>
+    <mat-stepper #stepper linear>
       <!-- Step 1: Usage Selection -->
       <mat-step [stepControl]="usageForm" label="Select Usage" [editable]="!isSubmitting">
         <form [formGroup]="usageForm" fxLayout="column" fxLayoutGap="24px">

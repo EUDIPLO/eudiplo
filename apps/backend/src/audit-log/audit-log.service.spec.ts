@@ -77,6 +77,8 @@ describe("AuditLogService", () => {
                 {
                     actorType: "user",
                     actorId: "alice",
+                    actorDisplay: "Web Console",
+                    changedFields: ["displayName", "statusListConfig"],
                 },
             );
             await add(
@@ -200,6 +202,55 @@ describe("AuditLogService", () => {
                     }),
                 ),
             ).toEqual(["oidc_client_created"]);
+        });
+
+        describe("text search", () => {
+            const search = async (q: string, filter: AuditLogFilter = {}) =>
+                actions(await list("t1", { ...filter, q }));
+
+            test("finds actions as written and as the client shows them", async () => {
+                expect(await search("openid connect")).toEqual([
+                    "oidc_client_secret_added",
+                    "oidc_client_created",
+                ]);
+                expect(await search("Client Created")).toEqual([
+                    "oidc_client_created",
+                ]);
+                expect(await search("bundle_imported")).toEqual([
+                    "config_bundle_imported",
+                ]);
+            });
+
+            test("finds the actor by id or name and changed fields by name, ignoring case", async () => {
+                expect(await search("ALI")).toEqual([
+                    "tenant_updated",
+                    "oidc_client_created",
+                ]);
+                expect(await search("web console")).toEqual(["tenant_updated"]);
+                expect(await search("statuslist")).toEqual(["tenant_updated"]);
+            });
+
+            test("treats LIKE wildcards as text", async () => {
+                expect(await search("%")).toEqual([]);
+                expect(await search("a%e")).toEqual([]);
+            });
+
+            test("applies the other filters to every match", async () => {
+                expect(await search("oidc", { actorId: "alice" })).toEqual([
+                    "oidc_client_created",
+                ]);
+                expect(await search("alice", { objectType: "tenant" })).toEqual(
+                    ["tenant_updated"],
+                );
+                const page = await service.pageByTenant(
+                    "t1",
+                    { q: "openid connect" },
+                    1,
+                    1,
+                );
+                expect(page).toMatchObject({ total: 2, totalPages: 2 });
+                expect(actions(await list("t2", { q: "alice" }))).toEqual([]);
+            });
         });
 
         test("a filter never reaches another tenant", async () => {

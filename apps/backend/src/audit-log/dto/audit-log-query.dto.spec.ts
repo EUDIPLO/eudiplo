@@ -48,6 +48,8 @@ describe("AuditLogListQueryDto", () => {
         { from: "2026-01-01T00:00:00" },
         { actorId: "" },
         { requestId: "x".repeat(256) },
+        { q: "x".repeat(256) },
+        { q: "  " },
         { from: "2026-01-02T00:00:00Z", to: "2026-01-01T00:00:00Z" },
     ])("rejects %j", (query) => {
         expect(parse(query).success).toBe(false);

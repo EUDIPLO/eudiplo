@@ -1,53 +1,123 @@
-<div fxLayout="row" fxLayoutAlign="end center" fxLayoutGap="8px" class="mb-2">
-  <button
-    matIconButton
-    routerLink="../"
-    matTooltip="Back to Clients List"
-    aria-label="Back to Clients List"
-  >
+<div class="page">
+  <a class="back-link" matButton routerLink="../" aria-label="Back to API Clients">
     <mat-icon>arrow_back</mat-icon>
-  </button>
+    API Clients
+  </a>
+
+  @if (client) {
+    <app-config-ownership-notice kind="Client" [resourceId]="client.clientId" />
+    <app-role-lock-notice subject="client" [roles]="unmanageableRoles" />
+
+    <!-- Who the client is, and what can be done with it -->
+    <mat-card appearance="outlined" class="hero">
+      <span class="hero-avatar" aria-hidden="true"><mat-icon>key</mat-icon></span>
+      <div class="hero-copy">
+        <h1>{{ client.clientId }}</h1>
+        <div class="hero-meta">
+          <span class="badge">{{ roleCount }} {{ roleCount === 1 ? 'role' : 'roles' }}</span>
+          <button matButton type="button" class="copy-id" (click)="copyId()">
+            <mat-icon>content_copy</mat-icon>
+            Copy client ID
+          </button>
+        </div>
+        <p class="hero-description" [class.muted]="!client.description">
+          {{ client.description || 'No description' }}
+        </p>
+      </div>
+      <div class="hero-actions">
+        <button
+          matButton="tonal"
+          routerLink="edit"
+          [disabled]="!canManage || deleting"
+          appConfigManaged
+          managedKind="Client"
+          [managedResourceId]="client.clientId"
+        >
+          <mat-icon>edit</mat-icon>
+          Edit
+        </button>
+        <button
+          matButton="outlined"
+          class="danger"
+          (click)="deleteClient()"
+          [disabled]="!canManage || deleting"
+          appConfigManaged
+          managedKind="Client"
+          [managedResourceId]="client.clientId"
+        >
+          <mat-icon>delete_outline</mat-icon>
+          Delete
+        </button>
+      </div>
+    </mat-card>
+
+    <div class="content-grid">
+      <mat-card appearance="outlined">
+        <mat-card-header>
+          <mat-icon mat-card-avatar>badge</mat-icon>
+          <h2 mat-card-title>Roles</h2>
+          <mat-card-subtitle>What the client may do, by area</mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
+          @for (group of roleGroups; track group.title) {
+            <section class="role-group" [attr.aria-labelledby]="'role-group-' + $index">
+              <h3 [id]="'role-group-' + $index">
+                <mat-icon aria-hidden="true">{{ group.icon }}</mat-icon>
+                {{ group.title }}
+              </h3>
+              <ul class="role-list">
+                @for (role of group.roles; track role) {
+                  <li class="role-badge">{{ role }}</li>
+                }
+              </ul>
+            </section>
+          } @empty {
+            <p class="muted">This client has no roles.</p>
+          }
+          <a
+            class="roles-link"
+            href="https://docs.eudiplo.dev/reference/roles"
+            target="_blank"
+            rel="noopener"
+          >
+            What each role allows
+            <mat-icon aria-hidden="true">open_in_new</mat-icon>
+          </a>
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card appearance="outlined">
+        <mat-card-header>
+          <mat-icon mat-card-avatar>rule</mat-icon>
+          <h2 mat-card-title>Access</h2>
+          <mat-card-subtitle>The configurations the client may use</mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
+          @for (restriction of restrictions; track restriction.title) {
+            <section class="restriction" [attr.aria-labelledby]="'restriction-' + $index">
+              <h3 [id]="'restriction-' + $index">{{ restriction.title }}</h3>
+              @if (restriction.ids.length) {
+                <ul class="config-list">
+                  @for (id of restriction.ids; track id) {
+                    <li>
+                      <code>{{ id }}</code>
+                    </li>
+                  }
+                </ul>
+              } @else {
+                <p class="unrestricted">
+                  <mat-icon aria-hidden="true">all_inclusive</mat-icon>
+                  All of them, including those created later
+                </p>
+              }
+            </section>
+          }
+        </mat-card-content>
+      </mat-card>
+    </div>
+  } @else {
+    <div class="loading-state">
+      <mat-spinner diameter="40" aria-label="Loading client"></mat-spinner>
+    </div>
+  }
 </div>
-@if (client) {
-  <app-config-ownership-notice kind="Client" [resourceId]="client.clientId" />
-  <app-role-lock-notice subject="client" [roles]="unmanageableRoles" />
-  <mat-card>
-    <mat-card-header>
-      <mat-card-title>{{ client.clientId }}</mat-card-title>
-      <mat-card-subtitle>{{ client.description }}</mat-card-subtitle>
-    </mat-card-header>
-    <mat-card-content>
-      <h3>Roles</h3>
-      <mat-chip-set>
-        @for (role of client.roles; track role) {
-          <span>
-            <mat-chip>{{ role }}</mat-chip>
-          </span>
-        }
-      </mat-chip-set>
-    </mat-card-content>
-    <mat-card-actions fxLayout="row" fxLayoutAlign="end center" fxLayoutGap="8px">
-      <button
-        mat-button
-        routerLink="edit"
-        [disabled]="!canManage || deleting"
-        appConfigManaged
-        managedKind="Client"
-        [managedResourceId]="client.clientId"
-      >
-        Edit
-      </button>
-      <button
-        mat-button
-        color="warn"
-        (click)="deleteClient()"
-        [disabled]="!canManage || deleting"
-        appConfigManaged
-        managedKind="Client"
-        [managedResourceId]="client.clientId"
-      >
-        Delete
-      </button>
-    </mat-card-actions>
-  </mat-card>
-}

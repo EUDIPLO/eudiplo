@@ -13,13 +13,13 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { KeyChainService } from '../key-chain.service';
 import { KeyChainResponseDto, KeyChainUpdateDto, RotationPolicyUpdateDto } from '@eudiplo/sdk-core';
 import { ConfigOwnershipDirective } from '../../config-portability/config-ownership.directive';
 import { ConfigOwnershipNoticeComponent } from '../../config-portability/config-ownership-notice.component';
 import { getApiErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
+import { keyUsages, type KeyUsageType } from '../key-usage';
 
 @Component({
   selector: 'app-key-management-create',
@@ -36,7 +36,6 @@ import { openErrorSnackBar } from '../../utils/error-snackbar';
     MatSlideToggleModule,
     MatSnackBarModule,
     MatTooltipModule,
-    FlexLayoutModule,
     ReactiveFormsModule,
     RouterModule,
     ConfigOwnershipDirective,
@@ -96,6 +95,17 @@ export class KeyManagementCreateComponent implements OnInit {
     } finally {
       this.isLoading = false;
     }
+  }
+
+  /** The usage as the key pages name it, such as "Status List". */
+  get usageLabel(): string {
+    const usage = this.keyChain?.usageType as KeyUsageType | undefined;
+    return (usage && keyUsages[usage]?.short) ?? this.keyChain?.usageType ?? '';
+  }
+
+  get usageIcon(): string {
+    const usage = this.keyChain?.usageType as KeyUsageType | undefined;
+    return (usage && keyUsages[usage]?.icon) ?? 'key';
   }
 
   get isInternalChain(): boolean {

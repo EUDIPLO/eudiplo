@@ -6,6 +6,11 @@ export interface ConfigResourceRouteMatch {
     id: string;
     create: boolean;
     tenantId?: string;
+    /**
+     * The route also reaches a resource of another tenant when the caller
+     * holds `tenants:manage`; the resource's own tenant then applies.
+     */
+    crossTenant?: boolean;
 }
 
 @Injectable()
@@ -51,8 +56,18 @@ export class ConfigResourceRouteService {
                 return { kind, id, create: method === "POST" };
         }
 
+        const rotateSecret = /\/client\/([^/]+)\/rotate-secret\/?$/.exec(path);
+        if (rotateSecret) {
+            return {
+                kind: "Client",
+                id: rotateSecret[1],
+                create: false,
+                crossTenant: true,
+            };
+        }
+
         const itemRoutes: Array<[RegExp, ConfigResourceKind]> = [
-            [/\/client\/([^/]+)(?:\/rotate-secret)?\/?$/, "Client"],
+            [/\/client\/([^/]+)\/?$/, "Client"],
             [/\/issuer\/credentials\/([^/]+)\/?$/, "CredentialConfig"],
             [/\/verifier\/config\/([^/]+)\/?$/, "PresentationConfig"],
             [/\/issuer\/attribute-providers\/([^/]+)\/?$/, "AttributeProvider"],

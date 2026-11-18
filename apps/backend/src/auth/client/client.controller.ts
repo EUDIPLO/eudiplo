@@ -22,7 +22,10 @@ import { Secured } from "../secure.decorator.js";
 import { requireTenantContext } from "../tenant-context.util.js";
 import { Token, TokenPayload } from "../token.decorator.js";
 import { CLIENTS_PROVIDER, ClientsProvider } from "./client.provider.js";
-import { ClientAccessService } from "./client-access.service.js";
+import {
+    ClientAccessService,
+    rotatesSecretsOfAnyTenant,
+} from "./client-access.service.js";
 import { ClientIdTaken } from "./domain/client-data.js";
 import { ClientResponseDto } from "./dto/client-response.dto.js";
 import { ClientSecretResponseDto } from "./dto/client-secret-response.dto.js";
@@ -82,6 +85,7 @@ export class ClientController {
      * Returns the new secret for one-time display - save it immediately!
      *
      * Users with `tenants:manage` role can rotate secrets for any client.
+     * A file-managed client answers 409 until a token of its tenant detaches it.
      * Users with `clients:manage` role can only rotate secrets for clients in
      * their tenant whose roles they hold or may grant.
      *
@@ -103,7 +107,7 @@ export class ClientController {
     ): Promise<ClientSecretResponseDto> {
         // Tenant managers can rotate any client's secret (tenantId = null)
         // Regular client managers can only rotate their own tenant's clients
-        const tenantId = user.roles.includes(Role.Tenants)
+        const tenantId = rotatesSecretsOfAnyTenant(user.roles)
             ? null
             : requireTenantContext(user);
         if (tenantId) {

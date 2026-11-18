@@ -5,7 +5,10 @@ import { MatTableModule } from '@angular/material/table';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { Router, RouterModule } from '@angular/router';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
+import { NgTemplateOutlet } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { MatCardModule } from '@angular/material/card';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import {
   clientControllerGetClients,
   ClientEntity,
@@ -13,7 +16,6 @@ import {
   clientControllerRotateClientSecret,
 } from '@eudiplo/sdk-core';
 import { ApiService } from '../../../core';
-import { MatChipsModule } from '@angular/material/chips';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { SecretDialogComponent } from '../secret-dialog/secret-dialog.component';
 import { ConfigOwnershipDirective } from '../../../config-portability/config-ownership.directive';
@@ -27,6 +29,9 @@ import { UnavailableCardComponent } from '../../../common/unavailable-card.compo
 import { LoadErrorComponent } from '../../../common/load-error.component';
 import { FrontendConfigService } from '../../../services/frontend-config.service';
 
+/** Columns of the client table. */
+type ClientColumn = 'clientId' | 'roles' | 'actions';
+
 @Component({
   selector: 'app-client-list',
   imports: [
@@ -34,8 +39,10 @@ import { FrontendConfigService } from '../../../services/frontend-config.service
     MatIconModule,
     MatButtonModule,
     RouterModule,
-    FlexLayoutModule,
-    MatChipsModule,
+    NgTemplateOutlet,
+    FormsModule,
+    MatCardModule,
+    MatProgressSpinnerModule,
     MatTooltipModule,
     MatDialogModule,
     ConfigOwnershipDirective,
@@ -48,13 +55,10 @@ import { FrontendConfigService } from '../../../services/frontend-config.service
 })
 export class ClientListComponent implements OnInit {
   @Input() loadedClients?: ClientEntity[];
-  /**
-   * Shown inside another page's card, such as a tenant's: no heading of its own, the
-   * description under the client ID, and the roles as compact badges.
-   */
+  /** Shown inside another page's card, such as a tenant's: without heading, search and card. */
   @Input() embedded = false;
 
-  /** Roles an embedded row shows before "+N more". */
+  /** Roles a row shows before "+N more". */
   readonly visibleRoleCount = 4;
 
   clients: ClientEntity[] = [];
@@ -65,12 +69,12 @@ export class ClientListComponent implements OnInit {
   unavailableMessage = '';
   hasPermission = false;
 
-  displayedColumns: (keyof ClientEntity | 'actions')[] = [
-    'clientId',
-    'description',
-    'roles',
-    'actions',
-  ];
+  /** The client column also shows the description. */
+  displayedColumns: ClientColumn[] = ['clientId', 'roles', 'actions'];
+  /** Text to find in a client's ID, description or roles. */
+  search = '';
+  /** The last search result, kept until the clients or the search change. */
+  private shown?: { clients: ClientEntity[]; search: string; result: ClientEntity[] };
 
   /** With another identity provider, records left from an earlier mode get no new secrets. */
   get rotatesSecrets(): boolean {
@@ -78,13 +82,33 @@ export class ClientListComponent implements OnInit {
   }
 
   /** A tenant's records without an action to offer get no Actions column. */
-  get columns(): (keyof ClientEntity | 'actions')[] {
-    return this.displayedColumns.filter(
-      (column) =>
-        !(column === 'actions' && this.loadedClients && !this.rotatesSecrets) &&
-        // Embedded, the description sits under the client ID
-        !(column === 'description' && this.embedded)
-    );
+  get columns(): ClientColumn[] {
+    return this.loadedClients && !this.rotatesSecrets
+      ? this.displayedColumns.filter((column) => column !== 'actions')
+      : this.displayedColumns;
+  }
+
+  /** The clients that match the search, sorted by client ID. */
+  get shownClients(): ClientEntity[] {
+    if (this.shown?.clients !== this.clients || this.shown.search !== this.search) {
+      const term = this.search.trim().toLowerCase();
+      const matches = term
+        ? this.clients.filter((client) =>
+            [client.clientId, client.description ?? '', ...(client.roles ?? [])].some((value) =>
+              value.toLowerCase().includes(term)
+            )
+          )
+        : [...this.clients];
+      matches.sort((a, b) =>
+        a.clientId.localeCompare(b.clientId, undefined, { numeric: true, sensitivity: 'base' })
+      );
+      this.shown = { clients: this.clients, search: this.search, result: matches };
+    }
+    return this.shown.result;
+  }
+
+  clearSearch(): void {
+    this.search = '';
   }
 
   /** A client's roles without repeats, as stored records may name a role twice. */
@@ -95,6 +119,8 @@ export class ClientListComponent implements OnInit {
   readonly manageDeniedHint = 'This client has roles you neither hold nor may grant';
   /** Roles of the signed-in caller, read once instead of per row */
   private readonly callerRoles: string[];
+  /** Tenant of the signed-in caller, read for the tenant page's clients. */
+  private callerTenantId: string | null = null;
   private readonly frontendConfig = inject(FrontendConfigService);
 
   constructor(
@@ -102,7 +128,7 @@ export class ClientListComponent implements OnInit {
     private readonly apiService: ApiService,
     private readonly router: Router,
     private readonly dialog: MatDialog,
-    jwtService: JwtService
+    private readonly jwtService: JwtService
   ) {
     this.callerRoles = jwtService.getRoles();
   }
@@ -111,8 +137,19 @@ export class ClientListComponent implements OnInit {
   canManage(client: ClientEntity): boolean {
     return canManageRoles(this.callerRoles, client.roles ?? []);
   }
+  /**
+   * The client to look up for the Config Portability lock, or none. The lookup
+   * only answers for the caller's own tenant, and refuses a caller without
+   * one, so the tenant page asks only about clients of the caller's tenant.
+   */
+  ownershipId(client: ClientEntity): string {
+    if (!this.loadedClients) return client.clientId;
+    return this.callerTenantId && client.tenantId === this.callerTenantId ? client.clientId : '';
+  }
+
   ngOnInit(): void {
     if (this.loadedClients) {
+      this.callerTenantId = this.jwtService.getTenantId();
       this.clients = this.loadedClients;
     } else {
       void this.loadClients();

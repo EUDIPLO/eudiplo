@@ -30,6 +30,27 @@ describe("ConfigResourceRouteService", () => {
         });
     });
 
+    it("marks only the secret rotation of a client as reaching other tenants", () => {
+        expect(
+            service.match("POST", "/api/client/automation/rotate-secret"),
+        ).toEqual({
+            kind: "Client",
+            id: "automation",
+            create: false,
+            crossTenant: true,
+        });
+        expect(service.match("PATCH", "/api/client/automation")).toEqual({
+            kind: "Client",
+            id: "automation",
+            create: false,
+        });
+        expect(service.match("DELETE", "/client/automation/")).toEqual({
+            kind: "Client",
+            id: "automation",
+            create: false,
+        });
+    });
+
     it("treats the default access key chain as the key chain defaults", () => {
         expect(service.match("PUT", "/api/key-chain/access/default")).toEqual({
             kind: "KeyChainDefaults",

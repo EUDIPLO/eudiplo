@@ -2,13 +2,11 @@ import { Component, type OnInit, type OnDestroy, ChangeDetectionStrategy } from 
 import { CommonModule } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
-import { MatChipsModule } from '@angular/material/chips';
 import { MatIconModule } from '@angular/material/icon';
-import { MatListModule } from '@angular/material/list';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import {
   KeyChainResponseDto,
   CertificateInfoDto,
@@ -42,6 +40,7 @@ import type { EudiHubAccessCertificate } from '../../registrar/eudi-hub.service'
 import { getApiErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { copyToClipboard } from '../../utils/copy-to-clipboard';
+import { keyUsages, type KeyUsageType } from '../key-usage';
 
 @Component({
   selector: 'app-key-management-show',
@@ -50,10 +49,8 @@ import { copyToClipboard } from '../../utils/copy-to-clipboard';
     MatIconModule,
     MatCardModule,
     MatButtonModule,
-    MatChipsModule,
-    MatListModule,
+    MatProgressSpinnerModule,
     MatTooltipModule,
-    FlexLayoutModule,
     RouterModule,
     ConfigOwnershipDirective,
     ConfigOwnershipNoticeComponent,
@@ -226,6 +223,24 @@ export class KeyManagementShowComponent implements OnInit, OnDestroy {
 
   get usageType(): string {
     return this.keyChain?.usageType || '';
+  }
+
+  /** The usage as the key pages name it, such as "Status List". */
+  get usageLabel(): string {
+    return keyUsages[this.usageType as KeyUsageType]?.short ?? this.usageType;
+  }
+
+  get usageIcon(): string {
+    return keyUsages[this.usageType as KeyUsageType]?.icon ?? 'key';
+  }
+
+  async copyKeyId(): Promise<void> {
+    await copyToClipboard(
+      this.snackBar,
+      this.keyId,
+      'Key chain ID copied to clipboard',
+      'Could not copy the key chain ID'
+    );
   }
 
   /** Federation keys are published as a JWK; their certificate is not used. */

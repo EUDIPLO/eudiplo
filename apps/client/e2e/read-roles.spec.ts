@@ -176,7 +176,7 @@ test.describe('read and status roles', () => {
     await nav.getByText('Keys', { exact: true }).click();
     await expect(page).toHaveURL(/\/keys$/);
     expect((await keyChains).ok(), 'GET /api/key-chain').toBe(true);
-    await expect(page.getByRole('heading', { name: 'Key Management' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Keys', exact: true })).toBeVisible();
 
     const description = `keys:manage ${suffix}`;
     await page.goto('/keys/create');

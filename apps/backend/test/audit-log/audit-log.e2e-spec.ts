@@ -95,6 +95,12 @@ describe("Audit log filters, search and retention", () => {
             }),
         ]);
         expect((await search("requestId=req-audit-e2e")).total).toBe(1);
+        expect(actionsOf((await search("q=ALICE")).items)).toEqual([
+            "webhook_endpoint_deleted",
+        ]);
+        expect(actionsOf((await search("q=Endpoint%20Deleted")).items)).toEqual(
+            ["webhook_endpoint_deleted"],
+        );
     });
 
     test("filters by time range", async () => {

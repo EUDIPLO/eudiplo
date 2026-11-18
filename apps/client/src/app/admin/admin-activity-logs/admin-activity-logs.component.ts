@@ -1,4 +1,3 @@
-import { CommonModule } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -9,6 +8,7 @@ import {
   ViewChild,
   inject,
 } from '@angular/core';
+import { DatePipe } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
   type AbstractControl,
@@ -17,17 +17,19 @@ import {
   ReactiveFormsModule,
   type ValidationErrors,
 } from '@angular/forms';
-import type { ErrorStateMatcher } from '@angular/material/core';
 import { MatButtonModule } from '@angular/material/button';
+import { MatCardModule } from '@angular/material/card';
+import { MatChipsModule } from '@angular/material/chips';
+import type { ErrorStateMatcher } from '@angular/material/core';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
-import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
+import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
-import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
-import { MatTableModule } from '@angular/material/table';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { ActivatedRoute, ParamMap, Params, Router } from '@angular/router';
 import type { AuditLogResponseDto, AuditLogRetentionResponseDto } from '@eudiplo/sdk-core';
 import { Subject, from, merge, of } from 'rxjs';
@@ -35,21 +37,119 @@ import { catchError, debounceTime, map, startWith, switchMap } from 'rxjs/operat
 
 import { focusAfterRenderIfLost } from '../../common/focus-if-lost.util';
 import { LoadErrorComponent } from '../../common/load-error.component';
-import { copyToClipboard } from '../../utils/copy-to-clipboard';
 import { getApiErrorMessage } from '../../utils/error-message';
+import { copyToClipboard } from '../../utils/copy-to-clipboard';
 import {
   ACTION_TYPES,
   ACTOR_LABELS,
   type AuditActionType,
   type AuditActorType,
   type AuditObjectType,
-  OBJECT_LABELS,
   OBJECT_TYPES,
-  actionLabel,
-  detailsOf,
   objectTypeOf,
 } from './activity-log-labels';
 import { type ActivityLogQuery, ActivityLogService } from './activity-log.service';
+
+/** What an entry's action did, as the page shows it. */
+export interface ActionDescription {
+  /** The object the action is about, such as `credential_config`. */
+  object: string;
+  /** The verb, such as `created`; empty when the action type has none of the known verbs. */
+  verb: string;
+  /** For example "Credential Config Created". */
+  label: string;
+  /** Colour role of the verb. */
+  tone: 'tone-success' | 'tone-info' | 'tone-danger' | 'tone-neutral';
+  icon: string;
+}
+
+/** Entries of one day, newest first. */
+interface DayGroup {
+  day: string;
+  label: string;
+  logs: AuditLogResponseDto[];
+}
+
+/** One changed field of an entry, with its value before and after the change. */
+interface FieldChange {
+  field: string;
+  before?: string;
+  after?: string;
+}
+
+interface ActionGroup {
+  objectType: AuditObjectType;
+  label: string;
+  actions: { value: AuditActionType; label: string }[];
+}
+
+/** The verbs action types end with, with their colour and icon. */
+const verbs: Record<string, { tone: ActionDescription['tone']; icon: string }> = {
+  created: { tone: 'tone-success', icon: 'add' },
+  added: { tone: 'tone-success', icon: 'add' },
+  imported: { tone: 'tone-success', icon: 'download' },
+  generated: { tone: 'tone-success', icon: 'key' },
+  updated: { tone: 'tone-info', icon: 'edit' },
+  reset: { tone: 'tone-info', icon: 'restart_alt' },
+  reattached: { tone: 'tone-info', icon: 'link' },
+  exported: { tone: 'tone-neutral', icon: 'upload' },
+  detached: { tone: 'tone-neutral', icon: 'link_off' },
+  pruned: { tone: 'tone-neutral', icon: 'auto_delete' },
+  deleted: { tone: 'tone-danger', icon: 'delete' },
+  cancelled: { tone: 'tone-danger', icon: 'block' },
+};
+
+const actorIcons: Record<AuditLogResponseDto['actorType'], string> = {
+  user: 'person',
+  client: 'key',
+  system: 'settings',
+};
+
+/** Words of object types that are not simply capitalised. */
+const words: Record<string, string> = {
+  oidc: 'OpenID Connect',
+  config: 'Config',
+};
+
+/** "credential_config" as "Credential Config", "oidc_client" as "OpenID Connect Client". */
+function titleCase(snake: string): string {
+  return snake
+    .split('_')
+    .map((word) => words[word] ?? word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+/** Splits an action type into its object and verb, for any action the backend logs. */
+export function describeAction(actionType: string | undefined): ActionDescription {
+  if (!actionType) {
+    return { object: '', verb: '', label: 'Unknown', tone: 'tone-neutral', icon: 'help' };
+  }
+  const verb = Object.keys(verbs).find((candidate) => actionType.endsWith(`_${candidate}`));
+  if (!verb) {
+    return {
+      object: actionType,
+      verb: '',
+      label: titleCase(actionType),
+      tone: 'tone-neutral',
+      icon: 'history',
+    };
+  }
+  const object = actionType.slice(0, -(verb.length + 1));
+  return { object, verb, label: `${titleCase(object)} ${titleCase(verb)}`, ...verbs[verb] };
+}
+
+/** A logged value for display: strings as they are, anything else as compact JSON. */
+function display(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  return typeof value === 'string' ? value : JSON.stringify(value);
+}
+
+/** The day of a timestamp in local time, as YYYY-MM-DD, for grouping. */
+function localDay(timestamp: string): string {
+  const date = new Date(timestamp);
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
 
 const DEFAULT_PAGE_SIZE = 25;
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
@@ -67,13 +167,15 @@ type TimeFilter = '' | Within | 'custom';
 
 /** Value of a `datetime-local` input: a local time to the minute. */
 const LOCAL_DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
-/** The longest id the backend accepts as a filter. */
-const MAX_ID_LENGTH = 255;
+/** The longest search text or id the backend accepts. */
+const MAX_TEXT_LENGTH = 255;
 
-/** An id the backend accepts: it trims before it checks the length. */
-function idLength(control: AbstractControl): ValidationErrors | null {
+/** Text the backend accepts: it trims before it checks the length. */
+function textLength(control: AbstractControl): ValidationErrors | null {
   const length = String(control.value ?? '').trim().length;
-  return length > MAX_ID_LENGTH ? { maxlength: { requiredLength: MAX_ID_LENGTH, length } } : null;
+  return length > MAX_TEXT_LENGTH
+    ? { maxlength: { requiredLength: MAX_TEXT_LENGTH, length } }
+    : null;
 }
 
 /** On `to`: a custom range must not end before it starts. */
@@ -89,29 +191,25 @@ function endsAfterStart(control: AbstractControl): ValidationErrors | null {
   return reversed ? { reversed: true } : null;
 }
 
-interface ActionGroup {
-  objectType: AuditObjectType;
-  label: string;
-  actions: { value: AuditActionType; label: string }[];
-}
-
 @Component({
   selector: 'app-admin-activity-logs',
   standalone: true,
   imports: [
-    CommonModule,
+    DatePipe,
     ReactiveFormsModule,
+    LoadErrorComponent,
     MatButtonModule,
-    MatTableModule,
+    MatCardModule,
+    MatChipsModule,
+    MatFormFieldModule,
     MatIconModule,
     MatInputModule,
+    MatMenuModule,
     MatProgressSpinnerModule,
+    MatSelectModule,
     MatTooltipModule,
     MatSnackBarModule,
     MatPaginatorModule,
-    MatSelectModule,
-    MatFormFieldModule,
-    LoadErrorComponent,
   ],
   templateUrl: './admin-activity-logs.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
@@ -121,17 +219,12 @@ export class AdminActivityLogsComponent implements OnInit {
   @ViewChild('pageHeading') private readonly pageHeading?: ElementRef<HTMLElement>;
 
   readonly filters = new FormGroup({
+    q: new FormControl('', { nonNullable: true, validators: textLength }),
     objectType: new FormControl<AuditObjectType | ''>('', { nonNullable: true }),
     actionType: new FormControl<AuditActionType[]>([], { nonNullable: true }),
     actorType: new FormControl<AuditActorType | ''>('', { nonNullable: true }),
-    actorId: new FormControl('', {
-      nonNullable: true,
-      validators: idLength,
-    }),
-    requestId: new FormControl('', {
-      nonNullable: true,
-      validators: idLength,
-    }),
+    actorId: new FormControl('', { nonNullable: true, validators: textLength }),
+    requestId: new FormControl('', { nonNullable: true, validators: textLength }),
     time: new FormControl<TimeFilter>('', { nonNullable: true }),
     from: new FormControl('', { nonNullable: true }),
     to: new FormControl('', { nonNullable: true, validators: endsAfterStart }),
@@ -141,24 +234,28 @@ export class AdminActivityLogsComponent implements OnInit {
   readonly showErrorsAtOnce: ErrorStateMatcher = {
     isErrorState: (control) => !!control?.invalid,
   };
-  readonly maxIdLength = MAX_ID_LENGTH;
-
-  readonly objectOptions = OBJECT_TYPES.map((value) => ({ value, label: OBJECT_LABELS[value] }));
+  readonly maxTextLength = MAX_TEXT_LENGTH;
+  readonly objectTypes = OBJECT_TYPES.map((value) => ({ value, label: titleCase(value) }));
   readonly actorOptions = Object.entries(ACTOR_LABELS).map(([value, label]) => ({ value, label }));
   readonly timeOptions = Object.entries(WITHIN).map(([value, { label }]) => ({ value, label }));
   readonly pageSizeOptions = PAGE_SIZE_OPTIONS;
-  readonly displayedColumns = ['timestamp', 'action', 'actor', 'details', 'actions'];
-  readonly actionLabel = actionLabel;
-  readonly detailsOf = detailsOf;
 
+  /** The entries of the current page. */
   logs: AuditLogResponseDto[] = [];
+  /** The entries of the current page, by day. */
+  dayGroups: DayGroup[] = [];
+  /** Entries that match the filters, on all pages. */
   total = 0;
   pageIndex = 0;
   pageSize = DEFAULT_PAGE_SIZE;
   loading = true;
+  /** Whether a page has loaded once; until then the page shows no filters. */
+  loaded = false;
   /** Set when the entries could not be loaded, so the page does not claim there are none. */
   loadError = '';
   retention?: AuditLogRetentionResponseDto;
+  /** Entries whose details are open. */
+  readonly expanded = new Set<string>();
 
   private readonly service = inject(ActivityLogService);
   private readonly route = inject(ActivatedRoute);
@@ -205,13 +302,11 @@ export class AdminActivityLogsComponent implements OnInit {
           if (this.filters.invalid) return of(null);
           this.loading = true;
           this.loadError = '';
-          const query = this.buildQuery();
-          return from(this.service.search(query)).pipe(
+          return from(this.service.search(this.buildQuery())).pipe(
             catchError((error: unknown) => {
               this.loadError = getApiErrorMessage(error, 'Failed to load activity logs');
-              // Rows of an earlier query no longer match what the filters ask for.
-              this.logs = [];
-              this.total = 0;
+              // Entries of an earlier query no longer match what the filters ask for.
+              this.showPage([], 0);
               return of(null);
             })
           );
@@ -228,8 +323,8 @@ export class AdminActivityLogsComponent implements OnInit {
         }
         this.loading = false;
         if (page) {
-          this.logs = page.items;
-          this.total = page.total;
+          this.loaded = true;
+          this.showPage(page.items, page.total);
           if (this.retrying) {
             focusAfterRenderIfLost(this.injector, () => this.pageHeading?.nativeElement);
           }
@@ -259,6 +354,13 @@ export class AdminActivityLogsComponent implements OnInit {
     this.reload$.next();
   }
 
+  /** Changes the page size and keeps the first entry of the current page in view. */
+  setPageSize(size: number): void {
+    this.pageIndex = Math.floor((this.pageIndex * this.pageSize) / size);
+    this.pageSize = size;
+    this.reload$.next();
+  }
+
   clearFilters(): void {
     this.filters.reset();
     // Clear Filters removes itself, and with it the focus.
@@ -266,9 +368,10 @@ export class AdminActivityLogsComponent implements OnInit {
   }
 
   hasActiveFilters(): boolean {
-    const { objectType, actionType, actorType, actorId, requestId, time } =
+    const { q, objectType, actionType, actorType, actorId, requestId, time } =
       this.filters.getRawValue();
     return !!(
+      q.trim() ||
       objectType ||
       actionType.length ||
       actorType ||
@@ -286,15 +389,15 @@ export class AdminActivityLogsComponent implements OnInit {
   /** The actions to choose from, grouped by object, limited to the chosen object. */
   actionGroups(): ActionGroup[] {
     const chosen = this.filters.controls.objectType.value;
-    return OBJECT_TYPES.filter((objectType) => !chosen || objectType === chosen).map(
-      (objectType) => ({
-        objectType,
-        label: OBJECT_LABELS[objectType],
-        actions: ACTION_TYPES.filter((action) => objectTypeOf(action) === objectType).map(
-          (value) => ({ value, label: actionLabel(value) })
+    return this.objectTypes
+      .filter((object) => !chosen || object.value === chosen)
+      .map((object) => ({
+        objectType: object.value,
+        label: object.label,
+        actions: ACTION_TYPES.filter((action) => objectTypeOf(action) === object.value).map(
+          (value) => ({ value, label: describeAction(value).label })
         ),
-      })
-    );
+      }));
   }
 
   /** A sentence about the retention, or '' while it is unknown. */
@@ -311,9 +414,12 @@ export class AdminActivityLogsComponent implements OnInit {
     return `The operator's retention settings delete ${limits.join(' and ')} every night.`;
   }
 
+  describe(log: AuditLogResponseDto): ActionDescription {
+    return describeAction(log.actionType);
+  }
+
   actorLabel(log: AuditLogResponseDto): string {
-    const display = log.actorDisplay || log.actorId || 'Unknown';
-    return `${display} (${ACTOR_LABELS[log.actorType] ?? log.actorType})`;
+    return log.actorDisplay || log.actorId || 'Unknown';
   }
 
   /**
@@ -324,25 +430,58 @@ export class AdminActivityLogsComponent implements OnInit {
     return log.actorId && log.actorDisplay && log.actorId !== log.actorDisplay ? log.actorId : '';
   }
 
-  copyLabel(log: AuditLogResponseDto): string {
-    return `Copy log entry ${actionLabel(log.actionType)} of ${this.formatTimestamp(log.timestamp)}`;
+  /** A person for users, a key for API clients, a gear for the system. */
+  actorIcon(log: AuditLogResponseDto): string {
+    return actorIcons[log.actorType] ?? 'help';
   }
 
-  formatTimestamp(timestamp?: string): string {
-    if (!timestamp) return '';
-    return new Date(timestamp).toLocaleString();
+  /** The changed fields with their values; for a new object, its fields after the change. */
+  fieldChanges(log: AuditLogResponseDto): FieldChange[] {
+    const fields = log.changedFields?.length
+      ? log.changedFields
+      : Object.keys(log.after ?? log.before ?? {});
+    return fields.map((field) => ({
+      field,
+      before: display(log.before?.[field]),
+      after: display(log.after?.[field]),
+    }));
+  }
+
+  /** Whether any field had a value before the change, so a Before column says something. */
+  hasBefore(changes: FieldChange[]): boolean {
+    return changes.some((change) => change.before !== undefined);
+  }
+
+  isExpanded(log: AuditLogResponseDto): boolean {
+    return this.expanded.has(log.id);
+  }
+
+  toggle(log: AuditLogResponseDto): void {
+    if (this.expanded.has(log.id)) {
+      this.expanded.delete(log.id);
+    } else {
+      this.expanded.add(log.id);
+    }
   }
 
   async copyLog(log: AuditLogResponseDto): Promise<void> {
-    await copyToClipboard(this.snackBar, JSON.stringify(log, null, 2), 'Copied to clipboard');
+    const text = JSON.stringify(log, null, 2);
+    await copyToClipboard(this.snackBar, text, 'Copied to clipboard');
+  }
+
+  private showPage(logs: AuditLogResponseDto[], total: number): void {
+    this.logs = logs;
+    this.total = total;
+    this.dayGroups = this.groupByDay(logs);
   }
 
   /** The filters as `GET /admin/audit-logs/search` query. */
   private buildQuery(): ActivityLogQuery {
-    const { objectType, actionType, actorType, actorId, requestId } = this.filters.getRawValue();
+    const { q, objectType, actionType, actorType, actorId, requestId } = this.filters.getRawValue();
     return {
       page: this.pageIndex + 1,
       pageSize: this.pageSize,
+      ...(q.trim() ? { q: q.trim() } : {}),
       ...(objectType ? { objectType } : {}),
       ...(actionType.length ? { actionType } : {}),
       ...(actorType ? { actorType } : {}),
@@ -370,10 +509,11 @@ export class AdminActivityLogsComponent implements OnInit {
 
   /** Keep the view in the URL so it can be bookmarked or shared. */
   private storeInUrl(): void {
-    const { objectType, actionType, actorType, actorId, requestId, time, from, to } =
+    const { q, objectType, actionType, actorType, actorId, requestId, time, from, to } =
       this.filters.getRawValue();
     const custom = time === 'custom';
     const queryParams: Params = {
+      q: q.trim() || null,
       objectType: objectType || null,
       actionType: actionType.length ? actionType : null,
       actorType: actorType || null,
@@ -402,6 +542,7 @@ export class AdminActivityLogsComponent implements OnInit {
 
     this.filters.setValue(
       {
+        q: params.get('q') ?? '',
         objectType: OBJECT_TYPES.includes(objectType as AuditObjectType)
           ? (objectType as AuditObjectType)
           : '',
@@ -424,5 +565,37 @@ export class AdminActivityLogsComponent implements OnInit {
     const pageSize = Number(params.get('pageSize'));
     if (PAGE_SIZE_OPTIONS.includes(pageSize)) this.pageSize = pageSize;
     if (Number.isInteger(page) && page > 1) this.pageIndex = page - 1;
+  }
+
+  /** Consecutive entries of the same local day, labelled "Today", "Yesterday" or the date. */
+  private groupByDay(logs: AuditLogResponseDto[]): DayGroup[] {
+    const today = localDay(new Date().toISOString());
+    const yesterdayDate = new Date();
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterday = localDay(yesterdayDate.toISOString());
+    const groups: DayGroup[] = [];
+    for (const log of logs) {
+      const day = localDay(log.timestamp);
+      let group = groups.at(-1);
+      if (group?.day !== day) {
+        let label: string;
+        if (day === today) {
+          label = 'Today';
+        } else if (day === yesterday) {
+          label = 'Yesterday';
+        } else {
+          label = new Date(log.timestamp).toLocaleDateString(undefined, {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+          });
+        }
+        group = { day, label, logs: [] };
+        groups.push(group);
+      }
+      group.logs.push(log);
+    }
+    return groups;
   }
 }

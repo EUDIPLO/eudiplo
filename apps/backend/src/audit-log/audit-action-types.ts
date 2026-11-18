@@ -62,3 +62,23 @@ export function actionTypesOf(objectType: AuditObjectType): AuditActionType[] {
         (actionType) => AUDIT_ACTION_OBJECT_TYPES[actionType] === objectType,
     );
 }
+
+/** Words of action types that read differently in the web client. */
+const SPOKEN_WORDS: Record<string, string> = { oidc: "openid connect" };
+
+/**
+ * The action types whose name contains `text`, either as written
+ * (`oidc_client_created`) or as the web client shows it, with spaces and
+ * spelled-out words ("OpenID Connect Client Created"). Ignores case.
+ */
+export function actionTypesMatching(text: string): AuditActionType[] {
+    const term = text.trim().toLowerCase();
+    if (!term) return [];
+    return AUDIT_ACTION_TYPES.filter((actionType) => {
+        const spoken = actionType
+            .split("_")
+            .map((word) => SPOKEN_WORDS[word] ?? word)
+            .join(" ");
+        return actionType.includes(term) || spoken.includes(term);
+    });
+}

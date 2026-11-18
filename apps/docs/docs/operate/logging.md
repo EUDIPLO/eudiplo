@@ -115,6 +115,7 @@ search endpoint rejects unknown parameters, the list endpoint ignores them:
 | `actionType` | One of these actions, e.g. `oidc_client_deleted`; repeat the parameter for several |
 | `objectType` | All actions on one kind of object, e.g. `oidc_client` (not its secrets, which are `oidc_client_secret`) |
 | `actorType`, `actorId` | `user`, `client` or `system`; the id of the user or client |
+| `q` | Text in the action (`credential_config_created` or `Credential Config Created`), the actor's id or name, or a changed field's name, ignoring case |
 | `requestId` | The `X-Request-Id` header of the call that caused the entry, to match it with your proxy or client logs. Recorded only when the caller or a reverse proxy sets the header |
 
 ```http

@@ -30,6 +30,7 @@ const filterFields = {
     actorType: z.enum(AUDIT_ACTOR_TYPES).optional(),
     actorId: identifier.optional(),
     requestId: identifier.optional(),
+    q: identifier.optional(),
 };
 
 /**
@@ -74,6 +75,11 @@ function documentFilters(target: object): void {
                 "The `X-Request-Id` header of the call that caused the entry (exact match). Recorded only when the caller or a reverse proxy sets the header.",
             maxLength: MAX_ID_LENGTH,
         }),
+        q: ApiPropertyOptional({
+            description:
+                "Text to find, ignoring case, in the action (as written, `credential_config_created`, or as the web client shows it, `Credential Config Created`), in the id or name of the actor, or in the name of a changed field",
+            maxLength: MAX_ID_LENGTH,
+        }),
     };
     for (const [name, decorate] of Object.entries(docs)) decorate(target, name);
 }
@@ -113,6 +119,7 @@ export class AuditLogListQueryDto
     declare actorType?: AuditActorType;
     declare actorId?: string;
     declare requestId?: string;
+    declare q?: string;
 
     @ApiPropertyOptional({
         type: Number,
@@ -146,6 +153,7 @@ export class AuditLogSearchQueryDto
     declare actorType?: AuditActorType;
     declare actorId?: string;
     declare requestId?: string;
+    declare q?: string;
 
     @ApiPropertyOptional({
         description: "Page number (1-based)",

@@ -1,423 +1,206 @@
-// Config list styling
-.config-list {
-  padding: 0;
+@use '../../tenants/tenant-page' as page;
 
-  mat-list-item {
-    height: auto !important;
-    padding: 12px 0;
-    border-bottom: 1px solid var(--mat-sys-outline-variant);
+// Back link, header card and the cards below it, as on the tenant and client pages
+@include page.base;
+@include page.detail-page;
 
-    // Long values (ids, URLs, free text) wrap instead of widening the page
-    // or ending in an ellipsis. Nested so it outranks Material's nowrap rule.
-    [matListItemLine] {
-      white-space: normal;
-      overflow-wrap: anywhere;
-    }
-
-    &:last-child {
-      border-bottom: none;
-    }
-  }
+// Settings beside the certificates and public keys
+.page {
+  --content-columns: minmax(0, 2fr) minmax(0, 3fr);
 }
 
-// The title holds the description or id; it takes the space the actions leave
-// and wraps there instead of pushing them off the page.
-.page-title {
-  flex: 1 1 0;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.delete-button {
-  color: var(--eudiplo-danger);
-}
-
-.spacer {
-  flex: 1 1 auto;
-}
-
-.cert-info {
-  margin-bottom: 24px;
-}
-
-.cert-details-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 8px;
-
-  td {
-    padding: 8px 16px 8px 0;
-    vertical-align: top;
-    border-bottom: 1px solid var(--mat-sys-outline-variant);
-
-    &:first-child {
-      width: 150px;
-      color: var(--mat-sys-on-surface-variant);
-    }
-
-    &:last-child {
-      word-break: break-all;
-    }
-  }
-}
-
-.cert-pem-section {
-  h4 {
-    margin-bottom: 12px;
-    color: var(--mat-sys-on-surface-variant);
-  }
-}
-
-.pem-container {
-  background-color: var(--mat-sys-surface-container);
-  border: 1px solid var(--mat-sys-outline-variant);
-  border-radius: 4px;
-  padding: 16px;
-  max-height: 300px;
-  overflow-y: auto;
-}
-
-.pem-certificate {
-  font-family: 'Courier New', 'Monaco', 'Lucida Console', monospace;
-  font-size: 12px;
-  line-height: 1.4;
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-all;
-  color: var(--mat-sys-on-surface);
-}
-
-.no-cert-message {
-  color: var(--mat-sys-on-surface-variant);
-  font-style: italic;
-  text-align: center;
-  padding: 32px 0;
-}
-
-h4 {
-  color: var(--eudiplo-info);
-  margin-bottom: 16px;
-  font-weight: 500;
-}
-
-.status-icon {
-  vertical-align: middle;
-  margin-left: 8px;
-  font-size: 18px;
-
-  &.valid {
-    color: var(--eudiplo-success);
-  }
-
-  &.expired {
-    color: var(--eudiplo-danger);
-  }
-}
-
-.status-text {
-  font-size: 12px;
-  font-weight: bold;
-  margin-left: 4px;
-
-  &.valid {
-    color: var(--eudiplo-success);
-  }
-
-  &.expired {
-    color: var(--eudiplo-danger);
-  }
-}
-
-.expired {
-  color: var(--eudiplo-danger);
-}
-
-.valid {
-  color: var(--eudiplo-success);
-}
-
-.key-usage-tag {
-  display: inline-block;
-  background-color: var(--mat-sys-primary-container);
-  color: var(--eudiplo-info);
-  padding: 2px 8px;
-  margin: 2px 4px 2px 0;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.usage-tag {
-  display: inline-block;
-  background-color: var(--mat-sys-tertiary-container);
-  color: var(--eudiplo-accent);
-  padding: 2px 8px;
-  margin: 2px 4px 2px 0;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.fingerprint {
-  font-family: 'Courier New', 'Monaco', 'Lucida Console', monospace;
-  font-size: 12px;
-  word-break: break-all;
-}
-
-.tab-content {
-  padding-top: 16px;
-}
-
-.tab-header {
+.column {
   display: flex;
-  justify-content: flex-end;
-  margin-bottom: 8px;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
 }
 
-.certificates-table {
-  width: 100%;
-  margin-top: 16px;
+// The ownership notice shows only when it applies; without content it takes no gap
+app-config-ownership-notice {
+  display: contents;
+}
+
+// One colour per usage, as on the key list
+.hero-avatar {
+  --tone: var(--mat-sys-primary);
+
+  background: color-mix(in srgb, var(--tone) 16%, var(--mat-sys-surface));
+  color: var(--tone);
+
+  mat-icon {
+    width: 32px;
+    height: 32px;
+    font-size: 32px;
+  }
+
+  &.usage-access {
+    --tone: var(--mat-sys-tertiary);
+  }
+
+  &.usage-authorizationServer {
+    --tone: var(--eudiplo-accent);
+  }
+
+  &.usage-statusList {
+    --tone: var(--eudiplo-success);
+  }
+
+  &.usage-trustList {
+    --tone: var(--eudiplo-warning);
+  }
+
+  &.usage-federation {
+    --tone: var(--mat-sys-secondary);
+  }
+}
+
+// The ID with its copy button, as a quiet chip
+.id-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding-left: 12px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: var(--mat-sys-corner-small);
+  background: var(--mat-sys-surface);
 
   code {
-    font-size: 12px;
-    background-color: var(--mat-sys-surface-container-high);
-    padding: 2px 6px;
-    border-radius: 4px;
-  }
-}
-
-.cert-row {
-  cursor: pointer;
-  transition: background-color 0.2s;
-
-  &:hover {
-    background-color: var(--mat-sys-surface-container-high);
-  }
-}
-
-.empty-state {
-  padding: 48px 24px;
-  text-align: center;
-
-  .empty-icon {
-    font-size: 64px;
-    width: 64px;
-    height: 64px;
-    color: var(--mat-sys-on-surface-variant);
-  }
-
-  p {
-    color: var(--mat-sys-on-surface-variant);
-    margin: 0;
-  }
-}
-
-mat-chip {
-  mat-icon {
-    font-size: 16px;
-    width: 16px;
-    height: 16px;
-    margin-right: 4px;
-  }
-}
-
-// Key Type Card Styles
-.key-type-card {
-  background-color: var(--mat-sys-surface-container-lowest, var(--mat-sys-surface-container));
-
-  .key-type-icon {
-    width: 56px;
-    height: 56px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-
-    mat-icon {
-      font-size: 28px;
-      width: 28px;
-      height: 28px;
-    }
-
-    &.root-ca {
-      background-color: var(--mat-sys-primary-container, var(--mat-sys-primary-container));
-
-      mat-icon {
-        color: var(--mat-sys-on-primary-container, var(--eudiplo-info));
-      }
-    }
-
-    &.signing {
-      background-color: var(--mat-sys-secondary-container, var(--mat-sys-secondary-container));
-
-      mat-icon {
-        color: var(--mat-sys-on-secondary-container, var(--eudiplo-success));
-      }
-    }
-
-    &.standalone {
-      background-color: var(--mat-sys-tertiary-container, #fff3e0);
-
-      mat-icon {
-        color: var(--mat-sys-on-tertiary-container, var(--eudiplo-warning));
-      }
-    }
-
-    &.internalChain {
-      background-color: var(--mat-sys-primary-container, var(--mat-sys-primary-container));
-
-      mat-icon {
-        color: var(--mat-sys-on-primary-container, var(--eudiplo-info));
-      }
-    }
-
-    &.legacy {
-      background-color: var(--mat-sys-error-container, var(--mat-sys-error-container));
-
-      mat-icon {
-        color: var(--mat-sys-on-error-container, #b71c1c);
-      }
-    }
-  }
-
-  .key-type-label {
-    font-size: 1.25rem;
-    font-weight: 500;
+    font-size: 13px;
     color: var(--mat-sys-on-surface);
   }
 
-  .key-type-description {
-    font-size: 0.875rem;
-    color: var(--mat-sys-on-surface-variant);
-    margin-top: 4px;
-  }
-}
+  .copy-id {
+    --mat-icon-button-state-layer-size: 32px;
 
-// Key Chain Visualization Styles
-.key-chain-section {
-  margin-top: 24px;
-  padding-top: 16px;
-  border-top: 1px solid var(--mat-sys-outline-variant, var(--mat-sys-outline-variant));
+    width: 32px;
+    height: 32px;
+    padding: 4px;
 
-  .chain-label {
-    font-size: 0.75rem;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--mat-sys-on-surface-variant);
-    margin-bottom: 12px;
-  }
-}
-
-.key-chain-visualization {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-left: 8px;
-}
-
-.chain-item {
-  position: relative;
-  padding: 12px 16px;
-  border-radius: 8px;
-  transition: background-color 0.2s;
-
-  &:hover {
-    background-color: var(--mat-sys-surface-container);
-  }
-
-  &.current {
-    background-color: var(--mat-sys-surface-container-high);
-  }
-
-  .chain-connector {
-    position: absolute;
-    left: 36px;
-    width: 2px;
-    background-color: var(--mat-sys-outline-variant);
-
-    &.up {
-      top: -8px;
-      height: 20px;
-    }
-
-    &.down {
-      top: -8px;
-      height: 20px;
+    mat-icon {
+      width: 18px;
+      height: 18px;
+      font-size: 18px;
     }
   }
 }
 
-.chain-key-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  display: flex;
+.hero-meta .badge {
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
+  gap: 4px;
 
   mat-icon {
-    font-size: 18px;
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
+    font-size: 16px;
   }
 
-  &.parent {
-    background-color: var(--mat-sys-primary-container, var(--mat-sys-primary-container));
+  &.usage,
+  &.default-chip {
+    background: var(--mat-sys-secondary-container);
+    color: var(--mat-sys-on-secondary-container);
+  }
+}
 
-    mat-icon {
-      color: var(--mat-sys-on-primary-container, var(--eudiplo-info));
+.icon-actions {
+  display: inline-flex;
+  gap: 2px;
+
+  .default-toggle.on mat-icon {
+    color: var(--eudiplo-warning);
+  }
+
+  .delete-action:not([disabled]) mat-icon {
+    color: var(--mat-sys-error);
+  }
+}
+
+// More specific than Material's own :last-child padding rule of the card content
+mat-card mat-card-content {
+  padding: 0 20px 20px;
+}
+
+// Label left, value right
+.details {
+  margin: 0;
+
+  > div {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 4px 16px;
+    padding: 10px 0;
+
+    & + div {
+      border-top: 1px solid var(--mat-sys-outline-variant);
     }
   }
 
-  &.current {
-    background-color: var(--mat-sys-secondary-container, var(--mat-sys-secondary-container));
-
-    mat-icon {
-      color: var(--mat-sys-on-secondary-container, var(--eudiplo-success));
-    }
+  dt {
+    font: var(--mat-sys-body-medium);
+    color: var(--mat-sys-on-surface-variant);
   }
 
-  &.child {
-    background-color: var(--mat-sys-tertiary-container, #fff3e0);
+  dd {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    margin: 0;
+    font: var(--mat-sys-body-medium);
+    font-weight: 500;
+    color: var(--mat-sys-on-surface);
+    text-align: right;
+    overflow-wrap: anywhere;
 
-    mat-icon {
-      color: var(--mat-sys-on-tertiary-container, var(--eudiplo-warning));
+    code {
+      font-size: 13px;
+      font-weight: 400;
     }
   }
 }
 
-.chain-key-link {
-  color: var(--mat-sys-primary, var(--eudiplo-info));
-  text-decoration: none;
-  font-weight: 500;
+// Small state label, such as Enabled or Expired
+.status {
+  --tone: var(--mat-sys-on-surface-variant);
 
-  &:hover {
-    text-decoration: underline;
+  padding: 2px 10px;
+  border-radius: var(--mat-sys-corner-full);
+  background: color-mix(in srgb, var(--tone) 14%, transparent);
+  font: var(--mat-sys-label-medium);
+  color: var(--mat-sys-on-surface);
+
+  &.tone-success {
+    --tone: var(--eudiplo-success);
+  }
+
+  &.tone-danger {
+    --tone: var(--eudiplo-danger);
   }
 }
 
-.chain-key-name {
-  font-weight: 500;
+.code-block {
+  max-height: 240px;
+  margin: 12px 0 0;
+  padding: 12px 16px;
+  overflow: auto;
+  border-radius: var(--mat-sys-corner-medium);
+  background: var(--mat-sys-surface-container-high);
+  font-size: 12px;
   color: var(--mat-sys-on-surface);
 }
 
-.chain-key-role {
-  font-size: 0.8rem;
-  color: var(--mat-sys-on-surface-variant);
-}
-
 .unused-certificate-note {
-  color: var(--mat-sys-on-surface-variant);
-  font-size: 13px;
   margin: 12px 0 0;
+  font: var(--mat-sys-body-small);
+  color: var(--mat-sys-on-surface-variant);
 }
 
-// Copy PEM and the certificate request actions share one row; on a narrow card
-// they wrap instead of overflowing it.
 .cert-actions {
+  display: flex;
   flex-wrap: wrap;
-  row-gap: 8px;
+  gap: 8px;
+  margin-top: 16px;
 }
