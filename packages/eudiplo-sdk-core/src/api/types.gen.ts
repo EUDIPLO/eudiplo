@@ -472,7 +472,7 @@ export type UpdateDefaultAccessKeyChainDto = {
 export type AuditLogResponseDto = {
     id: string;
     tenantId: string;
-    actionType: 'tenant_created' | 'tenant_updated' | 'tenant_deleted' | 'presentation_config_created' | 'presentation_config_updated' | 'presentation_config_deleted' | 'issuance_config_updated' | 'credential_config_created' | 'credential_config_updated' | 'credential_config_deleted' | 'status_list_config_updated' | 'status_list_config_reset' | 'webhook_endpoint_created' | 'webhook_endpoint_updated' | 'webhook_endpoint_deleted' | 'oidc_client_created' | 'oidc_client_updated' | 'oidc_client_deleted' | 'oidc_client_secret_added' | 'oidc_client_secret_updated' | 'oidc_client_secret_deleted' | 'attribute_provider_created' | 'attribute_provider_updated' | 'attribute_provider_deleted' | 'federation_trust_anchor_created' | 'federation_trust_anchor_updated' | 'federation_trust_anchor_deleted' | 'config_bundle_exported' | 'config_bundle_imported' | 'config_client_secret_generated' | 'config_resource_detached' | 'config_resource_reattached' | 'config_resource_exported' | 'session_cancelled';
+    actionType: 'tenant_created' | 'tenant_updated' | 'tenant_deleted' | 'presentation_config_created' | 'presentation_config_updated' | 'presentation_config_deleted' | 'issuance_config_updated' | 'credential_config_created' | 'credential_config_updated' | 'credential_config_deleted' | 'status_list_config_updated' | 'status_list_config_reset' | 'webhook_endpoint_created' | 'webhook_endpoint_updated' | 'webhook_endpoint_deleted' | 'oidc_client_created' | 'oidc_client_updated' | 'oidc_client_deleted' | 'oidc_client_secret_added' | 'oidc_client_secret_updated' | 'oidc_client_secret_deleted' | 'attribute_provider_created' | 'attribute_provider_updated' | 'attribute_provider_deleted' | 'federation_trust_anchor_created' | 'federation_trust_anchor_updated' | 'federation_trust_anchor_deleted' | 'config_bundle_exported' | 'config_bundle_imported' | 'config_client_secret_generated' | 'config_resource_detached' | 'config_resource_reattached' | 'config_resource_exported' | 'session_cancelled' | 'audit_log_pruned';
     actorType: 'user' | 'client' | 'system';
     actorId?: string;
     actorDisplay?: string;
@@ -485,6 +485,37 @@ export type AuditLogResponseDto = {
     };
     requestId?: string;
     timestamp: string;
+};
+
+export type AuditLogPageResponseDto = {
+    items: Array<AuditLogResponseDto>;
+    /**
+     * Number of entries matching the filters
+     */
+    total: number;
+    /**
+     * Current page number (1-based)
+     */
+    page: number;
+    /**
+     * Number of entries per page
+     */
+    pageSize: number;
+    /**
+     * Total number of pages
+     */
+    totalPages: number;
+};
+
+export type AuditLogRetentionResponseDto = {
+    /**
+     * Entries older than this many days are deleted daily. 0 means no age limit.
+     */
+    retentionDays: number;
+    /**
+     * Only this many of a tenant's newest entries are kept. 0 means no count limit.
+     */
+    maxEntriesPerTenant: number;
 };
 
 export type ClientSecretResponseDto = {
@@ -6752,9 +6783,41 @@ export type AuditLogControllerGetAuditLogsData = {
     path?: never;
     query?: {
         /**
-         * Maximum number of entries to return (1–500)
+         * Maximum number of entries to return (1–500, default 100)
          */
         limit?: number;
+        /**
+         * Only entries recorded at or after this time (ISO 8601 with offset)
+         */
+        from?: string;
+        /**
+         * Only entries recorded at or before this time (ISO 8601 with offset)
+         */
+        to?: string;
+        /**
+         * Filter by action. Repeat the parameter to match any of several actions.
+         */
+        actionType?: 'tenant_created' | 'tenant_updated' | 'tenant_deleted' | 'presentation_config_created' | 'presentation_config_updated' | 'presentation_config_deleted' | 'issuance_config_updated' | 'credential_config_created' | 'credential_config_updated' | 'credential_config_deleted' | 'status_list_config_updated' | 'status_list_config_reset' | 'webhook_endpoint_created' | 'webhook_endpoint_updated' | 'webhook_endpoint_deleted' | 'oidc_client_created' | 'oidc_client_updated' | 'oidc_client_deleted' | 'oidc_client_secret_added' | 'oidc_client_secret_updated' | 'oidc_client_secret_deleted' | 'attribute_provider_created' | 'attribute_provider_updated' | 'attribute_provider_deleted' | 'federation_trust_anchor_created' | 'federation_trust_anchor_updated' | 'federation_trust_anchor_deleted' | 'config_bundle_exported' | 'config_bundle_imported' | 'config_client_secret_generated' | 'config_resource_detached' | 'config_resource_reattached' | 'config_resource_exported' | 'session_cancelled' | 'audit_log_pruned' | Array<'tenant_created' | 'tenant_updated' | 'tenant_deleted' | 'presentation_config_created' | 'presentation_config_updated' | 'presentation_config_deleted' | 'issuance_config_updated' | 'credential_config_created' | 'credential_config_updated' | 'credential_config_deleted' | 'status_list_config_updated' | 'status_list_config_reset' | 'webhook_endpoint_created' | 'webhook_endpoint_updated' | 'webhook_endpoint_deleted' | 'oidc_client_created' | 'oidc_client_updated' | 'oidc_client_deleted' | 'oidc_client_secret_added' | 'oidc_client_secret_updated' | 'oidc_client_secret_deleted' | 'attribute_provider_created' | 'attribute_provider_updated' | 'attribute_provider_deleted' | 'federation_trust_anchor_created' | 'federation_trust_anchor_updated' | 'federation_trust_anchor_deleted' | 'config_bundle_exported' | 'config_bundle_imported' | 'config_client_secret_generated' | 'config_resource_detached' | 'config_resource_reattached' | 'config_resource_exported' | 'session_cancelled' | 'audit_log_pruned'>;
+        /**
+         * Filter by the kind of object an action is about, e.g. `oidc_client` for the actions on OpenID Connect clients but not on their secrets. Combined with `actionType`, both must match.
+         */
+        objectType?: 'tenant' | 'presentation_config' | 'issuance_config' | 'credential_config' | 'status_list_config' | 'webhook_endpoint' | 'oidc_client' | 'oidc_client_secret' | 'attribute_provider' | 'federation_trust_anchor' | 'config_bundle' | 'config_client_secret' | 'config_resource' | 'session' | 'audit_log';
+        /**
+         * Filter by the kind of actor
+         */
+        actorType?: 'user' | 'client' | 'system';
+        /**
+         * Id of the user or client that acted (exact match)
+         */
+        actorId?: string;
+        /**
+         * The `X-Request-Id` header of the call that caused the entry (exact match). Recorded only when the caller or a reverse proxy sets the header.
+         */
+        requestId?: string;
+        /**
+         * Text to find, ignoring case, in the action (as written, `credential_config_created`, or as the web client shows it, `Credential Config Created`), in the id of the actor or the client it used (`actorId`, `actorDisplay`), or in the name of a changed field. SQLite ignores case only for ASCII letters
+         */
+        q?: string;
     };
     url: '/api/admin/audit-logs';
 };
@@ -6764,6 +6827,73 @@ export type AuditLogControllerGetAuditLogsResponses = {
 };
 
 export type AuditLogControllerGetAuditLogsResponse = AuditLogControllerGetAuditLogsResponses[keyof AuditLogControllerGetAuditLogsResponses];
+
+export type AuditLogControllerSearchAuditLogsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Page number (1-based)
+         */
+        page?: number;
+        /**
+         * Number of entries per page
+         */
+        pageSize?: number;
+        /**
+         * Only entries recorded at or after this time (ISO 8601 with offset)
+         */
+        from?: string;
+        /**
+         * Only entries recorded at or before this time (ISO 8601 with offset)
+         */
+        to?: string;
+        /**
+         * Filter by action. Repeat the parameter to match any of several actions.
+         */
+        actionType?: 'tenant_created' | 'tenant_updated' | 'tenant_deleted' | 'presentation_config_created' | 'presentation_config_updated' | 'presentation_config_deleted' | 'issuance_config_updated' | 'credential_config_created' | 'credential_config_updated' | 'credential_config_deleted' | 'status_list_config_updated' | 'status_list_config_reset' | 'webhook_endpoint_created' | 'webhook_endpoint_updated' | 'webhook_endpoint_deleted' | 'oidc_client_created' | 'oidc_client_updated' | 'oidc_client_deleted' | 'oidc_client_secret_added' | 'oidc_client_secret_updated' | 'oidc_client_secret_deleted' | 'attribute_provider_created' | 'attribute_provider_updated' | 'attribute_provider_deleted' | 'federation_trust_anchor_created' | 'federation_trust_anchor_updated' | 'federation_trust_anchor_deleted' | 'config_bundle_exported' | 'config_bundle_imported' | 'config_client_secret_generated' | 'config_resource_detached' | 'config_resource_reattached' | 'config_resource_exported' | 'session_cancelled' | 'audit_log_pruned' | Array<'tenant_created' | 'tenant_updated' | 'tenant_deleted' | 'presentation_config_created' | 'presentation_config_updated' | 'presentation_config_deleted' | 'issuance_config_updated' | 'credential_config_created' | 'credential_config_updated' | 'credential_config_deleted' | 'status_list_config_updated' | 'status_list_config_reset' | 'webhook_endpoint_created' | 'webhook_endpoint_updated' | 'webhook_endpoint_deleted' | 'oidc_client_created' | 'oidc_client_updated' | 'oidc_client_deleted' | 'oidc_client_secret_added' | 'oidc_client_secret_updated' | 'oidc_client_secret_deleted' | 'attribute_provider_created' | 'attribute_provider_updated' | 'attribute_provider_deleted' | 'federation_trust_anchor_created' | 'federation_trust_anchor_updated' | 'federation_trust_anchor_deleted' | 'config_bundle_exported' | 'config_bundle_imported' | 'config_client_secret_generated' | 'config_resource_detached' | 'config_resource_reattached' | 'config_resource_exported' | 'session_cancelled' | 'audit_log_pruned'>;
+        /**
+         * Filter by the kind of object an action is about, e.g. `oidc_client` for the actions on OpenID Connect clients but not on their secrets. Combined with `actionType`, both must match.
+         */
+        objectType?: 'tenant' | 'presentation_config' | 'issuance_config' | 'credential_config' | 'status_list_config' | 'webhook_endpoint' | 'oidc_client' | 'oidc_client_secret' | 'attribute_provider' | 'federation_trust_anchor' | 'config_bundle' | 'config_client_secret' | 'config_resource' | 'session' | 'audit_log';
+        /**
+         * Filter by the kind of actor
+         */
+        actorType?: 'user' | 'client' | 'system';
+        /**
+         * Id of the user or client that acted (exact match)
+         */
+        actorId?: string;
+        /**
+         * The `X-Request-Id` header of the call that caused the entry (exact match). Recorded only when the caller or a reverse proxy sets the header.
+         */
+        requestId?: string;
+        /**
+         * Text to find, ignoring case, in the action (as written, `credential_config_created`, or as the web client shows it, `Credential Config Created`), in the id of the actor or the client it used (`actorId`, `actorDisplay`), or in the name of a changed field. SQLite ignores case only for ASCII letters
+         */
+        q?: string;
+    };
+    url: '/api/admin/audit-logs/search';
+};
+
+export type AuditLogControllerSearchAuditLogsResponses = {
+    200: AuditLogPageResponseDto;
+};
+
+export type AuditLogControllerSearchAuditLogsResponse = AuditLogControllerSearchAuditLogsResponses[keyof AuditLogControllerSearchAuditLogsResponses];
+
+export type AuditLogControllerGetRetentionData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/admin/audit-logs/retention';
+};
+
+export type AuditLogControllerGetRetentionResponses = {
+    200: AuditLogRetentionResponseDto;
+};
+
+export type AuditLogControllerGetRetentionResponse = AuditLogControllerGetRetentionResponses[keyof AuditLogControllerGetRetentionResponses];
 
 export type ClientControllerGetClientsData = {
     body?: never;

@@ -39,6 +39,47 @@
   padding: 0 20px 12px;
 }
 
+.retention-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font: var(--mat-sys-body-small);
+  color: var(--mat-sys-on-surface-variant);
+
+  mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+}
+
+.field-error {
+  margin: 0;
+  padding: 0 20px 8px;
+  font: var(--mat-sys-body-small);
+  color: var(--mat-sys-error);
+}
+
+// Filters the chips and the search do not cover
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px 12px;
+  padding: 0 20px 16px;
+
+  mat-form-field {
+    flex: 1 1 200px;
+    max-width: 280px;
+  }
+}
+
+// The entries of the previous query stay visible, dimmed, while the next loads
+.feed-list.reloading {
+  opacity: 0.6;
+}
+
 // One section per day, its date above its entries
 .day + .day {
   border-top: 1px solid var(--mat-sys-outline-variant);
@@ -152,6 +193,7 @@
   }
 
   .actor-type,
+  .actor-id,
   .fields {
     padding: 0 8px;
     border-radius: var(--mat-sys-corner-full);

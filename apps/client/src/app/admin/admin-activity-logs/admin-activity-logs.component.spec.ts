@@ -1,8 +1,11 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { client } from '@eudiplo/sdk-core';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { type ComponentFixture, TestBed } from '@angular/core/testing';
+import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angular/router';
+import type { AuditLogResponseDto } from '@eudiplo/sdk-core';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { AdminActivityLogsComponent, describeAction } from './admin-activity-logs.component';
+import { ACTION_TYPES, describeAction, objectTypeOf } from './activity-log-labels';
+import { ActivityLogService } from './activity-log.service';
+import { AdminActivityLogsComponent } from './admin-activity-logs.component';
 
 describe('describeAction', () => {
   it('names any action by its object and verb, with the colour of the verb', () => {
@@ -24,6 +27,9 @@ describe('describeAction', () => {
     );
     expect(describeAction('config_resource_reattached').label).toBe('Config Resource Reattached');
     expect(describeAction('session_cancelled').tone).toBe('tone-danger');
+    expect(describeAction('audit_log_pruned')).toEqual(
+      expect.objectContaining({ object: 'audit_log', label: 'Audit Log Pruned' })
+    );
   });
 
   it('keeps an action without a known verb readable', () => {
@@ -32,16 +38,37 @@ describe('describeAction', () => {
     );
     expect(describeAction(undefined).label).toBe('Unknown');
   });
+
+  it('labels every action the way the backend search matches it', () => {
+    // GET /api/admin/audit-logs/search finds an action by its type with
+    // spaces for underscores and "openid connect" for "oidc"
+    // (actionTypesMatching in the backend's audit-action-types.ts).
+    for (const action of ACTION_TYPES) {
+      const spoken = action
+        .split('_')
+        .map((word) => (word === 'oidc' ? 'openid connect' : word))
+        .join(' ');
+      expect(describeAction(action).label.toLowerCase(), action).toBe(spoken);
+    }
+  });
+
+  it('knows the verb of every recorded action, so its object is the type without it', () => {
+    // The backend's catalog follows the same rule (audit-action-types.spec.ts).
+    for (const action of ACTION_TYPES) {
+      expect(objectTypeOf(action), action).toBe(action.slice(0, action.lastIndexOf('_')));
+    }
+  });
 });
 
 describe('AdminActivityLogsComponent', () => {
-  const now = new Date();
+  // A fixed clock, so "Today" and "Yesterday" cannot change during a run.
+  const now = new Date(2026, 10, 18, 15, 0, 0);
   const hoursAgo = (hours: number) => new Date(now.getTime() - hours * 3_600_000).toISOString();
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
   yesterday.setHours(12, 0, 0, 0);
 
-  const logs = [
+  const logs: AuditLogResponseDto[] = [
     {
       id: 'a',
       tenantId: 'acme',
@@ -58,7 +85,8 @@ describe('AdminActivityLogsComponent', () => {
       tenantId: 'acme',
       actionType: 'config_bundle_exported',
       actorType: 'user',
-      actorDisplay: 'Jo',
+      actorId: 'user-sub-1',
+      actorDisplay: 'web-console',
       after: { documents: 3 },
       timestamp: hoursAgo(0.01),
     },
@@ -70,150 +98,419 @@ describe('AdminActivityLogsComponent', () => {
       timestamp: yesterday.toISOString(),
     },
   ];
+  const pageOf = (items: AuditLogResponseDto[], total = items.length, page = 1) => ({
+    items,
+    total,
+    page,
+    pageSize: 25,
+    totalPages: Math.ceil(total / 25),
+  });
 
-  let response: { status: number; body: unknown };
   let fixture: ComponentFixture<AdminActivityLogsComponent>;
   let component: AdminActivityLogsComponent;
   let page: HTMLElement;
-  const text = (element: Element | null) => element?.textContent?.replace(/\s+/g, ' ').trim();
+  let search: ReturnType<typeof vi.fn> | undefined;
+  let navigate: ReturnType<typeof vi.spyOn>;
 
-  beforeEach(() => {
-    response = { status: 200, body: logs };
-    client.setConfig({
-      fetch: vi.fn<typeof fetch>(
-        async () =>
-          new Response(JSON.stringify(response.body), {
-            status: response.status,
-            headers: { 'Content-Type': 'application/json' },
-          })
-      ),
-    });
-  });
-
-  afterEach(() => {
-    client.setConfig({ fetch: () => new Promise<Response>(() => undefined) });
-  });
-
-  async function render(): Promise<void> {
+  async function render(queryParams: Record<string, string | string[]> = {}) {
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    search ??= vi.fn().mockResolvedValue(pageOf(logs));
+    const retention = vi.fn().mockResolvedValue({ retentionDays: 0, maxEntriesPerTenant: 0 });
     await TestBed.configureTestingModule({
       imports: [AdminActivityLogsComponent],
+      providers: [
+        provideRouter([]),
+        { provide: ActivityLogService, useValue: { search, retention } },
+        {
+          provide: ActivatedRoute,
+          useValue: { snapshot: { queryParamMap: convertToParamMap(queryParams), queryParams } },
+        },
+      ],
     }).compileComponents();
+    navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
     fixture = TestBed.createComponent(AdminActivityLogsComponent);
     component = fixture.componentInstance;
-    fixture.detectChanges();
     page = fixture.nativeElement as HTMLElement;
-    await vi.waitFor(() => {
-      fixture.detectChanges();
-      expect(component.activityLoading).toBe(false);
-    });
+    fixture.detectChanges();
+    await settle();
+  }
+
+  /** Let the debounced filter change and the request through. */
+  async function settle() {
+    await vi.advanceTimersByTimeAsync(300);
+    await fixture.whenStable();
     fixture.detectChanges();
   }
 
-  const actions = () => Array.from(page.querySelectorAll('.entry-action'), text);
+  const text = (element: Element | null = page) =>
+    element?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+  const actions = () => Array.from(page.querySelectorAll('.entry-action'), (e) => text(e));
+  const searchMock = () => search!;
 
-  it('groups the entries by day and names every action', async () => {
-    await render();
-
-    expect(Array.from(page.querySelectorAll('.day-label'), text)).toEqual(['Today', 'Yesterday']);
-    expect(actions()).toEqual([
-      'Credential Config Updated',
-      'Config Bundle Exported',
-      'Tenant Created',
-    ]);
-    expect(text(page.querySelector('.feed-title output'))).toBe('3 entries');
+  afterEach(() => {
+    vi.useRealTimers();
+    search = undefined;
   });
 
-  it('limits the entries to an object type, including Config Portability actions', async () => {
-    await render();
+  describe('the feed', () => {
+    it('groups the page by day, names every action and counts all matches', async () => {
+      search = vi.fn().mockResolvedValue(pageOf(logs, 30));
+      await render();
 
-    expect(component.objectTypes.map((type) => type.label)).toEqual([
-      'Config Bundle',
-      'Credential Config',
-      'Tenant',
-    ]);
-    component.selectObjectType('config_bundle');
-    fixture.detectChanges();
+      expect(Array.from(page.querySelectorAll('.day-label'), (e) => text(e))).toEqual([
+        'Today',
+        'Yesterday',
+      ]);
+      expect(actions()).toEqual([
+        'Credential Config Updated',
+        'Config Bundle Exported',
+        'Tenant Created',
+      ]);
+      expect(text(page.querySelector('.feed-title output'))).toBe('30 entries');
+    });
 
-    expect(actions()).toEqual(['Config Bundle Exported']);
-    expect(text(page.querySelector('.feed-title output'))).toBe('1 of 3 entries');
+    it('opens an entry to show each changed field before and after', async () => {
+      await render();
+      const row = page.querySelector('.entry-row') as HTMLButtonElement;
+      expect(row.getAttribute('aria-expanded')).toBe('false');
+
+      row.click();
+      fixture.detectChanges();
+
+      expect(row.getAttribute('aria-expanded')).toBe('true');
+      const cells = Array.from(page.querySelectorAll('.changes tbody tr'), (tr) =>
+        Array.from(tr.querySelectorAll('th, td'), (e) => text(e))
+      );
+      expect(cells).toEqual([['description', 'Old', 'New']]);
+    });
+
+    it('shows only the values of a new object, which has none before', async () => {
+      await render();
+      (page.querySelectorAll('.entry-row')[1] as HTMLButtonElement).click();
+      fixture.detectChanges();
+
+      expect(Array.from(page.querySelectorAll('.changes thead th'), (e) => text(e))).toEqual([
+        'Field',
+        'Value',
+      ]);
+      expect(component.fieldChanges(logs[1])).toEqual([
+        { field: 'documents', before: undefined, after: '3' },
+      ]);
+    });
+
+    it('shows the id the actor filter matches when the label shows the client', async () => {
+      await render();
+      const meta = Array.from(page.querySelectorAll('.entry-meta'), (e) => text(e));
+      expect(meta[1]).toContain('web-console');
+      expect(meta[1]).toContain('User ID user-sub-1');
+      // The label already is the id: no second line.
+      expect(meta[0]).not.toContain('ID acme-admin');
+    });
+
+    it('shows values before the change for an entry that only has them', async () => {
+      await render();
+      const deleted: AuditLogResponseDto = {
+        ...logs[0],
+        changedFields: undefined,
+        before: { description: 'Old' },
+        after: undefined,
+      };
+      expect(component.fieldChanges(deleted)).toEqual([
+        { field: 'description', before: 'Old', after: undefined },
+      ]);
+    });
+
+    it('says how many entries a retention run deleted, and names actor types', async () => {
+      search = vi.fn().mockResolvedValue(
+        pageOf([
+          {
+            id: 'p',
+            tenantId: 'acme',
+            actionType: 'audit_log_pruned',
+            actorType: 'system',
+            actorDisplay: 'Audit log retention',
+            after: { deletedEntries: 3, retentionDays: 30 },
+            timestamp: now.toISOString(),
+          },
+        ])
+      );
+      await render();
+      const meta = text(page.querySelector('.entry-meta'));
+      expect(meta).toContain('3 entries deleted');
+      expect(meta).toContain('System');
+    });
+
+    it('names the entry on its Copy as JSON button', async () => {
+      await render();
+      (page.querySelector('.entry-row') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      const copy = Array.from(page.querySelectorAll('.details-footer button')).find((b) =>
+        text(b).includes('Copy as JSON')
+      );
+      expect(copy?.getAttribute('aria-label')).toMatch(
+        /^Copy as JSON: Credential Config Updated, /
+      );
+    });
+
+    it('says when there is no activity yet', async () => {
+      search = vi.fn().mockResolvedValue(pageOf([]));
+      await render();
+      expect(text(page.querySelector('.empty-state'))).toContain('No activity yet');
+    });
   });
 
-  it('finds entries by actor and changed field, and says when none match', async () => {
-    await render();
+  describe('server-side filters', () => {
+    it('loads the first page without filters and keeps the URL clean', async () => {
+      await render();
+      expect(searchMock()).toHaveBeenCalledExactlyOnceWith({ page: 1, pageSize: 25 });
+      const params = navigate.mock.calls[0][1]!.queryParams!;
+      expect(Object.values(params).every((value) => value === null)).toBe(true);
+    });
 
-    component.search = 'jo';
-    component.onFilterChange();
-    fixture.detectChanges();
-    expect(actions()).toEqual(['Config Bundle Exported']);
+    it('searches on the server, from page 1', async () => {
+      await render({ page: '2' });
+      searchMock().mockResolvedValue(pageOf([logs[1]]));
+      const input = page.querySelector<HTMLInputElement>('input[type="search"]')!;
+      input.value = ' web-console ';
+      input.dispatchEvent(new Event('input'));
+      await settle();
 
-    component.search = 'description';
-    component.onFilterChange();
-    fixture.detectChanges();
-    expect(actions()).toEqual(['Credential Config Updated']);
+      expect(searchMock()).toHaveBeenLastCalledWith({ page: 1, pageSize: 25, q: 'web-console' });
+      expect(actions()).toEqual(['Config Bundle Exported']);
+      expect(text(page.querySelector('.feed-title output'))).toBe('1 entry match');
+      expect(navigate.mock.calls.at(-1)![1]!.queryParams).toMatchObject({
+        q: 'web-console',
+        page: null,
+      });
+    });
 
-    component.search = 'nothing';
-    component.onFilterChange();
-    fixture.detectChanges();
-    expect(text(page.querySelector('.no-match'))).toContain('No activity matches the filters.');
+    it('offers every object as a chip and filters by it on the server', async () => {
+      await render();
+      const chips = Array.from(page.querySelectorAll('mat-chip-option'), (e) => text(e));
+      expect(chips).toContain('Config Bundle');
+      expect(chips).toContain('Audit Log');
+
+      component.filters.controls.objectType.setValue('config_bundle');
+      await settle();
+      expect(searchMock()).toHaveBeenLastCalledWith({
+        page: 1,
+        pageSize: 25,
+        objectType: 'config_bundle',
+      });
+    });
+
+    it('restores the filters from the URL and ignores unknown values', async () => {
+      await render({
+        q: 'secret',
+        objectType: 'oidc_client',
+        actionType: ['oidc_client_deleted', 'unknown_action'],
+        actorType: 'user',
+        actorId: 'alice',
+        requestId: 'req-1',
+        from: '2026-11-18T14:00',
+        to: '2026-11-18T14:30',
+        page: '3',
+        pageSize: '50',
+      });
+      expect(searchMock()).toHaveBeenCalledWith({
+        page: 3,
+        pageSize: 50,
+        q: 'secret',
+        objectType: 'oidc_client',
+        actionType: ['oidc_client_deleted'],
+        actorType: 'user',
+        actorId: 'alice',
+        requestId: 'req-1',
+        from: new Date(2026, 10, 18, 14, 0).toISOString(),
+        to: new Date(2026, 10, 18, 14, 30, 59, 999).toISOString(),
+      });
+      expect(component.filters.controls.time.value).toBe('custom');
+    });
+
+    it('turns a relative window into a start time and keeps it relative in the URL', async () => {
+      await render({ within: '1h' });
+      const [query] = searchMock().mock.calls[0];
+      expect(Date.now() - new Date(query.from).getTime()).toBeLessThanOrEqual(61 * 60_000);
+      expect(Date.now() - new Date(query.from).getTime()).toBeGreaterThan(59 * 60_000);
+      expect(query.to).toBeUndefined();
+      expect(navigate.mock.calls[0][1]!.queryParams).toMatchObject({ within: '1h', from: null });
+    });
+
+    it('drops chosen actions that do not belong to a newly chosen object', async () => {
+      await render({ actionType: ['tenant_updated', 'oidc_client_created'] });
+      component.filters.controls.objectType.setValue('tenant');
+      await settle();
+      expect(component.filters.controls.actionType.value).toEqual(['tenant_updated']);
+      expect(component.actionGroups().map((group) => group.objectType)).toEqual(['tenant']);
+    });
+
+    it('shows the last page when a bookmarked page lies past the end', async () => {
+      search = vi.fn(async ({ page: requested }: { page: number }) =>
+        requested === 4 ? { ...pageOf([], 30, 4), totalPages: 2 } : pageOf(logs, 30, requested)
+      );
+      await render({ page: '4' });
+      expect(searchMock()).toHaveBeenLastCalledWith({ page: 2, pageSize: 25 });
+      expect(component.pageIndex).toBe(1);
+      expect(actions()).toHaveLength(3);
+    });
+
+    it('keeps the feed and the search field while clearing a search that matched nothing', async () => {
+      await render();
+      searchMock().mockResolvedValue(pageOf([]));
+      component.filters.controls.q.setValue('nothing');
+      await settle();
+      expect(text(page.querySelector('.no-match'))).toContain('No activity matches');
+
+      searchMock().mockResolvedValue(pageOf(logs));
+      const input = page.querySelector<HTMLInputElement>('input[type="search"]')!;
+      input.focus();
+      (page.querySelector('.clear-search') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      // Before the unfiltered page arrives, the page must not claim the log is empty.
+      expect(page.querySelector('.empty-state')).toBeNull();
+      expect(document.activeElement).toBe(page.querySelector('input[type="search"]'));
+      await settle();
+      expect(actions()).toHaveLength(3);
+    });
+
+    // The chips' selection itself is checked in a real browser, in
+    // e2e/activity-logs.spec.ts: jsdom does not apply the listbox's value.
+    it('chooses the chosen chip again when a click deselects it, without loading again', async () => {
+      await render();
+      searchMock().mockClear();
+      const source = { value: undefined as unknown };
+      component.selectObjectType({ value: undefined, source } as never);
+      component.selectObjectType({ value: '', source } as never);
+      await settle();
+      expect(source.value).toBe('');
+      expect(searchMock()).not.toHaveBeenCalled();
+    });
+
+    it('keeps the first entry in view when the page size changes', async () => {
+      await render({ page: '3' });
+      component.setPageSize(10);
+      await settle();
+      expect(searchMock()).toHaveBeenLastCalledWith({ page: 6, pageSize: 10 });
+      expect(navigate.mock.calls.at(-1)![1]!.queryParams).toMatchObject({
+        page: 6,
+        pageSize: 10,
+      });
+    });
+
+    it('tells an empty filter result from an empty log', async () => {
+      await render();
+      searchMock().mockResolvedValue(pageOf([]));
+      component.filters.controls.actorType.setValue('system');
+      await settle();
+      expect(text(page.querySelector('.no-match'))).toContain('No activity matches the filters.');
+      expect(page.querySelector('.empty-state')).toBeNull();
+
+      component.clearFilters();
+      await settle();
+      expect(text(page.querySelector('.empty-state'))).toContain('No activity yet');
+    });
   });
 
-  it('opens an entry to show each changed field before and after', async () => {
-    await render();
-    const row = page.querySelector('.entry-row') as HTMLButtonElement;
-    expect(row.getAttribute('aria-expanded')).toBe('false');
+  describe('invalid filters', () => {
+    it('does not ask for a reversed time range and says what to fix', async () => {
+      await render();
+      searchMock().mockClear();
+      component.filters.setValue({
+        ...component.filters.getRawValue(),
+        time: 'custom',
+        from: '2026-11-18T15:00',
+        to: '2026-11-18T14:00',
+      });
+      await settle();
+      expect(searchMock()).not.toHaveBeenCalled();
+      expect(text()).toContain('Must not be before From');
+      expect(actions()).toEqual([]);
+      // No count of a result the page does not show.
+      expect(page.querySelector('.feed-title output')).toBeNull();
+    });
 
-    row.click();
-    fixture.detectChanges();
+    it('re-checks the range when From changes after To', async () => {
+      await render();
+      component.filters.controls.time.setValue('custom');
+      component.filters.controls.to.setValue('2026-11-18T14:00');
+      await settle();
+      searchMock().mockClear();
 
-    expect(row.getAttribute('aria-expanded')).toBe('true');
-    const cells = Array.from(page.querySelectorAll('.changes tbody tr'), (tr) =>
-      Array.from(tr.querySelectorAll('th, td'), text)
+      component.filters.controls.from.setValue('2026-11-18T15:00');
+      await settle();
+      expect(searchMock()).not.toHaveBeenCalled();
+      expect(text()).toContain('Must not be before From');
+
+      component.filters.controls.from.setValue('2026-11-18T13:00');
+      await settle();
+      expect(searchMock()).toHaveBeenCalledTimes(1);
+      expect(text()).not.toContain('Must not be before From');
+    });
+
+    it('measures text without surrounding spaces, as the backend does', async () => {
+      await render();
+      searchMock().mockClear();
+      component.filters.controls.actorId.setValue(` ${'x'.repeat(255)} `);
+      await settle();
+      expect(searchMock()).toHaveBeenCalledWith(
+        expect.objectContaining({ actorId: 'x'.repeat(255) })
+      );
+    });
+
+    it.each(['q', 'requestId'] as const)(
+      'does not send a %s longer than the backend accepts and says why',
+      async (field) => {
+        await render();
+        searchMock().mockClear();
+        component.filters.controls[field].setValue('x'.repeat(256));
+        await settle();
+        expect(searchMock()).not.toHaveBeenCalled();
+        expect(text()).toMatch(/at most 255 characters/i);
+      }
     );
-    expect(cells).toEqual([['description', 'Old', 'New']]);
   });
 
-  it('shows only the values of a new object, which has none before', async () => {
+  describe('focus and errors', () => {
+    it('says why the log could not be loaded, and Retry loads it and focuses the heading', async () => {
+      search = vi
+        .fn()
+        .mockRejectedValueOnce({ message: 'Forbidden resource' })
+        .mockResolvedValue(pageOf(logs));
+      await render();
+      expect(text(page.querySelector('app-load-error'))).toContain('Forbidden resource');
+
+      const retry = page.querySelector<HTMLButtonElement>('app-load-error button')!;
+      retry.focus();
+      retry.click();
+      await settle();
+      expect(actions()).toHaveLength(3);
+      expect(document.activeElement?.tagName).toBe('H1');
+    });
+
+    it('moves focus to the heading when Clear filters removes itself', async () => {
+      await render({ actorType: 'system' });
+      const clear = Array.from(page.querySelectorAll<HTMLButtonElement>('.filter-row button')).find(
+        (button) => text(button).includes('Clear filters')
+      )!;
+      clear.focus();
+      clear.click();
+      await settle();
+      expect(document.activeElement?.tagName).toBe('H1');
+    });
+  });
+
+  it.each([
+    [{ retentionDays: 0, maxEntriesPerTenant: 0 }, 'Entries are kept until the operator sets'],
+    [{ retentionDays: 365, maxEntriesPerTenant: 0 }, 'delete entries older than 365 days every'],
+    [
+      { retentionDays: 30, maxEntriesPerTenant: 1000 },
+      'entries older than 30 days and all but the newest 1,000 entries',
+    ],
+  ])('explains the retention %j', async (limits, sentence) => {
     await render();
-    (page.querySelectorAll('.entry-row')[1] as HTMLButtonElement).click();
+    component.retention = limits;
     fixture.detectChanges();
-
-    expect(Array.from(page.querySelectorAll('.changes thead th'), text)).toEqual([
-      'Field',
-      'Value',
-    ]);
-    expect(
-      Array.from(page.querySelectorAll('.changes tbody tr'), (tr) =>
-        Array.from(tr.querySelectorAll('th, td'), text)
-      )
-    ).toEqual([['documents', '3']]);
-  });
-
-  it('shows the fields of an entry without changed fields from its recorded values', async () => {
-    await render();
-
-    expect(component.fieldChanges(logs[1] as never)).toEqual([
-      { field: 'documents', before: undefined, after: '3' },
-    ]);
-  });
-
-  it('says why the log could not be loaded and loads it again on Retry', async () => {
-    response = { status: 403, body: { statusCode: 403, message: 'Forbidden resource' } };
-    await render();
-
-    expect(text(page.querySelector('app-load-error'))).toContain(
-      'Failed to load activity logs: Forbidden resource'
-    );
-
-    response = { status: 200, body: logs };
-    await component.loadActivityLogs();
-    fixture.detectChanges();
-    expect(actions()).toHaveLength(3);
-  });
-
-  it('says when there is no activity yet', async () => {
-    response = { status: 200, body: [] };
-    await render();
-
-    expect(text(page.querySelector('.empty-state'))).toContain('No activity yet');
+    expect(text()).toContain(sentence);
   });
 });

@@ -151,11 +151,12 @@ test.describe('read and status roles', () => {
 
     const logs = page.waitForResponse(
       (response) =>
-        response.url().includes('/api/admin/audit-logs') && response.request().method() === 'GET'
+        response.url().includes('/api/admin/audit-logs/search') &&
+        response.request().method() === 'GET'
     );
     await nav.getByText('Activity Logs', { exact: true }).click();
     await expect(page).toHaveURL(/\/admin\/activity-logs$/);
-    expect((await logs).ok(), 'GET /api/admin/audit-logs').toBe(true);
+    expect((await logs).ok(), 'GET /api/admin/audit-logs/search').toBe(true);
     await expect(page.getByRole('heading', { name: 'Activity Logs' })).toBeVisible();
   });
 

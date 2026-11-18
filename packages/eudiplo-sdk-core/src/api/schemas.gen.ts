@@ -959,7 +959,8 @@ export const AuditLogResponseDtoSchema = {
                 'config_resource_detached',
                 'config_resource_reattached',
                 'config_resource_exported',
-                'session_cancelled'
+                'session_cancelled',
+                'audit_log_pruned'
             ],
             type: 'string'
         },
@@ -1005,6 +1006,61 @@ export const AuditLogResponseDtoSchema = {
         'actionType',
         'actorType',
         'timestamp'
+    ]
+} as const;
+
+export const AuditLogPageResponseDtoSchema = {
+    type: 'object',
+    properties: {
+        items: {
+            type: 'array',
+            items: {
+                $ref: '#/components/schemas/AuditLogResponseDto'
+            }
+        },
+        total: {
+            type: 'number',
+            description: 'Number of entries matching the filters'
+        },
+        page: {
+            type: 'number',
+            description: 'Current page number (1-based)'
+        },
+        pageSize: {
+            type: 'number',
+            description: 'Number of entries per page'
+        },
+        totalPages: {
+            type: 'number',
+            description: 'Total number of pages'
+        }
+    },
+    required: [
+        'items',
+        'total',
+        'page',
+        'pageSize',
+        'totalPages'
+    ]
+} as const;
+
+export const AuditLogRetentionResponseDtoSchema = {
+    type: 'object',
+    properties: {
+        retentionDays: {
+            type: 'number',
+            description: 'Entries older than this many days are deleted daily. 0 means no age limit.',
+            minimum: 0
+        },
+        maxEntriesPerTenant: {
+            type: 'number',
+            description: 'Only this many of a tenant\'s newest entries are kept. 0 means no count limit.',
+            minimum: 0
+        }
+    },
+    required: [
+        'retentionDays',
+        'maxEntriesPerTenant'
     ]
 } as const;
 

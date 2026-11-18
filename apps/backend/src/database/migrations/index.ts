@@ -77,3 +77,4 @@ export { NormalizeTrustListEntityInfo1786200000000 } from "./1786200000000-Norma
 export { AddWalletUnitRevocation1786300000000 } from "./1786300000000-AddWalletUnitRevocation.js";
 export { AddOidcProvider1786400000000 } from "./1786400000000-AddOidcProvider.js";
 export { RemoveSandboxRegistrar1786500000000 } from "./1786500000000-RemoveSandboxRegistrar.js";
+export { AddAuditLogTenantTimestampIndex1786600000000 } from "./1786600000000-AddAuditLogTenantTimestampIndex.js";
