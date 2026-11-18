@@ -342,7 +342,10 @@ describe('ClientListComponent with another identity provider', () => {
       imports: [ClientListComponent],
       providers: [
         provideRouter([]),
-        { provide: JwtService, useValue: { getRoles: () => ['clients:manage'] } },
+        {
+          provide: JwtService,
+          useValue: { getRoles: () => ['clients:manage'], getTenantId: () => 'acme' },
+        },
         { provide: ConfigOwnershipService, useValue: { get: async () => undefined } },
         { provide: FrontendConfigService, useValue: { authMode: 'generic' } },
       ],
@@ -362,29 +365,93 @@ describe('ClientListComponent with another identity provider', () => {
   });
 });
 
-describe('ClientListComponent on the tenant page', () => {
-  it('looks up no ownership for the clients of the tenant page', async () => {
-    const get = vi.fn(async () => undefined);
+describe('ClientListComponent Config Portability lock', () => {
+  let get: Mock;
+
+  /** Shows `clients`, from the tenant page when `tenantPage` is set, to a caller of `callerTenant`. */
+  async function render(
+    callerTenant: string | null,
+    clients: Partial<ClientEntity>[],
+    tenantPage: boolean
+  ): Promise<{ fixture: ComponentFixture<ClientListComponent>; rotate: HTMLButtonElement }> {
+    vi.spyOn(ClientListComponent.prototype, 'loadClients').mockResolvedValue();
+    get = vi.fn(async (_kind: string, id: string) =>
+      id === 'acme-admin' ? { ownership: 'file-managed', source: 'folder:acme' } : undefined
+    );
     await TestBed.configureTestingModule({
       imports: [ClientListComponent],
       providers: [
         provideRouter([]),
-        { provide: JwtService, useValue: { getRoles: () => ['tenants:manage'] } },
+        {
+          provide: JwtService,
+          useValue: { getRoles: () => ['tenants:manage'], getTenantId: () => callerTenant },
+        },
         { provide: ConfigOwnershipService, useValue: { get } },
         { provide: FrontendConfigService, useValue: { authMode: null } },
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(ClientListComponent);
-    fixture.componentRef.setInput('loadedClients', [
-      { clientId: 'acme-admin', tenantId: 'acme', roles: [] } as unknown as ClientEntity,
-    ]);
+    if (tenantPage) {
+      fixture.componentRef.setInput('loadedClients', clients);
+    } else {
+      fixture.componentInstance.clients = clients as ClientEntity[];
+    }
     fixture.detectChanges();
     const page = fixture.nativeElement as HTMLElement;
+    const rotate = await vi.waitFor(() => {
+      fixture.detectChanges();
+      const button = page.querySelector<HTMLButtonElement>('[aria-label^="Rotate Secret"]');
+      expect(button).not.toBeNull();
+      return button!;
+    });
+    return { fixture, rotate };
+  }
 
+  afterEach(() => vi.restoreAllMocks());
+
+  it('locks Rotate Secret of a file-managed client on the Clients page', async () => {
+    const { fixture, rotate } = await render(
+      'acme',
+      [{ clientId: 'acme-admin', tenantId: 'acme', roles: [] }],
+      false
+    );
+    const rotateSecret = vi.spyOn(fixture.componentInstance, 'rotateSecret');
+
+    expect(get).toHaveBeenCalledWith('Client', 'acme-admin');
     await vi.waitFor(() => {
       fixture.detectChanges();
-      expect(page.querySelector('[aria-label^="Rotate Secret"]')).not.toBeNull();
+      expect(rotate.getAttribute('aria-disabled')).toBe('true');
     });
+    rotate.click();
+    expect(rotateSecret).not.toHaveBeenCalled();
+  });
+
+  it("locks Rotate Secret of a file-managed client on the page of the caller's tenant", async () => {
+    const { fixture, rotate } = await render(
+      'acme',
+      [{ clientId: 'acme-admin', tenantId: 'acme', roles: [] }],
+      true
+    );
+
+    expect(get).toHaveBeenCalledWith('Client', 'acme-admin');
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(rotate.getAttribute('aria-disabled')).toBe('true');
+    });
+  });
+
+  it.each([
+    ['another tenant', 'root'],
+    ['a caller without a tenant', null],
+  ])('looks up no ownership on the tenant page for %s', async (_, callerTenant) => {
+    const { rotate } = await render(
+      callerTenant,
+      [{ clientId: 'acme-admin', tenantId: 'acme', roles: [] }],
+      true
+    );
+
     expect(get).not.toHaveBeenCalled();
+    expect(rotate.getAttribute('aria-disabled')).toBeNull();
+    expect(rotate.getAttribute('aria-busy')).toBeNull();
   });
 });
