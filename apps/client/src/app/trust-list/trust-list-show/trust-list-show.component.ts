@@ -10,7 +10,6 @@ import {
 } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
-import { MatChipsModule } from '@angular/material/chips';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
@@ -31,7 +30,6 @@ import {
 import { FormControl } from '@angular/forms';
 import { ApiService } from '../../core';
 import { emailValidators } from '../trust-list-edit/trust-list-electronic-address';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { CredentialConfigService } from '../../issuance/credential-config/credential-config.service';
 import { PresentationManagementService } from '../../presentation/presentation-config/presentation-management.service';
 import { ConfigOwnershipDirective } from '../../config-portability/config-ownership.directive';
@@ -87,14 +85,12 @@ type TrustListEntity = InternalEntity | ExternalEntity;
     MatSnackBarModule,
     MatButtonModule,
     MatCardModule,
-    MatChipsModule,
     MatExpansionModule,
     MatFormFieldModule,
     MatIconModule,
     MatInputModule,
     MatTabsModule,
     MatTooltipModule,
-    FlexLayoutModule,
     RouterModule,
     ConfigOwnershipDirective,
     ConfigOwnershipNoticeComponent,

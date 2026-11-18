@@ -1,81 +1,111 @@
-<div fxLayout="row" fxLayoutAlign="space-between center">
-  <h2 #listHeading tabindex="-1">Trust lists</h2>
-  <div fxLayout="row" fxLayoutGap="8px">
+<div class="page">
+  <header class="page-header">
+    <div>
+      <!-- An h2: the list tests move the focus to the first h2 after a retry -->
+      <h2 #listHeading tabindex="-1" class="page-title">Trust lists</h2>
+      <p>Signed lists of the issuers and wallet providers that verifiers and wallets trust.</p>
+    </div>
+    <!-- The cookbook and its E2E test name this button by its tooltip. -->
     <button
-      matIconButton
+      matButton="filled"
       [routerLink]="['create']"
       matTooltip="Create new Trust List"
       aria-label="Create new Trust List"
     >
       <mat-icon>add</mat-icon>
+      Create new Trust List
     </button>
-  </div>
+  </header>
+
+  @if (loading) {
+    <div class="list-state">
+      <mat-spinner diameter="40" aria-label="Loading trust lists"></mat-spinner>
+    </div>
+  } @else if (loadError) {
+    <app-load-error [message]="loadError" (retry)="loadItems()" />
+  } @else if (lists.length === 0) {
+    <div class="list-state empty">
+      <span class="empty-icon"><mat-icon>shield</mat-icon></span>
+      <p>No trust lists yet.</p>
+      <a matButton="filled" [routerLink]="['create']">
+        <mat-icon>add</mat-icon>
+        Create Trust List
+      </a>
+    </div>
+  } @else {
+    <mat-card appearance="outlined" class="table-card">
+      <div class="table-scroll">
+        <table mat-table [dataSource]="lists">
+          <ng-container matColumnDef="id">
+            <th mat-header-cell *matHeaderCellDef>Trust List ID</th>
+            <td mat-cell *matCellDef="let list" class="id-cell">{{ list.id }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="description">
+            <th mat-header-cell *matHeaderCellDef>Description</th>
+            <td mat-cell *matCellDef="let list" class="description">
+              {{ list.description || '—' }}
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="sequenceNumber">
+            <th mat-header-cell *matHeaderCellDef>Version</th>
+            <td mat-cell *matCellDef="let list">
+              <span class="version">v{{ list.sequenceNumber }}</span>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="updatedAt">
+            <th mat-header-cell *matHeaderCellDef>Last updated</th>
+            <td mat-cell *matCellDef="let list" class="updated">
+              {{ list.updatedAt | date: 'medium' }}
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="actions">
+            <th mat-header-cell *matHeaderCellDef>
+              <span class="visually-hidden">Actions</span>
+            </th>
+            <td mat-cell *matCellDef="let list">
+              <span class="row-actions">
+                <button
+                  matIconButton
+                  [routerLink]="[list.id]"
+                  matTooltip="View details"
+                  [attr.aria-label]="'View trust list ' + list.id"
+                >
+                  <mat-icon>visibility</mat-icon>
+                </button>
+                <button
+                  matIconButton
+                  [routerLink]="[list.id, 'edit']"
+                  matTooltip="Edit"
+                  appConfigManaged
+                  managedKind="TrustList"
+                  [managedResourceId]="list.id"
+                  [attr.aria-label]="'Edit trust list ' + list.id"
+                >
+                  <mat-icon>edit</mat-icon>
+                </button>
+                <button
+                  matIconButton
+                  (click)="downloadConfig(list)"
+                  [disabled]="configDocuments.isDownloading('TrustList', list.id)"
+                  [attr.aria-busy]="configDocuments.isDownloading('TrustList', list.id)"
+                  disabledInteractive
+                  matTooltip="Download configuration"
+                  [attr.aria-label]="'Download the configuration of trust list ' + list.id"
+                >
+                  <mat-icon>download</mat-icon>
+                </button>
+              </span>
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+        </table>
+      </div>
+    </mat-card>
+  }
 </div>
-
-@if (loading) {
-  <div class="list-state">
-    <mat-spinner diameter="40" aria-label="Loading trust lists"></mat-spinner>
-  </div>
-} @else if (loadError) {
-  <app-load-error [message]="loadError" (retry)="loadItems()" />
-} @else if (lists.length === 0) {
-  <div class="list-state">
-    <mat-icon class="empty-icon">shield</mat-icon>
-    <p>No trust lists yet.</p>
-    <a mat-flat-button [routerLink]="['create']">
-      <mat-icon>add</mat-icon>
-      Create Trust List
-    </a>
-  </div>
-} @else {
-  <table mat-table [dataSource]="lists" class="mat-elevation-z8">
-    <ng-container matColumnDef="id">
-      <th mat-header-cell *matHeaderCellDef>Trust List ID</th>
-      <td mat-cell *matCellDef="let list">{{ list.id }}</td>
-    </ng-container>
-
-    <ng-container matColumnDef="description">
-      <th mat-header-cell *matHeaderCellDef>Description</th>
-      <td mat-cell *matCellDef="let list">{{ list.description }}</td>
-    </ng-container>
-
-    <ng-container matColumnDef="actions">
-      <th mat-header-cell *matHeaderCellDef>Actions</th>
-      <td mat-cell *matCellDef="let list">
-        <button
-          matIconButton
-          [routerLink]="[list.id]"
-          matTooltip="View details"
-          [attr.aria-label]="'View trust list ' + list.id"
-        >
-          <mat-icon>visibility</mat-icon>
-        </button>
-        <button
-          matIconButton
-          [routerLink]="[list.id, 'edit']"
-          matTooltip="Edit"
-          appConfigManaged
-          managedKind="TrustList"
-          [managedResourceId]="list.id"
-          [attr.aria-label]="'Edit trust list ' + list.id"
-        >
-          <mat-icon>edit</mat-icon>
-        </button>
-        <button
-          matIconButton
-          (click)="downloadConfig(list)"
-          [disabled]="configDocuments.isDownloading('TrustList', list.id)"
-          [attr.aria-busy]="configDocuments.isDownloading('TrustList', list.id)"
-          disabledInteractive
-          matTooltip="Download configuration"
-          [attr.aria-label]="'Download the configuration of trust list ' + list.id"
-        >
-          <mat-icon>download</mat-icon>
-        </button>
-      </td>
-    </ng-container>
-
-    <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-    <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
-  </table>
-}

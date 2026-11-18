@@ -7,7 +7,7 @@ import { MatTableModule } from '@angular/material/table';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { RouterModule } from '@angular/router';
 import { TrustList } from '@eudiplo/sdk-core';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
+import { MatCardModule } from '@angular/material/card';
 import { ConfigDocumentService } from '../../config-portability/config-document.service';
 import { ConfigOwnershipDirective } from '../../config-portability/config-ownership.directive';
 import { BaseAsyncListComponent } from '../../common/base-async-list.component';
@@ -25,7 +25,7 @@ import { TrustListService } from '../trust-list.service';
     MatSnackBarModule,
     MatTooltipModule,
     RouterModule,
-    FlexLayoutModule,
+    MatCardModule,
     ConfigOwnershipDirective,
     LoadErrorComponent,
     MatProgressSpinnerModule,
@@ -41,7 +41,13 @@ export class TrustListListComponent extends BaseAsyncListComponent<TrustList> {
     return this.items;
   }
 
-  displayedColumns: (keyof TrustList | 'actions')[] = ['id', 'description', 'actions'];
+  displayedColumns: (keyof TrustList | 'actions')[] = [
+    'id',
+    'description',
+    'sequenceNumber',
+    'updatedAt',
+    'actions',
+  ];
 
   constructor(
     private readonly trustListService: TrustListService,
