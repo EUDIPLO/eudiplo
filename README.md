@@ -69,7 +69,7 @@ Curious about EUDIPLO? Check out our recorded webinar (September 17, 2025) for a
 
 ## 🤝 Community Call
 
-Join our bi-weekly community call every Thursday:
+Join our weekly community call every Thursday:
 
 [Participate via Zoom](https://zoom-lfx.platform.linuxfoundation.org/meeting/94494306854?password=0d272140-5b2b-4bd4-a8fe-0b70efe1aa86)
 
