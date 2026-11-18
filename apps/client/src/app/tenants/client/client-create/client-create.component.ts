@@ -17,7 +17,6 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import {
   clientControllerCreateClient,
   clientControllerGetClient,
@@ -87,7 +86,6 @@ const configSources: Record<ConfigSource, ConfigSourceInfo> = {
     MatInputModule,
     MatButtonModule,
     MatIconModule,
-    FlexLayoutModule,
     MatSelectModule,
     RouterModule,
     MatTooltipModule,

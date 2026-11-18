@@ -1,99 +1,76 @@
-.loading-container {
-  padding: 20px;
-  text-align: center;
+@use '../../tenant-page' as page;
+
+@include page.base;
+
+.table-card {
+  overflow: hidden;
 }
 
-.status-text {
-  margin-left: 8px;
-  font-size: 14px;
-  color: var(--mat-sys-on-surface-variant);
+// Title and count on the left, the search bar on the right
+.table-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+  padding: 16px 20px;
 }
 
-.no-data {
-  padding: 40px;
-  text-align: center;
+.table-title {
+  display: flex;
+  flex-direction: column;
 
-  p {
-    margin-bottom: 20px;
-    color: var(--mat-sys-on-surface-variant);
-  }
-
-  button {
-    mat-icon {
-      margin-right: 8px;
-    }
-  }
-}
-
-.permission-denied {
-  padding: 20px;
-
-  mat-card {
-    max-width: 500px;
-    margin: 0 auto;
-  }
-
-  .large-icon {
-    font-size: 48px;
-    width: 48px;
-    height: 48px;
-  }
-
-  h3 {
+  h2 {
     margin: 0;
-    color: var(--mat-sys-on-surface-variant);
+    font: var(--mat-sys-title-medium);
+    color: var(--mat-sys-on-surface);
   }
 
-  p {
-    margin: 8px 0;
+  output {
+    font: var(--mat-sys-body-medium);
     color: var(--mat-sys-on-surface-variant);
-
-    &:last-of-type {
-      margin-bottom: 16px;
-    }
   }
+}
+
+@include page.search-bar;
+
+.table-scroll {
+  overflow-x: auto;
 }
 
 table {
-  width: 100%;
-  margin-top: 16px;
+  @include page.data-table;
+
+  // On the client list, the client ID link covers its row; the actions sit above it
+  &.linked tr.mat-mdc-row:not(.no-match) {
+    position: relative;
+    cursor: pointer;
+
+    .row-actions {
+      position: relative;
+      z-index: 1;
+    }
+
+    &:hover .client-copy code {
+      color: var(--mat-sys-primary);
+    }
+  }
 }
 
-// Embedded in another page's card: the card gives the frame, rows carry the detail
-table.embedded {
-  margin-top: 0;
-  background: transparent;
+.client-link {
+  color: inherit;
+  text-decoration: none;
 
-  th.mat-mdc-header-cell {
-    height: 48px;
-    border-top: 1px solid var(--mat-sys-outline-variant);
-    background: var(--mat-sys-surface-container-low);
-    font: var(--mat-sys-label-large);
-    color: var(--mat-sys-on-surface-variant);
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
   }
 
-  th.mat-mdc-header-cell:first-child,
-  td.mat-mdc-cell:first-child {
-    padding-left: 20px;
-  }
-
-  th.mat-mdc-header-cell:last-child,
-  td.mat-mdc-cell:last-child {
-    padding-right: 12px;
-  }
-
-  tr.mat-mdc-row:last-child td {
-    border-bottom: 0;
-  }
-
-  tr.mat-mdc-row:hover {
-    background: var(--mat-sys-surface-container-low);
-  }
-
-  .mat-column-actions {
-    width: 1%;
-    white-space: nowrap;
-    text-align: right;
+  &:focus-visible {
+    outline: 2px solid var(--mat-sys-primary);
+    outline-offset: 2px;
+    border-radius: var(--mat-sys-corner-extra-small);
   }
 }
 
@@ -132,6 +109,7 @@ table.embedded {
     font-weight: 500;
     color: var(--mat-sys-on-surface);
     overflow-wrap: anywhere;
+    transition: color 120ms ease;
   }
 
   small {
@@ -157,6 +135,8 @@ table.embedded {
 
   // A button only to reach the tooltip with the other roles by keyboard
   &.more {
+    position: relative;
+    z-index: 1;
     border: 0;
     background: var(--mat-sys-secondary-container);
     color: var(--mat-sys-on-secondary-container);
@@ -169,6 +149,71 @@ table.embedded {
   }
 }
 
+.row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+
+  .delete-action:not([disabled]) mat-icon {
+    color: var(--mat-sys-error);
+  }
+}
+
+.no-match td {
+  padding: 32px 20px;
+  color: var(--mat-sys-on-surface-variant);
+  text-align: center;
+
+  mat-icon {
+    display: block;
+    margin: 0 auto 8px;
+  }
+
+  span {
+    display: block;
+    margin-bottom: 8px;
+  }
+}
+
+.loading-state {
+  display: flex;
+  justify-content: center;
+  padding: 48px;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 48px 24px;
+  border: 1px dashed var(--mat-sys-outline-variant);
+  border-radius: var(--mat-sys-corner-large);
+  text-align: center;
+
+  strong {
+    margin-top: 8px;
+    font: var(--mat-sys-title-medium);
+    color: var(--mat-sys-on-surface);
+  }
+
+  p {
+    margin: 0 0 12px;
+    font: var(--mat-sys-body-medium);
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+.empty-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--mat-sys-corner-full);
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+}
+
 .section-hint {
   margin: 0;
   padding: 0 20px 12px;
@@ -178,7 +223,18 @@ table.embedded {
 
 // Narrow pages: the key icon gives its room to the client ID
 @container (max-width: 600px) {
-  table.embedded .client-icon {
+  .client-icon {
+    display: none;
+  }
+
+  .search-bar {
+    flex: 1 1 100%;
+  }
+}
+
+// Phones: the client list leaves the roles to each client's page
+@container (max-width: 560px) {
+  table.linked .mat-column-roles {
     display: none;
   }
 }
