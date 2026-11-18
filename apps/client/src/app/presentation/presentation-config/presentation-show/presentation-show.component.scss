@@ -7,9 +7,9 @@
     padding: 12px 0;
     border-bottom: 1px solid var(--mat-sys-outline-variant);
 
-    // Long values wrap instead of widening the page or ending in an ellipsis.
-    // Nested so it outranks Material's nowrap rule on list lines.
-    .wrapping-line {
+    // Long values (ids, URLs, free text) wrap instead of widening the page
+    // or ending in an ellipsis. Nested so it outranks Material's nowrap rule.
+    [matListItemLine] {
       white-space: normal;
       overflow-wrap: anywhere;
     }
@@ -283,4 +283,3 @@ mat-expansion-panel {
     }
   }
 }
-
