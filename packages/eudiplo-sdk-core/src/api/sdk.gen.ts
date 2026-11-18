@@ -207,6 +207,7 @@ export const clientControllerUpdateClient = <ThrowOnError extends boolean = true
  * Returns the new secret for one-time display - save it immediately!
  *
  * Users with `tenants:manage` role can rotate secrets for any client.
+ * A file-managed client answers 409 until a token of its tenant detaches it.
  * Users with `clients:manage` role can only rotate secrets for clients in
  * their tenant whose roles they hold or may grant.
  *

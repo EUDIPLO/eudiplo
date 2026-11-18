@@ -43,7 +43,9 @@ A caller that creates or changes a client (`/api/client`) or a person
 
 A caller can change or delete a client or person, or rotate a client's
 secret, only if it holds or can grant each of its roles; `tenants:manage` can
-rotate the secret of any client. A change may keep roles the caller cannot
+rotate the secret of any client, except a `file-managed` one, which answers
+`409` until a token of the client's tenant
+[detaches](../operate/configuration-as-code.md#configuration-model) it. A change may keep roles the caller cannot
 grant, such as `tenant:admin` for a `tenant:admin` caller, but not add them.
 The same rules apply to the clients that an imported
 [configuration bundle](config-bundle-format.md) creates, changes or deletes,
