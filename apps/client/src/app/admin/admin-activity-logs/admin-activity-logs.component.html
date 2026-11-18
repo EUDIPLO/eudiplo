@@ -10,7 +10,13 @@
         </p>
       }
     </div>
-    <button matButton="outlined" (click)="refresh()" [disabled]="loading">
+    <button
+      matButton="outlined"
+      (click)="refresh()"
+      [disabled]="loading"
+      disabledInteractive
+      [matTooltip]="loading ? 'Loading the activity log…' : 'Load the newest entries'"
+    >
       <mat-icon>refresh</mat-icon>
       Refresh
     </button>
@@ -22,7 +28,7 @@
     </div>
   } @else if (!loaded && loadError) {
     <app-load-error [message]="loadError" (retry)="retry()" />
-  } @else if (loaded && !loading && !loadError && total === 0 && !hasActiveFilters()) {
+  } @else if (loaded && !loading && !loadError && total === 0 && !loadedFiltered) {
     <div class="empty-state">
       <span class="empty-icon"><mat-icon>history</mat-icon></span>
       <strong>No activity yet</strong>
@@ -33,16 +39,19 @@
       <div class="feed-header">
         <div class="feed-title">
           <h2>All activity</h2>
-          <output>
-            {{ total }} {{ total === 1 ? 'entry' : 'entries' }}
-            @if (hasActiveFilters()) {
-              match
-            }
-          </output>
+          @if (!loadError && !filters.invalid) {
+            <output>
+              {{ total }} {{ total === 1 ? 'entry' : 'entries' }}
+              @if (loadedFiltered) {
+                match
+              }
+            </output>
+          }
         </div>
         <div class="search-bar" role="search">
           <mat-icon class="search-icon" aria-hidden="true">search</mat-icon>
           <input
+            #searchInput
             type="search"
             [formControl]="filters.controls.q"
             placeholder="Search activity"
@@ -56,7 +65,7 @@
               class="clear-search"
               aria-label="Clear search"
               matTooltip="Clear search"
-              (click)="filters.controls.q.setValue('')"
+              (click)="clearSearch()"
             >
               <mat-icon>close</mat-icon>
             </button>
@@ -73,7 +82,7 @@
         class="type-filters"
         aria-label="Filter by object type"
         [value]="filters.controls.objectType.value"
-        (change)="filters.controls.objectType.setValue($event.value ?? '')"
+        (change)="selectObjectType($event)"
       >
         <mat-chip-option value="">All</mat-chip-option>
         @for (type of objectTypes; track type.value) {
@@ -210,7 +219,13 @@
                             <mat-icon aria-hidden="true">{{ actorIcon(log) }}</mat-icon>
                             {{ actorLabel(log) }}
                           </span>
-                          <span class="actor-type">{{ log.actorType }}</span>
+                          <span class="actor-type">{{ actorTypeLabel(log) }}</span>
+                          @if (deletedEntries(log) !== undefined) {
+                            <span class="fields"
+                              >{{ deletedEntries(log) }}
+                              {{ deletedEntries(log) === 1 ? 'entry' : 'entries' }} deleted</span
+                            >
+                          }
                           @if (hiddenActorId(log)) {
                             <span class="actor-id"
                               >{{ log.actorType === 'user' ? 'User ID' : 'ID' }}
@@ -291,7 +306,17 @@
                               · Request <code>{{ log.requestId }}</code>
                             }
                           </span>
-                          <button matButton type="button" (click)="copyLog(log)">
+                          <button
+                            matButton
+                            type="button"
+                            (click)="copyLog(log)"
+                            [attr.aria-label]="
+                              'Copy as JSON: ' +
+                              action.label +
+                              ', ' +
+                              (log.timestamp | date: 'medium')
+                            "
+                          >
                             <mat-icon>content_copy</mat-icon>
                             Copy as JSON
                           </button>

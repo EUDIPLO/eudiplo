@@ -78,7 +78,7 @@ They are deleted with their session ([session retention](database.md#session-ret
 Once a request has resolved its session (by offer ID, `walletNonce`, `issuer_state`, code or access token), every following log line of that request, including the HTTP request log, carries `sessionId` and `tenantId`. This works with or without OpenTelemetry; with it, the request span and the span handling the session also get `session.id`.
 
 - Wallet-facing paths carry the session's `walletNonce`, with which anyone can fetch the credential offer or answer the presentation request. Logged URLs and the `url.path` span attribute replace it with `[redacted]` in `/issuers/{tenant}/vci/credential-offers/{walletNonce}`, `/presentations/{walletNonce}/oid4vp/...` and `/presentations/{walletNonce}/iso-18013-7`, and the `auth_session` in `/issuers/{tenant}/authorize/interactive/complete-web-auth/{auth_session}`. Since 10.0; 9.x logged the nonce in the URL and as `req.walletNonce`.
-- The values of the query parameters `q` (session search, can contain a pre-authorized code), `issuer_state`, `request_uri`, `code` and `response_code` are always replaced by `[redacted]` in logged URLs and in the `url.query` span attribute.
+- The values of the query parameters `q` (session and audit log search; a session search can contain a pre-authorized code), `issuer_state`, `request_uri`, `code` and `response_code` are always replaced by `[redacted]` in logged URLs and in the `url.query` span attribute.
 
 To go from a log line or a pasted offer link to the session, search the session list with `GET /api/session?q=...` ([Finding sessions](../concepts/sessions.md#finding-sessions)).
 
@@ -115,7 +115,7 @@ search endpoint rejects unknown parameters, the list endpoint ignores them:
 | `actionType` | One of these actions, e.g. `oidc_client_deleted`; repeat the parameter for several |
 | `objectType` | All actions on one kind of object, e.g. `oidc_client` (not its secrets, which are `oidc_client_secret`) |
 | `actorType`, `actorId` | `user`, `client` or `system`; the id of the user or client |
-| `q` | Text in the action (`credential_config_created` or `Credential Config Created`), the actor's id or name, or a changed field's name, ignoring case |
+| `q` | Text in the action (`credential_config_created` or `Credential Config Created`), in the actor's id or the client it used (`actorId`, `actorDisplay`), or in a changed field's name. Ignores case; on SQLite only for ASCII letters |
 | `requestId` | The `X-Request-Id` header of the call that caused the entry, to match it with your proxy or client logs. Recorded only when the caller or a reverse proxy sets the header |
 
 ```http

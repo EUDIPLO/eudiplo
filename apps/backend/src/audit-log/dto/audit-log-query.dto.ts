@@ -77,7 +77,7 @@ function documentFilters(target: object): void {
         }),
         q: ApiPropertyOptional({
             description:
-                "Text to find, ignoring case, in the action (as written, `credential_config_created`, or as the web client shows it, `Credential Config Created`), in the id or name of the actor, or in the name of a changed field",
+                "Text to find, ignoring case, in the action (as written, `credential_config_created`, or as the web client shows it, `Credential Config Created`), in the id of the actor or the client it used (`actorId`, `actorDisplay`), or in the name of a changed field. SQLite ignores case only for ASCII letters",
             maxLength: MAX_ID_LENGTH,
         }),
     };

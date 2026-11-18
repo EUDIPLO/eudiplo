@@ -323,10 +323,12 @@ function whereFor(
 }
 
 /**
- * Entries that match `where` and contain `q` in their action, the id or name
- * of their actor, or the name of a changed field, ignoring case. The action
- * is matched against the known action types in code, so "config created"
- * or "openid connect" find their actions through the index.
+ * Entries that match `where` and contain `q` in their action, the id or
+ * display value of their actor, or the name of a changed field, ignoring
+ * case (SQLite folds only ASCII letters). The action is matched in code
+ * against the known action types, as written or as the web client labels
+ * them, so "config created" or "openid connect" become an `IN` on the
+ * column instead of a pattern.
  */
 function textSearch(
     where: FindOptionsWhere<AuditLogEntity>,
@@ -351,7 +353,9 @@ function textSearch(
                 : contains((alias) => alias),
         },
         { ...where, actorDisplay: contains((alias) => alias) },
-        // The JSON array as text; CAST works on SQLite and PostgreSQL.
+        // The JSON array of field names as text; CAST works on SQLite and
+        // PostgreSQL. A `q` of JSON punctuation, such as a comma, also
+        // matches; that finds nothing the caller cannot already read.
         {
             ...where,
             changedFields: contains((alias) => `CAST(${alias} AS TEXT)`),

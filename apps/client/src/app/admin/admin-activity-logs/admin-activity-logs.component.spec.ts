@@ -3,9 +3,9 @@ import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angul
 import type { AuditLogResponseDto } from '@eudiplo/sdk-core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ACTION_TYPES, objectTypeOf } from './activity-log-labels';
+import { ACTION_TYPES, describeAction, objectTypeOf } from './activity-log-labels';
 import { ActivityLogService } from './activity-log.service';
-import { AdminActivityLogsComponent, describeAction } from './admin-activity-logs.component';
+import { AdminActivityLogsComponent } from './admin-activity-logs.component';
 
 describe('describeAction', () => {
   it('names any action by its object and verb, with the colour of the verb', () => {
@@ -39,6 +39,19 @@ describe('describeAction', () => {
     expect(describeAction(undefined).label).toBe('Unknown');
   });
 
+  it('labels every action the way the backend search matches it', () => {
+    // GET /api/admin/audit-logs/search finds an action by its type with
+    // spaces for underscores and "openid connect" for "oidc"
+    // (actionTypesMatching in the backend's audit-action-types.ts).
+    for (const action of ACTION_TYPES) {
+      const spoken = action
+        .split('_')
+        .map((word) => (word === 'oidc' ? 'openid connect' : word))
+        .join(' ');
+      expect(describeAction(action).label.toLowerCase(), action).toBe(spoken);
+    }
+  });
+
   it('agrees with the filter catalog on the object of every recorded action', () => {
     for (const action of ACTION_TYPES) {
       expect(describeAction(action).object, action).toBe(objectTypeOf(action));
@@ -47,7 +60,8 @@ describe('describeAction', () => {
 });
 
 describe('AdminActivityLogsComponent', () => {
-  const now = new Date();
+  // A fixed clock, so "Today" and "Yesterday" cannot change during a run.
+  const now = new Date(2026, 10, 18, 15, 0, 0);
   const hoursAgo = (hours: number) => new Date(now.getTime() - hours * 3_600_000).toISOString();
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
@@ -99,6 +113,7 @@ describe('AdminActivityLogsComponent', () => {
 
   async function render(queryParams: Record<string, string | string[]> = {}) {
     vi.useFakeTimers();
+    vi.setSystemTime(now);
     search ??= vi.fn().mockResolvedValue(pageOf(logs));
     const retention = vi.fn().mockResolvedValue({ retentionDays: 0, maxEntriesPerTenant: 0 });
     await TestBed.configureTestingModule({
@@ -190,6 +205,51 @@ describe('AdminActivityLogsComponent', () => {
       expect(meta[1]).toContain('User ID user-sub-1');
       // The label already is the id: no second line.
       expect(meta[0]).not.toContain('ID acme-admin');
+    });
+
+    it('shows values before the change for an entry that only has them', async () => {
+      await render();
+      const deleted: AuditLogResponseDto = {
+        ...logs[0],
+        changedFields: undefined,
+        before: { description: 'Old' },
+        after: undefined,
+      };
+      expect(component.fieldChanges(deleted)).toEqual([
+        { field: 'description', before: 'Old', after: undefined },
+      ]);
+    });
+
+    it('says how many entries a retention run deleted, and names actor types', async () => {
+      search = vi.fn().mockResolvedValue(
+        pageOf([
+          {
+            id: 'p',
+            tenantId: 'acme',
+            actionType: 'audit_log_pruned',
+            actorType: 'system',
+            actorDisplay: 'Audit log retention',
+            after: { deletedEntries: 3, retentionDays: 30 },
+            timestamp: now.toISOString(),
+          },
+        ])
+      );
+      await render();
+      const meta = text(page.querySelector('.entry-meta'));
+      expect(meta).toContain('3 entries deleted');
+      expect(meta).toContain('System');
+    });
+
+    it('names the entry on its Copy as JSON button', async () => {
+      await render();
+      (page.querySelector('.entry-row') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      const copy = Array.from(page.querySelectorAll('.details-footer button')).find((b) =>
+        text(b).includes('Copy as JSON')
+      );
+      expect(copy?.getAttribute('aria-label')).toMatch(
+        /^Copy as JSON: Credential Config Updated, /
+      );
     });
 
     it('says when there is no activity yet', async () => {
@@ -294,6 +354,49 @@ describe('AdminActivityLogsComponent', () => {
       expect(actions()).toHaveLength(3);
     });
 
+    it('keeps the feed and the search field while clearing a search that matched nothing', async () => {
+      await render();
+      searchMock().mockResolvedValue(pageOf([]));
+      component.filters.controls.q.setValue('nothing');
+      await settle();
+      expect(text(page.querySelector('.no-match'))).toContain('No activity matches');
+
+      searchMock().mockResolvedValue(pageOf(logs));
+      const input = page.querySelector<HTMLInputElement>('input[type="search"]')!;
+      input.focus();
+      (page.querySelector('.clear-search') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      // Before the unfiltered page arrives, the page must not claim the log is empty.
+      expect(page.querySelector('.empty-state')).toBeNull();
+      expect(document.activeElement).toBe(page.querySelector('input[type="search"]'));
+      await settle();
+      expect(actions()).toHaveLength(3);
+    });
+
+    // The chips' selection itself is checked in a real browser, in
+    // e2e/activity-logs.spec.ts: jsdom does not apply the listbox's value.
+    it('chooses the chosen chip again when a click deselects it, without loading again', async () => {
+      await render();
+      searchMock().mockClear();
+      const source = { value: undefined as unknown };
+      component.selectObjectType({ value: undefined, source } as never);
+      component.selectObjectType({ value: '', source } as never);
+      await settle();
+      expect(source.value).toBe('');
+      expect(searchMock()).not.toHaveBeenCalled();
+    });
+
+    it('keeps the first entry in view when the page size changes', async () => {
+      await render({ page: '3' });
+      component.setPageSize(10);
+      await settle();
+      expect(searchMock()).toHaveBeenLastCalledWith({ page: 6, pageSize: 10 });
+      expect(navigate.mock.calls.at(-1)![1]!.queryParams).toMatchObject({
+        page: 6,
+        pageSize: 10,
+      });
+    });
+
     it('tells an empty filter result from an empty log', async () => {
       await render();
       searchMock().mockResolvedValue(pageOf([]));
@@ -322,6 +425,8 @@ describe('AdminActivityLogsComponent', () => {
       expect(searchMock()).not.toHaveBeenCalled();
       expect(text()).toContain('Must not be before From');
       expect(actions()).toEqual([]);
+      // No count of a result the page does not show.
+      expect(page.querySelector('.feed-title output')).toBeNull();
     });
 
     it('re-checks the range when From changes after To', async () => {

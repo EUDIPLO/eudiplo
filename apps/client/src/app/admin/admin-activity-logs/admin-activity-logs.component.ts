@@ -19,7 +19,7 @@ import {
 } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
-import { MatChipsModule } from '@angular/material/chips';
+import { type MatChipListboxChange, MatChipsModule } from '@angular/material/chips';
 import type { ErrorStateMatcher } from '@angular/material/core';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
@@ -45,23 +45,13 @@ import {
   type AuditActionType,
   type AuditActorType,
   type AuditObjectType,
+  type ActionDescription,
   OBJECT_TYPES,
+  describeAction,
   objectTypeOf,
+  titleCase,
 } from './activity-log-labels';
 import { type ActivityLogQuery, ActivityLogService } from './activity-log.service';
-
-/** What an entry's action did, as the page shows it. */
-export interface ActionDescription {
-  /** The object the action is about, such as `credential_config`. */
-  object: string;
-  /** The verb, such as `created`; empty when the action type has none of the known verbs. */
-  verb: string;
-  /** For example "Credential Config Created". */
-  label: string;
-  /** Colour role of the verb. */
-  tone: 'tone-success' | 'tone-info' | 'tone-danger' | 'tone-neutral';
-  icon: string;
-}
 
 /** Entries of one day, newest first. */
 interface DayGroup {
@@ -83,60 +73,11 @@ interface ActionGroup {
   actions: { value: AuditActionType; label: string }[];
 }
 
-/** The verbs action types end with, with their colour and icon. */
-const verbs: Record<string, { tone: ActionDescription['tone']; icon: string }> = {
-  created: { tone: 'tone-success', icon: 'add' },
-  added: { tone: 'tone-success', icon: 'add' },
-  imported: { tone: 'tone-success', icon: 'download' },
-  generated: { tone: 'tone-success', icon: 'key' },
-  updated: { tone: 'tone-info', icon: 'edit' },
-  reset: { tone: 'tone-info', icon: 'restart_alt' },
-  reattached: { tone: 'tone-info', icon: 'link' },
-  exported: { tone: 'tone-neutral', icon: 'upload' },
-  detached: { tone: 'tone-neutral', icon: 'link_off' },
-  pruned: { tone: 'tone-neutral', icon: 'auto_delete' },
-  deleted: { tone: 'tone-danger', icon: 'delete' },
-  cancelled: { tone: 'tone-danger', icon: 'block' },
-};
-
 const actorIcons: Record<AuditLogResponseDto['actorType'], string> = {
   user: 'person',
   client: 'key',
   system: 'settings',
 };
-
-/** Words of object types that are not simply capitalised. */
-const words: Record<string, string> = {
-  oidc: 'OpenID Connect',
-  config: 'Config',
-};
-
-/** "credential_config" as "Credential Config", "oidc_client" as "OpenID Connect Client". */
-function titleCase(snake: string): string {
-  return snake
-    .split('_')
-    .map((word) => words[word] ?? word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
-}
-
-/** Splits an action type into its object and verb, for any action the backend logs. */
-export function describeAction(actionType: string | undefined): ActionDescription {
-  if (!actionType) {
-    return { object: '', verb: '', label: 'Unknown', tone: 'tone-neutral', icon: 'help' };
-  }
-  const verb = Object.keys(verbs).find((candidate) => actionType.endsWith(`_${candidate}`));
-  if (!verb) {
-    return {
-      object: actionType,
-      verb: '',
-      label: titleCase(actionType),
-      tone: 'tone-neutral',
-      icon: 'history',
-    };
-  }
-  const object = actionType.slice(0, -(verb.length + 1));
-  return { object, verb, label: `${titleCase(object)} ${titleCase(verb)}`, ...verbs[verb] };
-}
 
 /** A logged value for display: strings as they are, anything else as compact JSON. */
 function display(value: unknown): string | undefined {
@@ -217,6 +158,7 @@ function endsAfterStart(control: AbstractControl): ValidationErrors | null {
 })
 export class AdminActivityLogsComponent implements OnInit {
   @ViewChild('pageHeading') private readonly pageHeading?: ElementRef<HTMLElement>;
+  @ViewChild('searchInput') private readonly searchInput?: ElementRef<HTMLInputElement>;
 
   readonly filters = new FormGroup({
     q: new FormControl('', { nonNullable: true, validators: textLength }),
@@ -251,6 +193,12 @@ export class AdminActivityLogsComponent implements OnInit {
   loading = true;
   /** Whether a page has loaded once; until then the page shows no filters. */
   loaded = false;
+  /**
+   * Whether the page on screen was asked for with filters. Decides between
+   * "No activity yet" and "No activity matches", so clearing a filter does
+   * not show the empty log before the unfiltered page has loaded.
+   */
+  loadedFiltered = false;
   /** Set when the entries could not be loaded, so the page does not claim there are none. */
   loadError = '';
   retention?: AuditLogRetentionResponseDto;
@@ -324,6 +272,7 @@ export class AdminActivityLogsComponent implements OnInit {
         this.loading = false;
         if (page) {
           this.loaded = true;
+          this.loadedFiltered = this.hasActiveFilters();
           this.showPage(page.items, page.total);
           if (this.retrying) {
             focusAfterRenderIfLost(this.injector, () => this.pageHeading?.nativeElement);
@@ -340,7 +289,32 @@ export class AdminActivityLogsComponent implements OnInit {
   }
 
   refresh(): void {
+    // `disabledInteractive` keeps Refresh clickable while it looks disabled.
+    if (this.loading) return;
     this.reload$.next();
+  }
+
+  /** Clear search removes itself; the search field keeps the focus. */
+  clearSearch(): void {
+    this.filters.controls.q.setValue('');
+    this.searchInput?.nativeElement.focus();
+  }
+
+  /**
+   * A click on the chosen chip deselects it; choose it again, so one chip is
+   * always chosen and nothing is loaded again.
+   */
+  selectObjectType(event: Pick<MatChipListboxChange, 'value' | 'source'>): void {
+    const value = event.value as AuditObjectType | '' | undefined;
+    if (value === undefined) {
+      // After the chip has finished handling the click that deselected it.
+      const chosen = this.filters.controls.objectType.value;
+      queueMicrotask(() => (event.source.value = chosen));
+      return;
+    }
+    if (value !== this.filters.controls.objectType.value) {
+      this.filters.controls.objectType.setValue(value);
+    }
   }
 
   retry(): void {
@@ -428,6 +402,18 @@ export class AdminActivityLogsComponent implements OnInit {
    */
   hiddenActorId(log: AuditLogResponseDto): string {
     return log.actorId && log.actorDisplay && log.actorId !== log.actorDisplay ? log.actorId : '';
+  }
+
+  actorTypeLabel(log: AuditLogResponseDto): string {
+    return ACTOR_LABELS[log.actorType] ?? log.actorType;
+  }
+
+  /** How many entries a retention run deleted, for its row. */
+  deletedEntries(log: AuditLogResponseDto): number | undefined {
+    const deleted = log.after?.['deletedEntries'];
+    return log.actionType === 'audit_log_pruned' && typeof deleted === 'number'
+      ? deleted
+      : undefined;
   }
 
   /** A person for users, a key for API clients, a gear for the system. */

@@ -41,6 +41,12 @@ test('filters the activity log on the server by search, object and time, and kee
     page.getByText('Entries are kept until the operator sets a retention.')
   ).toBeVisible();
 
+  // One object chip is always chosen, also after clicking the chosen one.
+  const allChip = page.getByRole('option', { name: 'All', exact: true });
+  await expect(allChip).toHaveAttribute('aria-selected', 'true');
+  await allChip.click();
+  await expect(allChip).toHaveAttribute('aria-selected', 'true');
+
   // The free-text search runs on the server and matches the action as the page shows it.
   const searched = page.waitForResponse(
     (response) =>

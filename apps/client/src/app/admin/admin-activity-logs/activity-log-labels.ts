@@ -65,3 +65,65 @@ export const ACTOR_LABELS: Record<AuditActorType, string> = {
 export function objectTypeOf(actionType: string): AuditObjectType | undefined {
   return ACTION_OBJECTS[actionType as AuditActionType];
 }
+
+/** What an entry's action did, as the page shows it. */
+export interface ActionDescription {
+  /** The object the action is about, such as `credential_config`. */
+  object: string;
+  /** The verb, such as `created`; empty when the action type has none of the known verbs. */
+  verb: string;
+  /** For example "Credential Config Created". */
+  label: string;
+  /** Colour role of the verb. */
+  tone: 'tone-success' | 'tone-info' | 'tone-danger' | 'tone-neutral';
+  icon: string;
+}
+
+/** The verbs action types end with, with their colour and icon. */
+const verbs: Record<string, { tone: ActionDescription['tone']; icon: string }> = {
+  created: { tone: 'tone-success', icon: 'add' },
+  added: { tone: 'tone-success', icon: 'add' },
+  imported: { tone: 'tone-success', icon: 'download' },
+  generated: { tone: 'tone-success', icon: 'key' },
+  updated: { tone: 'tone-info', icon: 'edit' },
+  reset: { tone: 'tone-info', icon: 'restart_alt' },
+  reattached: { tone: 'tone-info', icon: 'link' },
+  exported: { tone: 'tone-neutral', icon: 'upload' },
+  detached: { tone: 'tone-neutral', icon: 'link_off' },
+  pruned: { tone: 'tone-neutral', icon: 'auto_delete' },
+  deleted: { tone: 'tone-danger', icon: 'delete' },
+  cancelled: { tone: 'tone-danger', icon: 'block' },
+};
+
+/** Words of object types that are not simply capitalised. */
+const words: Record<string, string> = {
+  oidc: 'OpenID Connect',
+  config: 'Config',
+};
+
+/** "credential_config" as "Credential Config", "oidc_client" as "OpenID Connect Client". */
+export function titleCase(snake: string): string {
+  return snake
+    .split('_')
+    .map((word) => words[word] ?? word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+/** Splits an action type into its object and verb, for any action the backend logs. */
+export function describeAction(actionType: string | undefined): ActionDescription {
+  if (!actionType) {
+    return { object: '', verb: '', label: 'Unknown', tone: 'tone-neutral', icon: 'help' };
+  }
+  const verb = Object.keys(verbs).find((candidate) => actionType.endsWith(`_${candidate}`));
+  if (!verb) {
+    return {
+      object: actionType,
+      verb: '',
+      label: titleCase(actionType),
+      tone: 'tone-neutral',
+      icon: 'history',
+    };
+  }
+  const object = actionType.slice(0, -(verb.length + 1));
+  return { object, verb, label: `${titleCase(object)} ${titleCase(verb)}`, ...verbs[verb] };
+}
