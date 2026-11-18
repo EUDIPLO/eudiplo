@@ -1,7 +1,10 @@
 import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import type { TokenPayload } from "../../auth/token.decorator.js";
 import type { IssuedCertificate } from "../issued-certificate.js";
-import { RegistrationCertificateStorage } from "../registration-certificate-storage.service.js";
+import {
+    type IssuerCertificateRequest,
+    RegistrationCertificateStorage,
+} from "../registration-certificate-storage.service.js";
 import { revokeUnstored } from "../revoke-unstored.js";
 import {
     hubCredentialsForDcql,
@@ -24,8 +27,13 @@ import {
     type EudiHubCredentialIssuance,
     type EudiHubRegistrationCertificate,
     type EudiHubRegistrationCertificateBase,
+    EudiHubRequestError,
 } from "./eudi-hub.client.js";
-import { EUDI_HUB, eudiHubHttpException } from "./eudi-hub-errors.js";
+import {
+    EUDI_HUB,
+    eudiHubHttpException,
+    isEudiHubFailure,
+} from "./eudi-hub-errors.js";
 
 /** The organization and token of a request to the EUDI Hub. */
 type HubTarget = { token: string; organizationId: string };
@@ -188,38 +196,13 @@ export class EudiHubRegistrationService {
         });
         const name = dto.name ?? "Issuer registration certificate";
 
+        const credentialIssuanceIds = await this.credentialIssuanceIds(
+            tenantId,
+            dto,
+            request.credentialTypes.providesAttestations,
+        );
         let certificate: EudiHubRegistrationCertificate;
-        let credentialIssuanceIds: string[];
         try {
-            const existing = await this.client.listCredentialIssuances(
-                dto.token,
-                dto.organizationId,
-                dto.environment,
-            );
-            // Created in parallel. When one is refused, the others may stay
-            // unused at the EUDI Hub; the next request finds and reuses them.
-            credentialIssuanceIds = await Promise.all(
-                request.credentialTypes.providesAttestations.map(
-                    async ({ format, type }): Promise<string> => {
-                        const issuance: EudiHubCredentialIssuance =
-                            existing.find(
-                                ({ credential }) =>
-                                    credential?.format === format &&
-                                    credential?.type === type,
-                            ) ??
-                            (await this.client.createCredentialIssuance(
-                                dto.token,
-                                dto.organizationId,
-                                {
-                                    name: type,
-                                    credential: { format, type },
-                                    environments: [dto.environment],
-                                },
-                            ));
-                        return issuance.id;
-                    },
-                ),
-            );
             certificate = await this.client.createRegistrationCertificate(
                 dto.token,
                 dto.organizationId,
@@ -246,6 +229,97 @@ export class EudiHubRegistrationService {
             expirationDate: certificate.expirationDate,
             credentialIssuanceIds,
         };
+    }
+
+    /**
+     * The ID of the EUDI Hub credential issuance of each type, in the order
+     * of the types. Existing ones are reused; missing ones are created in
+     * parallel. When the EUDI Hub does not register a type, the error names
+     * it, and the issuances created for the other types stay at the EUDI Hub
+     * for the next request to reuse.
+     */
+    private async credentialIssuanceIds(
+        tenantId: string,
+        dto: EudiHubIssuerRegistrationCertificateRequest,
+        types: IssuerCertificateRequest["credentialTypes"]["providesAttestations"],
+    ): Promise<string[]> {
+        let existing: EudiHubCredentialIssuance[];
+        try {
+            existing = await this.client.listCredentialIssuances(
+                dto.token,
+                dto.organizationId,
+                dto.environment,
+            );
+        } catch (error) {
+            throw eudiHubHttpException(
+                this.logger,
+                tenantId,
+                error,
+                "Could not read the credential issuances at the EUDI Hub",
+            );
+        }
+
+        // allSettled, not all: creations still running when one is refused
+        // finish before the answer, so a retry finds and reuses them.
+        const results = await Promise.allSettled(
+            types.map(
+                async ({ format, type }): Promise<string> =>
+                    (
+                        existing.find(
+                            ({ credential }) =>
+                                credential?.format === format &&
+                                credential?.type === type,
+                        ) ??
+                        (await this.client.createCredentialIssuance(
+                            dto.token,
+                            dto.organizationId,
+                            {
+                                name: type,
+                                credential: { format, type },
+                                environments: [dto.environment],
+                            },
+                        ))
+                    ).id,
+            ),
+        );
+
+        const refused = types.flatMap(({ type }, index) => {
+            const result = results[index];
+            return result.status === "rejected"
+                ? [{ type, reason: result.reason as unknown }]
+                : [];
+        });
+        if (refused.length > 0) {
+            // A failure of the EUDI Hub itself decides the answer over a
+            // refusal, so it is a 502 whenever the EUDI Hub failed.
+            const lead =
+                refused.find(({ reason }) => isEudiHubFailure(reason)) ??
+                refused[0];
+            const others = refused.filter((entry) => entry !== lead);
+            for (const { type, reason } of others) {
+                // Same level as eudiHubHttpException: an error that is not an
+                // EUDI Hub request error is a bug, not an EUDI Hub answer.
+                const message = `[${tenantId}] The EUDI Hub did not register credential type ${type}: ${reason instanceof Error ? reason.message : String(reason)}`;
+                if (reason instanceof EudiHubRequestError) {
+                    this.logger.warn(message);
+                } else {
+                    this.logger.error(message);
+                }
+            }
+            const alsoRefused =
+                others.length > 0
+                    ? ` (nor ${others.map(({ type }) => type).join(", ")})`
+                    : "";
+            throw eudiHubHttpException(
+                this.logger,
+                tenantId,
+                lead.reason,
+                `The EUDI Hub did not register credential type ${lead.type} for the registration certificate${alsoRefused}`,
+            );
+        }
+        return results.map(
+            (result) => (result as PromiseFulfilledResult<string>).value,
+        );
     }
 
     private certificateBase(

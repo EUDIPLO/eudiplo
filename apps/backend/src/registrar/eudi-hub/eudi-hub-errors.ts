@@ -10,6 +10,19 @@ import { EudiHubRequestError } from "./eudi-hub.client.js";
 export const EUDI_HUB = "EUDI Hub";
 
 /**
+ * Whether an error is a failure of the EUDI Hub rather than a refusal: no
+ * answer, a server error, an answer that does not match the EUDI Hub API, or
+ * an error that is not an EUDI Hub request error. `eudiHubHttpException`
+ * answers exactly these with a 502.
+ */
+export function isEudiHubFailure(error: unknown): boolean {
+    if (!(error instanceof EudiHubRequestError)) {
+        return true;
+    }
+    return error.status === undefined ? !error.blocked : error.status >= 500;
+}
+
+/**
  * The answer for a failed EUDI Hub request, logged. A refused token is a 400,
  * not a 401, since EUDIPLO's own session is fine. Other refusals and a
  * request the outbound URL policy blocked are a 400 with the reason; no
@@ -43,7 +56,7 @@ export function eudiHubHttpException(
                 `${context}: the EUDI Hub refused the request (HTTP 403)${detail}. The portal user may lack the permission for this organization.`,
             );
         case undefined:
-            if (error.blocked) {
+            if (!isEudiHubFailure(error)) {
                 return new BadRequestException(`${context}: ${error.message}`);
             }
             return new BadGatewayException(
@@ -52,7 +65,7 @@ export function eudiHubHttpException(
                     : `${context}: the EUDI Hub could not be reached.`,
             );
         default:
-            return error.status >= 500
+            return isEudiHubFailure(error)
                 ? new BadGatewayException(
                       `${context}: the EUDI Hub answered with HTTP ${error.status}${detail}.`,
                   )
