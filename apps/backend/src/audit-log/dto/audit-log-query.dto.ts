@@ -88,9 +88,9 @@ const AuditLogListQuerySchema = z
                 const parsed = Number.parseInt(String(value ?? ""), 10);
                 return Number.isNaN(parsed) ? undefined : parsed;
             },
+            // parseInt already gave an integer; any size is clamped.
             z
                 .number()
-                .int()
                 .default(DEFAULT_LIMIT)
                 .transform((limit) => Math.max(1, Math.min(limit, MAX_LIMIT))),
         ),

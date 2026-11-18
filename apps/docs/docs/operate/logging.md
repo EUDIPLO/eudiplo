@@ -134,7 +134,10 @@ AUDIT_LOG_MAX_ENTRIES_PER_TENANT=10000  # keep only the newest N per tenant, 0 =
 Each tenant whose entries the job deletes gets an `audit_log_pruned` entry from
 the `system` actor with the number of deleted entries and the limit that applied
 (`after.reason` is `retention_days` or `max_entries_per_tenant`). With
-`AUDIT_LOG_MAX_ENTRIES_PER_TENANT`, that entry counts towards the limit.
+`AUDIT_LOG_MAX_ENTRIES_PER_TENANT`, that entry counts towards the limit. Earlier
+`audit_log_pruned` entries older than `AUDIT_LOG_RETENTION_DAYS` are deleted
+without a new record and are not counted in `deletedEntries`, so a tenant without
+other activity does not get a new record every retention period.
 
 Use session logs to answer "what happened in this flow?" and the audit log for
 "who changed the configuration, and when?".
