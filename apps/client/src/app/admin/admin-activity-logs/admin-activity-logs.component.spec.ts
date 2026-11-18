@@ -52,9 +52,10 @@ describe('describeAction', () => {
     }
   });
 
-  it('agrees with the filter catalog on the object of every recorded action', () => {
+  it('knows the verb of every recorded action, so its object is the type without it', () => {
+    // The backend's catalog follows the same rule (audit-action-types.spec.ts).
     for (const action of ACTION_TYPES) {
-      expect(describeAction(action).object, action).toBe(objectTypeOf(action));
+      expect(objectTypeOf(action), action).toBe(action.slice(0, action.lastIndexOf('_')));
     }
   });
 });
