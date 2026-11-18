@@ -175,7 +175,7 @@
                   (click)="rotateSecret(client)"
                   appConfigManaged
                   managedKind="Client"
-                  [managedResourceId]="client.clientId"
+                  [managedResourceId]="ownershipId(client)"
                 >
                   <mat-icon>autorenew</mat-icon>
                 </button>

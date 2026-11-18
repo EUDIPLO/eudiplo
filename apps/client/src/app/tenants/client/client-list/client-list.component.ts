@@ -119,6 +119,8 @@ export class ClientListComponent implements OnInit {
   readonly manageDeniedHint = 'This client has roles you neither hold nor may grant';
   /** Roles of the signed-in caller, read once instead of per row */
   private readonly callerRoles: string[];
+  /** Tenant of the signed-in caller, read for the tenant page's clients. */
+  private callerTenantId: string | null = null;
   private readonly frontendConfig = inject(FrontendConfigService);
 
   constructor(
@@ -126,7 +128,7 @@ export class ClientListComponent implements OnInit {
     private readonly apiService: ApiService,
     private readonly router: Router,
     private readonly dialog: MatDialog,
-    jwtService: JwtService
+    private readonly jwtService: JwtService
   ) {
     this.callerRoles = jwtService.getRoles();
   }
@@ -135,8 +137,19 @@ export class ClientListComponent implements OnInit {
   canManage(client: ClientEntity): boolean {
     return canManageRoles(this.callerRoles, client.roles ?? []);
   }
+  /**
+   * The client to look up for the Config Portability lock, or none. The lookup
+   * only answers for the caller's own tenant, and refuses a caller without
+   * one, so the tenant page asks only about clients of the caller's tenant.
+   */
+  ownershipId(client: ClientEntity): string {
+    if (!this.loadedClients) return client.clientId;
+    return this.callerTenantId && client.tenantId === this.callerTenantId ? client.clientId : '';
+  }
+
   ngOnInit(): void {
     if (this.loadedClients) {
+      this.callerTenantId = this.jwtService.getTenantId();
       this.clients = this.loadedClients;
     } else {
       void this.loadClients();
