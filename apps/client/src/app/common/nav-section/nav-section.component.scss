@@ -2,33 +2,35 @@
   display: block;
 }
 
+// Inset divider between sections, as in the Material 3 navigation drawer
+mat-divider {
+  margin: 8px 16px;
+}
+
 // The header of a section; it collapses the entries below it.
 .nav-section-toggle {
   display: flex !important;
   align-items: center;
   gap: 8px;
   box-sizing: border-box;
-  // Fits the sidenav and keeps the icon on the 16px column of the entry icons.
-  width: calc(100% - 16px);
-  margin-inline: 8px;
-  padding-inline: 8px;
-  // The whole row is clickable, as tall as the entries, instead of a margin around the label.
-  min-height: 48px;
+  // Spans the list, and keeps the icon in the same 24px column as the entry icons.
+  width: 100%;
+  margin-inline: 0;
+  padding-inline: 16px 12px;
+  // The whole row is clickable instead of a margin around the label.
+  min-height: 44px;
   margin-block: 0;
   padding-block: 0;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--mat-sys-corner-full);
   background: none;
-  color: inherit;
-  font-family: inherit;
-  font-size: inherit;
-  font-weight: 500;
-  line-height: inherit;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-title-small);
   text-align: start;
   cursor: pointer;
 
   &:hover {
-    background: var(--mat-sys-surface-container-high);
+    background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent);
   }
 
   &:focus-visible {
@@ -41,17 +43,19 @@
   }
 
   .subheader-icon {
-    font-size: 18px;
-    width: 18px;
-    height: 18px;
-    opacity: 0.7;
+    display: inline-grid;
+    place-items: center;
+    font-size: 20px;
+    width: 24px;
+    height: 20px;
+    // Starts the label where the entry labels start
+    margin-right: 8px;
   }
 
   .nav-section-chevron {
     font-size: 20px;
     width: 20px;
     height: 20px;
-    opacity: 0.7;
     transition: transform 0.15s ease-in-out;
   }
 

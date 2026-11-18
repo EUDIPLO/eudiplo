@@ -56,6 +56,7 @@ import { KEY_CHAIN_ROLES } from './key-management/key-chain.service';
   templateUrl: './app.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './app.component.scss',
+  host: { '[class.app-shell]': 'shouldShowToolbar' },
 })
 export class AppComponent implements OnInit, OnDestroy {
   logout() {
@@ -137,6 +138,11 @@ export class AppComponent implements OnInit, OnDestroy {
       // Tells which accounts this instance manages.
       void this.frontendConfig.getConfig();
     }
+  }
+
+  /** First letter of the signed-in client, shown in the account button. */
+  get accountInitial(): string {
+    return (this.apiService.getClientId() ?? '').charAt(0).toUpperCase() || '?';
   }
 
   /** Whether the Administration section has an entry for the caller on this instance. */

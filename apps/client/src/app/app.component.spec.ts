@@ -35,6 +35,34 @@ describe('AppComponent', () => {
 @Component({ template: '' })
 class EmptyPageComponent {}
 
+// The app-shell class gives the shell the window's height, so the toolbar and the side
+// navigation stay in place and only the content panel scrolls
+describe('AppComponent shell height', () => {
+  it('marks the host as the app shell on pages with the toolbar, not on the login page', async () => {
+    TestBed.configureTestingModule({
+      imports: [AppComponent],
+      providers: [
+        provideRouter([
+          { path: 'login', component: EmptyPageComponent },
+          { path: 'dashboard', component: EmptyPageComponent },
+        ]),
+      ],
+    });
+    const fixture = TestBed.createComponent(AppComponent);
+    const host = fixture.nativeElement as HTMLElement;
+    const router = TestBed.inject(Router);
+    fixture.detectChanges();
+
+    await router.navigateByUrl('/dashboard');
+    fixture.detectChanges();
+    expect(host.classList).toContain('app-shell');
+
+    await router.navigateByUrl('/login');
+    fixture.detectChanges();
+    expect(host.classList).not.toContain('app-shell');
+  });
+});
+
 describe('AppComponent navigation', () => {
   let fixture: ComponentFixture<AppComponent>;
 
@@ -301,6 +329,63 @@ describe('AppComponent help menu', () => {
       'GitHub',
       'Discord community',
     ]);
+  });
+});
+
+describe('AppComponent account menu', () => {
+  function openAccountMenu(clientId: string | undefined) {
+    TestBed.configureTestingModule({
+      imports: [AppComponent],
+      providers: [
+        provideRouter([]),
+        {
+          provide: ApiService,
+          useValue: {
+            accessToken: '',
+            getAuthenticationStatus: () => false,
+            getTokenTimeRemaining: () => 0,
+            canRefreshToken: () => false,
+            getBaseUrl: () => 'https://eudiplo.example',
+            getClientId: () => clientId,
+            tokenRenewed$: NEVER,
+            sessionEnded$: NEVER,
+          },
+        },
+      ],
+    });
+    const fixture = TestBed.createComponent(AppComponent);
+    fixture.componentInstance.shouldShowToolbar = true;
+    fixture.detectChanges();
+    const trigger = (fixture.nativeElement as HTMLElement).querySelector(
+      'button[aria-label="Account menu"]'
+    ) as HTMLButtonElement;
+    trigger.click();
+    fixture.detectChanges();
+    return { fixture, trigger, panel: document.querySelector('.mat-mdc-menu-panel')! };
+  }
+
+  it('shows the initial of the client and names client and instance in the menu', () => {
+    const { fixture, trigger, panel } = openAccountMenu('local-admin');
+
+    expect(trigger.textContent?.trim()).toBe('L');
+    expect(panel.querySelector('.account-summary-client')?.textContent?.trim()).toBe(
+      'Client ID: local-admin'
+    );
+    expect(panel.querySelector('.account-summary-instance')?.textContent?.trim()).toBe(
+      'Instance: https://eudiplo.example'
+    );
+    // Logout, the only entry, refers to the summary, which screen readers skip in a menu
+    const items = panel.querySelectorAll('[role="menuitem"]');
+    expect(items).toHaveLength(1);
+    expect(items[0].textContent?.trim()).toContain('Logout');
+    expect(items[0].getAttribute('aria-describedby')).toBe('account-summary');
+    fixture.destroy();
+  });
+
+  it('shows a placeholder initial while the client is unknown', () => {
+    const { fixture, trigger } = openAccountMenu(undefined);
+    expect(trigger.textContent?.trim()).toBe('?');
+    fixture.destroy();
   });
 });
 
