@@ -126,7 +126,6 @@ export class EudiHubRegistrationService {
         };
         const name = dto.name ?? request.defaultName;
 
-        let certificate: EudiHubRegistrationCertificate;
         let credentialRequestId: string;
         let reused = false;
         try {
@@ -150,6 +149,17 @@ export class EudiHubRegistrationService {
                     },
                 ))
             ).id;
+        } catch (error) {
+            throw eudiHubHttpException(
+                this.logger,
+                tenantId,
+                error,
+                "Could not find or register the credential request at the EUDI Hub",
+                { beforeCertificate: true },
+            );
+        }
+        let certificate: EudiHubRegistrationCertificate;
+        try {
             certificate = await this.client.createRegistrationCertificate(
                 dto.token,
                 dto.organizationId,
@@ -236,7 +246,8 @@ export class EudiHubRegistrationService {
      * of the types. Existing ones are reused; missing ones are created in
      * parallel. When the EUDI Hub does not register a type, the error names
      * it, and the issuances created for the other types stay at the EUDI Hub
-     * for the next request to reuse.
+     * for the next request to reuse. Its 502s say that no certificate was
+     * requested.
      */
     private async credentialIssuanceIds(
         tenantId: string,
@@ -256,6 +267,7 @@ export class EudiHubRegistrationService {
                 tenantId,
                 error,
                 "Could not read the credential issuances at the EUDI Hub",
+                { beforeCertificate: true },
             );
         }
 
@@ -315,6 +327,7 @@ export class EudiHubRegistrationService {
                 tenantId,
                 lead.reason,
                 `The EUDI Hub did not register credential type ${lead.type} for the registration certificate${alsoRefused}`,
+                { beforeCertificate: true },
             );
         }
         return results.map(

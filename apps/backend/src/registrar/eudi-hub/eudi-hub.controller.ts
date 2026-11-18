@@ -17,6 +17,7 @@ import {
     EudiHubRegistrationCertificateDto,
 } from "./dto/eudi-hub-response.dto.js";
 import { EudiHubService } from "./eudi-hub.service.js";
+import { EUDI_HUB_NO_CERTIFICATE_REQUESTED } from "./eudi-hub-errors.js";
 import { EudiHubRegistrationService } from "./eudi-hub-registration.service.js";
 
 const HUB_UNAVAILABLE =
@@ -157,7 +158,10 @@ export class EudiHubController {
         status: 409,
         description: "Presentation configuration not found",
     })
-    @ApiResponse({ status: 502, description: HUB_UNAVAILABLE })
+    @ApiResponse({
+        status: 502,
+        description: `${HUB_UNAVAILABLE}. When this happens while finding or registering the credential request, before a certificate is requested, the body has the code ${EUDI_HUB_NO_CERTIFICATE_REQUESTED}`,
+    })
     requestPresentationRegistrationCertificate(
         @Token() token: TokenPayload,
         @Body() dto: EudiHubPresentationRegistrationCertificateRequestDto,
@@ -193,7 +197,7 @@ export class EudiHubController {
     })
     @ApiResponse({
         status: 502,
-        description: `${HUB_UNAVAILABLE}, or it issued a certificate that does not list every credential type, which is then revoked`,
+        description: `${HUB_UNAVAILABLE}, or it issued a certificate that does not list every credential type, which is then revoked. When the EUDI Hub fails while reading or registering the credential issuances, before a certificate is requested, the body has the code ${EUDI_HUB_NO_CERTIFICATE_REQUESTED}`,
     })
     requestIssuerRegistrationCertificate(
         @Token() token: TokenPayload,

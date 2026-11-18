@@ -7,9 +7,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { IssuanceConfigurationNotFound } from "../../issuer/configuration/issuance/domain/issuance-configuration.js";
 import { RegistrationCertificateStorage } from "../registration-certificate-storage.service.js";
 import { EudiHubRequestError } from "./eudi-hub.client.js";
+import { EUDI_HUB_NO_CERTIFICATE_REQUESTED } from "./eudi-hub-errors.js";
 import { EudiHubRegistrationService } from "./eudi-hub-registration.service.js";
 
 const ORG = "01932c5a-9abc-7000-8000-000000000010";
+
+/** The `code` of the answer body of an HTTP exception, if it has one. */
+function codeOf(error: unknown): unknown {
+    const body = (error as BadGatewayException).getResponse();
+    return typeof body === "object"
+        ? (body as { code?: unknown }).code
+        : undefined;
+}
 
 /** An unsigned JWT with this payload; the service only decodes it. */
 function jwt(payload: Record<string, unknown>): string {
@@ -506,6 +515,53 @@ describe("EudiHubRegistrationService", () => {
             ).rejects.toThrow(/copy a fresh one/);
             expect(client.revokeRegistrationCertificate).not.toHaveBeenCalled();
         });
+
+        it.each([
+            ["listing", "listCredentialRequests"],
+            ["creating", "createCredentialRequest"],
+        ] as const)(
+            "says no certificate was requested when %s the credential request fails",
+            async (_case, method) => {
+                client.listCredentialRequests.mockResolvedValue([]);
+                client[method].mockRejectedValue(
+                    new EudiHubRequestError("down", { status: 503 }),
+                );
+
+                const error = await service
+                    .requestPresentationCertificate(
+                        "t1",
+                        presentationRequest,
+                        actor,
+                    )
+                    .catch((caught: unknown) => caught);
+
+                expect(error).toBeInstanceOf(BadGatewayException);
+                expect((error as BadGatewayException).message).toBe(
+                    "Could not find or register the credential request at the EUDI Hub: the EUDI Hub answered with HTTP 503.",
+                );
+                expect(codeOf(error)).toBe(EUDI_HUB_NO_CERTIFICATE_REQUESTED);
+                expect(
+                    client.createRegistrationCertificate,
+                ).not.toHaveBeenCalled();
+            },
+        );
+
+        it("does not say no certificate was requested when requesting it fails", async () => {
+            client.createRegistrationCertificate.mockRejectedValue(
+                new EudiHubRequestError("down", { status: 503 }),
+            );
+
+            const error = await service
+                .requestPresentationCertificate(
+                    "t1",
+                    presentationRequest,
+                    actor,
+                )
+                .catch((caught: unknown) => caught);
+
+            expect(error).toBeInstanceOf(BadGatewayException);
+            expect(codeOf(error)).toBeUndefined();
+        });
     });
 
     describe("issuer", () => {
@@ -708,6 +764,7 @@ describe("EudiHubRegistrationService", () => {
             expect((error as BadGatewayException).message).toBe(
                 "The EUDI Hub did not register credential type org.b for the registration certificate (nor urn:a): the EUDI Hub answered with HTTP 503.",
             );
+            expect(codeOf(error)).toBe(EUDI_HUB_NO_CERTIFICATE_REQUESTED);
         });
 
         it.each([
@@ -739,6 +796,7 @@ describe("EudiHubRegistrationService", () => {
                 expect((error as BadGatewayException).message).toMatch(
                     /^The EUDI Hub did not register credential type org\.b for the registration certificate \(nor urn:a\)/,
                 );
+                expect(codeOf(error)).toBe(EUDI_HUB_NO_CERTIFICATE_REQUESTED);
             },
         );
 
@@ -753,17 +811,44 @@ describe("EudiHubRegistrationService", () => {
             async (_case, failure) => {
                 client.listCredentialIssuances.mockRejectedValue(failure);
 
-                await expect(
-                    service.requestIssuerCertificate("t1", base, actor),
-                ).rejects.toThrow(
+                const error = await service
+                    .requestIssuerCertificate("t1", base, actor)
+                    .catch((caught: unknown) => caught);
+
+                expect(error).toBeInstanceOf(BadGatewayException);
+                expect((error as BadGatewayException).message).toMatch(
                     /^Could not read the credential issuances at the EUDI Hub: /,
                 );
-                await expect(
-                    service.requestIssuerCertificate("t1", base, actor),
-                ).rejects.toBeInstanceOf(BadGatewayException);
+                expect(codeOf(error)).toBe(EUDI_HUB_NO_CERTIFICATE_REQUESTED);
                 expect(client.createCredentialIssuance).not.toHaveBeenCalled();
             },
         );
+
+        it("does not say no certificate was requested when requesting it fails", async () => {
+            client.createRegistrationCertificate.mockRejectedValue(
+                new EudiHubRequestError("reset"),
+            );
+
+            const error = await service
+                .requestIssuerCertificate("t1", base, actor)
+                .catch((caught: unknown) => caught);
+
+            expect(error).toBeInstanceOf(BadGatewayException);
+            expect(codeOf(error)).toBeUndefined();
+        });
+
+        it("says nothing about a certificate in a refusal before requesting one", async () => {
+            client.listCredentialIssuances.mockRejectedValue(
+                new EudiHubRequestError("refused", { status: 401 }),
+            );
+
+            const error = await service
+                .requestIssuerCertificate("t1", base, actor)
+                .catch((caught: unknown) => caught);
+
+            expect(error).toBeInstanceOf(BadRequestException);
+            expect(codeOf(error)).toBeUndefined();
+        });
 
         it("reports a refused token when the credential issuances cannot be listed", async () => {
             client.listCredentialIssuances.mockRejectedValue(

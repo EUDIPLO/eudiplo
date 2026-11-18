@@ -10,6 +10,14 @@ import { EudiHubRequestError } from "./eudi-hub.client.js";
 export const EUDI_HUB = "EUDI Hub";
 
 /**
+ * `code` of a 502 for a failure before EUDIPLO asked the EUDI Hub for a
+ * certificate, such as reading or registering the credential issuances, so
+ * the request cannot have stored a certificate.
+ */
+export const EUDI_HUB_NO_CERTIFICATE_REQUESTED =
+    "EUDI_HUB_NO_CERTIFICATE_REQUESTED";
+
+/**
  * Whether an error is a failure of the EUDI Hub rather than a refusal: no
  * answer, a server error, an answer that does not match the EUDI Hub API, or
  * an error that is not an EUDI Hub request error. `eudiHubHttpException`
@@ -28,21 +36,32 @@ export function isEudiHubFailure(error: unknown): boolean {
  * request the outbound URL policy blocked are a 400 with the reason; no
  * answer, a server error or an answer that does not match the EUDI Hub API
  * is a 502. An error that is not an EUDI Hub request error is a 502 that
- * points to the log.
+ * points to the log. With `beforeCertificate`, a 502 carries the `code`
+ * {@link EUDI_HUB_NO_CERTIFICATE_REQUESTED}.
  */
 export function eudiHubHttpException(
     logger: LoggerService,
     tenantId: string,
     error: unknown,
     context: string,
+    { beforeCertificate = false }: { beforeCertificate?: boolean } = {},
 ): HttpException {
+    // An object replaces Nest's whole body, so the coded body repeats the
+    // `error` of an uncoded 502 to keep both shapes alike.
+    const badGateway = (message: string) =>
+        beforeCertificate
+            ? new BadGatewayException({
+                  statusCode: 502,
+                  error: "Bad Gateway",
+                  code: EUDI_HUB_NO_CERTIFICATE_REQUESTED,
+                  message,
+              })
+            : new BadGatewayException(message);
     if (!(error instanceof EudiHubRequestError)) {
         logger.error(
             `[${tenantId}] ${context}: ${error instanceof Error ? error.message : String(error)}`,
         );
-        return new BadGatewayException(
-            `${context}; the server log has the cause.`,
-        );
+        return badGateway(`${context}; the server log has the cause.`);
     }
     logger.warn(`[${tenantId}] ${context}: ${error.message}`);
     const detail = error.detail ? ` (${error.detail})` : "";
@@ -59,14 +78,14 @@ export function eudiHubHttpException(
             if (!isEudiHubFailure(error)) {
                 return new BadRequestException(`${context}: ${error.message}`);
             }
-            return new BadGatewayException(
+            return badGateway(
                 error.invalidAnswer
                     ? `${context}: ${error.message}.`
                     : `${context}: the EUDI Hub could not be reached.`,
             );
         default:
             return isEudiHubFailure(error)
-                ? new BadGatewayException(
+                ? badGateway(
                       `${context}: the EUDI Hub answered with HTTP ${error.status}${detail}.`,
                   )
                 : new BadRequestException(
