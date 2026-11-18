@@ -3,7 +3,7 @@
  * action types the audit log records; adding an action here adds it to the
  * entity type, the API enum and the object type filter at once.
  */
-export const AUDIT_ACTION_OBJECT_TYPES = {
+const AUDIT_ACTION_OBJECT_TYPES = {
     tenant_created: "tenant",
     tenant_updated: "tenant",
     tenant_deleted: "tenant",

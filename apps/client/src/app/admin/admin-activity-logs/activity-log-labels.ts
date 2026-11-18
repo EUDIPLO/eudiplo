@@ -10,7 +10,7 @@ export type AuditObjectType = NonNullable<
  * Labels of every action the backend records. Typed against the SDK, so a new
  * action type does not compile until it has a label here.
  */
-export const ACTION_LABELS: Record<AuditActionType, string> = {
+const ACTION_LABELS: Record<AuditActionType, string> = {
   tenant_created: 'Tenant Created',
   tenant_updated: 'Tenant Updated',
   tenant_deleted: 'Tenant Deleted',
