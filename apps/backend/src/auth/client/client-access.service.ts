@@ -1,9 +1,21 @@
 import { Inject, Injectable } from "@nestjs/common";
+import { Role } from "../roles/role.enum.js";
 import {
     assertMayChangeRoles,
     assertMayManageRoles,
 } from "../roles/role-grants.js";
 import { CLIENTS_PROVIDER, ClientsProvider } from "./client.provider.js";
+
+/**
+ * Whether the caller rotates the secret of a client of any tenant, rather
+ * than only of its own. The controller and ConfigGenerationInterceptor, which
+ * checks the file-managed state of the client's tenant, both decide by it.
+ */
+export function rotatesSecretsOfAnyTenant(
+    callerRoles: readonly string[] | undefined,
+): boolean {
+    return callerRoles?.includes(Role.Tenants) ?? false;
+}
 
 /**
  * The authorization check for acting on an existing client, shared by the
