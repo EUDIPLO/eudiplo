@@ -175,6 +175,21 @@ use the [legacy documentation archive](https://eudiplo.github.io/eudiplo/docs/la
 
 ---
 
+## 🗂️ Repositories
+
+EUDIPLO is developed in several repositories under the
+[EUDIPLO organization](https://github.com/EUDIPLO):
+
+| Repository                                          | Description                                                                                      |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| [eudiplo](https://github.com/EUDIPLO/eudiplo)       | Backend, web client, CLI, SDKs and documentation (this repository)                               |
+| [website](https://github.com/EUDIPLO/website)       | [eudiplo.dev](https://eudiplo.dev): landing page, CLI installer and published config schemas     |
+| [wallet-qa](https://github.com/EUDIPLO/wallet-qa)   | Manual test bench for EUDI wallets: run a test with a real wallet against EUDIPLO, get a verdict |
+| [governance](https://github.com/EUDIPLO/governance) | Teams and project governance                                                                     |
+| [.github](https://github.com/EUDIPLO/.github)       | Organization profile and the default community files for all repositories                        |
+
+---
+
 ## 🤝 Contributing
 
 We welcome PRs from wallet developers, institutions, and contributors interested
