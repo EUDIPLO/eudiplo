@@ -119,7 +119,7 @@ describe('KeyCreateWizardComponent', () => {
       'Paste the certificate chain or load certificate files',
     ]);
     expect(snackBar.open).toHaveBeenLastCalledWith(
-      'Check the highlighted fields in Basic Settings.',
+      'Check the highlighted fields in Certificate.',
       'Close',
       expect.anything()
     );
@@ -177,9 +177,7 @@ describe('KeyCreateWizardComponent errors', () => {
     expect(keyChainService.import).not.toHaveBeenCalled();
     expect(component.configForm.get('externalCertificate')?.hasError('required')).toBe(true);
     expect(component.configForm.get('externalCertificate')?.touched).toBe(true);
-    expect(snackBar.open.mock.lastCall?.[0]).toBe(
-      'Check the highlighted fields in Basic Settings.'
-    );
+    expect(snackBar.open.mock.lastCall?.[0]).toBe('Check the highlighted fields in Certificate.');
   });
 
   it("shows the backend's reason when the import is rejected", async () => {

@@ -19,7 +19,6 @@ import {
 } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
-import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
@@ -31,7 +30,6 @@ import { MatStepper, MatStepperModule } from '@angular/material/stepper';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { merge } from 'rxjs';
 import { readCertificateFiles } from '../certificate-files';
 import { KeyChainService } from '../key-chain.service';
@@ -70,7 +68,6 @@ function requiredText(control: AbstractControl): ValidationErrors | null {
     CommonModule,
     MatButtonModule,
     MatCardModule,
-    MatCheckboxModule,
     MatFormFieldModule,
     MatIconModule,
     MatInputModule,
@@ -81,7 +78,6 @@ function requiredText(control: AbstractControl): ValidationErrors | null {
     MatSnackBarModule,
     MatStepperModule,
     MatTooltipModule,
-    FlexLayoutModule,
     ReactiveFormsModule,
     ReturnToFormComponent,
     RouterModule,
@@ -200,6 +196,27 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
   ];
 
   // Access source options (shown for access keys)
+  /** Where the key of a certificate from an external CA comes from. */
+  readonly certificateSources: {
+    value: ExternalCertificateSource;
+    label: string;
+    icon: string;
+    description: string;
+  }[] = [
+    {
+      value: 'import',
+      label: 'Import key and certificate',
+      icon: 'upload_file',
+      description: 'Import a key and the certificate chain issued for it.',
+    },
+    {
+      value: 'csr',
+      label: 'Request with a CSR',
+      icon: 'outgoing_mail',
+      description: 'Create the key in EUDIPLO and request its certificate with a CSR.',
+    },
+  ];
+
   accessSourceOptions = [
     {
       value: 'selfSigned' as AccessSourceSelection,
@@ -507,11 +524,10 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
         injector: this.injector,
         container: () => this.configFormElement?.nativeElement,
         sections: [
+          { name: 'Basic Settings', controls: ['kmsProvider', 'alg'].map(control) },
           {
-            name: 'Basic Settings',
-            controls: ['kmsProvider', 'alg', 'externalPrivateKey', 'externalCertificate'].map(
-              control
-            ),
+            name: 'Certificate',
+            controls: ['externalPrivateKey', 'externalCertificate'].map(control),
           },
           {
             name: 'Rotation Policy',
