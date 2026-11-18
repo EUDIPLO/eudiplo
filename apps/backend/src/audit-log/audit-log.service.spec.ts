@@ -220,9 +220,8 @@ describe("AuditLogService", () => {
             expect(actions(second.items)).toEqual(["oidc_client_created"]);
         });
 
-        test("clamps the limit of the list", async () => {
+        test("returns at most limit entries", async () => {
             expect(await service.listByTenant("t1", {}, 2)).toHaveLength(2);
-            expect(await service.listByTenant("t1", {}, 0)).toHaveLength(1);
         });
     });
 
@@ -319,6 +318,83 @@ describe("AuditLogService", () => {
                 "tenant_updated",
             ]);
             expect(remaining[1].id).toBe(newest.id);
+        });
+    });
+
+    describe("pruning edge cases", () => {
+        const all = (tenantId: string) => service.listByTenant(tenantId);
+
+        test("an aged pruning record alone is removed without a new record", async () => {
+            settings.AUDIT_LOG_RETENTION_DAYS = 30;
+            await add(
+                "t1",
+                "audit_log_pruned",
+                new Date(Date.now() - 40 * DAY),
+            );
+
+            await service.pruneOldLogs();
+
+            expect(await all("t1")).toEqual([]);
+        });
+
+        test("old pruning records are removed but not counted", async () => {
+            settings.AUDIT_LOG_RETENTION_DAYS = 30;
+            await add(
+                "t1",
+                "audit_log_pruned",
+                new Date(Date.now() - 40 * DAY),
+            );
+            await add("t1", "tenant_updated", new Date(Date.now() - 40 * DAY));
+
+            await service.pruneOldLogs();
+
+            const [record, ...rest] = await all("t1");
+            expect(rest).toEqual([]);
+            expect(record).toMatchObject({
+                actionType: "audit_log_pruned",
+                after: { deletedEntries: 1, reason: "retention_days" },
+            });
+        });
+
+        test("both limits together leave at most the allowed number", async () => {
+            settings.AUDIT_LOG_RETENTION_DAYS = 30;
+            settings.AUDIT_LOG_MAX_ENTRIES_PER_TENANT = 2;
+            await add("t1", "tenant_updated", new Date(Date.now() - 40 * DAY));
+            for (let i = 3; i > 0; i--) {
+                await add(
+                    "t1",
+                    "tenant_updated",
+                    new Date(Date.now() - i * DAY),
+                );
+            }
+
+            await service.pruneOldLogs();
+
+            const remaining = await all("t1");
+            expect(remaining).toHaveLength(2);
+            expect(remaining.map((entry) => entry.actionType)).toContain(
+                "audit_log_pruned",
+            );
+        });
+
+        test("a limit of one keeps only the pruning record", async () => {
+            settings.AUDIT_LOG_MAX_ENTRIES_PER_TENANT = 1;
+            for (let i = 3; i > 0; i--) {
+                await add(
+                    "t1",
+                    "tenant_updated",
+                    new Date(Date.now() - i * DAY),
+                );
+            }
+
+            await service.pruneOldLogs();
+
+            expect(await all("t1")).toEqual([
+                expect.objectContaining({
+                    actionType: "audit_log_pruned",
+                    after: expect.objectContaining({ deletedEntries: 3 }),
+                }),
+            ]);
         });
     });
 

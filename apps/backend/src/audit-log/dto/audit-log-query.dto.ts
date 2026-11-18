@@ -3,8 +3,10 @@ import { createZodDto } from "nestjs-zod";
 import { z } from "zod";
 import {
     orderedRange,
+    repeatable,
     timestamp,
-} from "../../session/dto/session-query.dto.js";
+} from "../../shared/common/zod/query-params.js";
+import type { AuditLogFilter } from "../audit-log.service.js";
 import {
     AUDIT_ACTION_TYPES,
     AUDIT_ACTOR_TYPES,
@@ -18,30 +20,12 @@ const MAX_ID_LENGTH = 255;
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 500;
 
-/** Filters of both audit log list endpoints. All given filters must match. */
-export interface AuditLogFilter {
-    from?: Date;
-    to?: Date;
-    actionType?: AuditActionType[];
-    objectType?: AuditObjectType;
-    actorType?: AuditActorType;
-    actorId?: string;
-    requestId?: string;
-}
-
 const identifier = z.string().trim().min(1).max(MAX_ID_LENGTH);
 
 const filterFields = {
     from: timestamp.optional(),
     to: timestamp.optional(),
-    // A repeated query parameter arrives as an array, a single one as a string.
-    actionType: z
-        .union([
-            z.enum(AUDIT_ACTION_TYPES),
-            z.array(z.enum(AUDIT_ACTION_TYPES)),
-        ])
-        .transform((value) => (Array.isArray(value) ? value : [value]))
-        .optional(),
+    actionType: repeatable(z.enum(AUDIT_ACTION_TYPES)).optional(),
     objectType: z.enum(AUDIT_OBJECT_TYPES).optional(),
     actorType: z.enum(AUDIT_ACTOR_TYPES).optional(),
     actorId: identifier.optional(),
@@ -87,7 +71,7 @@ function documentFilters(target: object): void {
         }),
         requestId: ApiPropertyOptional({
             description:
-                "Request id of the call that caused the entry (exact match), to find the entry behind a log line or trace",
+                "The `X-Request-Id` header of the call that caused the entry (exact match). Recorded only when the caller or a reverse proxy sets the header.",
             maxLength: MAX_ID_LENGTH,
         }),
     };
@@ -97,16 +81,19 @@ function documentFilters(target: object): void {
 const AuditLogListQuerySchema = z
     .object({
         ...filterFields,
-        // As lenient as before the filters existed: a missing or unreadable
-        // limit means the default, an out-of-range one is clamped.
-        limit: z.coerce
-            .number()
-            .catch(DEFAULT_LIMIT)
-            .transform((limit) =>
-                Math.max(1, Math.min(Math.trunc(limit), MAX_LIMIT)),
-            )
-            .optional()
-            .default(DEFAULT_LIMIT),
+        // Read with parseInt as before the filters existed: a missing or
+        // unreadable limit means the default, an out-of-range one is clamped.
+        limit: z.preprocess(
+            (value) => {
+                const parsed = Number.parseInt(String(value ?? ""), 10);
+                return Number.isNaN(parsed) ? undefined : parsed;
+            },
+            z
+                .number()
+                .int()
+                .default(DEFAULT_LIMIT)
+                .transform((limit) => Math.max(1, Math.min(limit, MAX_LIMIT))),
+        ),
     })
     .refine(...orderedRange("from", "to"));
 

@@ -62,9 +62,7 @@ test('filters the activity log by object and time, and keeps the filter in the U
   await page.getByRole('option', { name: 'Custom Range' }).click();
   await page.getByLabel('From', { exact: true }).fill('2026-01-02T10:00');
   await page.getByLabel('To', { exact: true }).fill('2026-01-01T10:00');
-  await expect(page.getByRole('alert')).toHaveText(
-    'The end of the time range lies before its start.'
-  );
+  await expect(page.getByText('Must not be before From')).toBeVisible();
   await expect(rows).toHaveCount(0);
 
   await page.getByRole('button', { name: 'Clear Filters' }).click();

@@ -10,7 +10,15 @@ import {
   inject,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
+import {
+  type AbstractControl,
+  FormControl,
+  FormGroup,
+  ReactiveFormsModule,
+  type ValidationErrors,
+  Validators,
+} from '@angular/forms';
+import type { ErrorStateMatcher } from '@angular/material/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
@@ -60,6 +68,21 @@ type TimeFilter = '' | Within | 'custom';
 
 /** Value of a `datetime-local` input: a local time to the minute. */
 const LOCAL_DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
+/** The longest id the backend accepts as a filter. */
+const MAX_ID_LENGTH = 255;
+
+/** On `to`: a custom range must not end before it starts. */
+function endsAfterStart(control: AbstractControl): ValidationErrors | null {
+  const time = control.parent?.get('time')?.value;
+  const from = control.parent?.get('from')?.value;
+  const to = control.value;
+  const reversed =
+    time === 'custom' &&
+    LOCAL_DATE_TIME.test(from) &&
+    LOCAL_DATE_TIME.test(to) &&
+    new Date(from) > new Date(to);
+  return reversed ? { reversed: true } : null;
+}
 
 interface ActionGroup {
   objectType: AuditObjectType;
@@ -96,12 +119,24 @@ export class AdminActivityLogsComponent implements OnInit {
     objectType: new FormControl<AuditObjectType | ''>('', { nonNullable: true }),
     actionType: new FormControl<AuditActionType[]>([], { nonNullable: true }),
     actorType: new FormControl<AuditActorType | ''>('', { nonNullable: true }),
-    actorId: new FormControl('', { nonNullable: true }),
-    requestId: new FormControl('', { nonNullable: true }),
+    actorId: new FormControl('', {
+      nonNullable: true,
+      validators: Validators.maxLength(MAX_ID_LENGTH),
+    }),
+    requestId: new FormControl('', {
+      nonNullable: true,
+      validators: Validators.maxLength(MAX_ID_LENGTH),
+    }),
     time: new FormControl<TimeFilter>('', { nonNullable: true }),
     from: new FormControl('', { nonNullable: true }),
-    to: new FormControl('', { nonNullable: true }),
+    to: new FormControl('', { nonNullable: true, validators: endsAfterStart }),
   });
+
+  /** Filters apply as the user types, so their errors show at once, not on blur. */
+  readonly showErrorsAtOnce: ErrorStateMatcher = {
+    isErrorState: (control) => !!control?.invalid,
+  };
+  readonly maxIdLength = MAX_ID_LENGTH;
 
   readonly objectOptions = OBJECT_TYPES.map((value) => ({ value, label: OBJECT_LABELS[value] }));
   readonly actorOptions = Object.entries(ACTOR_LABELS).map(([value, label]) => ({ value, label }));
@@ -142,6 +177,12 @@ export class AdminActivityLogsComponent implements OnInit {
         if (kept.length !== actions.length) this.filters.controls.actionType.setValue(kept);
       });
 
+    // The range check on `to` also depends on these.
+    merge(this.filters.controls.time.valueChanges, this.filters.controls.from.valueChanges)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.filters.controls.to.updateValueAndValidity({ emitEvent: false }));
+    this.filters.controls.to.updateValueAndValidity({ emitEvent: false });
+
     // Typing in a text field should not send a request per keystroke.
     const filterChange = this.filters.valueChanges.pipe(
       debounceTime(300),
@@ -155,8 +196,8 @@ export class AdminActivityLogsComponent implements OnInit {
         startWith(undefined),
         switchMap(() => {
           this.storeInUrl();
-          // The template says what to fix; the backend would only refuse it.
-          if (this.rangeReversed()) return of(null);
+          // The fields say what to fix; the backend would only refuse the query.
+          if (this.filters.invalid) return of(null);
           this.loading = true;
           this.loadError = '';
           const query = this.buildQuery();
@@ -173,6 +214,13 @@ export class AdminActivityLogsComponent implements OnInit {
         takeUntilDestroyed(this.destroyRef)
       )
       .subscribe((page) => {
+        // A bookmark or Refresh can point past the last page, for example
+        // after the nightly pruning: show the last page instead.
+        if (page && page.items.length === 0 && page.total > 0 && this.pageIndex > 0) {
+          this.pageIndex = Math.max(0, page.totalPages - 1);
+          this.reload$.next();
+          return;
+        }
         this.loading = false;
         if (page) {
           this.logs = page.items;
@@ -208,6 +256,8 @@ export class AdminActivityLogsComponent implements OnInit {
 
   clearFilters(): void {
     this.filters.reset();
+    // Clear Filters removes itself, and with it the focus.
+    focusAfterRenderIfLost(this.injector, () => this.pageHeading?.nativeElement);
   }
 
   hasActiveFilters(): boolean {
@@ -225,13 +275,7 @@ export class AdminActivityLogsComponent implements OnInit {
 
   /** Whether the custom range ends before it starts. */
   rangeReversed(): boolean {
-    const { time, from, to } = this.filters.getRawValue();
-    return (
-      time === 'custom' &&
-      LOCAL_DATE_TIME.test(from) &&
-      LOCAL_DATE_TIME.test(to) &&
-      new Date(from) > new Date(to)
-    );
+    return this.filters.controls.to.hasError('reversed');
   }
 
   /** The actions to choose from, grouped by object, limited to the chosen object. */
@@ -265,6 +309,18 @@ export class AdminActivityLogsComponent implements OnInit {
   actorLabel(log: AuditLogResponseDto): string {
     const display = log.actorDisplay || log.actorId || 'Unknown';
     return `${display} (${ACTOR_LABELS[log.actorType] ?? log.actorType})`;
+  }
+
+  /**
+   * The id the Actor ID filter matches, when the label shows something else:
+   * for a user, the label is the client they signed in with.
+   */
+  hiddenActorId(log: AuditLogResponseDto): string {
+    return log.actorId && log.actorId !== log.actorDisplay ? log.actorId : '';
+  }
+
+  copyLabel(log: AuditLogResponseDto): string {
+    return `Copy log entry ${actionLabel(log.actionType)} of ${this.formatTimestamp(log.timestamp)}`;
   }
 
   formatTimestamp(timestamp?: string): string {

@@ -6811,7 +6811,7 @@ export type AuditLogControllerGetAuditLogsData = {
          */
         actorId?: string;
         /**
-         * Request id of the call that caused the entry (exact match), to find the entry behind a log line or trace
+         * The `X-Request-Id` header of the call that caused the entry (exact match). Recorded only when the caller or a reverse proxy sets the header.
          */
         requestId?: string;
     };
@@ -6861,7 +6861,7 @@ export type AuditLogControllerSearchAuditLogsData = {
          */
         actorId?: string;
         /**
-         * Request id of the call that caused the entry (exact match), to find the entry behind a log line or trace
+         * The `X-Request-Id` header of the call that caused the entry (exact match). Recorded only when the caller or a reverse proxy sets the header.
          */
         requestId?: string;
     };

@@ -14,9 +14,9 @@ import {
 import {
     type AuditActionType,
     type AuditActorType,
+    type AuditObjectType,
     actionTypesOf,
 } from "./audit-action-types.js";
-import type { AuditLogFilter } from "./dto/audit-log-query.dto.js";
 import { AuditLogEntity } from "./entities/audit-log.entity.js";
 
 export interface AuditLogActor {
@@ -26,6 +26,17 @@ export interface AuditLogActor {
 }
 
 export interface AuditLogRequestMeta {
+    requestId?: string;
+}
+
+/** Filters of the audit log lists. All given filters must match. */
+export interface AuditLogFilter {
+    from?: Date;
+    to?: Date;
+    actionType?: AuditActionType[];
+    objectType?: AuditObjectType;
+    actorType?: AuditActorType;
+    actorId?: string;
     requestId?: string;
 }
 
@@ -63,7 +74,7 @@ export class AuditLogService {
         });
     }
 
-    /** The newest entries of the tenant that match the filter. */
+    /** The newest entries of the tenant that match the filter, at most `limit`. */
     async listByTenant(
         tenantId: string,
         filter: AuditLogFilter = {},
@@ -74,7 +85,7 @@ export class AuditLogService {
         return this.auditLogRepository.find({
             where,
             order: NEWEST_FIRST,
-            take: Math.max(1, Math.min(limit, 500)),
+            take: limit,
         });
     }
 
@@ -150,6 +161,14 @@ export class AuditLogService {
 
         let total = 0;
         for (const { tenantId } of tenants) {
+            // Earlier pruning records age out too. Deleting only those is not
+            // worth a record of its own, or a quiet tenant would get one per
+            // retention period forever.
+            await this.auditLogRepository.delete({
+                tenantId,
+                actionType: "audit_log_pruned",
+                timestamp: LessThan(cutoff),
+            });
             const result = await this.auditLogRepository.delete({
                 tenantId,
                 timestamp: LessThan(cutoff),

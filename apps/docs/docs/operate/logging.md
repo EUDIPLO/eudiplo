@@ -85,8 +85,9 @@ To go from a log line or a pasted offer link to the session, search the session 
 ## Audit log
 
 Changes to a tenant and to its credential, issuance, presentation and
-status-list configurations, webhook endpoints and attribute providers are
-recorded with actor, time and changed fields, as are bundle imports, exports,
+status-list configurations, webhook endpoints, attribute providers,
+federation trust anchors and the clients of the
+[OpenID Provider](oidc-provider.md) and their secrets are recorded with actor, time and changed fields, as are bundle imports, exports,
 exports of single resources as documents (`config_resource_exported`, with kind
 and ID), detach and reattach actions, generated client secrets and cancelled sessions (with the
 reason). Secrets are not recorded: the API keys of webhook endpoints and
@@ -105,7 +106,8 @@ or with role `audit:read` or `clients:manage` through the API:
 | `GET /api/admin/audit-logs` | The newest matching entries as an array, at most `limit` (1–500, default 100) |
 | `GET /api/admin/audit-logs/retention` | The retention limits below, so a client can tell pruned entries from a quiet period |
 
-Both list endpoints take the same filters; all given filters must match:
+Both list endpoints take the same filters; all given filters must match. The
+search endpoint rejects unknown parameters, the list endpoint ignores them:
 
 | Parameter | Matches |
 | --- | --- |
@@ -113,7 +115,7 @@ Both list endpoints take the same filters; all given filters must match:
 | `actionType` | One of these actions, e.g. `oidc_client_deleted`; repeat the parameter for several |
 | `objectType` | All actions on one kind of object, e.g. `oidc_client` (not its secrets, which are `oidc_client_secret`) |
 | `actorType`, `actorId` | `user`, `client` or `system`; the id of the user or client |
-| `requestId` | The request that caused the entry, to find it from a log line or trace |
+| `requestId` | The `X-Request-Id` header of the call that caused the entry, to match it with your proxy or client logs. Recorded only when the caller or a reverse proxy sets the header |
 
 ```http
 GET /api/admin/audit-logs/search?from=2026-11-17T14:00:00Z&to=2026-11-17T14:30:00Z&objectType=oidc_client

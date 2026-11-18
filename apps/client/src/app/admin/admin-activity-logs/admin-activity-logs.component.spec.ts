@@ -140,8 +140,63 @@ describe('AdminActivityLogsComponent', () => {
     });
     await settle();
     expect(search).not.toHaveBeenCalled();
-    expect(text()).toContain('The end of the time range lies before its start.');
+    expect(text()).toContain('Must not be before From');
     expect(text()).not.toContain('Tenant Updated');
+  });
+
+  it('does not send an id longer than the backend accepts and says why', async () => {
+    await setup();
+    search.mockClear();
+    component.filters.controls.requestId.setValue('x'.repeat(256));
+    await settle();
+    expect(search).not.toHaveBeenCalled();
+    expect(text()).toContain('At most 255 characters');
+  });
+
+  it('shows the last page when a bookmarked page lies past the end', async () => {
+    await setup({ page: '4' });
+    search.mockImplementation(async ({ page }: { page: number }) =>
+      page === 4
+        ? { items: [], total: 30, page: 4, pageSize: 25, totalPages: 2 }
+        : { items: [entry()], total: 30, page, pageSize: 25, totalPages: 2 }
+    );
+    component.refresh();
+    await settle();
+    expect(search).toHaveBeenLastCalledWith({ page: 2, pageSize: 25 });
+    expect(component.pageIndex).toBe(1);
+    expect(text()).toContain('Tenant Updated');
+  });
+
+  it('shows the id the actor filter matches when the label shows the client', async () => {
+    await setup();
+    search.mockResolvedValue({
+      items: [entry({ actorType: 'user', actorId: 'user-sub-1', actorDisplay: 'web-client' })],
+      total: 1,
+      page: 1,
+      pageSize: 25,
+      totalPages: 1,
+    });
+    component.refresh();
+    await settle();
+    expect(text()).toContain('web-client (User)');
+    expect(text()).toContain('ID user-sub-1');
+  });
+
+  it('names the entry on each copy button', async () => {
+    await setup();
+    const button = (fixture.nativeElement as HTMLElement).querySelector('td button');
+    expect(button?.getAttribute('aria-label')).toMatch(/^Copy log entry Tenant Updated of /);
+  });
+
+  it('moves focus to the heading when Clear Filters removes itself', async () => {
+    await setup({ actorType: 'system' });
+    const clear = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('button')
+    ).find((button) => button.textContent?.includes('Clear Filters'))!;
+    clear.focus();
+    clear.click();
+    await settle();
+    expect(document.activeElement?.textContent).toContain('Activity Logs');
   });
 
   it('tells an empty filter result from an empty log', async () => {
@@ -163,11 +218,14 @@ describe('AdminActivityLogsComponent', () => {
     expect(text()).toContain('Database unavailable');
     expect(text()).not.toContain('No activity logs');
 
-    (fixture.nativeElement as HTMLElement)
-      .querySelector<HTMLButtonElement>('app-load-error button')!
-      .click();
+    const retry = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+      'app-load-error button'
+    )!;
+    retry.focus();
+    retry.click();
     await settle();
     expect(text()).toContain('Tenant Updated');
+    expect(document.activeElement?.tagName).toBe('H2');
   });
 
   it.each([
@@ -186,7 +244,7 @@ describe('AdminActivityLogsComponent', () => {
 });
 
 describe('activity log labels', () => {
-  it('maps every action to an object, preferring the longest match', () => {
+  it('maps every action to a listed object', () => {
     for (const action of ACTION_TYPES) {
       expect(OBJECT_TYPES).toContain(objectTypeOf(action));
     }

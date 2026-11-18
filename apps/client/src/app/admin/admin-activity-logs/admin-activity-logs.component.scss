@@ -72,10 +72,10 @@
   }
 }
 
-.filter-error {
-  flex-basis: 100%;
-  margin: 0;
-  color: var(--mat-sys-error);
+.actor-id {
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 12px;
+  word-break: break-all;
 }
 
 .empty-state {

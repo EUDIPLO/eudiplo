@@ -7,8 +7,6 @@ import {
 } from "typeorm";
 import type { AuditActionType, AuditActorType } from "../audit-action-types.js";
 
-export type { AuditActionType, AuditActorType };
-
 // Keep the existing table name to avoid a migration
 @Entity("tenant_action_log")
 // Every list query filters on the tenant and orders by time.

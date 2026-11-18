@@ -7,45 +7,46 @@ export type AuditObjectType = NonNullable<
 >;
 
 /**
- * Labels of every action the backend records. Typed against the SDK, so a new
- * action type does not compile until it has a label here.
+ * The object and label of every action the backend records, as in the
+ * backend's catalog (`audit-action-types.ts`). Typed against the SDK, so a
+ * new action type does not compile until it is listed here.
  */
-const ACTION_LABELS: Record<AuditActionType, string> = {
-  tenant_created: 'Tenant Created',
-  tenant_updated: 'Tenant Updated',
-  tenant_deleted: 'Tenant Deleted',
-  presentation_config_created: 'Presentation Config Created',
-  presentation_config_updated: 'Presentation Config Updated',
-  presentation_config_deleted: 'Presentation Config Deleted',
-  issuance_config_updated: 'Issuance Config Updated',
-  credential_config_created: 'Credential Config Created',
-  credential_config_updated: 'Credential Config Updated',
-  credential_config_deleted: 'Credential Config Deleted',
-  status_list_config_updated: 'Status List Config Updated',
-  status_list_config_reset: 'Status List Config Reset',
-  webhook_endpoint_created: 'Webhook Endpoint Created',
-  webhook_endpoint_updated: 'Webhook Endpoint Updated',
-  webhook_endpoint_deleted: 'Webhook Endpoint Deleted',
-  oidc_client_created: 'OpenID Connect Client Created',
-  oidc_client_updated: 'OpenID Connect Client Updated',
-  oidc_client_deleted: 'OpenID Connect Client Deleted',
-  oidc_client_secret_added: 'OpenID Connect Client Secret Added',
-  oidc_client_secret_updated: 'OpenID Connect Client Secret Updated',
-  oidc_client_secret_deleted: 'OpenID Connect Client Secret Deleted',
-  attribute_provider_created: 'Attribute Provider Created',
-  attribute_provider_updated: 'Attribute Provider Updated',
-  attribute_provider_deleted: 'Attribute Provider Deleted',
-  federation_trust_anchor_created: 'Federation Trust Anchor Created',
-  federation_trust_anchor_updated: 'Federation Trust Anchor Updated',
-  federation_trust_anchor_deleted: 'Federation Trust Anchor Deleted',
-  config_bundle_exported: 'Configuration Bundle Exported',
-  config_bundle_imported: 'Configuration Bundle Imported',
-  config_client_secret_generated: 'Client Secret Generated for Import',
-  config_resource_detached: 'Configuration Detached from File',
-  config_resource_reattached: 'Configuration Reattached to File',
-  config_resource_exported: 'Configuration Exported',
-  session_cancelled: 'Session Cancelled',
-  audit_log_pruned: 'Old Entries Deleted',
+const ACTIONS: Record<AuditActionType, [AuditObjectType, string]> = {
+  tenant_created: ['tenant', 'Tenant Created'],
+  tenant_updated: ['tenant', 'Tenant Updated'],
+  tenant_deleted: ['tenant', 'Tenant Deleted'],
+  presentation_config_created: ['presentation_config', 'Presentation Config Created'],
+  presentation_config_updated: ['presentation_config', 'Presentation Config Updated'],
+  presentation_config_deleted: ['presentation_config', 'Presentation Config Deleted'],
+  issuance_config_updated: ['issuance_config', 'Issuance Config Updated'],
+  credential_config_created: ['credential_config', 'Credential Config Created'],
+  credential_config_updated: ['credential_config', 'Credential Config Updated'],
+  credential_config_deleted: ['credential_config', 'Credential Config Deleted'],
+  status_list_config_updated: ['status_list_config', 'Status List Config Updated'],
+  status_list_config_reset: ['status_list_config', 'Status List Config Reset'],
+  webhook_endpoint_created: ['webhook_endpoint', 'Webhook Endpoint Created'],
+  webhook_endpoint_updated: ['webhook_endpoint', 'Webhook Endpoint Updated'],
+  webhook_endpoint_deleted: ['webhook_endpoint', 'Webhook Endpoint Deleted'],
+  oidc_client_created: ['oidc_client', 'OpenID Connect Client Created'],
+  oidc_client_updated: ['oidc_client', 'OpenID Connect Client Updated'],
+  oidc_client_deleted: ['oidc_client', 'OpenID Connect Client Deleted'],
+  oidc_client_secret_added: ['oidc_client_secret', 'OpenID Connect Client Secret Added'],
+  oidc_client_secret_updated: ['oidc_client_secret', 'OpenID Connect Client Secret Updated'],
+  oidc_client_secret_deleted: ['oidc_client_secret', 'OpenID Connect Client Secret Deleted'],
+  attribute_provider_created: ['attribute_provider', 'Attribute Provider Created'],
+  attribute_provider_updated: ['attribute_provider', 'Attribute Provider Updated'],
+  attribute_provider_deleted: ['attribute_provider', 'Attribute Provider Deleted'],
+  federation_trust_anchor_created: ['federation_trust_anchor', 'Federation Trust Anchor Created'],
+  federation_trust_anchor_updated: ['federation_trust_anchor', 'Federation Trust Anchor Updated'],
+  federation_trust_anchor_deleted: ['federation_trust_anchor', 'Federation Trust Anchor Deleted'],
+  config_bundle_exported: ['config_bundle', 'Configuration Bundle Exported'],
+  config_bundle_imported: ['config_bundle', 'Configuration Bundle Imported'],
+  config_client_secret_generated: ['config_client_secret', 'Client Secret Generated for Import'],
+  config_resource_detached: ['config_resource', 'Configuration Detached from File'],
+  config_resource_reattached: ['config_resource', 'Configuration Reattached to File'],
+  config_resource_exported: ['config_resource', 'Configuration Exported'],
+  session_cancelled: ['session', 'Session Cancelled'],
+  audit_log_pruned: ['audit_log', 'Old Entries Deleted'],
 };
 
 /** Labels of the objects actions are about, in the order the filter lists them. */
@@ -68,7 +69,7 @@ export const OBJECT_LABELS = {
 } as const satisfies Record<AuditObjectType, string>;
 
 export const OBJECT_TYPES = Object.keys(OBJECT_LABELS) as AuditObjectType[];
-export const ACTION_TYPES = Object.keys(ACTION_LABELS) as AuditActionType[];
+export const ACTION_TYPES = Object.keys(ACTIONS) as AuditActionType[];
 
 export const ACTOR_LABELS: Record<AuditActorType, string> = {
   user: 'User',
@@ -76,20 +77,14 @@ export const ACTOR_LABELS: Record<AuditActorType, string> = {
   system: 'System',
 };
 
-/**
- * The object an action is about: the longest object type the action starts
- * with, so `oidc_client_secret_added` belongs to `oidc_client_secret`, not
- * to `oidc_client`.
- */
+/** The object an action is about. */
 export function objectTypeOf(actionType: string): AuditObjectType | undefined {
-  return OBJECT_TYPES.filter((objectType) => actionType.startsWith(`${objectType}_`)).sort(
-    (a, b) => b.length - a.length
-  )[0];
+  return ACTIONS[actionType as AuditActionType]?.[0];
 }
 
 export function actionLabel(actionType: string | undefined): string {
   if (!actionType) return 'Unknown';
-  return ACTION_LABELS[actionType as AuditActionType] ?? actionType;
+  return ACTIONS[actionType as AuditActionType]?.[1] ?? actionType;
 }
 
 /** Changed fields, or what a retention run deleted. */

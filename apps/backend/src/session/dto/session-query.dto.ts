@@ -2,6 +2,11 @@ import { ApiPropertyOptional } from "@nestjs/swagger";
 import { createZodDto } from "nestjs-zod";
 import { z } from "zod";
 import {
+    orderedRange,
+    repeatable,
+    timestamp,
+} from "../../shared/common/zod/query-params.js";
+import {
     SESSION_SORT_FIELDS,
     type SessionListQuery,
 } from "../domain/session-list.js";
@@ -11,35 +16,13 @@ import { SessionStatus } from "../domain/session-state.js";
 const MAX_ID_LENGTH = 255;
 const MAX_SEARCH_LENGTH = 4096;
 
-// ISO 8601 with an explicit offset, so the range never depends on server time zone.
-export const timestamp = z.iso
-    .datetime({ offset: true })
-    .transform((value) => new Date(value));
 const identifier = z.string().trim().min(1).max(MAX_ID_LENGTH);
-
-/** Zod refinement that rejects a time range whose start lies after its end. */
-export function orderedRange<K extends string>(
-    from: K,
-    to: K,
-): [
-    (query: Partial<Record<K, Date>>) => boolean,
-    { message: string; path: string[] },
-] {
-    return [
-        (query) => !query[from] || !query[to] || query[from] <= query[to],
-        { message: `${from} must not be after ${to}`, path: [from] },
-    ];
-}
 
 const SessionQuerySchema = z
     .object({
         page: z.coerce.number().int().min(1).default(1),
         pageSize: z.coerce.number().int().min(1).max(100).default(25),
-        // A repeated query parameter arrives as an array, a single one as a string.
-        status: z
-            .union([z.enum(SessionStatus), z.array(z.enum(SessionStatus))])
-            .transform((value) => (Array.isArray(value) ? value : [value]))
-            .optional(),
+        status: repeatable(z.enum(SessionStatus)).optional(),
         type: z.enum(["issuance", "presentation"]).optional(),
         createdFrom: timestamp.optional(),
         createdTo: timestamp.optional(),

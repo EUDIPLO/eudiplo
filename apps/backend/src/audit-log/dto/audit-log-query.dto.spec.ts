@@ -10,7 +10,10 @@ describe("AuditLogListQueryDto", () => {
 
     it.each([
         [undefined, 100],
+        ["", 100],
         ["10", 10],
+        ["10abc", 10],
+        ["2.5", 2],
         ["abc", 100],
         ["0", 1],
         ["-5", 1],
