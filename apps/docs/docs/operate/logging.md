@@ -94,15 +94,45 @@ attribute providers and the upstream client secrets of chained authorization
 servers appear as `[REDACTED]`, and a changed secret is still listed among the
 changed fields. Not audited: key chains, trust lists, API clients and users (including
 role changes and secret rotation), KMS provider configuration,
-and session retention settings. Read the audit log with
-`GET /api/admin/audit-logs` (role `audit:read` or `clients:manage`) or under
-**Administration → Activity Logs** in the web client. The
-audit log is kept forever unless you limit it; a daily job at 03:00 applies:
+and session retention settings.
+
+Read the audit log under **Administration → Activity Logs** in the web client,
+or with role `audit:read` or `clients:manage` through the API:
+
+| Endpoint | Returns |
+| --- | --- |
+| `GET /api/admin/audit-logs/search` | One page (`page`, `pageSize` up to 100) of the matching entries, newest first, with `total` |
+| `GET /api/admin/audit-logs` | The newest matching entries as an array, at most `limit` (1–500, default 100) |
+| `GET /api/admin/audit-logs/retention` | The retention limits below, so a client can tell pruned entries from a quiet period |
+
+Both list endpoints take the same filters; all given filters must match:
+
+| Parameter | Matches |
+| --- | --- |
+| `from`, `to` | Recorded at or after / at or before this time, ISO 8601 with offset |
+| `actionType` | One of these actions, e.g. `oidc_client_deleted`; repeat the parameter for several |
+| `objectType` | All actions on one kind of object, e.g. `oidc_client` (not its secrets, which are `oidc_client_secret`) |
+| `actorType`, `actorId` | `user`, `client` or `system`; the id of the user or client |
+| `requestId` | The request that caused the entry, to find it from a log line or trace |
+
+```http
+GET /api/admin/audit-logs/search?from=2026-11-17T14:00:00Z&to=2026-11-17T14:30:00Z&objectType=oidc_client
+```
+
+The web client keeps its filters in the URL, so a filtered view can be shared.
+
+The audit log is kept forever unless the operator limits it. Tenants cannot
+delete entries; a daily job at 03:00 applies these limits to every tenant:
 
 ```env
 AUDIT_LOG_RETENTION_DAYS=365          # delete entries older than this, 0 = keep
 AUDIT_LOG_MAX_ENTRIES_PER_TENANT=10000  # keep only the newest N per tenant, 0 = all
 ```
+
+Each tenant whose entries the job deletes gets an `audit_log_pruned` entry from
+the `system` actor with the number of deleted entries and the limit that applied
+(`after.reason` is `retention_days` or `max_entries_per_tenant`). With
+`AUDIT_LOG_MAX_ENTRIES_PER_TENANT`, that entry counts towards the limit.
 
 Use session logs to answer "what happened in this flow?" and the audit log for
 "who changed the configuration, and when?".

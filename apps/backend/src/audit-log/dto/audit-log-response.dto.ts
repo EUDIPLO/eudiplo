@@ -1,77 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-
-export type AuditActionTypeLiteral =
-    | "tenant_created"
-    | "tenant_updated"
-    | "tenant_deleted"
-    | "presentation_config_created"
-    | "presentation_config_updated"
-    | "presentation_config_deleted"
-    | "issuance_config_updated"
-    | "credential_config_created"
-    | "credential_config_updated"
-    | "credential_config_deleted"
-    | "status_list_config_updated"
-    | "status_list_config_reset"
-    | "webhook_endpoint_created"
-    | "webhook_endpoint_updated"
-    | "webhook_endpoint_deleted"
-    | "oidc_client_created"
-    | "oidc_client_updated"
-    | "oidc_client_deleted"
-    | "oidc_client_secret_added"
-    | "oidc_client_secret_updated"
-    | "oidc_client_secret_deleted"
-    | "attribute_provider_created"
-    | "attribute_provider_updated"
-    | "attribute_provider_deleted"
-    | "federation_trust_anchor_created"
-    | "federation_trust_anchor_updated"
-    | "federation_trust_anchor_deleted"
-    | "config_bundle_exported"
-    | "config_bundle_imported"
-    | "config_client_secret_generated"
-    | "config_resource_detached"
-    | "config_resource_reattached"
-    | "config_resource_exported"
-    | "session_cancelled";
-
-const ACTION_TYPE_VALUES: AuditActionTypeLiteral[] = [
-    "tenant_created",
-    "tenant_updated",
-    "tenant_deleted",
-    "presentation_config_created",
-    "presentation_config_updated",
-    "presentation_config_deleted",
-    "issuance_config_updated",
-    "credential_config_created",
-    "credential_config_updated",
-    "credential_config_deleted",
-    "status_list_config_updated",
-    "status_list_config_reset",
-    "webhook_endpoint_created",
-    "webhook_endpoint_updated",
-    "webhook_endpoint_deleted",
-    "oidc_client_created",
-    "oidc_client_updated",
-    "oidc_client_deleted",
-    "oidc_client_secret_added",
-    "oidc_client_secret_updated",
-    "oidc_client_secret_deleted",
-    "attribute_provider_created",
-    "attribute_provider_updated",
-    "attribute_provider_deleted",
-    "federation_trust_anchor_created",
-    "federation_trust_anchor_updated",
-    "federation_trust_anchor_deleted",
-    "config_bundle_exported",
-    "config_bundle_imported",
-    "config_client_secret_generated",
-    "config_resource_detached",
-    "config_resource_reattached",
-    "config_resource_exported",
-    "session_cancelled",
-];
+import {
+    AUDIT_ACTION_TYPES,
+    AUDIT_ACTOR_TYPES,
+    type AuditActionType,
+    type AuditActorType,
+} from "../audit-action-types.js";
 
 export class AuditLogResponseDto {
     @ApiProperty()
@@ -80,11 +13,11 @@ export class AuditLogResponseDto {
     @ApiProperty()
     tenantId!: string;
 
-    @ApiProperty({ enum: ACTION_TYPE_VALUES })
-    actionType!: AuditActionTypeLiteral;
+    @ApiProperty({ enum: AUDIT_ACTION_TYPES })
+    actionType!: AuditActionType;
 
-    @ApiProperty({ enum: ["user", "client", "system"] })
-    actorType!: "user" | "client" | "system";
+    @ApiProperty({ enum: AUDIT_ACTOR_TYPES })
+    actorType!: AuditActorType;
 
     @ApiPropertyOptional()
     actorId?: string;

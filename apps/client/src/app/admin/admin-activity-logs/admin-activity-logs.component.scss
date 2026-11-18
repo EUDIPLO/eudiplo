@@ -30,8 +30,11 @@
 }
 
 .filters {
-  margin-bottom: 16px;
+  display: flex;
   flex-wrap: wrap;
+  align-items: center;
+  gap: 0 12px;
+  margin-bottom: 16px;
 
   .filter-field {
     min-width: 220px;
@@ -54,24 +57,25 @@
   }
 }
 
-.error-message {
+.retention-note {
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 16px;
-  background-color: var(--mat-sys-error-container);
-  border-left: 4px solid var(--eudiplo-danger);
-  border-radius: 4px;
-  color: var(--eudiplo-danger);
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 0;
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 14px;
 
   mat-icon {
-    flex-shrink: 0;
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
   }
+}
 
-  p {
-    margin: 0;
-    line-height: 1.5;
-  }
+.filter-error {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--mat-sys-error);
 }
 
 .empty-state {
@@ -100,6 +104,11 @@
 .table-container {
   overflow-x: auto;
   margin-top: 16px;
+
+  // Keep the rows of the previous query visible, dimmed, while the next loads.
+  &.reloading {
+    opacity: 0.6;
+  }
 }
 
 .table-footer {
