@@ -1,95 +1,115 @@
-<div fxLayout="row" fxLayoutAlign="space-between center">
-  <h2 #listHeading tabindex="-1">Federation trust anchors</h2>
-  <div fxLayout="row" fxLayoutGap="8px">
+<div class="page">
+  <header class="page-header">
+    <div>
+      <!-- An h2: the list tests move the focus to the first h2 after a retry -->
+      <h2 #listHeading tabindex="-1" class="page-title">Federation trust anchors</h2>
+      <p>
+        OpenID Federation trust anchors with their federation keys. Issuance and presentation
+        configurations trust a federation only through a trust anchor registered here.
+      </p>
+    </div>
+    <!-- The list tests name this button by its tooltip and accessible name. -->
     <button
-      matIconButton
+      matButton="filled"
       [routerLink]="['create']"
       matTooltip="Register a trust anchor"
       aria-label="Register a trust anchor"
     >
       <mat-icon>add</mat-icon>
+      Register a trust anchor
     </button>
-  </div>
+  </header>
+
+  @if (loading) {
+    <div class="list-state">
+      <mat-spinner diameter="40" aria-label="Loading federation trust anchors"></mat-spinner>
+    </div>
+  } @else if (loadError) {
+    <app-load-error [message]="loadError" (retry)="loadItems()" />
+  } @else if (anchors.length === 0) {
+    <div class="list-state empty">
+      <span class="empty-icon"><mat-icon>account_tree</mat-icon></span>
+      <p>No federation trust anchors yet.</p>
+      <span class="muted">Register the trust anchor of a federation to trust its members.</span>
+      <a matButton="tonal" [routerLink]="['create']">
+        <mat-icon>add</mat-icon>
+        Register trust anchor
+      </a>
+    </div>
+  } @else {
+    <mat-card appearance="outlined" class="table-card">
+      <div class="table-scroll">
+        <table mat-table [dataSource]="anchors">
+          <ng-container matColumnDef="id">
+            <th mat-header-cell *matHeaderCellDef>ID</th>
+            <td mat-cell *matCellDef="let anchor" class="id-cell">{{ anchor.id }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="entityId">
+            <th mat-header-cell *matHeaderCellDef>Entity ID</th>
+            <td mat-cell *matCellDef="let anchor" class="entity-id">{{ anchor.entityId }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="description">
+            <th mat-header-cell *matHeaderCellDef>Description</th>
+            <td mat-cell *matCellDef="let anchor" class="description">
+              {{ anchor.description }}
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="keys">
+            <th mat-header-cell *matHeaderCellDef>Pinned keys</th>
+            <td mat-cell *matCellDef="let anchor">
+              <span class="badge">{{ keyCount(anchor) }}</span>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="actions">
+            <th mat-header-cell *matHeaderCellDef>
+              <span class="visually-hidden">Actions</span>
+            </th>
+            <td mat-cell *matCellDef="let anchor">
+              <span class="row-actions">
+                <button
+                  matIconButton
+                  [routerLink]="[anchor.id]"
+                  matTooltip="View details"
+                  [attr.aria-label]="'View trust anchor ' + anchor.id"
+                >
+                  <mat-icon>visibility</mat-icon>
+                </button>
+                <button
+                  matIconButton
+                  [routerLink]="[anchor.id, 'edit']"
+                  matTooltip="Edit"
+                  appConfigManaged
+                  managedKind="FederationTrustAnchor"
+                  [managedResourceId]="anchor.id"
+                  [attr.aria-label]="'Edit trust anchor ' + anchor.id"
+                >
+                  <mat-icon>edit</mat-icon>
+                </button>
+                <button
+                  matIconButton
+                  (click)="downloadConfig(anchor)"
+                  [disabled]="configDocuments.isDownloading('FederationTrustAnchor', anchor.id)"
+                  [attr.aria-busy]="
+                    configDocuments.isDownloading('FederationTrustAnchor', anchor.id)
+                  "
+                  disabledInteractive
+                  matTooltip="Download configuration"
+                  [attr.aria-label]="'Download the configuration of trust anchor ' + anchor.id"
+                >
+                  <mat-icon>download</mat-icon>
+                </button>
+              </span>
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+        </table>
+      </div>
+    </mat-card>
+  }
 </div>
-<p>
-  OpenID Federation trust anchors with their federation keys. Issuance and presentation
-  configurations trust a federation only through a trust anchor registered here.
-</p>
-
-@if (loading) {
-  <div class="list-state">
-    <mat-spinner diameter="40" aria-label="Loading federation trust anchors"></mat-spinner>
-  </div>
-} @else if (loadError) {
-  <app-load-error [message]="loadError" (retry)="loadItems()" />
-} @else if (anchors.length === 0) {
-  <div class="list-state">
-    <mat-icon class="empty-icon">account_tree</mat-icon>
-    <p>No federation trust anchors yet.</p>
-    <a mat-flat-button [routerLink]="['create']">
-      <mat-icon>add</mat-icon>
-      Register trust anchor
-    </a>
-  </div>
-} @else {
-  <table mat-table [dataSource]="anchors" class="mat-elevation-z8">
-    <ng-container matColumnDef="id">
-      <th mat-header-cell *matHeaderCellDef>ID</th>
-      <td mat-cell *matCellDef="let anchor">{{ anchor.id }}</td>
-    </ng-container>
-
-    <ng-container matColumnDef="entityId">
-      <th mat-header-cell *matHeaderCellDef>Entity ID</th>
-      <td mat-cell *matCellDef="let anchor">{{ anchor.entityId }}</td>
-    </ng-container>
-
-    <ng-container matColumnDef="description">
-      <th mat-header-cell *matHeaderCellDef>Description</th>
-      <td mat-cell *matCellDef="let anchor">{{ anchor.description }}</td>
-    </ng-container>
-
-    <ng-container matColumnDef="keys">
-      <th mat-header-cell *matHeaderCellDef>Pinned keys</th>
-      <td mat-cell *matCellDef="let anchor">{{ keyCount(anchor) }}</td>
-    </ng-container>
-
-    <ng-container matColumnDef="actions">
-      <th mat-header-cell *matHeaderCellDef>Actions</th>
-      <td mat-cell *matCellDef="let anchor">
-        <button
-          matIconButton
-          [routerLink]="[anchor.id]"
-          matTooltip="View details"
-          [attr.aria-label]="'View trust anchor ' + anchor.id"
-        >
-          <mat-icon>visibility</mat-icon>
-        </button>
-        <button
-          matIconButton
-          [routerLink]="[anchor.id, 'edit']"
-          matTooltip="Edit"
-          appConfigManaged
-          managedKind="FederationTrustAnchor"
-          [managedResourceId]="anchor.id"
-          [attr.aria-label]="'Edit trust anchor ' + anchor.id"
-        >
-          <mat-icon>edit</mat-icon>
-        </button>
-        <button
-          matIconButton
-          (click)="downloadConfig(anchor)"
-          [disabled]="configDocuments.isDownloading('FederationTrustAnchor', anchor.id)"
-          [attr.aria-busy]="configDocuments.isDownloading('FederationTrustAnchor', anchor.id)"
-          disabledInteractive
-          matTooltip="Download configuration"
-          [attr.aria-label]="'Download the configuration of trust anchor ' + anchor.id"
-        >
-          <mat-icon>download</mat-icon>
-        </button>
-      </td>
-    </ng-container>
-
-    <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-    <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
-  </table>
-}

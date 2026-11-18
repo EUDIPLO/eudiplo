@@ -1,32 +1,80 @@
-.title-icon {
-  margin-right: 8px;
-  vertical-align: middle;
+@use '../../tenants/tenant-page' as page;
+
+// Back link, heading, sections and action bar, as on the tenant, client and key forms
+@include page.base;
+@include page.form-page;
+
+.page-header .page-title {
+  margin: 0;
+  font: var(--mat-sys-headline-medium);
+  color: var(--mat-sys-on-surface);
 }
 
-mat-card-title {
-  display: flex;
-  align-items: center;
+.form-avatar mat-icon {
+  width: 28px;
+  height: 28px;
+  font-size: 28px;
+}
+
+// The ownership notice shows only when it applies; without content it takes no gap
+app-config-ownership-notice {
+  display: contents;
+}
+
+.section-intro h3 {
+  margin: 0;
+  font: var(--mat-sys-title-medium);
+  color: var(--mat-sys-on-surface);
 }
 
 .field-hint {
+  margin: 0 0 12px;
+  font: var(--mat-sys-body-medium);
   color: var(--mat-sys-on-surface-variant);
-  margin: 0 0 8px;
+
+  // The JWK set example on a tonal strip
+  &.example {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 14px;
+    border-radius: var(--mat-sys-corner-medium);
+    background: var(--mat-sys-surface-container-low);
+
+    span {
+      font: var(--mat-sys-label-medium);
+    }
+
+    code {
+      font-size: 12px;
+      color: var(--mat-sys-on-surface);
+      overflow-wrap: anywhere;
+    }
+  }
 }
 
 .jwks-error {
-  color: var(--mat-sys-error);
-  font-size: 12px;
   margin: 8px 0 0;
+  font: var(--mat-sys-body-small);
+  color: var(--mat-sys-error);
 }
 
+// Says which configurations an entity ID change would break, as a tonal error note
 .entity-id-warning {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  margin: 0;
-  color: var(--mat-sys-error);
+  margin: -8px 0 0;
+  padding: 10px 14px;
+  border-radius: var(--mat-sys-corner-medium);
+  background: var(--mat-sys-error-container);
+  font: var(--mat-sys-body-medium);
+  color: var(--mat-sys-on-error-container);
 
   mat-icon {
-    flex-shrink: 0;
+    flex: none;
+    width: 20px;
+    height: 20px;
+    font-size: 20px;
   }
 }

@@ -25,7 +25,6 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import type { CreateFederationTrustAnchorDto } from '@eudiplo/sdk-core';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { focusAfterRenderIfLost } from '../../common/focus-if-lost.util';
 import { showFieldsToFix } from '../../common/field-to-fix.util';
 import { LoadErrorComponent } from '../../common/load-error.component';
@@ -63,7 +62,6 @@ type JwksValue = CreateFederationTrustAnchorDto['jwks'];
     MatInputModule,
     MatSnackBarModule,
     MatTooltipModule,
-    FlexLayoutModule,
     ReactiveFormsModule,
     RouterModule,
     EditorComponent,

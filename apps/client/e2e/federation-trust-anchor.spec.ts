@@ -43,8 +43,14 @@ const apiRequest = (method: string, path: string, body?: unknown) =>
   tenantRequest(tenant, method, path, body);
 
 async function selectOption(page: Page, field: Locator, option: string | RegExp) {
-  await field.click();
-  await page.getByRole('option', { name: option }).click();
+  // A select without options does not open, so a click while the registered trust anchors
+  // still load does nothing; open it again until the option shows.
+  const choice = page.getByRole('option', { name: option });
+  await expect(async () => {
+    if (!(await choice.isVisible())) await field.click();
+    await expect(choice).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 15_000 });
+  await choice.click();
 }
 
 test('registers a trust anchor with its federation keys', async ({ page }) => {
