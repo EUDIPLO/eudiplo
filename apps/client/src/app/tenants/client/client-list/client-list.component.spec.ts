@@ -42,19 +42,19 @@ describe('ClientListComponent role limits', () => {
   }
 
   it('enables edit, rotate and delete for a client whose roles the caller holds', () => {
-    // View, edit, rotate secret, delete
-    expect(actions(0).map((button) => button.disabled)).toEqual([false, false, false, false]);
+    // Edit, rotate secret, delete; the client ID links to the client's page
+    expect(actions(0).map((button) => button.disabled)).toEqual([false, false, false]);
   });
 
   it('disables edit, rotate and delete for a client with a role the caller lacks', () => {
-    expect(actions(1).map((button) => button.disabled)).toEqual([false, true, true, true]);
+    expect(actions(1).map((button) => button.disabled)).toEqual([true, true, true]);
   });
 
   it('sends nothing when a disabled action is clicked', () => {
     const rotate = vi.spyOn(component, 'rotateSecret');
     const remove = vi.spyOn(component, 'deleteClient');
+    actions(1)[1].click();
     actions(1)[2].click();
-    actions(1)[3].click();
     expect(rotate).not.toHaveBeenCalled();
     expect(remove).not.toHaveBeenCalled();
   });
@@ -332,7 +332,7 @@ describe('ClientListComponent with another identity provider', () => {
       'Clients are managed in the identity provider (OIDC_PROVIDER=generic).'
     );
     expect(page.querySelector('app-load-error')).toBeNull();
-    expect(page.querySelector('[aria-label="Create New Client"]')).toBeNull();
+    expect(page.querySelector('.create-client')).toBeNull();
   });
 
   it('offers no new secret for a record left from an earlier mode', async () => {
@@ -425,13 +425,97 @@ describe('ClientListComponent embedded in a tenant page', () => {
     expect(text(more)).toBe('+2 more');
     expect(more?.getAttribute('aria-label')).toBe('2 more roles: audit:read, keys:manage');
   });
+});
 
-  it('keeps its heading, description column and role chips when not embedded', async () => {
-    const page = await render(false);
+describe('ClientListComponent page', () => {
+  const text = (element: Element | null) => element?.textContent?.replace(/\s+/g, ' ').trim();
 
-    expect(text(page.querySelector('h2'))).toBe('Clients');
-    expect(page.querySelector('th.mat-column-description')).not.toBeNull();
-    expect(page.querySelectorAll('mat-chip')).toHaveLength(7);
+  async function render(clients: object[]) {
+    vi.spyOn(ClientListComponent.prototype, 'loadClients').mockResolvedValue();
+    await TestBed.configureTestingModule({
+      imports: [ClientListComponent],
+      providers: [
+        provideRouter([]),
+        { provide: JwtService, useValue: { getRoles: () => ['clients:manage', 'tenant:admin'] } },
+        { provide: ConfigOwnershipService, useValue: { get: async () => undefined } },
+        { provide: FrontendConfigService, useValue: { authMode: null } },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ClientListComponent);
+    fixture.componentInstance.clients = clients as ClientEntity[];
+    fixture.detectChanges();
+    const page = fixture.nativeElement as HTMLElement;
+    const ids = () => Array.from(page.querySelectorAll('tr.mat-mdc-row .client-copy code'), text);
+    return { fixture, component: fixture.componentInstance, page, ids };
+  }
+
+  afterEach(() => vi.restoreAllMocks());
+
+  const clients = [
+    { clientId: 'shop-10', description: 'Web shop', roles: ['issuance:offer'] },
+    { clientId: 'shop-2', roles: ['presentation:request'] },
+    { clientId: 'audit', description: 'Reads the log', roles: ['audit:read'] },
+  ];
+
+  it('heads the page, offers to create a client and links each client by ID, sorted', async () => {
+    const { page, ids } = await render(clients);
+
+    expect(text(page.querySelector('h1'))).toBe('API Clients');
+    expect(page.querySelector('.create-client')).not.toBeNull();
+    expect(text(page.querySelector('.table-title output'))).toBe('3 clients');
+    // Numbers sort by value: shop-2 before shop-10
+    expect(ids()).toEqual(['audit', 'shop-2', 'shop-10']);
+    expect(page.querySelector('a.client-link')?.getAttribute('href')).toBe('/audit');
+    expect(page.querySelector('th.mat-column-description')).toBeNull();
+  });
+
+  it('finds clients by ID, description or role', async () => {
+    const { fixture, component, page, ids } = await render(clients);
+
+    component.search = 'shop';
+    fixture.detectChanges();
+    expect(ids()).toEqual(['shop-2', 'shop-10']);
+    expect(text(page.querySelector('.table-title output'))).toBe('2 of 3 clients');
+
+    component.search = 'log';
+    fixture.detectChanges();
+    expect(ids()).toEqual(['audit']);
+
+    component.search = 'presentation:';
+    fixture.detectChanges();
+    expect(ids()).toEqual(['shop-2']);
+  });
+
+  it('says when no client matches and clears the search on request', async () => {
+    const { fixture, component, page, ids } = await render(clients);
+    component.search = 'nothing';
+    fixture.detectChanges();
+
+    expect(text(page.querySelector('.no-match'))).toContain('No client matches "nothing".');
+    (
+      Array.from(page.querySelectorAll('.no-match button')).find(
+        (button) => text(button) === 'Clear search'
+      ) as HTMLButtonElement
+    ).click();
+    fixture.detectChanges();
+
+    expect(component.search).toBe('');
+    expect(ids()).toHaveLength(3);
+  });
+
+  it('invites to create the first client instead of showing an empty table', async () => {
+    const { page } = await render([]);
+
+    expect(page.querySelector('table')).toBeNull();
+    expect(text(page.querySelector('.empty-state'))).toContain('No clients yet');
+  });
+
+  it('shows a spinner while the clients load', async () => {
+    const { fixture, component, page } = await render([]);
+    component.loading = true;
+    fixture.detectChanges();
+
+    expect(page.querySelector('mat-spinner[aria-label="Loading clients"]')).not.toBeNull();
   });
 });
 

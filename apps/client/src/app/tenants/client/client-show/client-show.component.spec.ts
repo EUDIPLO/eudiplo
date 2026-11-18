@@ -17,7 +17,7 @@ import {
 import { ConfigOwnershipService } from '../../../config-portability/config-ownership.service';
 import { ApiService } from '../../../core';
 import { JwtService } from '../../../services/jwt.service';
-import { ClientShowComponent } from './client-show.component';
+import { ClientShowComponent, groupRoles } from './client-show.component';
 import { errorSnackBarDuration } from '../../../utils/error-snackbar';
 
 describe('ClientShowComponent', () => {
@@ -42,9 +42,11 @@ describe('ClientShowComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('names the back button for assistive technology', () => {
-    const back = (fixture.nativeElement as HTMLElement).querySelector('button[routerLink="../"]');
-    expect(back?.getAttribute('aria-label')).toBe('Back to Clients List');
+  it('names the back link for assistive technology', () => {
+    const back = (fixture.nativeElement as HTMLElement).querySelector('a.back-link');
+    // The name contains the visible label "API Clients"
+    expect(back?.getAttribute('aria-label')).toBe('Back to API Clients');
+    expect(back?.textContent).toContain('API Clients');
   });
 });
 
@@ -104,8 +106,14 @@ describe('ClientShowComponent delete', () => {
     fixture: ComponentFixture<ClientShowComponent>,
     label: string
   ): HTMLButtonElement {
+    // The label without the text of the button's icon
+    const labelOf = (candidate: HTMLElement) => {
+      const copy = candidate.cloneNode(true) as HTMLElement;
+      copy.querySelectorAll('mat-icon').forEach((icon) => icon.remove());
+      return copy.textContent?.trim();
+    };
     const found = [...(fixture.nativeElement as HTMLElement).querySelectorAll('button')].find(
-      (candidate) => candidate.textContent?.trim() === label
+      (candidate) => labelOf(candidate) === label
     );
     if (!found) throw new Error(`No ${label} button`);
     return found;
@@ -289,5 +297,95 @@ describe('ClientShowComponent delete', () => {
     expect(button.getAttribute('aria-disabled')).toBe('true');
     expect(confirm).not.toHaveBeenCalled();
     expect(requests).not.toContain('DELETE /api/client/offer-client');
+  });
+});
+
+describe('groupRoles', () => {
+  it('groups the roles by area, once each, and keeps unknown roles under Other', () => {
+    expect(
+      groupRoles([
+        'clients:manage',
+        'issuance:offer',
+        'clients:manage',
+        'audit:read',
+        'presentation:manage',
+        'future:role',
+      ]).map((group) => [group.title, group.roles])
+    ).toEqual([
+      ['Issuance', ['issuance:offer']],
+      ['Presentation', ['presentation:manage']],
+      ['Sessions and audit', ['audit:read']],
+      ['Administration', ['clients:manage']],
+      ['Other', ['future:role']],
+    ]);
+  });
+});
+
+describe('ClientShowComponent details', () => {
+  const text = (element: Element | null) => element?.textContent?.replace(/\s+/g, ' ').trim();
+
+  afterEach(() => {
+    client.setConfig({ fetch: () => new Promise<Response>(() => undefined) });
+  });
+
+  it('shows the roles by area and the configurations the client may use', async () => {
+    client.setConfig({
+      fetch: vi.fn<typeof fetch>(
+        async () =>
+          new Response(
+            JSON.stringify({
+              clientId: 'shop',
+              description: 'Web shop',
+              roles: ['issuance:offer', 'presentation:request'],
+              allowedPresentationConfigs: ['pid'],
+              allowedIssuanceConfigs: null,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          )
+      ),
+    });
+    await TestBed.configureTestingModule({
+      imports: [ClientShowComponent],
+      providers: [
+        provideRouter([]),
+        {
+          provide: ActivatedRoute,
+          useValue: { snapshot: { paramMap: convertToParamMap({ id: 'shop' }) } },
+        },
+        { provide: ApiService, useValue: { getClientId: () => 'admin', sessionEnded$: NEVER } },
+        {
+          provide: JwtService,
+          useValue: { getRoles: () => ['clients:manage'], canUseConfigPortability: () => false },
+        },
+        { provide: ConfigOwnershipService, useValue: { get: async () => undefined } },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ClientShowComponent);
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(fixture.componentInstance.client).toBeDefined());
+    fixture.detectChanges();
+    const page = fixture.nativeElement as HTMLElement;
+
+    expect(text(page.querySelector('h1'))).toBe('shop');
+    expect(text(page.querySelector('.hero-description'))).toBe('Web shop');
+    expect(text(page.querySelector('.hero-meta .badge'))).toBe('2 roles');
+    expect(
+      Array.from(page.querySelectorAll('.role-group'), (group) => [
+        text(group.querySelector('h3'))?.replace(/^\S+ /, ''),
+        Array.from(group.querySelectorAll('.role-badge'), text),
+      ])
+    ).toEqual([
+      ['Issuance', ['issuance:offer']],
+      ['Presentation', ['presentation:request']],
+    ]);
+    expect(
+      Array.from(page.querySelectorAll('.restriction'), (section) => [
+        text(section.querySelector('h3')),
+        text(section.querySelector('ul, .unrestricted'))?.replace(/^all_inclusive /, ''),
+      ])
+    ).toEqual([
+      ['Presentation configurations', 'pid'],
+      ['Credential configurations', 'All of them, including those created later'],
+    ]);
   });
 });
