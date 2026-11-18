@@ -361,3 +361,30 @@ describe('ClientListComponent with another identity provider', () => {
     expect(page.querySelector('[aria-label^="Rotate Secret"]')).toBeNull();
   });
 });
+
+describe('ClientListComponent on the tenant page', () => {
+  it('looks up no ownership for the clients of the tenant page', async () => {
+    const get = vi.fn(async () => undefined);
+    await TestBed.configureTestingModule({
+      imports: [ClientListComponent],
+      providers: [
+        provideRouter([]),
+        { provide: JwtService, useValue: { getRoles: () => ['tenants:manage'] } },
+        { provide: ConfigOwnershipService, useValue: { get } },
+        { provide: FrontendConfigService, useValue: { authMode: null } },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ClientListComponent);
+    fixture.componentRef.setInput('loadedClients', [
+      { clientId: 'acme-admin', tenantId: 'acme', roles: [] } as unknown as ClientEntity,
+    ]);
+    fixture.detectChanges();
+    const page = fixture.nativeElement as HTMLElement;
+
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(page.querySelector('[aria-label^="Rotate Secret"]')).not.toBeNull();
+    });
+    expect(get).not.toHaveBeenCalled();
+  });
+});

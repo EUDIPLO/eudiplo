@@ -95,6 +95,15 @@ export class ClientListComponent implements OnInit {
   canManage(client: ClientEntity): boolean {
     return canManageRoles(this.callerRoles, client.roles ?? []);
   }
+  /**
+   * The client to look up for the Config Portability lock, or none. The lookup
+   * reads the caller's own tenant, so it cannot answer for the clients of the
+   * tenant page, which may belong to another tenant.
+   */
+  ownershipId(client: ClientEntity): string {
+    return this.loadedClients ? '' : client.clientId;
+  }
+
   ngOnInit(): void {
     if (this.loadedClients) {
       this.clients = this.loadedClients;
