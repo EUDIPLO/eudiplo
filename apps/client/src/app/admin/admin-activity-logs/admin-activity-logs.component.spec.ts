@@ -179,7 +179,22 @@ describe('AdminActivityLogsComponent', () => {
     component.refresh();
     await settle();
     expect(text()).toContain('web-client (User)');
-    expect(text()).toContain('ID user-sub-1');
+    expect(text()).toContain('User ID user-sub-1');
+  });
+
+  it('does not repeat an actor id that is already the label', async () => {
+    await setup();
+    search.mockResolvedValue({
+      items: [entry({ actorType: 'user', actorId: 'user-sub-1', actorDisplay: undefined })],
+      total: 1,
+      page: 1,
+      pageSize: 25,
+      totalPages: 1,
+    });
+    component.refresh();
+    await settle();
+    expect(text()).toContain('user-sub-1 (User)');
+    expect(text()).not.toContain('User ID');
   });
 
   it('names the entry on each copy button', async () => {

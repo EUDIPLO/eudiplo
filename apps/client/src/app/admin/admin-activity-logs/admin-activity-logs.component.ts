@@ -316,7 +316,7 @@ export class AdminActivityLogsComponent implements OnInit {
    * for a user, the label is the client they signed in with.
    */
   hiddenActorId(log: AuditLogResponseDto): string {
-    return log.actorId && log.actorId !== log.actorDisplay ? log.actorId : '';
+    return log.actorId && log.actorDisplay && log.actorId !== log.actorDisplay ? log.actorId : '';
   }
 
   copyLabel(log: AuditLogResponseDto): string {

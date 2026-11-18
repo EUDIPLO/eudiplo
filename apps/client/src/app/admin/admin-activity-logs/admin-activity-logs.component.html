@@ -168,7 +168,9 @@
           <td mat-cell *matCellDef="let element">
             {{ actorLabel(element) }}
             @if (hiddenActorId(element)) {
-              <div class="actor-id">ID {{ hiddenActorId(element) }}</div>
+              <div class="actor-id">
+                {{ element.actorType === 'user' ? 'User ID' : 'ID' }} {{ hiddenActorId(element) }}
+              </div>
             }
           </td>
         </ng-container>
