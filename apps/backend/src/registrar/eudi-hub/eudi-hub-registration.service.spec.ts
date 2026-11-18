@@ -1,3 +1,4 @@
+import { setTimeout as sleep } from "node:timers/promises";
 import {
     BadGatewayException,
     BadRequestException,
@@ -9,6 +10,11 @@ import { RegistrationCertificateStorage } from "../registration-certificate-stor
 import { EudiHubRequestError } from "./eudi-hub.client.js";
 import { EUDI_HUB_NO_CERTIFICATE_REQUESTED } from "./eudi-hub-errors.js";
 import { EudiHubRegistrationService } from "./eudi-hub-registration.service.js";
+
+// The pause between two creations at the EUDI Hub; tests do not wait for it.
+vi.mock("node:timers/promises", () => ({
+    setTimeout: vi.fn().mockResolvedValue(undefined),
+}));
 
 const ORG = "01932c5a-9abc-7000-8000-000000000010";
 
@@ -80,6 +86,7 @@ describe("EudiHubRegistrationService", () => {
     const actor = { entity: { id: "t1" } } as any;
 
     beforeEach(() => {
+        vi.mocked(sleep).mockReset().mockResolvedValue(undefined);
         client = {
             getOrganization: vi.fn(),
             listCredentialRequests: vi.fn().mockResolvedValue([]),
@@ -597,6 +604,8 @@ describe("EudiHubRegistrationService", () => {
                 "sandbox",
             );
             expect(client.createCredentialIssuance).toHaveBeenCalledTimes(1);
+            // The existing type comes first: no pause before the only creation.
+            expect(sleep).not.toHaveBeenCalled();
             expect(client.createCredentialIssuance).toHaveBeenCalledWith(
                 "token",
                 ORG,
@@ -630,28 +639,66 @@ describe("EudiHubRegistrationService", () => {
             ]);
         });
 
-        it("keeps the order of the types when the creations finish out of order", async () => {
-            client.createCredentialIssuance.mockImplementation(
-                (_t, _o, body) =>
-                    new Promise((resolve) =>
-                        setTimeout(
-                            () => resolve({ id: `ci-${body.credential.type}` }),
-                            body.credential.type === "urn:a" ? 20 : 0,
-                        ),
-                    ),
-            );
-            client.downloadRegistrationCertificate.mockResolvedValue(listing);
-
-            const result = await service.requestIssuerCertificate(
-                "t1",
-                base,
-                actor,
-            );
-
-            expect(result.credentialIssuanceIds).toEqual([
-                "ci-urn:a",
-                "ci-org.b",
+        it("creates the missing types one after another with a pause between them", async () => {
+            issuance.registrationCertificateMaterial.mockResolvedValue({
+                providesAttestations: [
+                    { format: "dc+sd-jwt", type: "urn:a" },
+                    { format: "dc+sd-jwt", type: "urn:existing" },
+                    { format: "mso_mdoc", type: "org.b" },
+                    { format: "dc+sd-jwt", type: "urn:c" },
+                ],
+            });
+            client.listCredentialIssuances.mockResolvedValue([
+                {
+                    id: "ci-existing",
+                    credential: { format: "dc+sd-jwt", type: "urn:existing" },
+                },
             ]);
+            const events: string[] = [];
+            let running = 0;
+            let mostRunning = 0;
+            vi.mocked(sleep).mockImplementation(async (ms) => {
+                events.push(`pause ${ms}`);
+                return undefined;
+            });
+            client.createCredentialIssuance.mockImplementation(
+                async (_t, _o, body) => {
+                    running++;
+                    mostRunning = Math.max(mostRunning, running);
+                    events.push(`create ${body.credential.type}`);
+                    // Stays running across a real tick, so parallel
+                    // creations would overlap and raise mostRunning.
+                    await new Promise((resolve) => setTimeout(resolve, 5));
+                    running--;
+                    return { id: `ci-${body.credential.type}` };
+                },
+            );
+            client.createRegistrationCertificate.mockRejectedValue(
+                new EudiHubRequestError("stop", { status: 400 }),
+            );
+
+            await expect(
+                service.requestIssuerCertificate("t1", base, actor),
+            ).rejects.toBeInstanceOf(BadRequestException);
+
+            expect(mostRunning).toBe(1);
+            expect(events).toEqual([
+                "create urn:a",
+                "pause 300",
+                "create org.b",
+                "pause 300",
+                "create urn:c",
+            ]);
+            expect(
+                client.createRegistrationCertificate.mock.lastCall?.[2],
+            ).toMatchObject({
+                credentialIssuanceIds: [
+                    "ci-urn:a",
+                    "ci-existing",
+                    "ci-org.b",
+                    "ci-urn:c",
+                ],
+            });
         });
 
         it("requests no certificate when the EUDI Hub fails to register a type", async () => {
@@ -721,28 +768,33 @@ describe("EudiHubRegistrationService", () => {
             }
         });
 
-        it("waits for the other creations before it answers a refusal", async () => {
-            let created = false;
+        it("pauses after a refused type and still creates the remaining ones", async () => {
+            const events: string[] = [];
+            vi.mocked(sleep).mockImplementation(async (ms) => {
+                events.push(`pause ${ms}`);
+                return undefined;
+            });
             client.createCredentialIssuance.mockImplementation(
-                (_t, _o, body) =>
-                    body.credential.type === "urn:a"
+                (_t, _o, body) => {
+                    events.push(`create ${body.credential.type}`);
+                    return body.credential.type === "urn:a"
                         ? Promise.reject(
                               new EudiHubRequestError("conflict", {
                                   status: 409,
                               }),
                           )
-                        : new Promise((resolve) =>
-                              setTimeout(() => {
-                                  created = true;
-                                  resolve({ id: "ci-org.b" });
-                              }, 20),
-                          ),
+                        : Promise.resolve({ id: "ci-org.b" });
+                },
             );
 
             await expect(
                 service.requestIssuerCertificate("t1", base, actor),
             ).rejects.toBeInstanceOf(BadRequestException);
-            expect(created).toBe(true);
+            expect(events).toEqual([
+                "create urn:a",
+                "pause 300",
+                "create org.b",
+            ]);
         });
 
         it("answers with a 502 when the EUDI Hub failed for one type and refused another", async () => {
