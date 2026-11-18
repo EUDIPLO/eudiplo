@@ -12,7 +12,11 @@ import {
     EudiHubClient,
     EudiHubRequestError,
 } from "./eudi-hub.client.js";
-import { EUDI_HUB, eudiHubHttpException } from "./eudi-hub-errors.js";
+import {
+    EUDI_HUB,
+    eudiHubHttpException,
+    isEudiHubFailure,
+} from "./eudi-hub-errors.js";
 
 /** How many certificates of the same name a lost answer is looked for in. */
 const MAX_RECOVERY_DOWNLOADS = 5;
@@ -163,11 +167,7 @@ export class EudiHubService {
 
     /** No answer, or a server error: the certificate may exist anyway. */
     private mayHaveIssued(error: unknown): boolean {
-        return (
-            error instanceof EudiHubRequestError &&
-            !error.blocked &&
-            (error.status === undefined || error.status >= 500)
-        );
+        return error instanceof EudiHubRequestError && isEudiHubFailure(error);
     }
 
     /**

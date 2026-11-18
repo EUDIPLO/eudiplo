@@ -1,4 +1,8 @@
-import { BadGatewayException, BadRequestException } from "@nestjs/common";
+import {
+    BadGatewayException,
+    BadRequestException,
+    Logger,
+} from "@nestjs/common";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { IssuanceConfigurationNotFound } from "../../issuer/configuration/issuance/domain/issuance-configuration.js";
 import { RegistrationCertificateStorage } from "../registration-certificate-storage.service.js";
@@ -594,7 +598,7 @@ describe("EudiHubRegistrationService", () => {
             ]);
         });
 
-        it("requests no certificate when the EUDI Hub refuses to register a type", async () => {
+        it("requests no certificate when the EUDI Hub fails to register a type", async () => {
             client.createCredentialIssuance.mockImplementation(
                 (_t, _o, body) =>
                     body.credential.type === "org.b"
@@ -610,6 +614,169 @@ describe("EudiHubRegistrationService", () => {
             expect(client.createRegistrationCertificate).not.toHaveBeenCalled();
             expect(client.revokeRegistrationCertificate).not.toHaveBeenCalled();
             expect(issuance.storeIssuanceConfiguration).not.toHaveBeenCalled();
+        });
+
+        it("names the credential type the EUDI Hub refused", async () => {
+            client.createCredentialIssuance.mockImplementation(
+                (_t, _o, body) =>
+                    body.credential.type === "org.b"
+                        ? Promise.reject(
+                              new EudiHubRequestError("conflict", {
+                                  status: 409,
+                                  detail: "A credential issuance with the same credential already exists in the registry",
+                              }),
+                          )
+                        : Promise.resolve({ id: "ci-urn:a" }),
+            );
+
+            const error = await service
+                .requestIssuerCertificate("t1", base, actor)
+                .catch((caught: unknown) => caught);
+
+            expect(error).toBeInstanceOf(BadRequestException);
+            expect((error as BadRequestException).message).toBe(
+                "The EUDI Hub did not register credential type org.b for the registration certificate: the EUDI Hub answered with HTTP 409 (A credential issuance with the same credential already exists in the registry).",
+            );
+            expect(client.createRegistrationCertificate).not.toHaveBeenCalled();
+        });
+
+        it("names every refused type and logs the reasons of the others", async () => {
+            const warn = vi.spyOn(Logger.prototype, "warn");
+            client.createCredentialIssuance.mockImplementation((_t, _o, body) =>
+                Promise.reject(
+                    new EudiHubRequestError(
+                        `conflict ${body.credential.type}`,
+                        { status: 409 },
+                    ),
+                ),
+            );
+
+            try {
+                await expect(
+                    service.requestIssuerCertificate("t1", base, actor),
+                ).rejects.toThrow(
+                    "The EUDI Hub did not register credential type urn:a for the registration certificate (nor org.b): the EUDI Hub answered with HTTP 409.",
+                );
+                expect(warn).toHaveBeenCalledWith(
+                    "[t1] The EUDI Hub did not register credential type org.b: conflict org.b",
+                );
+            } finally {
+                warn.mockRestore();
+            }
+        });
+
+        it("waits for the other creations before it answers a refusal", async () => {
+            let created = false;
+            client.createCredentialIssuance.mockImplementation(
+                (_t, _o, body) =>
+                    body.credential.type === "urn:a"
+                        ? Promise.reject(
+                              new EudiHubRequestError("conflict", {
+                                  status: 409,
+                              }),
+                          )
+                        : new Promise((resolve) =>
+                              setTimeout(() => {
+                                  created = true;
+                                  resolve({ id: "ci-org.b" });
+                              }, 20),
+                          ),
+            );
+
+            await expect(
+                service.requestIssuerCertificate("t1", base, actor),
+            ).rejects.toBeInstanceOf(BadRequestException);
+            expect(created).toBe(true);
+        });
+
+        it("answers with a 502 when the EUDI Hub failed for one type and refused another", async () => {
+            client.createCredentialIssuance.mockImplementation((_t, _o, body) =>
+                Promise.reject(
+                    body.credential.type === "urn:a"
+                        ? new EudiHubRequestError("conflict", {
+                              status: 409,
+                          })
+                        : new EudiHubRequestError("down", { status: 503 }),
+                ),
+            );
+
+            const error = await service
+                .requestIssuerCertificate("t1", base, actor)
+                .catch((caught: unknown) => caught);
+
+            expect(error).toBeInstanceOf(BadGatewayException);
+            expect((error as BadGatewayException).message).toBe(
+                "The EUDI Hub did not register credential type org.b for the registration certificate (nor urn:a): the EUDI Hub answered with HTTP 503.",
+            );
+        });
+
+        it.each([
+            [
+                "an invalid answer",
+                new EudiHubRequestError("no id", { invalidAnswer: true }),
+            ],
+            ["no answer", new EudiHubRequestError("reset")],
+            ["an unexpected error", new TypeError("boom")],
+        ])(
+            "answers with a 502 when the EUDI Hub gave %s for one type and refused another",
+            async (_case, failure) => {
+                client.createCredentialIssuance.mockImplementation(
+                    (_t, _o, body) =>
+                        Promise.reject(
+                            body.credential.type === "urn:a"
+                                ? new EudiHubRequestError("conflict", {
+                                      status: 409,
+                                  })
+                                : failure,
+                        ),
+                );
+
+                const error = await service
+                    .requestIssuerCertificate("t1", base, actor)
+                    .catch((caught: unknown) => caught);
+
+                expect(error).toBeInstanceOf(BadGatewayException);
+                expect((error as BadGatewayException).message).toMatch(
+                    /^The EUDI Hub did not register credential type org\.b for the registration certificate \(nor urn:a\)/,
+                );
+            },
+        );
+
+        it.each([
+            [
+                "a server error",
+                new EudiHubRequestError("down", { status: 503 }),
+            ],
+            ["no answer", new EudiHubRequestError("reset")],
+        ])(
+            "answers with a 502 when listing the credential issuances gets %s",
+            async (_case, failure) => {
+                client.listCredentialIssuances.mockRejectedValue(failure);
+
+                await expect(
+                    service.requestIssuerCertificate("t1", base, actor),
+                ).rejects.toThrow(
+                    /^Could not read the credential issuances at the EUDI Hub: /,
+                );
+                await expect(
+                    service.requestIssuerCertificate("t1", base, actor),
+                ).rejects.toBeInstanceOf(BadGatewayException);
+                expect(client.createCredentialIssuance).not.toHaveBeenCalled();
+            },
+        );
+
+        it("reports a refused token when the credential issuances cannot be listed", async () => {
+            client.listCredentialIssuances.mockRejectedValue(
+                new EudiHubRequestError("refused", { status: 401 }),
+            );
+
+            await expect(
+                service.requestIssuerCertificate("t1", base, actor),
+            ).rejects.toThrow(
+                /^Could not read the credential issuances at the EUDI Hub: .*copy a fresh one\.$/,
+            );
+            expect(client.createCredentialIssuance).not.toHaveBeenCalled();
+            expect(client.createRegistrationCertificate).not.toHaveBeenCalled();
         });
 
         it("refuses without credential types", async () => {
