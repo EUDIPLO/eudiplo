@@ -1,1 +1,243 @@
-// Tenant show component styles (activity styles removed - see /admin/admin-activity-logs)
+@use '../tenant-page' as page;
+
+@include page.base;
+
+.page {
+  gap: 16px;
+}
+
+.back-link {
+  align-self: flex-start;
+  margin-left: -12px;
+}
+
+// Header card: avatar, name, ID and status, description, and the actions on the right
+.hero {
+  // mat-card lays out in a column; the header reads left to right
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 20px 24px;
+  padding: 24px;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--mat-sys-primary) 7%, var(--mat-sys-surface)) 0%,
+    var(--mat-sys-surface) 60%
+  );
+}
+
+.tenant-avatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border-radius: var(--mat-sys-corner-large);
+  // A tint of the primary colour, soft in both themes
+  background: color-mix(in srgb, var(--mat-sys-primary) 16%, var(--mat-sys-surface));
+  font: var(--mat-sys-headline-medium);
+  color: var(--mat-sys-primary);
+  text-transform: uppercase;
+}
+
+.hero-copy {
+  flex: 1 1 320px;
+  min-width: 0;
+
+  h1 {
+    margin: 0;
+    font: var(--mat-sys-headline-medium);
+    color: var(--mat-sys-on-surface);
+    overflow-wrap: anywhere;
+  }
+}
+
+.hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 8px;
+}
+
+// The ID with its copy button, as a quiet chip
+.id-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding-left: 12px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: var(--mat-sys-corner-small);
+  background: var(--mat-sys-surface);
+
+  code {
+    font-size: 13px;
+    color: var(--mat-sys-on-surface);
+  }
+
+  .copy-id {
+    --mat-icon-button-state-layer-size: 32px;
+
+    width: 32px;
+    height: 32px;
+    padding: 4px;
+
+    mat-icon {
+      width: 18px;
+      height: 18px;
+      font-size: 18px;
+    }
+  }
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+
+  &::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: var(--mat-sys-corner-full);
+    background: var(--tone);
+  }
+}
+
+.hero-description {
+  max-width: 72ch;
+  margin: 12px 0 0;
+  font: var(--mat-sys-body-large);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+// Clients beside the configuration; one column on narrow screens
+.content-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr);
+  gap: 16px;
+  align-items: start;
+  margin-top: 8px;
+}
+
+mat-card-header {
+  padding: 20px 20px 16px;
+}
+
+.clients-card {
+  overflow: hidden;
+}
+
+// The clients table scrolls sideways on narrow screens instead of being cut off
+.table-scroll {
+  overflow-x: auto;
+}
+
+.empty-clients {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 32px 20px 40px;
+  border-top: 1px solid var(--mat-sys-outline-variant);
+  color: var(--mat-sys-on-surface-variant);
+
+  p {
+    margin: 0;
+  }
+}
+
+.settings-card mat-card-content {
+  padding: 0 20px 12px !important;
+}
+
+.setting-group {
+  padding: 16px 0;
+
+  & + & {
+    border-top: 1px solid var(--mat-sys-outline-variant);
+  }
+
+  h3 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 8px;
+    font: var(--mat-sys-title-small);
+    color: var(--mat-sys-on-surface);
+
+    mat-icon {
+      width: 20px;
+      height: 20px;
+      font-size: 20px;
+      color: var(--mat-sys-primary);
+    }
+  }
+
+  dl {
+    margin: 0;
+  }
+}
+
+// Label left, value right; a value the instance supplies is muted
+.setting {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 6px 0;
+
+  dt {
+    font: var(--mat-sys-body-medium);
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  dd {
+    margin: 0;
+    font: var(--mat-sys-body-medium);
+    font-weight: 500;
+    color: var(--mat-sys-on-surface);
+    text-align: right;
+    overflow-wrap: anywhere;
+
+    &.default {
+      font-weight: 400;
+      font-style: italic;
+      color: var(--mat-sys-on-surface-variant);
+    }
+  }
+}
+
+.loading-state {
+  display: flex;
+  justify-content: center;
+  padding: 48px;
+}
+
+@container (max-width: 960px) {
+  .content-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@container (max-width: 600px) {
+  .hero {
+    padding: 20px;
+  }
+
+  .tenant-avatar {
+    width: 56px;
+    height: 56px;
+    font: var(--mat-sys-headline-small);
+  }
+
+  .hero-copy h1 {
+    font: var(--mat-sys-headline-small);
+  }
+}

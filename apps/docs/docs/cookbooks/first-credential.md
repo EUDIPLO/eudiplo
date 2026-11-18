@@ -16,8 +16,8 @@ A tenant `membership-demo` that issues an SD-JWT VC of type `urn:example:members
 
 ## Step 1: Create a tenant for the recipe
 
-1. Open **Administration → Tenants** and choose the **+** button (**Create New Tenant**).
-2. Enter **tenant ID** `membership-demo` and **Name** `Membership Demo`.
+1. Open **Administration → Tenants** and choose **Create tenant**.
+2. Enter **Tenant ID** `membership-demo` and **Name** `Membership Demo`.
 3. Under **Initial Admin Client → Client Roles**, keep `clients:manage` and add exactly these roles:
 
     | Role                   | Allows                                                           |

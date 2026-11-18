@@ -58,3 +58,120 @@ table {
   width: 100%;
   margin-top: 16px;
 }
+
+// Embedded in another page's card: the card gives the frame, rows carry the detail
+table.embedded {
+  margin-top: 0;
+  background: transparent;
+
+  th.mat-mdc-header-cell {
+    height: 48px;
+    border-top: 1px solid var(--mat-sys-outline-variant);
+    background: var(--mat-sys-surface-container-low);
+    font: var(--mat-sys-label-large);
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  th.mat-mdc-header-cell:first-child,
+  td.mat-mdc-cell:first-child {
+    padding-left: 20px;
+  }
+
+  th.mat-mdc-header-cell:last-child,
+  td.mat-mdc-cell:last-child {
+    padding-right: 12px;
+  }
+
+  tr.mat-mdc-row:last-child td {
+    border-bottom: 0;
+  }
+
+  tr.mat-mdc-row:hover {
+    background: var(--mat-sys-surface-container-low);
+  }
+
+  .mat-column-actions {
+    width: 1%;
+    white-space: nowrap;
+    text-align: right;
+  }
+}
+
+.client-cell {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 0;
+}
+
+.client-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--mat-sys-corner-full);
+  background: color-mix(in srgb, var(--mat-sys-primary) 14%, var(--mat-sys-surface));
+  color: var(--mat-sys-primary);
+
+  mat-icon {
+    width: 20px;
+    height: 20px;
+    font-size: 20px;
+  }
+}
+
+.client-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+
+  code {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--mat-sys-on-surface);
+    overflow-wrap: anywhere;
+  }
+
+  small {
+    font: var(--mat-sys-body-small);
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+.role-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 0;
+}
+
+.role-badge {
+  padding: 2px 10px;
+  border-radius: var(--mat-sys-corner-small);
+  background: var(--mat-sys-surface-container-high);
+  font: var(--mat-sys-label-medium);
+  color: var(--mat-sys-on-surface-variant);
+  white-space: nowrap;
+
+  &.more {
+    background: var(--mat-sys-secondary-container);
+    color: var(--mat-sys-on-secondary-container);
+    cursor: default;
+  }
+}
+
+.section-hint {
+  margin: 0;
+  padding: 0 20px 12px;
+  font: var(--mat-sys-body-medium);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+// Narrow pages: the key icon gives its room to the client ID
+@container (max-width: 600px) {
+  table.embedded .client-icon {
+    display: none;
+  }
+}

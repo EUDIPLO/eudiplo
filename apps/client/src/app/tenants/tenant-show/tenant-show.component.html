@@ -1,30 +1,124 @@
-@if (tenant) {
-  <div fxLayout="row" fxLayoutAlign="space-between center">
-    <h2>Tenant {{ tenant.id }}</h2>
-    <div>
-      <button
-        mat-icon-button
-        [routerLink]="['../']"
-        matTooltip="Back to Tenants"
-        aria-label="Back to Tenants"
-      >
-        <mat-icon>arrow_back</mat-icon>
-      </button>
-      <button
-        mat-icon-button
-        [routerLink]="['edit']"
-        matTooltip="Edit Tenant"
-        aria-label="Edit Tenant"
-      >
-        <mat-icon>edit</mat-icon>
-      </button>
+<div class="page">
+  @if (loadError) {
+    <app-load-error [message]="loadError" (retry)="loadTenant()">
+      <a matButton [routerLink]="['../']">Back to Tenants</a>
+    </app-load-error>
+  } @else if (!tenant) {
+    <div class="loading-state">
+      <mat-spinner diameter="40" aria-label="Loading tenant"></mat-spinner>
     </div>
-  </div>
-  <mat-list>
-    <mat-list-item>Name: {{ tenant.name }}</mat-list-item>
-    <mat-list-item>Description: {{ tenant.description }}</mat-list-item>
-    <mat-list-item>Status: {{ tenant.status }}</mat-list-item>
-  </mat-list>
+  } @else {
+    <a class="back-link" matButton [routerLink]="['../']">
+      <mat-icon>arrow_back</mat-icon>
+      Tenants
+    </a>
 
-  <app-client-list [loadedClients]="tenant.clients"></app-client-list>
-}
+    <!-- Who the tenant is, and what can be done with it -->
+    <mat-card appearance="outlined" class="hero">
+      <span class="tenant-avatar" aria-hidden="true">{{ initial }}</span>
+      <div class="hero-copy">
+        <h1>{{ tenant.name }}</h1>
+        <div class="hero-meta">
+          <span class="id-chip">
+            <code>{{ tenant.id }}</code>
+            <button
+              matIconButton
+              type="button"
+              class="copy-id"
+              matTooltip="Copy tenant ID"
+              aria-label="Copy tenant ID"
+              (click)="copyId()"
+            >
+              <mat-icon>content_copy</mat-icon>
+            </button>
+          </span>
+          @if (tenant.status) {
+            <span class="badge" [class]="'status-' + tenant.status">{{ tenant.status }}</span>
+          } @else {
+            <span class="badge">Status not set</span>
+          }
+        </div>
+        <p class="hero-description" [class.muted]="!tenant.description">
+          {{ tenant.description || 'No description' }}
+        </p>
+      </div>
+      <div class="hero-actions">
+        <a matButton="tonal" [routerLink]="['edit']" aria-label="Edit Tenant">
+          <mat-icon>edit</mat-icon>
+          Edit
+        </a>
+        <button
+          matIconButton
+          [matMenuTriggerFor]="moreMenu"
+          aria-label="More actions for this tenant"
+          matTooltip="More actions"
+        >
+          <mat-icon>more_vert</mat-icon>
+        </button>
+      </div>
+    </mat-card>
+
+    <div class="content-grid">
+      <mat-card appearance="outlined" class="clients-card">
+        <mat-card-header>
+          <mat-icon mat-card-avatar>group</mat-icon>
+          <h2 mat-card-title>Clients</h2>
+          <mat-card-subtitle>
+            {{ tenant.clients?.length ?? 0 }}
+            {{ tenant.clients?.length === 1 ? 'client signs' : 'clients sign' }} in to this tenant
+          </mat-card-subtitle>
+        </mat-card-header>
+        @if (tenant.clients?.length) {
+          <div class="table-scroll">
+            <app-client-list [loadedClients]="tenant.clients" [embedded]="true"></app-client-list>
+          </div>
+        } @else {
+          <div class="empty-clients">
+            <mat-icon aria-hidden="true">person_off</mat-icon>
+            <p>This tenant has no clients yet.</p>
+          </div>
+        }
+      </mat-card>
+
+      <mat-card appearance="outlined" class="settings-card">
+        <mat-card-header>
+          <mat-icon mat-card-avatar>tune</mat-icon>
+          <h2 mat-card-title>Configuration</h2>
+          <mat-card-subtitle>The tenant's own settings</mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
+          @for (group of settingGroups; track group.title) {
+            <section class="setting-group" [attr.aria-labelledby]="'settings-' + $index">
+              <h3 [id]="'settings-' + $index">
+                <mat-icon aria-hidden="true">{{ group.icon }}</mat-icon>
+                {{ group.title }}
+              </h3>
+              <dl>
+                @for (setting of group.settings; track setting.label) {
+                  <div class="setting">
+                    <dt>{{ setting.label }}</dt>
+                    <dd [class.default]="!setting.value">
+                      {{ setting.value ?? setting.fallback ?? 'Instance default' }}
+                    </dd>
+                  </div>
+                }
+              </dl>
+            </section>
+          }
+        </mat-card-content>
+      </mat-card>
+    </div>
+  }
+</div>
+
+<mat-menu #moreMenu="matMenu" class="m3-menu" xPosition="before">
+  <button mat-menu-item (click)="copyId()">
+    <mat-icon>content_copy</mat-icon>
+    <span>Copy tenant ID</span>
+  </button>
+  <mat-divider></mat-divider>
+  <button mat-menu-item class="danger" (click)="deleteTenant()">
+    <mat-icon>delete_outline</mat-icon>
+    <span>Delete tenant</span>
+  </button>
+</mat-menu>

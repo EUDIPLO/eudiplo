@@ -23,7 +23,6 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import {
   tenantControllerGetTenant,
   tenantControllerInitTenant,
@@ -49,7 +48,6 @@ import { LoadErrorComponent } from '../../common/load-error.component';
     MatFormFieldModule,
     MatInputModule,
     MatButtonModule,
-    FlexLayoutModule,
     MatSelectModule,
     MatSlideToggleModule,
     RouterModule,
@@ -82,6 +80,8 @@ export class TenantCreateComponent implements OnInit {
   private readonly frontendConfig = inject(FrontendConfigService);
   /** With another identity provider (OIDC_PROVIDER=generic), that provider manages the clients. */
   providerManagesClients = false;
+  /** The stored name of the tenant being edited, for the link back to it. */
+  private loadedName = '';
 
   constructor(
     private readonly fb: FormBuilder,
@@ -140,6 +140,7 @@ export class TenantCreateComponent implements OnInit {
     this.loadError = '';
     try {
       const tenant = await tenantControllerGetTenant<true>({ path: { id } });
+      this.loadedName = tenant.data.name;
       this.tenantForm.patchValue({
         id: tenant.data.id,
         name: tenant.data.name,
@@ -156,6 +157,17 @@ export class TenantCreateComponent implements OnInit {
     if (retrying && !this.loadError) {
       focusAfterRenderIfLost(this.injector, () => this.pageHeading?.nativeElement);
     }
+  }
+
+  /** The tenant being edited, by its stored name until it has loaded. */
+  get backLabel(): string {
+    return this.loadedName || this.route.snapshot.paramMap.get('id') || 'Tenant';
+  }
+
+  /** First letter of the name as typed, or of the ID, for the avatar next to the heading. */
+  get avatarInitial(): string {
+    const value = this.tenantForm.getRawValue() as { id: string; name: string };
+    return (value.name.trim() || value.id.trim()).charAt(0).toUpperCase();
   }
 
   /** Save stays focusable while a save runs, so its tooltip says why it waits. */
@@ -243,7 +255,11 @@ export class TenantCreateComponent implements OnInit {
     }
   }
 
+  /**
+   * Back to where the page was opened from. `../` drops the last URL segment: from
+   * /tenants/:id/edit to the tenant's page, from /tenants/create to the list.
+   */
   onCancel(): void {
-    this.router.navigate(['../'], { relativeTo: this.route });
+    void this.router.navigate(['../'], { relativeTo: this.route });
   }
 }

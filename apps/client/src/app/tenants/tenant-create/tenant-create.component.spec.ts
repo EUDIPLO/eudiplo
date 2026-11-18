@@ -4,13 +4,14 @@ import { FormBuilder } from '@angular/forms';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltip } from '@angular/material/tooltip';
 import { By } from '@angular/platform-browser';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { client } from '@eudiplo/sdk-core';
 import { of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { type AuthMode, FrontendConfigService } from '../../services/frontend-config.service';
+import { tenantRoutes } from '../tenants.routes';
 import { TenantCreateComponent } from './tenant-create.component';
 
 /** A frontend config service that reports `authMode` once loaded. */
@@ -182,6 +183,16 @@ describe('TenantCreateComponent', () => {
     });
   });
 
+  it('shows the first letter of the name as typed, or of the ID without a name', () => {
+    expect(component.avatarInitial).toBe('');
+
+    component.tenantForm.patchValue({ id: 'acme' });
+    expect(component.avatarInitial).toBe('A');
+
+    component.tenantForm.patchValue({ name: '  zeta corp' });
+    expect(component.avatarInitial).toBe('Z');
+  });
+
   it('sends null when an existing description is intentionally cleared', async () => {
     routeId = 'tenant';
     component.isEditMode = true;
@@ -253,6 +264,56 @@ describe('TenantCreateComponent', () => {
   describe('rendered', () => {
     afterEach(() => TestBed.resetTestingModule());
 
+    /** Opens a page of the real tenant routes and clicks its Cancel button. */
+    async function cancelFrom(url: string): Promise<{ afterCancel: string; backLink: string }> {
+      client.setConfig({
+        fetch: vi.fn<typeof fetch>(
+          async () =>
+            new Response(JSON.stringify({ id: 'acme', name: 'Acme', description: null }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            })
+        ),
+      });
+      TestBed.resetTestingModule();
+      await TestBed.configureTestingModule({
+        providers: [
+          provideRouter([{ path: 'tenants', children: tenantRoutes }]),
+          { provide: MatSnackBar, useValue: { open: vi.fn() } },
+          { provide: FrontendConfigService, useValue: frontendConfig(null) },
+        ],
+      }).compileComponents();
+      const harness = await RouterTestingHarness.create();
+      await harness.navigateByUrl(url, TenantCreateComponent);
+      const page = harness.routeNativeElement as HTMLElement;
+      await vi.waitFor(() => {
+        harness.detectChanges();
+        expect(page.querySelector('form')).not.toBeNull();
+      });
+      const backLink = page.querySelector('a.back-link')!.getAttribute('href')!;
+      const cancel = [...page.querySelectorAll('button')].find(
+        (button) => button.textContent?.trim() === 'Cancel'
+      )!;
+      cancel.click();
+      const router = TestBed.inject(Router);
+      await vi.waitFor(() => expect(router.url).not.toBe(url));
+      return { afterCancel: router.url, backLink };
+    }
+
+    it('returns from editing to the tenant on Cancel and by the back link', async () => {
+      expect(await cancelFrom('/tenants/acme/edit')).toEqual({
+        afterCancel: '/tenants/acme',
+        backLink: '/tenants/acme',
+      });
+    });
+
+    it('returns from creating to the list on Cancel and by the back link', async () => {
+      expect(await cancelFrom('/tenants/create')).toEqual({
+        afterCancel: '/tenants',
+        backLink: '/tenants',
+      });
+    });
+
     it('creates no admin client where the identity provider manages the clients', async () => {
       TestBed.resetTestingModule();
       await TestBed.configureTestingModule({
@@ -309,7 +370,7 @@ describe('TenantCreateComponent', () => {
       });
       expect(
         [...page.querySelectorAll('mat-error')].map((error) => error.textContent?.trim())
-      ).toEqual(['tenant ID is required', 'Select at least one role']);
+      ).toEqual(['Tenant ID is required', 'Select at least one role']);
       expect(snackBar.open).toHaveBeenLastCalledWith(
         'Check the highlighted fields.',
         'Close',
@@ -409,7 +470,7 @@ describe('TenantCreateComponent', () => {
         true
       );
       expect(page.querySelector('[role="alert"]')).toBeNull();
-      await vi.waitFor(() => expect(document.activeElement).toBe(page.querySelector('h2')));
+      await vi.waitFor(() => expect(document.activeElement).toBe(page.querySelector('h1')));
     });
   });
 });

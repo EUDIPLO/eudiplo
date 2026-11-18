@@ -105,3 +105,51 @@ app-root {
     height: 48px;
   }
 }
+
+/*
+ * Material 3 menu, opted into with class="m3-menu" on <mat-menu>: a rounded container on the
+ * low surface, rounded items inset from its edge, and the selected choice on the secondary
+ * container with a check mark. The panel opens in an overlay, so it is styled here.
+ */
+.m3-menu {
+  @include mat.menu-overrides(
+    (
+      container-shape: var(--mat-sys-corner-large),
+      container-color: var(--mat-sys-surface-container-low),
+      divider-color: var(--mat-sys-outline-variant),
+      divider-top-spacing: 4px,
+      divider-bottom-spacing: 4px,
+    )
+  );
+
+  &.mat-mdc-menu-panel {
+    min-width: 168px;
+  }
+
+  .mat-mdc-menu-content {
+    padding: 4px;
+  }
+
+  .mat-mdc-menu-item {
+    min-height: 44px;
+    border-radius: var(--mat-sys-corner-medium);
+
+    & + .mat-mdc-menu-item {
+      margin-top: 2px;
+    }
+
+    &.selected {
+      background: var(--mat-sys-secondary-container);
+      color: var(--mat-sys-on-secondary-container);
+
+      .mat-icon {
+        color: var(--mat-sys-on-secondary-container);
+      }
+    }
+
+    &.danger,
+    &.danger .mat-icon {
+      color: var(--mat-sys-error);
+    }
+  }
+}
