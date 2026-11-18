@@ -551,6 +551,44 @@ describe("Access certificate from the EUDI Hub (e2e)", () => {
         });
     });
 
+    test("says no certificate was requested when the credential issuances cannot be read", async () => {
+        const keyChainId = (
+            await request(app.getHttpServer())
+                .post("/key-chain")
+                .set("Authorization", `Bearer ${registrarToken}`)
+                .send({ usageType: "attestation", type: "standalone" })
+                .expect(201)
+        ).body.id;
+        const credentialConfig = readConfig<Record<string, unknown>>(
+            join(
+                __dirname,
+                "../fixtures/haip/issuance/credentials/pid-no-key.json",
+            ),
+        );
+        await request(app.getHttpServer())
+            .post("/issuer/credentials")
+            .set("Authorization", `Bearer ${registrarToken}`)
+            .send({ ...credentialConfig, id: "hub-pid-unread", keyChainId })
+            .expect(201);
+        nock(hub)
+            .get(`${base}/organizations/${ORG}/credential-issuances`)
+            .query(true)
+            .reply(503, { detail: "Maintenance" });
+
+        const res = await request(app.getHttpServer())
+            .post("/eudi-hub/registration-certificate/issuer")
+            .set("Authorization", `Bearer ${registrarToken}`)
+            .send(certificateFields)
+            .expect(502);
+
+        expect(res.body).toMatchObject({
+            code: "EUDI_HUB_NO_CERTIFICATE_REQUESTED",
+            message:
+                "Could not read the credential issuances at the EUDI Hub: the EUDI Hub answered with HTTP 503 (Maintenance).",
+        });
+        expect(nock.isDone()).toBe(true);
+    });
+
     test("reads the organization's data from the EUDI Hub", async () => {
         nock(hub)
             .get(`${base}/organizations/${ORG}`)

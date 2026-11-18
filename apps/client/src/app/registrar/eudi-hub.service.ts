@@ -26,6 +26,14 @@ export type EudiHubOrganizationDetails = EudiHubOrganizationDetailsDto;
 /** A registration certificate the EUDI Hub issued and EUDIPLO stored. */
 export type EudiHubRegistrationCertificate = EudiHubRegistrationCertificateDto;
 
+/**
+ * `code` of a backend error for an EUDI Hub failure before a certificate was
+ * requested, so the request cannot have stored one. Same value as in the
+ * backend's `eudi-hub-errors.ts`; without it the dialog says a certificate
+ * may have been stored.
+ */
+export const EUDI_HUB_NO_CERTIFICATE_REQUESTED = 'EUDI_HUB_NO_CERTIFICATE_REQUESTED';
+
 /** Where users sign in to the EUDI Hub and copy their access token from. */
 export const EUDI_HUB_PORTAL_URL = 'https://portal.eudi-hub.gov.de/';
 

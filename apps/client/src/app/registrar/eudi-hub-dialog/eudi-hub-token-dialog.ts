@@ -10,7 +10,12 @@ import {
   getApiErrorMessage,
   hasHttpStatus,
 } from '../../utils/error-message';
-import { EUDI_HUB_PORTAL_URL, EudiHubOrganization, EudiHubService } from '../eudi-hub.service';
+import {
+  EUDI_HUB_NO_CERTIFICATE_REQUESTED,
+  EUDI_HUB_PORTAL_URL,
+  EudiHubOrganization,
+  EudiHubService,
+} from '../eudi-hub.service';
 
 /** What the backend accepts: an RFC 6750 bearer token, with or without `Bearer `. */
 const TOKEN = /^\s*([Bb][Ee][Aa][Rr][Ee][Rr]\s+)?[\w.~+/-]+=*\s*$/;
@@ -101,9 +106,11 @@ export abstract class EudiHubTokenDialog<R> {
 
   /**
    * Runs `request` once and closes the dialog with its result. EUDIPLO
-   * refuses before it calls the EUDI Hub or after the EUDI Hub refused;
-   * after any other failure the result may have been stored, which the
-   * message then says with `mayHaveStored`.
+   * refuses before it calls the EUDI Hub or after the EUDI Hub refused. An
+   * EUDI Hub failure before EUDIPLO asked for a certificate is marked with a
+   * code, and the message then says nothing was stored; after any other failure
+   * the result may have been stored, which the message says with
+   * `mayHaveStored`.
    */
   protected async run(
     request: () => Promise<R>,
@@ -118,7 +125,17 @@ export abstract class EudiHubTokenDialog<R> {
     } catch (error) {
       const message = this.errorMessage(error, fallback);
       const refused = [400, 403, 404, 409].some((status) => hasHttpStatus(error, status));
-      this.error.set(refused ? message : `${asSentence(message)} ${mayHaveStored}`);
+      const nothingRequested =
+        (error as { code?: unknown } | null)?.code === EUDI_HUB_NO_CERTIFICATE_REQUESTED;
+      if (refused) {
+        this.error.set(message);
+      } else if (nothingRequested) {
+        this.error.set(
+          `${asSentence(message)} EUDIPLO requested no certificate and stored nothing.`
+        );
+      } else {
+        this.error.set(`${asSentence(message)} ${mayHaveStored}`);
+      }
     } finally {
       this.requesting.set(false);
     }

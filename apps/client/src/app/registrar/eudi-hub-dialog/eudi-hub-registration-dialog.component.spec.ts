@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { describe, expect, it, vi } from 'vitest';
 
-import { EudiHubService } from '../eudi-hub.service';
+import { EUDI_HUB_NO_CERTIFICATE_REQUESTED, EudiHubService } from '../eudi-hub.service';
 import {
   EudiHubRegistrationDialogComponent,
   type EudiHubRegistrationDialogData,
@@ -381,6 +381,71 @@ describe('EudiHubRegistrationDialogComponent', () => {
     expect(dialog.error()).toContain('Create an SD-JWT VC credential configuration');
     expect(dialog.error()).not.toContain('may have been stored');
     expect(dialogRef.close).not.toHaveBeenCalled();
+  });
+
+  it('says nothing was stored after a failure before a certificate was requested', async () => {
+    const { dialog, eudiHub, dialogRef } = createDialog({
+      kind: 'issuer',
+      defaultName: 'Issuer registration certificate',
+    });
+    eudiHub.requestIssuerRegistrationCertificate.mockRejectedValue({
+      statusCode: 502,
+      code: EUDI_HUB_NO_CERTIFICATE_REQUESTED,
+      message:
+        'Could not read the credential issuances at the EUDI Hub: the EUDI Hub answered with HTTP 503.',
+    });
+    dialog.token.setValue('abc');
+    dialog.organizationId.setValue(ORG);
+    await vi.waitFor(() => expect(dialog.loadingDetails()).toBe(false));
+
+    await dialog.submit();
+
+    expect(dialog.error()).toBe(
+      'Could not read the credential issuances at the EUDI Hub: the EUDI Hub answered with HTTP 503. EUDIPLO requested no certificate and stored nothing.'
+    );
+    expect(dialog.error()).not.toContain('may have been stored');
+    expect(dialogRef.close).not.toHaveBeenCalled();
+  });
+
+  it('says nothing was stored when a verifier request fails before a certificate was requested', async () => {
+    const { dialog, eudiHub } = createDialog();
+    eudiHub.requestPresentationRegistrationCertificate.mockRejectedValue({
+      statusCode: 502,
+      code: EUDI_HUB_NO_CERTIFICATE_REQUESTED,
+      message:
+        'Could not find or register the credential request at the EUDI Hub: the EUDI Hub could not be reached.',
+    });
+    dialog.token.setValue('abc');
+    dialog.organizationId.setValue(ORG);
+    await vi.waitFor(() => expect(dialog.loadingDetails()).toBe(false));
+    dialog.form.controls.purposeDe.setValue('Prüfung');
+    dialog.form.controls.purposeEn.setValue('Check');
+    dialog.form.controls.privacyPolicy.setValue('https://example.com/privacy');
+
+    await dialog.submit();
+
+    expect(eudiHub.requestPresentationRegistrationCertificate).toHaveBeenCalled();
+    expect(dialog.error()).toContain('EUDIPLO requested no certificate and stored nothing.');
+    expect(dialog.error()).not.toContain('may have been stored');
+  });
+
+  it('says a certificate may have been stored after a failure once one was requested', async () => {
+    const { dialog, eudiHub } = createDialog({
+      kind: 'issuer',
+      defaultName: 'Issuer registration certificate',
+    });
+    eudiHub.requestIssuerRegistrationCertificate.mockRejectedValue({
+      statusCode: 502,
+      message:
+        'The EUDI Hub did not issue a registration certificate: the EUDI Hub could not be reached.',
+    });
+    dialog.token.setValue('abc');
+    dialog.organizationId.setValue(ORG);
+    await vi.waitFor(() => expect(dialog.loadingDetails()).toBe(false));
+
+    await dialog.submit();
+
+    expect(dialog.error()).toContain('A certificate may have been stored anyway');
   });
 
   it('replaces the data of an earlier organization but keeps what the user changed', async () => {

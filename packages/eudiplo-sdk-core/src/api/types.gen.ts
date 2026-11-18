@@ -9089,7 +9089,7 @@ export type EudiHubControllerRequestPresentationRegistrationCertificateErrors = 
      */
     409: unknown;
     /**
-     * The EUDI Hub could not be reached, answered with a server error, or answered with something other than its API describes
+     * The EUDI Hub could not be reached, answered with a server error, or answered with something other than its API describes. When this happens while finding or registering the credential request, before a certificate is requested, the body has the code EUDI_HUB_NO_CERTIFICATE_REQUESTED
      */
     502: unknown;
 };
@@ -9120,7 +9120,7 @@ export type EudiHubControllerRequestIssuerRegistrationCertificateErrors = {
      */
     403: unknown;
     /**
-     * The EUDI Hub could not be reached, answered with a server error, or answered with something other than its API describes, or it issued a certificate that does not list every credential type, which is then revoked
+     * The EUDI Hub could not be reached, answered with a server error, or answered with something other than its API describes, or it issued a certificate that does not list every credential type, which is then revoked. When the EUDI Hub fails while reading or registering the credential issuances, before a certificate is requested, the body has the code EUDI_HUB_NO_CERTIFICATE_REQUESTED
      */
     502: unknown;
 };
