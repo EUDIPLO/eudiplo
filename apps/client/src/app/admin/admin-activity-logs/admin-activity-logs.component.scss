@@ -1,143 +1,361 @@
-.activity-page {
-  width: 100%;
+@use '../../tenants/tenant-page' as page;
+
+// Page heading, outlined cards and the Material 3 search bar, as on the tenant and client pages
+@include page.base;
+@include page.search-bar;
+
+.feed-card {
+  overflow: hidden;
 }
 
-.header {
+// Title and count on the left, the search bar on the right
+.feed-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
-  margin-bottom: 12px;
+  gap: 12px 24px;
+  padding: 16px 20px;
+}
+
+.feed-title {
+  display: flex;
+  flex-direction: column;
+
+  h2 {
+    margin: 0;
+    font: var(--mat-sys-title-medium);
+    color: var(--mat-sys-on-surface);
+  }
+
+  output {
+    font: var(--mat-sys-body-medium);
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+.type-filters {
+  display: block;
+  padding: 0 20px 12px;
+}
+
+// One section per day, its date above its entries
+.day + .day {
+  border-top: 1px solid var(--mat-sys-outline-variant);
+}
+
+.day-label {
+  margin: 0;
+  padding: 12px 20px 4px;
+  background: var(--mat-sys-surface-container-low);
+  border-top: 1px solid var(--mat-sys-outline-variant);
+  font: var(--mat-sys-label-large);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.entries {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.entry + .entry {
+  border-top: 1px solid var(--mat-sys-outline-variant);
+}
+
+// The whole entry is the button that opens its details
+.entry-row {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto 24px;
+  align-items: center;
+  gap: 16px;
   width: 100%;
-  flex-wrap: wrap;
+  padding: 12px 16px 12px 20px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
 
-  .header-main {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    text-align: left;
-    flex: 1;
-    min-width: 300px;
+  &:hover {
+    background: var(--mat-sys-surface-container-low);
   }
 
-  .header-controls {
-    display: flex;
+  &:focus-visible {
+    outline: 2px solid var(--mat-sys-primary);
+    outline-offset: -2px;
+  }
+}
+
+.entry-icon {
+  --tone: var(--mat-sys-on-surface-variant);
+
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--mat-sys-corner-full);
+  background: color-mix(in srgb, var(--tone) 14%, var(--mat-sys-surface));
+  color: var(--tone);
+
+  mat-icon {
+    width: 20px;
+    height: 20px;
+    font-size: 20px;
+  }
+
+  &.tone-success {
+    --tone: var(--eudiplo-success);
+  }
+
+  &.tone-info {
+    --tone: var(--eudiplo-info);
+  }
+
+  &.tone-danger {
+    --tone: var(--eudiplo-danger);
+  }
+}
+
+.entry-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.entry-action {
+  font: var(--mat-sys-title-small);
+  color: var(--mat-sys-on-surface);
+}
+
+.entry-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  font: var(--mat-sys-body-small);
+  color: var(--mat-sys-on-surface-variant);
+
+  .actor {
+    display: inline-flex;
     align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-    justify-content: flex-end;
+    gap: 4px;
+    overflow-wrap: anywhere;
+
+    mat-icon {
+      width: 16px;
+      height: 16px;
+      font-size: 16px;
+    }
+  }
+
+  .actor-type,
+  .fields {
+    padding: 0 8px;
+    border-radius: var(--mat-sys-corner-full);
+    background: var(--mat-sys-surface-container-high);
+    font: var(--mat-sys-label-small);
   }
 }
 
-.filters {
-  margin-bottom: 16px;
+.entry-time {
+  font: var(--mat-sys-body-medium);
+  color: var(--mat-sys-on-surface-variant);
+  font-variant-numeric: tabular-nums;
+}
+
+.entry-chevron {
+  color: var(--mat-sys-on-surface-variant);
+  transition: transform 150ms ease;
+}
+
+.entry.open {
+  .entry-row {
+    background: var(--mat-sys-surface-container-low);
+  }
+
+  .entry-chevron {
+    transform: rotate(180deg);
+  }
+}
+
+// Before and after of each changed field
+.entry-details {
+  padding: 4px 20px 16px 76px;
+  background: var(--mat-sys-surface-container-low);
+}
+
+.changes {
+  width: 100%;
+  border-collapse: collapse;
+  font: var(--mat-sys-body-small);
+
+  th,
+  td {
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--mat-sys-outline-variant);
+    text-align: left;
+    vertical-align: top;
+  }
+
+  thead th {
+    font: var(--mat-sys-label-medium);
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  tbody th {
+    width: 25%;
+    font-weight: 400;
+  }
+
+  code {
+    font-size: 12px;
+    overflow-wrap: anywhere;
+  }
+
+  // Field names wrap only where they have to
+  tbody th code {
+    overflow-wrap: break-word;
+  }
+
+  .before {
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  .after {
+    color: var(--mat-sys-on-surface);
+  }
+}
+
+.none {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+p.none {
+  margin: 8px 0;
+  font: var(--mat-sys-body-medium);
+}
+
+.details-footer {
+  display: flex;
   flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+}
 
-  .filter-field {
-    min-width: 220px;
-    max-width: 280px;
-    flex: 1 1 240px;
+.detail-meta {
+  font: var(--mat-sys-body-small);
+  color: var(--mat-sys-on-surface-variant);
+
+  code {
+    font-size: 12px;
   }
 }
 
-.loading-container {
+.no-match {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: 40px;
-  text-align: center;
+  gap: 8px;
+  padding: 32px 20px;
+  border-top: 1px solid var(--mat-sys-outline-variant);
+  color: var(--mat-sys-on-surface-variant);
+}
 
-  p {
-    margin-top: 16px;
-    color: var(--text-secondary, #666);
+// Page size on the left, the range and the page buttons on the right
+.feed-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 8px 12px 8px 20px;
+  border-top: 1px solid var(--mat-sys-outline-variant);
+}
+
+.page-size {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.page-size-label {
+  font: var(--mat-sys-body-medium);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+// Tonal pill; its arrow turns while the menu is open
+.page-size-trigger {
+  min-width: 76px;
+  font-variant-numeric: tabular-nums;
+
+  mat-icon {
+    transition: transform 150ms ease;
+  }
+
+  &.open mat-icon {
+    transform: rotate(180deg);
   }
 }
 
-.error-message {
+mat-paginator {
+  background: transparent;
+}
+
+.loading-state {
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 16px;
-  background-color: var(--mat-sys-error-container);
-  border-left: 4px solid var(--eudiplo-danger);
-  border-radius: 4px;
-  color: var(--eudiplo-danger);
-
-  mat-icon {
-    flex-shrink: 0;
-  }
-
-  p {
-    margin: 0;
-    line-height: 1.5;
-  }
+  justify-content: center;
+  padding: 48px;
 }
 
 .empty-state {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: 40px;
+  gap: 8px;
+  padding: 48px 24px;
+  border: 1px dashed var(--mat-sys-outline-variant);
+  border-radius: var(--mat-sys-corner-large);
   text-align: center;
-  color: var(--text-secondary, var(--mat-sys-on-surface-variant));
 
-  mat-icon {
-    font-size: 48px;
-    width: 48px;
-    height: 48px;
-    margin-bottom: 16px;
-    opacity: 0.5;
+  strong {
+    margin-top: 8px;
+    font: var(--mat-sys-title-medium);
+    color: var(--mat-sys-on-surface);
   }
 
   p {
     margin: 0;
-    font-size: 16px;
+    font: var(--mat-sys-body-medium);
+    color: var(--mat-sys-on-surface-variant);
   }
 }
 
-.table-container {
-  overflow-x: auto;
-  margin-top: 16px;
+.empty-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--mat-sys-corner-full);
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
 }
 
-.table-footer {
-  display: flex;
-  align-items: center;
-  justify-content: stretch;
-  border-top: 1px solid var(--divider-color, var(--mat-sys-outline-variant));
-  width: 100%;
-
-  mat-paginator {
-    width: 100%;
-  }
-}
-
-.activity-table {
-  width: 100%;
-}
-
-.action-badge {
-  display: inline-block;
-  padding: 4px 12px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-
-  &.action-tenant_created {
-    background-color: var(--mat-sys-secondary-container);
-    color: var(--eudiplo-success);
+// Narrow pages: the details start at the edge and the search bar takes the full width
+@container (max-width: 600px) {
+  .entry-details {
+    padding-left: 20px;
   }
 
-  &.action-tenant_updated {
-    background-color: var(--mat-sys-primary-container);
-    color: var(--eudiplo-info);
+  .search-bar {
+    flex: 1 1 100%;
   }
 
-  &.action-tenant_deleted {
-    background-color: var(--mat-sys-tertiary-container);
-    color: var(--eudiplo-warning);
+  .changes tbody th {
+    width: auto;
   }
 }

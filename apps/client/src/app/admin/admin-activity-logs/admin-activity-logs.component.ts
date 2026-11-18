@@ -1,33 +1,130 @@
 import { Component, OnInit, ChangeDetectionStrategy } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { DatePipe } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
-import { MatTableModule } from '@angular/material/table';
+import { MatCardModule } from '@angular/material/card';
+import { MatChipsModule } from '@angular/material/chips';
 import { MatIconModule } from '@angular/material/icon';
+import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
-import { MatSelectModule } from '@angular/material/select';
-import { MatFormFieldModule } from '@angular/material/form-field';
 import { AuditLogResponseDto, auditLogControllerGetAuditLogs } from '@eudiplo/sdk-core';
+import { LoadErrorComponent } from '../../common/load-error.component';
 import { getApiErrorMessage } from '../../utils/error-message';
-import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { copyToClipboard } from '../../utils/copy-to-clipboard';
+
+/** What an entry's action did, as the page shows it. */
+export interface ActionDescription {
+  /** The object the action is about, such as `credential_config`. */
+  object: string;
+  /** The verb, such as `created`; empty when the action type has none of the known verbs. */
+  verb: string;
+  /** For example "Credential Config Created". */
+  label: string;
+  /** Colour role of the verb. */
+  tone: 'tone-success' | 'tone-info' | 'tone-danger' | 'tone-neutral';
+  icon: string;
+}
+
+/** Entries of one day, newest first. */
+interface DayGroup {
+  day: string;
+  label: string;
+  logs: AuditLogResponseDto[];
+}
+
+/** One changed field of an entry, with its value before and after the change. */
+interface FieldChange {
+  field: string;
+  before?: string;
+  after?: string;
+}
+
+/** The verbs action types end with, with their colour and icon. */
+const verbs: Record<string, { tone: ActionDescription['tone']; icon: string }> = {
+  created: { tone: 'tone-success', icon: 'add' },
+  added: { tone: 'tone-success', icon: 'add' },
+  imported: { tone: 'tone-success', icon: 'download' },
+  generated: { tone: 'tone-success', icon: 'key' },
+  updated: { tone: 'tone-info', icon: 'edit' },
+  reset: { tone: 'tone-info', icon: 'restart_alt' },
+  reattached: { tone: 'tone-info', icon: 'link' },
+  exported: { tone: 'tone-neutral', icon: 'upload' },
+  detached: { tone: 'tone-neutral', icon: 'link_off' },
+  deleted: { tone: 'tone-danger', icon: 'delete' },
+  cancelled: { tone: 'tone-danger', icon: 'block' },
+};
+
+const actorIcons: Record<AuditLogResponseDto['actorType'], string> = {
+  user: 'person',
+  client: 'key',
+  system: 'settings',
+};
+
+/** Words of object types that are not simply capitalised. */
+const words: Record<string, string> = {
+  oidc: 'OpenID Connect',
+  config: 'Config',
+};
+
+/** "credential_config" as "Credential Config", "oidc_client" as "OpenID Connect Client". */
+function titleCase(snake: string): string {
+  return snake
+    .split('_')
+    .map((word) => words[word] ?? word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+/** Splits an action type into its object and verb, for any action the backend logs. */
+export function describeAction(actionType: string | undefined): ActionDescription {
+  if (!actionType) {
+    return { object: '', verb: '', label: 'Unknown', tone: 'tone-neutral', icon: 'help' };
+  }
+  const verb = Object.keys(verbs).find((candidate) => actionType.endsWith(`_${candidate}`));
+  if (!verb) {
+    return {
+      object: actionType,
+      verb: '',
+      label: titleCase(actionType),
+      tone: 'tone-neutral',
+      icon: 'history',
+    };
+  }
+  const object = actionType.slice(0, -(verb.length + 1));
+  return { object, verb, label: `${titleCase(object)} ${titleCase(verb)}`, ...verbs[verb] };
+}
+
+/** A logged value for display: strings as they are, anything else as compact JSON. */
+function display(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  return typeof value === 'string' ? value : JSON.stringify(value);
+}
+
+/** The day of a timestamp in local time, as YYYY-MM-DD, for grouping. */
+function localDay(timestamp: string): string {
+  const date = new Date(timestamp);
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
 
 @Component({
   selector: 'app-admin-activity-logs',
   standalone: true,
   imports: [
-    CommonModule,
+    DatePipe,
+    FormsModule,
+    LoadErrorComponent,
     MatButtonModule,
-    MatTableModule,
+    MatCardModule,
+    MatChipsModule,
     MatIconModule,
+    MatMenuModule,
     MatProgressSpinnerModule,
     MatTooltipModule,
     MatSnackBarModule,
     MatPaginatorModule,
-    MatSelectModule,
-    MatFormFieldModule,
   ],
   templateUrl: './admin-activity-logs.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
@@ -35,8 +132,12 @@ import { copyToClipboard } from '../../utils/copy-to-clipboard';
 })
 export class AdminActivityLogsComponent implements OnInit {
   activityLogs: AuditLogResponseDto[] = [];
+  /** The entries that match the search and the object type, on all pages. */
   filteredLogs: AuditLogResponseDto[] = [];
-  visibleLogs: AuditLogResponseDto[] = [];
+  /** The entries of the current page, by day. */
+  dayGroups: DayGroup[] = [];
+  /** The object types of the loaded entries, for the filter chips. */
+  objectTypes: { label: string; value: string }[] = [];
   activityLoading = false;
   activityError = '';
   readonly fetchLimit = 500;
@@ -45,14 +146,17 @@ export class AdminActivityLogsComponent implements OnInit {
   pageSize = 25;
   readonly pageSizeOptions = [10, 25, 50, 100];
 
-  selectedObjectType: string | null = null;
+  /** Object type the entries are limited to; empty for all. */
+  selectedObjectType = '';
+  /** Text to find in an entry's action, actor or changed fields. */
+  search = '';
+  /** Entries whose details are open. */
+  readonly expanded = new Set<string>();
 
-  displayedColumns: string[] = ['timestamp', 'action', 'actor', 'changedFields', 'actions'];
-
-  constructor(private snackBar: MatSnackBar) {}
+  constructor(private readonly snackBar: MatSnackBar) {}
 
   ngOnInit(): void {
-    this.loadActivityLogs();
+    void this.loadActivityLogs();
   }
 
   async loadActivityLogs(): Promise<void> {
@@ -65,119 +169,107 @@ export class AdminActivityLogsComponent implements OnInit {
       });
 
       this.activityLogs = response.data || [];
+      this.objectTypes = this.collectObjectTypes();
       this.pageIndex = 0;
-      this.updateVisibleLogs();
+      this.applyFilters();
     } catch (error) {
       this.activityError = getApiErrorMessage(error, 'Failed to load activity logs');
-      openErrorSnackBar(this.snackBar, this.activityError);
     } finally {
       this.activityLoading = false;
     }
   }
 
+  /** Filters by object type and search, keeps the page within the results and groups it by day. */
+  applyFilters(): void {
+    const term = this.search.trim().toLowerCase();
+    this.filteredLogs = this.activityLogs.filter((log) => {
+      const action = describeAction(log.actionType);
+      if (this.selectedObjectType && action.object !== this.selectedObjectType) return false;
+      if (!term) return true;
+      return [action.label, this.actorLabel(log), ...(log.changedFields ?? [])].some((value) =>
+        value.toLowerCase().includes(term)
+      );
+    });
+    const lastPage = Math.max(0, Math.ceil(this.filteredLogs.length / this.pageSize) - 1);
+    this.pageIndex = Math.min(this.pageIndex, lastPage);
+    const start = this.pageIndex * this.pageSize;
+    this.dayGroups = this.groupByDay(this.filteredLogs.slice(start, start + this.pageSize));
+  }
+
+  /** A new search or object type starts on the first page. */
+  onFilterChange(): void {
+    this.pageIndex = 0;
+    this.applyFilters();
+  }
+
+  selectObjectType(value: string): void {
+    this.selectedObjectType = value;
+    this.onFilterChange();
+  }
+
+  clearFilters(): void {
+    this.search = '';
+    this.selectedObjectType = '';
+    this.onFilterChange();
+  }
+
+  get hasFilters(): boolean {
+    return this.search.trim() !== '' || this.selectedObjectType !== '';
+  }
+
   onPageChange(event: PageEvent): void {
     this.pageIndex = event.pageIndex;
     this.pageSize = event.pageSize;
-    this.updateVisibleLogs();
+    this.applyFilters();
   }
 
-  onFilterChange(): void {
-    this.pageIndex = 0;
-    this.updateVisibleLogs();
+  /** Changes the page size and keeps the first entry of the current page in view. */
+  setPageSize(size: number): void {
+    this.pageIndex = Math.floor((this.pageIndex * this.pageSize) / size);
+    this.pageSize = size;
+    this.applyFilters();
   }
 
-  private updateVisibleLogs(): void {
-    let filtered = this.activityLogs;
-
-    if (this.selectedObjectType) {
-      filtered = filtered.filter((log) => objectTypeOf(log.actionType) === this.selectedObjectType);
-    }
-
-    this.filteredLogs = filtered;
-    const start = this.pageIndex * this.pageSize;
-    const end = start + this.pageSize;
-    this.visibleLogs = filtered.slice(start, end);
+  describe(log: AuditLogResponseDto): ActionDescription {
+    return describeAction(log.actionType);
   }
 
-  getObjectTypes(): { label: string; value: string }[] {
-    const objectTypes = new Set<string>();
-
-    for (const log of this.activityLogs) {
-      const objectType = objectTypeOf(log.actionType);
-      if (objectType) {
-        objectTypes.add(objectType);
-      }
-    }
-
-    const typeLabels: Record<string, string> = {
-      tenant: 'Tenant',
-      presentation_config: 'Presentation Config',
-      issuance_config: 'Issuance Config',
-      credential_config: 'Credential Config',
-      attribute_provider: 'Attribute Provider',
-      status_list_config: 'Status List Config',
-      webhook_endpoint: 'Webhook Endpoint',
-      federation_trust_anchor: 'Federation Trust Anchor',
-      oidc_client: 'OpenID Connect Client',
-      oidc_client_secret: 'OpenID Connect Client Secret',
-      session: 'Session',
-    };
-
-    return Array.from(objectTypes)
-      .sort((a, b) => a.localeCompare(b))
-      .map((type) => ({
-        label: typeLabels[type] || type,
-        value: type,
-      }));
-  }
   actorLabel(log: AuditLogResponseDto): string {
-    const display = log.actorDisplay || log.actorId || 'Unknown';
-    return `${display} (${log.actorType})`;
+    return log.actorDisplay || log.actorId || 'Unknown';
   }
 
-  actionLabel(actionType?: string): string {
-    if (!actionType) return 'Unknown';
-    const labels: Record<string, string> = {
-      tenant_created: 'Tenant Created',
-      tenant_updated: 'Tenant Updated',
-      tenant_deleted: 'Tenant Deleted',
-      presentation_config_created: 'Presentation Config Created',
-      presentation_config_updated: 'Presentation Config Updated',
-      presentation_config_deleted: 'Presentation Config Deleted',
-      issuance_config_updated: 'Issuance Config Updated',
-      credential_config_created: 'Credential Config Created',
-      credential_config_updated: 'Credential Config Updated',
-      credential_config_deleted: 'Credential Config Deleted',
-      attribute_provider_created: 'Attribute Provider Created',
-      attribute_provider_updated: 'Attribute Provider Updated',
-      attribute_provider_deleted: 'Attribute Provider Deleted',
-      status_list_config_updated: 'Status List Config Updated',
-      status_list_config_reset: 'Status List Config Reset',
-      webhook_endpoint_created: 'Webhook Endpoint Created',
-      webhook_endpoint_updated: 'Webhook Endpoint Updated',
-      webhook_endpoint_deleted: 'Webhook Endpoint Deleted',
-      oidc_client_created: 'OpenID Connect Client Created',
-      oidc_client_updated: 'OpenID Connect Client Updated',
-      oidc_client_deleted: 'OpenID Connect Client Deleted',
-      oidc_client_secret_added: 'OpenID Connect Client Secret Added',
-      oidc_client_secret_updated: 'OpenID Connect Client Secret Updated',
-      oidc_client_secret_deleted: 'OpenID Connect Client Secret Deleted',
-      federation_trust_anchor_created: 'Federation Trust Anchor Created',
-      federation_trust_anchor_updated: 'Federation Trust Anchor Updated',
-      federation_trust_anchor_deleted: 'Federation Trust Anchor Deleted',
-      session_cancelled: 'Session Cancelled',
-    };
-    return labels[actionType] || actionType;
+  /** A person for users, a key for API clients, a gear for the system. */
+  actorIcon(log: AuditLogResponseDto): string {
+    return actorIcons[log.actorType] ?? 'help';
   }
 
-  formatTimestamp(timestamp?: string): string {
-    if (!timestamp) return '';
-    return new Date(timestamp).toLocaleString();
+  /** The changed fields with their values; for a new object, its fields after the change. */
+  fieldChanges(log: AuditLogResponseDto): FieldChange[] {
+    const fields = log.changedFields?.length
+      ? log.changedFields
+      : Object.keys(log.after ?? log.before ?? {});
+    return fields.map((field) => ({
+      field,
+      before: display(log.before?.[field]),
+      after: display(log.after?.[field]),
+    }));
   }
 
-  getChangedFieldsText(changedFields?: string[]): string {
-    if (!changedFields || changedFields.length === 0) return 'N/A';
-    return changedFields.join(', ');
+  /** Whether any field had a value before the change, so a Before column says something. */
+  hasBefore(changes: FieldChange[]): boolean {
+    return changes.some((change) => change.before !== undefined);
+  }
+
+  isExpanded(log: AuditLogResponseDto): boolean {
+    return this.expanded.has(log.id);
+  }
+
+  toggle(log: AuditLogResponseDto): void {
+    if (this.expanded.has(log.id)) {
+      this.expanded.delete(log.id);
+    } else {
+      this.expanded.add(log.id);
+    }
   }
 
   async copyLog(log: AuditLogResponseDto): Promise<void> {
@@ -186,17 +278,48 @@ export class AdminActivityLogsComponent implements OnInit {
   }
 
   refresh(): void {
-    this.selectedObjectType = null;
-    this.pageIndex = 0;
-    this.loadActivityLogs();
+    this.clearFilters();
+    void this.loadActivityLogs();
   }
-}
 
-/**
- * The object an action is about, such as `oidc_client` for
- * `oidc_client_created`. Exact, so `oidc_client` does not also match
- * `oidc_client_secret_added`.
- */
-function objectTypeOf(actionType: string | undefined): string | undefined {
-  return actionType?.match(/^(.+?)(?:_created|_updated|_deleted|_reset|_cancelled|_added)$/)?.[1];
+  private collectObjectTypes(): { label: string; value: string }[] {
+    const objects = new Set(
+      this.activityLogs.map((log) => describeAction(log.actionType).object).filter(Boolean)
+    );
+    return [...objects]
+      .map((value) => ({ value, label: titleCase(value) }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }
+
+  /** Consecutive entries of the same local day, labelled "Today", "Yesterday" or the date. */
+  private groupByDay(logs: AuditLogResponseDto[]): DayGroup[] {
+    const today = localDay(new Date().toISOString());
+    const yesterdayDate = new Date();
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterday = localDay(yesterdayDate.toISOString());
+    const groups: DayGroup[] = [];
+    for (const log of logs) {
+      const day = localDay(log.timestamp);
+      let group = groups.at(-1);
+      if (group?.day !== day) {
+        let label: string;
+        if (day === today) {
+          label = 'Today';
+        } else if (day === yesterday) {
+          label = 'Yesterday';
+        } else {
+          label = new Date(log.timestamp).toLocaleDateString(undefined, {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+          });
+        }
+        group = { day, label, logs: [] };
+        groups.push(group);
+      }
+      group.logs.push(log);
+    }
+    return groups;
+  }
 }
