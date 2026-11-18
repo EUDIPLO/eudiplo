@@ -1,134 +1,245 @@
-<div class="activity-page">
-  <div class="header" fxLayout="row" fxLayoutAlign="space-between center" fxLayoutGap="24px">
-    <div class="header-main">
-      <h2>Activity Logs</h2>
+<div class="page">
+  <header class="page-header">
+    <div>
+      <h1>Activity Logs</h1>
+      <p>
+        Changes to this tenant's configuration, newest first. Shows the latest
+        {{ fetchLimit }} entries.
+      </p>
     </div>
+    <button matButton="outlined" (click)="refresh()" [disabled]="activityLoading">
+      <mat-icon>refresh</mat-icon>
+      Refresh
+    </button>
+  </header>
 
-    <div class="header-controls" fxLayout="row" fxLayoutGap="8px">
-      <button
-        mat-icon-button
-        color="primary"
-        (click)="refresh()"
-        [disabled]="activityLoading"
-        matTooltip="Refresh activity logs"
-        aria-label="Refresh activity logs"
-      >
-        <mat-icon>refresh</mat-icon>
-      </button>
-    </div>
-  </div>
-
-  <div class="filters" fxLayout="row" fxLayoutGap="12px" fxLayoutAlign="start center">
-    <mat-form-field appearance="outline" class="filter-field">
-      <mat-label>Filter by Object Type</mat-label>
-      <mat-select [(value)]="selectedObjectType" (selectionChange)="onFilterChange()">
-        <mat-option value="">All Objects</mat-option>
-        @for (objectType of getObjectTypes(); track objectType.value) {
-          <mat-option [value]="objectType.value">
-            {{ objectType.label }}
-          </mat-option>
-        }
-      </mat-select>
-    </mat-form-field>
-  </div>
-
-  <!-- Loading State -->
   @if (activityLoading) {
-    <div class="loading-container">
-      <mat-spinner diameter="40"></mat-spinner>
-      <p>Loading activity logs...</p>
+    <div class="loading-state">
+      <mat-spinner diameter="40" aria-label="Loading activity logs"></mat-spinner>
     </div>
-  }
-
-  <!-- Error State -->
-  @if (activityError && !activityLoading) {
-    <div class="error-message">
-      <mat-icon>error_outline</mat-icon>
-      <p>{{ activityError }}</p>
-    </div>
-  }
-
-  <!-- Empty State -->
-  @if (!activityLoading && !activityError && activityLogs.length === 0) {
+  } @else if (activityError) {
+    <app-load-error [message]="activityError" (retry)="loadActivityLogs()" />
+  } @else if (activityLogs.length === 0) {
     <div class="empty-state">
-      <mat-icon>info</mat-icon>
-      <p>No activity logs found for your tenant</p>
+      <span class="empty-icon"><mat-icon>history</mat-icon></span>
+      <strong>No activity yet</strong>
+      <p>Changes to the tenant's configuration appear here.</p>
     </div>
-  }
-
-  <!-- Activity Table -->
-  @if (!activityLoading && activityLogs.length > 0) {
-    <div class="table-container">
-      <table mat-table [dataSource]="visibleLogs" class="activity-table mat-elevation-z8">
-        <!-- Timestamp Column -->
-        <ng-container matColumnDef="timestamp">
-          <th mat-header-cell *matHeaderCellDef>Timestamp</th>
-          <td mat-cell *matCellDef="let element">
-            {{ formatTimestamp(element.timestamp) }}
-          </td>
-        </ng-container>
-
-        <!-- Action Column -->
-        <ng-container matColumnDef="action">
-          <th mat-header-cell *matHeaderCellDef>Action</th>
-          <td mat-cell *matCellDef="let element">
-            <span class="action-badge" [ngClass]="'action-' + element.actionType">
-              {{ actionLabel(element.actionType) }}
-            </span>
-          </td>
-        </ng-container>
-
-        <!-- Actor Column -->
-        <ng-container matColumnDef="actor">
-          <th mat-header-cell *matHeaderCellDef>Actor</th>
-          <td mat-cell *matCellDef="let element">
-            {{ actorLabel(element) }}
-          </td>
-        </ng-container>
-
-        <!-- Changed Fields Column -->
-        <ng-container matColumnDef="changedFields">
-          <th mat-header-cell *matHeaderCellDef>Changed Fields</th>
-          <td mat-cell *matCellDef="let element">
-            <span
-              [matTooltip]="getChangedFieldsText(element.changedFields)"
-              matTooltipPosition="above"
-            >
-              {{ getChangedFieldsText(element.changedFields) }}
-            </span>
-          </td>
-        </ng-container>
-
-        <!-- Actions Column -->
-        <ng-container matColumnDef="actions">
-          <th mat-header-cell *matHeaderCellDef>Actions</th>
-          <td mat-cell *matCellDef="let element">
+  } @else {
+    <mat-card appearance="outlined" class="feed-card">
+      <div class="feed-header">
+        <div class="feed-title">
+          <h2>All activity</h2>
+          <output>
+            @if (hasFilters) {
+              {{ filteredLogs.length }} of {{ activityLogs.length }} entries
+            } @else {
+              {{ activityLogs.length }} {{ activityLogs.length === 1 ? 'entry' : 'entries' }}
+            }
+          </output>
+        </div>
+        <div class="search-bar" role="search">
+          <mat-icon class="search-icon" aria-hidden="true">search</mat-icon>
+          <input
+            type="search"
+            [(ngModel)]="search"
+            (ngModelChange)="onFilterChange()"
+            placeholder="Search activity"
+            aria-label="Search activity by action, actor or changed field"
+          />
+          @if (search) {
             <button
-              mat-icon-button
-              (click)="copyLog(element)"
-              matTooltip="Copy to clipboard"
-              matTooltipPosition="above"
-              aria-label="Copy log entry to clipboard"
+              matIconButton
+              type="button"
+              class="clear-search"
+              aria-label="Clear search"
+              matTooltip="Clear search"
+              (click)="search = ''; onFilterChange()"
             >
-              <mat-icon>content_copy</mat-icon>
+              <mat-icon>close</mat-icon>
             </button>
-          </td>
-        </ng-container>
+          }
+        </div>
+      </div>
 
-        <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-        <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
-      </table>
-    </div>
+      <!-- Object type as Material 3 filter chips -->
+      @if (objectTypes.length > 1) {
+        <mat-chip-listbox
+          class="type-filters"
+          aria-label="Filter by object type"
+          [value]="selectedObjectType"
+          (change)="selectObjectType($event.value ?? '')"
+        >
+          <mat-chip-option value="">All</mat-chip-option>
+          @for (type of objectTypes; track type.value) {
+            <mat-chip-option [value]="type.value">{{ type.label }}</mat-chip-option>
+          }
+        </mat-chip-listbox>
+      }
 
-    <div class="table-footer">
-      <mat-paginator
-        [length]="filteredLogs.length"
-        [pageIndex]="pageIndex"
-        [pageSize]="pageSize"
-        [pageSizeOptions]="pageSizeOptions"
-        (page)="onPageChange($event)"
-        aria-label="Select activity log page"
-      ></mat-paginator>
-    </div>
+      @if (filteredLogs.length === 0) {
+        <div class="no-match">
+          <mat-icon aria-hidden="true">search_off</mat-icon>
+          <span>No activity matches the filters.</span>
+          <button matButton type="button" (click)="clearFilters()">Clear filters</button>
+        </div>
+      } @else {
+        @for (group of dayGroups; track group.day) {
+          <section class="day" [attr.aria-label]="group.label">
+            <h3 class="day-label">{{ group.label }}</h3>
+            <ol class="entries">
+              @for (log of group.logs; track log.id) {
+                @let action = describe(log);
+                @let open = isExpanded(log);
+                <li class="entry" [class.open]="open">
+                  <button
+                    type="button"
+                    class="entry-row"
+                    [attr.aria-expanded]="open"
+                    [attr.aria-controls]="'entry-' + log.id"
+                    (click)="toggle(log)"
+                  >
+                    <span class="entry-icon" [class]="action.tone" aria-hidden="true">
+                      <mat-icon>{{ action.icon }}</mat-icon>
+                    </span>
+                    <span class="entry-copy">
+                      <strong class="entry-action">{{ action.label }}</strong>
+                      <span class="entry-meta">
+                        <span class="actor">
+                          <mat-icon aria-hidden="true">{{ actorIcon(log) }}</mat-icon>
+                          {{ actorLabel(log) }}
+                        </span>
+                        <span class="actor-type">{{ log.actorType }}</span>
+                        @if (log.changedFields?.length) {
+                          <span class="fields"
+                            >{{ log.changedFields!.length }}
+                            {{ log.changedFields!.length === 1 ? 'field' : 'fields' }}</span
+                          >
+                        }
+                      </span>
+                    </span>
+                    <time
+                      class="entry-time"
+                      [attr.datetime]="log.timestamp"
+                      [title]="log.timestamp | date: 'medium'"
+                      >{{ log.timestamp | date: 'HH:mm' }}</time
+                    >
+                    <mat-icon class="entry-chevron" aria-hidden="true">expand_more</mat-icon>
+                  </button>
+
+                  @if (open) {
+                    <div class="entry-details" [id]="'entry-' + log.id">
+                      @let changes = fieldChanges(log);
+                      <!-- A new object has no values before; then only its values show -->
+                      @let compare = hasBefore(changes);
+                      @if (changes.length) {
+                        <table class="changes">
+                          <caption class="visually-hidden">
+                            Changes of this entry
+                          </caption>
+                          <thead>
+                            <tr>
+                              <th scope="col">Field</th>
+                              @if (compare) {
+                                <th scope="col">Before</th>
+                                <th scope="col">After</th>
+                              } @else {
+                                <th scope="col">Value</th>
+                              }
+                            </tr>
+                          </thead>
+                          <tbody>
+                            @for (change of changes; track change.field) {
+                              <tr>
+                                <th scope="row">
+                                  <code>{{ change.field }}</code>
+                                </th>
+                                @if (compare) {
+                                  <td>
+                                    @if (change.before !== undefined) {
+                                      <code class="before">{{ change.before }}</code>
+                                    } @else {
+                                      <span class="none">—</span>
+                                    }
+                                  </td>
+                                }
+                                <td>
+                                  @if (change.after !== undefined) {
+                                    <code class="after">{{ change.after }}</code>
+                                  } @else {
+                                    <span class="none">—</span>
+                                  }
+                                </td>
+                              </tr>
+                            }
+                          </tbody>
+                        </table>
+                      } @else {
+                        <p class="none">No field values were recorded for this entry.</p>
+                      }
+                      <div class="details-footer">
+                        <span class="detail-meta">
+                          {{ log.timestamp | date: 'medium' }}
+                          @if (log.requestId) {
+                            · Request <code>{{ log.requestId }}</code>
+                          }
+                        </span>
+                        <button matButton type="button" (click)="copyLog(log)">
+                          <mat-icon>content_copy</mat-icon>
+                          Copy as JSON
+                        </button>
+                      </div>
+                    </div>
+                  }
+                </li>
+              }
+            </ol>
+          </section>
+        }
+      }
+
+      @if (filteredLogs.length > pageSizeOptions[0]) {
+        <div class="feed-footer">
+          <div class="page-size">
+            <span class="page-size-label" aria-hidden="true">Entries per page</span>
+            <button
+              matButton="tonal"
+              type="button"
+              class="page-size-trigger"
+              [class.open]="pageSizeTrigger.menuOpen"
+              [matMenuTriggerFor]="pageSizeMenu"
+              #pageSizeTrigger="matMenuTrigger"
+              [attr.aria-label]="'Entries per page: ' + pageSize"
+            >
+              {{ pageSize }}
+              <mat-icon iconPositionEnd>arrow_drop_down</mat-icon>
+            </button>
+          </div>
+          <mat-paginator
+            hidePageSize
+            [length]="filteredLogs.length"
+            [pageIndex]="pageIndex"
+            [pageSize]="pageSize"
+            (page)="onPageChange($event)"
+            aria-label="Select activity log page"
+          ></mat-paginator>
+        </div>
+      }
+    </mat-card>
   }
 </div>
+
+<mat-menu #pageSizeMenu="matMenu" class="m3-menu" yPosition="above">
+  @for (size of pageSizeOptions; track size) {
+    <button
+      mat-menu-item
+      role="menuitemradio"
+      [attr.aria-checked]="size === pageSize"
+      [class.selected]="size === pageSize"
+      (click)="setPageSize(size)"
+    >
+      <mat-icon>{{ size === pageSize ? 'check' : '' }}</mat-icon>
+      <span>{{ size }} entries</span>
+    </button>
+  }
+</mat-menu>
