@@ -277,6 +277,12 @@ describe('DashboardComponent', () => {
     expect(health).toContain('KMS: Could not be loaded');
     expect(health).toContain('Access Certificate: Missing');
     expect(text(page.querySelector('.warnings-card'))).toContain('Could not load trust lists.');
+    // A missing certificate is marked as a problem; a signal that did not load is not marked
+    const signals = Array.from(page.querySelectorAll('.health-card .signal'));
+    const signal = (label: string) =>
+      signals.find((row) => text(row.querySelector('.signal-label'))?.startsWith(label));
+    expect(signal('Access Certificate')?.classList).toContain('tone-danger');
+    expect(signal('KMS')?.classList).toContain('tone-neutral');
   });
 
   it('counts unreachable KMS providers in the health card', async () => {
@@ -440,6 +446,19 @@ describe('DashboardComponent', () => {
     expect(configure?.getAttribute('href')).toBe('/keys/kc');
   });
 
+  it('counts only the setup steps it shows', async () => {
+    roles = ['issuance:manage'];
+    // A key chain without a usable access certificate: the issuance steps stay hidden
+    responses['/api/key-chain'] = [{ id: 'kc', usageType: 'access' }];
+    responses['/api/issuer/credentials'] = [];
+    responses['/api/issuer/config'] = { id: 'config' };
+
+    const page = await render();
+
+    expect(page.querySelectorAll('.setup-step')).toHaveLength(2);
+    expect(text(page.querySelector('.setup-progress'))).toBe('1 of 2 steps done');
+  });
+
   it('tells issuance:offer users why they cannot issue from here', async () => {
     roles = ['issuance:offer'];
     responses['/api/session/stats'] = {
@@ -516,6 +535,31 @@ describe('DashboardComponent', () => {
       ]);
     });
 
+    it('draws the trend of sessions and failures over the window next to their figures', async () => {
+      const page = await render();
+
+      const trends = Array.from(page.querySelectorAll('.stat-card-link'))
+        .filter((link) => link.querySelector('svg.sparkline'))
+        .map((link) => text(link.querySelector('.stat-label')));
+      expect(trends).toEqual(['Sessions · 7 days', 'Failed · 7 days']);
+      expect(page.querySelector('.sparkline')?.getAttribute('aria-hidden')).toBe('true');
+    });
+
+    it('draws no trend when no session was created in the window', async () => {
+      responses['/api/session/stats?bucket'] = {
+        presentation: {
+          total: 0,
+          byStatus: statusCounts(),
+          failureCodes: [],
+          lastCompletedAt: null,
+        },
+      };
+
+      const page = await render();
+
+      expect(page.querySelector('.sparkline')).toBeNull();
+    });
+
     it('shows the week by day and links each failure reason to its sessions', async () => {
       const page = await render();
 
@@ -524,6 +568,10 @@ describe('DashboardComponent', () => {
       expect(card?.querySelector('.retention-note')).toBeNull();
       const reason = card?.querySelector('.failure-codes a');
       expect(reason?.getAttribute('aria-label')).toBe('trust_chain_not_trusted: 1 failed session');
+      // The most frequent reason sets the full width of the bars
+      expect((reason?.querySelector('.failure-bar') as HTMLElement | null)?.style.width).toBe(
+        '100%'
+      );
       expect(decodeURIComponent(reason?.getAttribute('href') ?? '')).toBe(
         '/session-management?status=failed&createdFrom=2026-10-05&failureCode=trust_chain_not_trusted'
       );
@@ -603,7 +651,10 @@ describe('DashboardComponent', () => {
       const failed = Array.from(page.querySelectorAll('.session-overview-card a.status-link')).find(
         (link) => text(link)?.includes('Failed')
       );
-      expect(text(failed?.querySelector('span') ?? null)).toBe('1 Failed');
+      expect(failed?.getAttribute('aria-label')).toBe('1 Failed');
+      expect(text(failed?.querySelector('.status-count') ?? null)).toBe('1');
+      expect(text(failed?.querySelector('.status-share') ?? null)).toBe('25%');
+      expect(text(page.querySelector('.session-overview-card .header-meta'))).toBe('4 total');
       expect(failed?.getAttribute('href')).toBe('/session-management?status=failed');
     });
 

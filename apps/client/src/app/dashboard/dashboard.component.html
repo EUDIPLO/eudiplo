@@ -1,11 +1,8 @@
-<div fxLayout="column" fxLayoutAlign="start center" fxFill class="dashboard-container">
-  <!-- Dashboard Header -->
-  <div class="welcome-header" fxLayout="row" fxLayoutAlign="space-between center" fxFill>
+<div class="dashboard-container">
+  <header class="dashboard-header">
     <div class="dashboard-heading">
       <h1>Dashboard</h1>
-      <p class="subtitle" [class.needs-attention]="dashboardService.hasWarnings">
-        {{ readinessTitle }}
-      </p>
+      <p class="subtitle" [attr.data-tone]="readinessTone">{{ readinessTitle }}</p>
     </div>
     <div class="header-actions">
       @if (dashboardService.lastUpdatedAt && !rolesMissing) {
@@ -35,7 +32,7 @@
         <mat-icon>refresh</mat-icon>
       </button>
       <button
-        mat-stroked-button
+        matButton="outlined"
         type="button"
         class="customize-button"
         (click)="customizePanelOpen = !customizePanelOpen"
@@ -53,347 +50,93 @@
         aria-label="Loading dashboard"
       ></mat-progress-bar>
     }
-  </div>
+  </header>
 
   @if (customizePanelOpen) {
-    <mat-card id="dashboard-customization" class="customization-card">
+    <mat-card appearance="outlined" id="dashboard-customization" class="customization-card">
       <mat-card-header>
-        <mat-icon mat-card-avatar>tune</mat-icon>
-        <mat-card-title>Customize dashboard</mat-card-title>
+        <h2 mat-card-title>Customize dashboard</h2>
         <mat-card-subtitle>Choose the sections to show</mat-card-subtitle>
       </mat-card-header>
       <mat-card-content>
-        <div class="customization-sections">
-          <section aria-label="Visible sections">
-            <div class="section-toggles">
-              <mat-checkbox
-                [checked]="isSectionVisible('activity')"
-                [disabled]="!dashboardService.canViewSessions"
-                (change)="setSectionVisibility('activity', $event.checked)"
-              >
-                Sessions by outcome
-              </mat-checkbox>
-              <mat-checkbox
-                [checked]="isSectionVisible('recentActivity')"
-                [disabled]="!dashboardService.canViewSessions"
-                (change)="setSectionVisibility('recentActivity', $event.checked)"
-              >
-                Recent activity
-              </mat-checkbox>
-              <mat-checkbox
-                [checked]="isSectionVisible('sessionOverview')"
-                [disabled]="!dashboardService.canViewSessions"
-                (change)="setSectionVisibility('sessionOverview', $event.checked)"
-              >
-                Session overview
-              </mat-checkbox>
-              <mat-checkbox
-                [checked]="isSectionVisible('quickActions')"
-                [disabled]="
-                  !(dashboardService.canOfferIssuance || jwtService.hasRole('presentation:request'))
-                "
-                (change)="setSectionVisibility('quickActions', $event.checked)"
-              >
-                Quick actions
-              </mat-checkbox>
-            </div>
-            <p class="fixed-sections-note">
-              <mat-icon>lock</mat-icon>
-              System health and warnings stay visible whenever they apply to your role.
-            </p>
-          </section>
-        </div>
+        <section aria-label="Visible sections">
+          <div class="section-toggles">
+            <mat-checkbox
+              [checked]="isSectionVisible('activity')"
+              [disabled]="!dashboardService.canViewSessions"
+              (change)="setSectionVisibility('activity', $event.checked)"
+            >
+              Sessions by outcome
+            </mat-checkbox>
+            <mat-checkbox
+              [checked]="isSectionVisible('recentActivity')"
+              [disabled]="!dashboardService.canViewSessions"
+              (change)="setSectionVisibility('recentActivity', $event.checked)"
+            >
+              Recent activity
+            </mat-checkbox>
+            <mat-checkbox
+              [checked]="isSectionVisible('sessionOverview')"
+              [disabled]="!dashboardService.canViewSessions"
+              (change)="setSectionVisibility('sessionOverview', $event.checked)"
+            >
+              Session overview
+            </mat-checkbox>
+            <mat-checkbox
+              [checked]="isSectionVisible('quickActions')"
+              [disabled]="
+                !(dashboardService.canOfferIssuance || jwtService.hasRole('presentation:request'))
+              "
+              (change)="setSectionVisibility('quickActions', $event.checked)"
+            >
+              Quick actions
+            </mat-checkbox>
+          </div>
+          <p class="fixed-sections-note">
+            <mat-icon>lock</mat-icon>
+            System health and warnings stay visible whenever they apply to your role.
+          </p>
+        </section>
       </mat-card-content>
       <mat-card-actions align="end">
-        <button mat-button type="button" (click)="resetDashboard()">
+        <button matButton type="button" (click)="resetDashboard()">
           <mat-icon>restart_alt</mat-icon>
           Show all sections
         </button>
-        <button mat-flat-button type="button" color="primary" (click)="customizePanelOpen = false">
-          Done
-        </button>
+        <button matButton="filled" type="button" (click)="customizePanelOpen = false">Done</button>
       </mat-card-actions>
-    </mat-card>
-  }
-
-  <!-- Setup Guide (shown if setup not complete) -->
-  @if (dashboardService.showSetupGuide && dashboardService.hasLoaded) {
-    <mat-card class="setup-card">
-      <mat-card-header>
-        <mat-icon mat-card-avatar class="setup-icon">rocket_launch</mat-icon>
-        <mat-card-title>Getting Started</mat-card-title>
-        <mat-card-subtitle
-          >Complete the setup to start issuing or verifying credentials</mat-card-subtitle
-        >
-      </mat-card-header>
-      <mat-card-content>
-        <!-- Prerequisites Section -->
-        @if (dashboardService.canManageKeyChains) {
-          <div class="setup-section">
-            <h3 class="section-title">
-              <mat-icon>foundation</mat-icon>
-              Prerequisites
-            </h3>
-            <p class="section-description">Required for both issuance and verification</p>
-
-            <div class="setup-steps" fxLayout="column" fxLayoutGap="8px">
-              <!-- Step 1: Create Key Chain -->
-              <div
-                class="setup-step"
-                [class.completed]="dashboardService.totalKeyChains > 0"
-                fxLayout="row"
-                fxLayoutAlign="start center"
-                fxLayoutGap="12px"
-              >
-                <mat-icon [class.done]="dashboardService.totalKeyChains > 0">
-                  {{
-                    dashboardService.totalKeyChains > 0 ? 'check_circle' : 'radio_button_unchecked'
-                  }}
-                </mat-icon>
-                <div fxFlex>
-                  <strong>1. Create a Key Chain</strong>
-                  <p>
-                    Key chains contain cryptographic keys and certificates used to sign credentials
-                    and presentations
-                  </p>
-                </div>
-                @if (dashboardService.totalKeyChains === 0) {
-                  <a mat-stroked-button color="primary" routerLink="/keys/create">
-                    <mat-icon>add</mat-icon> Create Key Chain
-                  </a>
-                } @else {
-                  <mat-chip>{{ dashboardService.totalKeyChains }} key chain(s)</mat-chip>
-                }
-              </div>
-
-              <!-- Step 2: Configure Access Certificate -->
-              <div
-                class="setup-step"
-                [class.completed]="dashboardService.hasUsableAccessCertificate"
-                fxLayout="row"
-                fxLayoutAlign="start center"
-                fxLayoutGap="12px"
-              >
-                <mat-icon [class.done]="dashboardService.hasUsableAccessCertificate">
-                  {{
-                    dashboardService.hasUsableAccessCertificate
-                      ? 'check_circle'
-                      : 'radio_button_unchecked'
-                  }}
-                </mat-icon>
-                <div fxFlex>
-                  <strong>2. Configure an Access Certificate</strong>
-                  <p>
-                    An active access certificate is required to sign wallet-facing issuance and
-                    presentation requests
-                  </p>
-                </div>
-                @if (!dashboardService.hasUsableAccessCertificate) {
-                  <a
-                    mat-stroked-button
-                    color="primary"
-                    [routerLink]="dashboardService.accessCertificateRoute"
-                  >
-                    <mat-icon>verified</mat-icon> Configure
-                  </a>
-                } @else {
-                  <mat-chip>{{ dashboardService.accessKeyChains }} access key chain(s)</mat-chip>
-                }
-              </div>
-            </div>
-          </div>
-        }
-
-        <!-- Two-track setup -->
-        @if (dashboardService.hasPrerequisites) {
-          <mat-divider class="section-divider"></mat-divider>
-
-          <div class="tracks-container" fxLayout="row" fxLayout.lt-md="column" fxLayoutGap="24px">
-            <!-- Issuance Track -->
-            @if (dashboardService.canManageIssuance) {
-              <div class="setup-track" [class.ready]="dashboardService.isReadyToIssue" fxFlex>
-                <h3 class="track-title">
-                  <mat-icon>card_giftcard</mat-icon>
-                  Issue Credentials
-                  @if (dashboardService.isReadyToIssue) {
-                    <mat-chip color="primary" highlighted>Ready</mat-chip>
-                  } @else if (dashboardService.issueReadinessReason; as reason) {
-                    <mat-chip class="reason-chip" [matTooltip]="reason">{{ reason }}</mat-chip>
-                  }
-                </h3>
-
-                <div class="setup-steps" fxLayout="column" fxLayoutGap="8px">
-                  <!-- Issuance Config -->
-                  <div
-                    class="setup-step"
-                    [class.completed]="dashboardService.hasIssuanceConfig"
-                    fxLayout="row"
-                    fxLayoutAlign="start center"
-                    fxLayoutGap="12px"
-                  >
-                    <mat-icon [class.done]="dashboardService.hasIssuanceConfig">
-                      {{
-                        dashboardService.hasIssuanceConfig
-                          ? 'check_circle'
-                          : 'radio_button_unchecked'
-                      }}
-                    </mat-icon>
-                    <div fxFlex>
-                      <strong>Issuer Settings</strong>
-                      <p>Configure your issuer identity</p>
-                    </div>
-                    @if (!dashboardService.hasIssuanceConfig) {
-                      <a mat-stroked-button color="primary" routerLink="/issuance-config">
-                        <mat-icon>settings</mat-icon> Configure
-                      </a>
-                    }
-                  </div>
-
-                  <!-- Credential Config -->
-                  <div
-                    class="setup-step"
-                    [class.completed]="dashboardService.credentialConfigs > 0"
-                    fxLayout="row"
-                    fxLayoutAlign="start center"
-                    fxLayoutGap="12px"
-                  >
-                    <mat-icon [class.done]="dashboardService.credentialConfigs > 0">
-                      {{
-                        dashboardService.credentialConfigs > 0
-                          ? 'check_circle'
-                          : 'radio_button_unchecked'
-                      }}
-                    </mat-icon>
-                    <div fxFlex>
-                      <strong>Credential Config</strong>
-                      <p>Define credentials to issue</p>
-                    </div>
-                    @if (dashboardService.credentialConfigs === 0) {
-                      <a mat-stroked-button color="primary" routerLink="/credential-config/create">
-                        <mat-icon>add</mat-icon> Add
-                      </a>
-                    } @else {
-                      <mat-chip>{{ dashboardService.credentialConfigs }} config(s)</mat-chip>
-                    }
-                  </div>
-
-                  @if (!dashboardService.isReadyToIssue) {
-                    <div class="track-actions" fxLayout="row" fxLayoutGap="8px">
-                      @if (!dashboardService.hasIssuanceConfig) {
-                        <a mat-flat-button color="primary" routerLink="/issuance-config">
-                          <mat-icon>settings</mat-icon> Open Issuer Settings
-                        </a>
-                      } @else if (dashboardService.credentialConfigs === 0) {
-                        <a mat-flat-button color="primary" routerLink="/credential-config/create">
-                          <mat-icon>add</mat-icon> Add Credential Config
-                        </a>
-                      }
-                    </div>
-                  }
-                </div>
-              </div>
-            }
-
-            <!-- Verification Track -->
-            @if (dashboardService.canManagePresentation) {
-              <div class="setup-track" [class.ready]="dashboardService.isReadyToVerify" fxFlex>
-                <h3 class="track-title">
-                  <mat-icon>verified_user</mat-icon>
-                  Verify Presentations
-                  @if (dashboardService.isReadyToVerify) {
-                    <mat-chip color="accent" highlighted>Ready</mat-chip>
-                  } @else if (dashboardService.verifyReadinessReason; as reason) {
-                    <mat-chip class="reason-chip" [matTooltip]="reason">{{ reason }}</mat-chip>
-                  }
-                </h3>
-
-                <div class="setup-steps" fxLayout="column" fxLayoutGap="8px">
-                  <!-- Presentation Config -->
-                  <div
-                    class="setup-step"
-                    [class.completed]="dashboardService.presentationConfigs > 0"
-                    fxLayout="row"
-                    fxLayoutAlign="start center"
-                    fxLayoutGap="12px"
-                  >
-                    <mat-icon [class.done]="dashboardService.presentationConfigs > 0">
-                      {{
-                        dashboardService.presentationConfigs > 0
-                          ? 'check_circle'
-                          : 'radio_button_unchecked'
-                      }}
-                    </mat-icon>
-                    <div fxFlex>
-                      <strong>Presentation Config</strong>
-                      <p>Define what credentials to request</p>
-                    </div>
-                    @if (dashboardService.presentationConfigs === 0) {
-                      <a
-                        mat-stroked-button
-                        color="primary"
-                        routerLink="/presentation-config/create"
-                      >
-                        <mat-icon>add</mat-icon> Add
-                      </a>
-                    } @else {
-                      <mat-chip>{{ dashboardService.presentationConfigs }} config(s)</mat-chip>
-                    }
-                  </div>
-
-                  @if (!dashboardService.isReadyToVerify) {
-                    <div class="track-actions" fxLayout="row" fxLayoutGap="8px">
-                      @if (dashboardService.presentationConfigs === 0) {
-                        <a mat-flat-button color="primary" routerLink="/presentation-config/create">
-                          <mat-icon>add</mat-icon> Add Presentation Config
-                        </a>
-                      }
-                    </div>
-                  }
-                </div>
-              </div>
-            }
-          </div>
-        }
-      </mat-card-content>
     </mat-card>
   }
 
   @if (rolesMissing) {
-    <mat-card class="setup-card warnings-card roles-missing-card">
-      <mat-card-header>
-        <mat-icon mat-card-avatar class="setup-icon">error</mat-icon>
-        <mat-card-title>Could not load your roles</mat-card-title>
-        <mat-card-subtitle>
-          The dashboard and the menu show what your roles allow once they are loaded.
-        </mat-card-subtitle>
-      </mat-card-header>
-      <mat-card-actions>
-        <button mat-stroked-button type="button" (click)="retryRoles()">
-          <mat-icon>refresh</mat-icon> Retry
-        </button>
-      </mat-card-actions>
-    </mat-card>
+    <section class="banner tone-danger roles-missing-card" aria-labelledby="roles-missing-heading">
+      <mat-icon class="banner-icon">error</mat-icon>
+      <div class="banner-copy">
+        <h2 id="roles-missing-heading">Could not load your roles</h2>
+        <p>The dashboard and the menu show what your roles allow once they are loaded.</p>
+      </div>
+      <button matButton="outlined" type="button" (click)="retryRoles()">
+        <mat-icon>refresh</mat-icon> Retry
+      </button>
+    </section>
   }
 
   @if (dashboardService.hasWarnings) {
-    <mat-card class="setup-card warnings-card">
-      <mat-card-header>
-        <mat-icon mat-card-avatar class="setup-icon">warning</mat-icon>
-        <mat-card-title>Needs attention</mat-card-title>
-        <mat-card-subtitle>Signals that may affect issuance and verification</mat-card-subtitle>
-      </mat-card-header>
-      <mat-card-content>
-        <div class="setup-steps" fxLayout="column" fxLayoutGap="8px">
+    <section class="banner tone-warning warnings-card" aria-labelledby="warnings-heading">
+      <mat-icon class="banner-icon">warning</mat-icon>
+      <div class="banner-copy">
+        <h2 id="warnings-heading">Needs attention</h2>
+        <p>Signals that may affect issuance and verification</p>
+        <ul class="banner-list">
           @for (
             warning of dashboardService.warnings;
             track warning.message + (warning.action?.route?.join('/') ?? '')
           ) {
-            <div class="setup-step" fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="12px">
-              <mat-icon>warning_amber</mat-icon>
-              <div fxFlex>{{ warning.message }}</div>
+            <li class="banner-item">
+              <span>{{ warning.message }}</span>
               @if (warning.retry) {
                 <button
-                  mat-stroked-button
+                  matButton
                   type="button"
                   (click)="refresh()"
                   [disabled]="dashboardService.isLoading"
@@ -402,8 +145,7 @@
                 </button>
               } @else if (warning.action) {
                 <a
-                  mat-stroked-button
-                  color="primary"
+                  matButton
                   [routerLink]="warning.action.route"
                   [fragment]="warning.action.fragment"
                   [attr.aria-label]="warning.action.ariaLabel ?? null"
@@ -411,11 +153,270 @@
                   {{ warning.action.label }}
                 </a>
               }
-            </div>
+            </li>
           }
+        </ul>
+      </div>
+    </section>
+  }
+
+  <!-- Setup guide, shown until issuance or verification is ready -->
+  @if (dashboardService.showSetupGuide && dashboardService.hasLoaded) {
+    <mat-card appearance="outlined" class="setup-card">
+      <mat-card-header>
+        <mat-icon mat-card-avatar class="setup-icon">rocket_launch</mat-icon>
+        <h2 mat-card-title>Getting Started</h2>
+        <mat-card-subtitle>
+          Complete the setup to start issuing or verifying credentials
+        </mat-card-subtitle>
+      </mat-card-header>
+      @if (setupProgress; as progress) {
+        <div class="setup-progress">
+          <mat-progress-bar
+            mode="determinate"
+            [value]="(progress.done / progress.total) * 100"
+            [attr.aria-label]="progress.done + ' of ' + progress.total + ' setup steps done'"
+          ></mat-progress-bar>
+          <span>{{ progress.done }} of {{ progress.total }} steps done</span>
         </div>
+      }
+      <mat-card-content>
+        @if (dashboardService.canManageKeyChains) {
+          <section class="setup-section" aria-labelledby="prerequisites-heading">
+            <h3 id="prerequisites-heading" class="section-title">Prerequisites</h3>
+            <p class="section-description">Required for both issuance and verification</p>
+
+            <ol class="setup-steps">
+              <li class="setup-step" [class.completed]="dashboardService.totalKeyChains > 0">
+                @if (dashboardService.totalKeyChains > 0) {
+                  <mat-icon class="step-icon">check_circle</mat-icon>
+                } @else {
+                  <span class="step-number" aria-hidden="true">1</span>
+                }
+                <div class="step-copy">
+                  <strong>Create a Key Chain</strong>
+                  <p>
+                    Key chains contain cryptographic keys and certificates used to sign credentials
+                    and presentations
+                  </p>
+                </div>
+                @if (dashboardService.totalKeyChains === 0) {
+                  <a matButton="tonal" routerLink="/keys/create">
+                    <mat-icon>add</mat-icon> Create Key Chain
+                  </a>
+                } @else {
+                  <span class="step-count">{{ dashboardService.totalKeyChains }} key chain(s)</span>
+                }
+              </li>
+
+              <li
+                class="setup-step"
+                [class.completed]="dashboardService.hasUsableAccessCertificate"
+              >
+                @if (dashboardService.hasUsableAccessCertificate) {
+                  <mat-icon class="step-icon">check_circle</mat-icon>
+                } @else {
+                  <span class="step-number" aria-hidden="true">2</span>
+                }
+                <div class="step-copy">
+                  <strong>Configure an Access Certificate</strong>
+                  <p>
+                    An active access certificate is required to sign wallet-facing issuance and
+                    presentation requests
+                  </p>
+                </div>
+                @if (!dashboardService.hasUsableAccessCertificate) {
+                  <a matButton="tonal" [routerLink]="dashboardService.accessCertificateRoute">
+                    <mat-icon>verified</mat-icon> Configure
+                  </a>
+                } @else {
+                  <span class="step-count">
+                    {{ dashboardService.accessKeyChains }} access key chain(s)
+                  </span>
+                }
+              </li>
+            </ol>
+          </section>
+        }
+
+        @if (dashboardService.hasPrerequisites) {
+          <div class="tracks-container">
+            @if (dashboardService.canManageIssuance) {
+              <section
+                class="setup-track"
+                [class.ready]="dashboardService.isReadyToIssue"
+                aria-labelledby="issue-track-heading"
+              >
+                <h3 id="issue-track-heading" class="track-title">
+                  <mat-icon>card_giftcard</mat-icon>
+                  Issue Credentials
+                  @if (dashboardService.isReadyToIssue) {
+                    <span class="status-badge tone-success">Ready</span>
+                  } @else if (dashboardService.issueReadinessReason; as reason) {
+                    <span class="status-badge tone-warning" [matTooltip]="reason">{{
+                      reason
+                    }}</span>
+                  }
+                </h3>
+
+                <ol class="setup-steps">
+                  <li class="setup-step" [class.completed]="dashboardService.hasIssuanceConfig">
+                    @if (dashboardService.hasIssuanceConfig) {
+                      <mat-icon class="step-icon">check_circle</mat-icon>
+                    } @else {
+                      <span class="step-number" aria-hidden="true">1</span>
+                    }
+                    <div class="step-copy">
+                      <strong>Issuer Settings</strong>
+                      <p>Configure your issuer identity</p>
+                    </div>
+                    @if (!dashboardService.hasIssuanceConfig) {
+                      <a matButton="tonal" routerLink="/issuance-config">
+                        <mat-icon>settings</mat-icon> Configure
+                      </a>
+                    }
+                  </li>
+
+                  <li class="setup-step" [class.completed]="dashboardService.credentialConfigs > 0">
+                    @if (dashboardService.credentialConfigs > 0) {
+                      <mat-icon class="step-icon">check_circle</mat-icon>
+                    } @else {
+                      <span class="step-number" aria-hidden="true">2</span>
+                    }
+                    <div class="step-copy">
+                      <strong>Credential Config</strong>
+                      <p>Define credentials to issue</p>
+                    </div>
+                    @if (dashboardService.credentialConfigs === 0) {
+                      <a matButton="tonal" routerLink="/credential-config/create">
+                        <mat-icon>add</mat-icon> Add
+                      </a>
+                    } @else {
+                      <span class="step-count">
+                        {{ dashboardService.credentialConfigs }} config(s)
+                      </span>
+                    }
+                  </li>
+                </ol>
+              </section>
+            }
+
+            @if (dashboardService.canManagePresentation) {
+              <section
+                class="setup-track"
+                [class.ready]="dashboardService.isReadyToVerify"
+                aria-labelledby="verify-track-heading"
+              >
+                <h3 id="verify-track-heading" class="track-title">
+                  <mat-icon>verified_user</mat-icon>
+                  Verify Presentations
+                  @if (dashboardService.isReadyToVerify) {
+                    <span class="status-badge tone-success">Ready</span>
+                  } @else if (dashboardService.verifyReadinessReason; as reason) {
+                    <span class="status-badge tone-warning" [matTooltip]="reason">{{
+                      reason
+                    }}</span>
+                  }
+                </h3>
+
+                <ol class="setup-steps">
+                  <li
+                    class="setup-step"
+                    [class.completed]="dashboardService.presentationConfigs > 0"
+                  >
+                    @if (dashboardService.presentationConfigs > 0) {
+                      <mat-icon class="step-icon">check_circle</mat-icon>
+                    } @else {
+                      <span class="step-number" aria-hidden="true">1</span>
+                    }
+                    <div class="step-copy">
+                      <strong>Presentation Config</strong>
+                      <p>Define what credentials to request</p>
+                    </div>
+                    @if (dashboardService.presentationConfigs === 0) {
+                      <a matButton="tonal" routerLink="/presentation-config/create">
+                        <mat-icon>add</mat-icon> Add
+                      </a>
+                    } @else {
+                      <span class="step-count">
+                        {{ dashboardService.presentationConfigs }} config(s)
+                      </span>
+                    }
+                  </li>
+                </ol>
+              </section>
+            }
+          </div>
+        }
       </mat-card-content>
     </mat-card>
+  }
+
+  <!-- Quick actions -->
+  @if (
+    isSectionVisible('quickActions') &&
+    (dashboardService.canOfferIssuance || jwtService.hasRole('presentation:request'))
+  ) {
+    <section class="quick-actions-card" aria-label="Quick actions">
+      <div class="quick-actions">
+        @if (dashboardService.canOfferIssuance) {
+          <a
+            class="action-tile action-issue"
+            routerLink="/offer/issuance"
+            [class.disabled]="!dashboardService.isReadyToIssue"
+            [attr.aria-disabled]="!dashboardService.isReadyToIssue || null"
+            [attr.tabindex]="!dashboardService.isReadyToIssue ? -1 : 0"
+          >
+            <span class="action-icon"><mat-icon>card_giftcard</mat-icon></span>
+            <span class="action-copy">
+              <strong>Issue Credential</strong>
+              <small>Create a credential offer for a wallet</small>
+            </span>
+            <mat-icon class="action-arrow">arrow_forward</mat-icon>
+          </a>
+        }
+        @if (jwtService.hasRole('presentation:request')) {
+          <a
+            class="action-tile action-verify"
+            routerLink="/offer/presentation"
+            [class.disabled]="!dashboardService.isReadyToVerify"
+            [attr.aria-disabled]="!dashboardService.isReadyToVerify || null"
+            [attr.tabindex]="!dashboardService.isReadyToVerify ? -1 : 0"
+          >
+            <span class="action-icon"><mat-icon>fact_check</mat-icon></span>
+            <span class="action-copy">
+              <strong>Request Presentation</strong>
+              <small>Ask a wallet to present credentials</small>
+            </span>
+            <mat-icon class="action-arrow">arrow_forward</mat-icon>
+          </a>
+        }
+      </div>
+      @if (
+        dashboardService.hasLoaded &&
+        (((dashboardService.canManageIssuance || dashboardService.canOfferIssuance) &&
+          !dashboardService.isReadyToIssue) ||
+          (dashboardService.canReadPresentationConfigs && !dashboardService.isReadyToVerify))
+      ) {
+        <div class="actions-hint">
+          <mat-icon>info</mat-icon>
+          <span>
+            @if (
+              (dashboardService.canManageIssuance || dashboardService.canOfferIssuance) &&
+              dashboardService.issueReadinessReason
+            ) {
+              Issuance is blocked: <strong>{{ dashboardService.issueReadinessReason }}</strong>.
+            }
+            @if (
+              dashboardService.canReadPresentationConfigs && dashboardService.verifyReadinessReason
+            ) {
+              Presentation is blocked:
+              <strong>{{ dashboardService.verifyReadinessReason }}</strong>.
+            }
+          </span>
+        </div>
+      }
+    </section>
   }
 
   <!-- Key figures -->
@@ -427,9 +428,12 @@
         [queryParams]="card.queryParams"
         [matTooltip]="card.hint ?? ''"
       >
-        <mat-card class="stat-card">
-          <mat-card-content fxLayout="column" fxLayoutAlign="center center">
-            <mat-icon [class]="'stat-icon ' + card.iconClass">{{ card.icon }}</mat-icon>
+        <mat-card appearance="outlined" class="stat-card">
+          <span class="stat-head">
+            <span class="stat-label">{{ card.label }}</span>
+            <mat-icon class="stat-icon" [class]="card.iconClass">{{ card.icon }}</mat-icon>
+          </span>
+          <span class="stat-body">
             <span class="stat-value">
               @if (dashboardService.isLoaded(card.source)) {
                 {{ card.value }}
@@ -439,13 +443,24 @@
                 <mat-spinner diameter="28" aria-label="Loading"></mat-spinner>
               }
             </span>
-            <span class="stat-label">{{ card.label }}</span>
-            @if (dashboardService.hasFailed(card.source)) {
-              <span class="stat-note failed">Could not be loaded</span>
-            } @else if (card.note && dashboardService.isLoaded(card.source)) {
-              <span class="stat-note">{{ card.note }}</span>
+            @if (dashboardService.isLoaded(card.source) && sparkline(card.trend); as spark) {
+              <svg
+                class="sparkline"
+                [class]="card.iconClass"
+                viewBox="0 0 100 32"
+                preserveAspectRatio="none"
+                aria-hidden="true"
+              >
+                <path class="sparkline-area" [attr.d]="spark.area" />
+                <path class="sparkline-line" [attr.d]="spark.line" />
+              </svg>
             }
-          </mat-card-content>
+          </span>
+          @if (dashboardService.hasFailed(card.source)) {
+            <span class="stat-note failed">Could not be loaded</span>
+          } @else if (card.note && dashboardService.isLoaded(card.source)) {
+            <span class="stat-note">{{ card.note }}</span>
+          }
         </mat-card>
       </a>
     }
@@ -453,10 +468,9 @@
 
   <!-- Session activity of the last days -->
   @if (dashboardService.canViewSessions && isSectionVisible('activity')) {
-    <mat-card class="activity-card">
+    <mat-card appearance="outlined" class="activity-card">
       <mat-card-header>
-        <mat-icon mat-card-avatar>bar_chart</mat-icon>
-        <mat-card-title>Sessions by outcome</mat-card-title>
+        <h2 mat-card-title>Sessions by outcome</h2>
         <mat-card-subtitle>
           Sessions created in the last {{ dashboardService.activity?.label ?? '…' }}, by outcome
         </mat-card-subtitle>
@@ -502,6 +516,7 @@
                       (failure.count === 1 ? ' failed session' : ' failed sessions')
                     "
                   >
+                    <span class="failure-bar" [style.width.%]="failureShare(failure.count)"></span>
                     <code>{{ failure.code }}</code>
                     <span class="count">{{ failure.count }}</span>
                   </a>
@@ -532,347 +547,189 @@
     </mat-card>
   }
 
+  @let showRecentActivity = dashboardService.canViewSessions && isSectionVisible('recentActivity');
+  @let showSessionOverview =
+    dashboardService.canViewSessions &&
+    isSectionVisible('sessionOverview') &&
+    dashboardService.totalSessions > 0;
+
+  @if (showRecentActivity || showSessionOverview) {
+    <div class="dashboard-grid" [class.two-columns]="showRecentActivity && showSessionOverview">
+      <!-- Recent session activity -->
+      @if (showRecentActivity) {
+        <mat-card appearance="outlined" class="recent-activity-card">
+          <mat-card-header>
+            <h2 mat-card-title>Recent Activity</h2>
+            <mat-card-subtitle>Latest issuance and presentation session updates</mat-card-subtitle>
+            @if (
+              dashboardService.recentSessions.length > 0 ||
+              dashboardService.hasFailed('recentSessions')
+            ) {
+              <a matButton class="header-action" routerLink="/session-management">
+                View all
+                <mat-icon iconPositionEnd>arrow_forward</mat-icon>
+              </a>
+            }
+          </mat-card-header>
+          <mat-card-content>
+            @if (dashboardService.recentSessions.length > 0) {
+              <div class="activity-list">
+                @for (session of dashboardService.recentSessions; track session.id) {
+                  <a class="activity-row" [routerLink]="['/session-management', session.id]">
+                    <span class="activity-status" [class]="'status-' + session.status">
+                      <mat-icon>{{ sessionStatusIcon(session.status) }}</mat-icon>
+                    </span>
+                    <span class="activity-copy">
+                      <strong>{{ sessionTypeLabel(session) }} {{ session.status }}</strong>
+                      <small [title]="session.id">{{ sessionDetails(session) }}</small>
+                    </span>
+                    <time [attr.datetime]="session.updatedAt">
+                      {{ session.updatedAt | date: 'MMM d, HH:mm' }}
+                    </time>
+                    <mat-icon class="activity-arrow">chevron_right</mat-icon>
+                  </a>
+                }
+              </div>
+            } @else if (dashboardService.isLoaded('recentSessions')) {
+              <div class="empty-state">
+                <span class="empty-icon"><mat-icon>inbox</mat-icon></span>
+                <div>
+                  <strong>No session activity yet</strong>
+                  <p>Run an issuance or presentation flow to see recent updates here.</p>
+                </div>
+              </div>
+            } @else if (dashboardService.hasFailed('recentSessions')) {
+              <div class="empty-state">
+                <span class="empty-icon"><mat-icon>error_outline</mat-icon></span>
+                <div>
+                  <strong>Recent activity could not be loaded</strong>
+                  <p>See the message at the top, or open the full session list.</p>
+                </div>
+              </div>
+            } @else {
+              <div class="empty-state">
+                <mat-spinner diameter="24" aria-label="Loading recent activity"></mat-spinner>
+                <div>
+                  <strong>Loading recent activity…</strong>
+                </div>
+              </div>
+            }
+          </mat-card-content>
+        </mat-card>
+      }
+
+      <!-- Session status breakdown -->
+      @if (showSessionOverview) {
+        <mat-card appearance="outlined" class="session-overview-card">
+          <mat-card-header>
+            <h2 mat-card-title>Session Overview</h2>
+            <mat-card-subtitle>Current session status breakdown</mat-card-subtitle>
+            <span class="header-meta">
+              <strong>{{ dashboardService.totalSessions }}</strong> total
+            </span>
+          </mat-card-header>
+          <mat-card-content>
+            <div class="status-bar" aria-hidden="true">
+              @for (status of sessionStatuses; track status.status) {
+                @if (status.count > 0) {
+                  <span [class]="'status-' + status.status" [style.flex-grow]="status.count"></span>
+                }
+              }
+            </div>
+            <ul class="status-list">
+              @for (status of sessionStatuses; track status.status) {
+                <li>
+                  <a
+                    class="status-link"
+                    [class]="'status-' + status.status"
+                    [attr.aria-label]="status.count + ' ' + status.label"
+                    routerLink="/session-management"
+                    [queryParams]="{ status: status.status }"
+                  >
+                    <span class="status-dot" aria-hidden="true"></span>
+                    <span class="status-name">{{ status.label }}</span>
+                    <span class="status-share">{{ sessionShare(status.count) }}%</span>
+                    <strong class="status-count">{{ status.count }}</strong>
+                    <mat-icon class="status-link-arrow">chevron_right</mat-icon>
+                  </a>
+                </li>
+              }
+            </ul>
+          </mat-card-content>
+        </mat-card>
+      }
+    </div>
+  }
+
+  <!-- Operational health -->
   @if (dashboardService.hasHealthSignals) {
-    <mat-card class="session-breakdown-card health-card">
+    <mat-card appearance="outlined" class="health-card">
       <mat-card-header>
-        <mat-icon mat-card-avatar>health_and_safety</mat-icon>
-        <mat-card-title>Operational Health</mat-card-title>
+        <h2 mat-card-title>Operational Health</h2>
         <mat-card-subtitle>Readiness and integration health signals</mat-card-subtitle>
       </mat-card-header>
       <mat-card-content>
-        @if (dashboardService.canManageKeyChains || dashboardService.canManagePresentation) {
-          <div class="session-stats" fxLayout="row wrap" fxLayoutGap="24px">
-            @if (dashboardService.canManageKeyChains) {
-              <div
-                class="session-stat"
-                fxLayout="row"
-                fxLayoutAlign="start center"
-                fxLayoutGap="8px"
+        <ul class="signal-list">
+          @if (dashboardService.canManageKeyChains) {
+            <li class="signal" [class]="accessCertificateTone">
+              <span class="signal-icon"><mat-icon>verified</mat-icon></span>
+              <span class="signal-label"
+                >Access Certificate<span class="visually-hidden">: </span></span
               >
-                <mat-icon class="status-completed">verified</mat-icon>
-                <span
-                  ><strong>Access Certificate:</strong>
-                  {{
-                    loadedValue('keyChains', dashboardService.accessCertificateStatusLabel)
-                  }}</span
-                >
-              </div>
-              @if (dashboardService.accessCertificateExpiresAt) {
-                <div
-                  class="session-stat"
-                  fxLayout="row"
-                  fxLayoutAlign="start center"
-                  fxLayoutGap="8px"
-                >
-                  <mat-icon class="status-expired">event</mat-icon>
-                  <span
-                    ><strong>Expires:</strong>
-                    {{ dashboardService.accessCertificateExpiresAt | date: 'yyyy-MM-dd' }}
-                    (in {{ dashboardService.accessCertificateDaysUntilExpiry }}
-                    {{
-                      dashboardService.accessCertificateDaysUntilExpiry === 1 ? 'day' : 'days'
-                    }})</span
-                  >
-                </div>
-              }
-              <div
-                class="session-stat"
-                fxLayout="row"
-                fxLayoutAlign="start center"
-                fxLayoutGap="8px"
-              >
-                <mat-icon class="status-fetched">dns</mat-icon>
-                <span><strong>KMS:</strong> {{ loadedValue('kmsHealth', kmsSummary) }}</span>
-              </div>
-            }
-          </div>
-        }
-
-        @if (dashboardService.sessionStats.issuance || dashboardService.sessionStats.presentation) {
-          <div class="session-stats" fxLayout="row wrap" fxLayoutGap="24px">
-            @if (dashboardService.sessionStats.issuance) {
-              <div
-                class="session-stat"
-                fxLayout="row"
-                fxLayoutAlign="start center"
-                fxLayoutGap="8px"
-              >
-                <mat-icon class="status-completed">north_east</mat-icon>
-                <span
-                  ><strong>Last Issuance Success:</strong>
-                  {{
-                    dashboardService.lastSuccessfulIssuanceAt
-                      ? (dashboardService.lastSuccessfulIssuanceAt | date: 'yyyy-MM-dd HH:mm')
-                      : 'n/a'
-                  }}</span
-                >
-              </div>
-            }
-            @if (dashboardService.sessionStats.presentation) {
-              <div
-                class="session-stat"
-                fxLayout="row"
-                fxLayoutAlign="start center"
-                fxLayoutGap="8px"
-              >
-                <mat-icon class="status-completed">fact_check</mat-icon>
-                <span
-                  ><strong>Last Presentation Success:</strong>
-                  {{
-                    dashboardService.lastSuccessfulPresentationAt
-                      ? (dashboardService.lastSuccessfulPresentationAt | date: 'yyyy-MM-dd HH:mm')
-                      : 'n/a'
-                  }}</span
-                >
-              </div>
-            }
-          </div>
-        }
-      </mat-card-content>
-    </mat-card>
-  }
-
-  <!-- Recent session activity -->
-  @if (dashboardService.canViewSessions && isSectionVisible('recentActivity')) {
-    <mat-card class="recent-activity-card">
-      <mat-card-header>
-        <mat-icon mat-card-avatar>history</mat-icon>
-        <mat-card-title>Recent Activity</mat-card-title>
-        <mat-card-subtitle>Latest issuance and presentation session updates</mat-card-subtitle>
-      </mat-card-header>
-      <mat-card-content>
-        @if (dashboardService.recentSessions.length > 0) {
-          <div class="activity-list">
-            @for (session of dashboardService.recentSessions; track session.id) {
-              <a class="activity-row" [routerLink]="['/session-management', session.id]">
-                <mat-icon [class]="'activity-status status-' + session.status">
-                  {{ sessionStatusIcon(session.status) }}
-                </mat-icon>
-                <span class="activity-copy">
-                  <strong>{{ sessionTypeLabel(session) }} {{ session.status }}</strong>
-                  <small [title]="session.id">{{ sessionDetails(session) }}</small>
+              <span class="signal-value">
+                {{ loadedValue('keyChains', dashboardService.accessCertificateStatusLabel) }}
+              </span>
+            </li>
+            @if (dashboardService.accessCertificateExpiresAt) {
+              <li class="signal" [class]="accessCertificateTone">
+                <span class="signal-icon"><mat-icon>event</mat-icon></span>
+                <span class="signal-label">Expires<span class="visually-hidden">: </span></span>
+                <span class="signal-value">
+                  {{ dashboardService.accessCertificateExpiresAt | date: 'yyyy-MM-dd' }}
+                  <small>
+                    in {{ dashboardService.accessCertificateDaysUntilExpiry }}
+                    {{ dashboardService.accessCertificateDaysUntilExpiry === 1 ? 'day' : 'days' }}
+                  </small>
                 </span>
-                <time [attr.datetime]="session.updatedAt">
-                  {{ session.updatedAt | date: 'MMM d, HH:mm' }}
-                </time>
-                <mat-icon class="activity-arrow">chevron_right</mat-icon>
-              </a>
+              </li>
             }
-          </div>
-        } @else if (dashboardService.isLoaded('recentSessions')) {
-          <div class="empty-state">
-            <mat-icon>inbox</mat-icon>
-            <div>
-              <strong>No session activity yet</strong>
-              <p>Run an issuance or presentation flow to see recent updates here.</p>
-            </div>
-          </div>
-        } @else if (dashboardService.hasFailed('recentSessions')) {
-          <div class="empty-state">
-            <mat-icon>error_outline</mat-icon>
-            <div>
-              <strong>Recent activity could not be loaded</strong>
-              <p>See the message at the top, or open the full session list below.</p>
-            </div>
-          </div>
-        } @else {
-          <div class="empty-state">
-            <mat-spinner diameter="24" aria-label="Loading recent activity"></mat-spinner>
-            <div>
-              <strong>Loading recent activity…</strong>
-            </div>
-          </div>
-        }
-      </mat-card-content>
-      @if (
-        dashboardService.recentSessions.length > 0 || dashboardService.hasFailed('recentSessions')
-      ) {
-        <mat-card-actions>
-          <a mat-button color="primary" routerLink="/session-management">View all sessions</a>
-        </mat-card-actions>
-      }
-    </mat-card>
-  }
-
-  <!-- Session Status Breakdown -->
-  @if (
-    dashboardService.canViewSessions &&
-    isSectionVisible('sessionOverview') &&
-    dashboardService.totalSessions > 0
-  ) {
-    <mat-card class="session-breakdown-card session-overview-card">
-      <mat-card-header>
-        <mat-icon mat-card-avatar>analytics</mat-icon>
-        <mat-card-title>Session Overview</mat-card-title>
-        <mat-card-subtitle>Current session status breakdown</mat-card-subtitle>
-      </mat-card-header>
-      <mat-card-content>
-        <div class="session-stats" fxLayout="row wrap" fxLayoutGap="24px">
-          <a
-            class="session-stat status-link"
-            fxLayout="row"
-            fxLayoutAlign="start center"
-            fxLayoutGap="8px"
-            routerLink="/session-management"
-            [queryParams]="{ status: 'active' }"
-          >
-            <mat-icon class="status-active">hourglass_empty</mat-icon>
-            <span
-              ><strong>{{ dashboardService.sessionActive }}</strong> Active</span
-            >
-            <mat-icon class="status-link-arrow">chevron_right</mat-icon>
-          </a>
-          <a
-            class="session-stat status-link"
-            fxLayout="row"
-            fxLayoutAlign="start center"
-            fxLayoutGap="8px"
-            routerLink="/session-management"
-            [queryParams]="{ status: 'fetched' }"
-          >
-            <mat-icon class="status-fetched">download</mat-icon>
-            <span
-              ><strong>{{ dashboardService.sessionFetched }}</strong> Fetched</span
-            >
-            <mat-icon class="status-link-arrow">chevron_right</mat-icon>
-          </a>
-          <a
-            class="session-stat status-link"
-            fxLayout="row"
-            fxLayoutAlign="start center"
-            fxLayoutGap="8px"
-            routerLink="/session-management"
-            [queryParams]="{ status: 'completed' }"
-          >
-            <mat-icon class="status-completed">check_circle</mat-icon>
-            <span
-              ><strong>{{ dashboardService.sessionCompleted }}</strong> Completed</span
-            >
-            <mat-icon class="status-link-arrow">chevron_right</mat-icon>
-          </a>
-          <a
-            class="session-stat status-link"
-            fxLayout="row"
-            fxLayoutAlign="start center"
-            fxLayoutGap="8px"
-            routerLink="/session-management"
-            [queryParams]="{ status: 'expired' }"
-          >
-            <mat-icon class="status-expired">schedule</mat-icon>
-            <span
-              ><strong>{{ dashboardService.sessionExpired }}</strong> Expired</span
-            >
-            <mat-icon class="status-link-arrow">chevron_right</mat-icon>
-          </a>
-          <a
-            class="session-stat status-link"
-            fxLayout="row"
-            fxLayoutAlign="start center"
-            fxLayoutGap="8px"
-            routerLink="/session-management"
-            [queryParams]="{ status: 'failed' }"
-          >
-            <mat-icon class="status-failed">error</mat-icon>
-            <span
-              ><strong>{{ dashboardService.sessionFailed }}</strong> Failed</span
-            >
-            <mat-icon class="status-link-arrow">chevron_right</mat-icon>
-          </a>
-          <a
-            class="session-stat status-link"
-            fxLayout="row"
-            fxLayoutAlign="start center"
-            fxLayoutGap="8px"
-            routerLink="/session-management"
-            [queryParams]="{ status: 'cancelled' }"
-          >
-            <mat-icon class="status-cancelled">cancel</mat-icon>
-            <span
-              ><strong>{{ dashboardService.sessionCancelled }}</strong> Cancelled</span
-            >
-            <mat-icon class="status-link-arrow">chevron_right</mat-icon>
-          </a>
-        </div>
-      </mat-card-content>
-      <mat-card-actions>
-        <a mat-button color="primary" routerLink="/session-management">
-          <mat-icon>visibility</mat-icon> View All Sessions
-        </a>
-      </mat-card-actions>
-    </mat-card>
-  }
-
-  <!-- Quick Actions -->
-  @if (
-    isSectionVisible('quickActions') &&
-    (dashboardService.canOfferIssuance || jwtService.hasRole('presentation:request'))
-  ) {
-    <mat-card class="quick-actions-card">
-      <mat-card-header>
-        <mat-icon mat-card-avatar>flash_on</mat-icon>
-        <mat-card-title>Quick Actions</mat-card-title>
-        <mat-card-subtitle>Start an issuance or a presentation request</mat-card-subtitle>
-      </mat-card-header>
-      <mat-card-content>
-        <div class="quick-actions" fxLayout="row wrap" fxLayoutGap="12px">
-          @if (dashboardService.canOfferIssuance) {
-            <a
-              mat-raised-button
-              color="primary"
-              routerLink="/offer/issuance"
-              [class.disabled]="!dashboardService.isReadyToIssue"
-              [attr.tabindex]="!dashboardService.isReadyToIssue ? -1 : 0"
-              [matTooltip]="
-                !dashboardService.isReadyToIssue
-                  ? dashboardService.issueReadinessReason || 'Issuance is not ready'
-                  : 'Create an issuance offer'
-              "
-            >
-              <mat-icon>card_giftcard</mat-icon> Issue Credential
-            </a>
+            <li class="signal" [class]="kmsTone">
+              <span class="signal-icon"><mat-icon>dns</mat-icon></span>
+              <span class="signal-label">KMS<span class="visually-hidden">: </span></span>
+              <span class="signal-value">{{ loadedValue('kmsHealth', kmsSummary) }}</span>
+            </li>
           }
-          @if (jwtService.hasRole('presentation:request')) {
-            <a
-              mat-raised-button
-              color="accent"
-              routerLink="/offer/presentation"
-              [class.disabled]="!dashboardService.isReadyToVerify"
-              [attr.tabindex]="!dashboardService.isReadyToVerify ? -1 : 0"
-              [matTooltip]="
-                !dashboardService.isReadyToVerify
-                  ? dashboardService.verifyReadinessReason || 'Presentation is not ready'
-                  : 'Request a presentation'
-              "
-            >
-              <mat-icon>fact_check</mat-icon> Request Presentation
-            </a>
+          @if (dashboardService.sessionStats.issuance) {
+            <li class="signal tone-neutral">
+              <span class="signal-icon"><mat-icon>card_giftcard</mat-icon></span>
+              <span class="signal-label"
+                >Last Issuance Success<span class="visually-hidden">: </span></span
+              >
+              <span class="signal-value">
+                {{
+                  dashboardService.lastSuccessfulIssuanceAt
+                    ? (dashboardService.lastSuccessfulIssuanceAt | date: 'yyyy-MM-dd HH:mm')
+                    : 'n/a'
+                }}
+              </span>
+            </li>
           }
-        </div>
-        @if (
-          dashboardService.hasLoaded &&
-          (((dashboardService.canManageIssuance || dashboardService.canOfferIssuance) &&
-            !dashboardService.isReadyToIssue) ||
-            (dashboardService.canReadPresentationConfigs && !dashboardService.isReadyToVerify))
-        ) {
-          <div class="actions-hint">
-            <mat-icon>info</mat-icon>
-            <span>
-              @if (
-                (dashboardService.canManageIssuance || dashboardService.canOfferIssuance) &&
-                dashboardService.issueReadinessReason
-              ) {
-                Issuance is blocked: <strong>{{ dashboardService.issueReadinessReason }}</strong>.
-              }
-              @if (
-                dashboardService.canReadPresentationConfigs &&
-                dashboardService.verifyReadinessReason
-              ) {
-                Presentation is blocked:
-                <strong>{{ dashboardService.verifyReadinessReason }}</strong>.
-              }
-            </span>
-          </div>
-        }
+          @if (dashboardService.sessionStats.presentation) {
+            <li class="signal tone-neutral">
+              <span class="signal-icon"><mat-icon>fact_check</mat-icon></span>
+              <span class="signal-label"
+                >Last Presentation Success<span class="visually-hidden">: </span></span
+              >
+              <span class="signal-value">
+                {{
+                  dashboardService.lastSuccessfulPresentationAt
+                    ? (dashboardService.lastSuccessfulPresentationAt | date: 'yyyy-MM-dd HH:mm')
+                    : 'n/a'
+                }}
+              </span>
+            </li>
+          }
+        </ul>
       </mat-card-content>
     </mat-card>
   }

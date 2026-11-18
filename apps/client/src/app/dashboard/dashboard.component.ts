@@ -5,15 +5,12 @@ import type { Session } from '@eudiplo/sdk-core';
 
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
-import { MatChipsModule } from '@angular/material/chips';
-import { MatDividerModule } from '@angular/material/divider';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { type Params, RouterModule } from '@angular/router';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { JwtService } from '../services/jwt.service';
 import { GrafanaLinkService } from '../services/grafana-link.service';
 import { MatCheckboxModule } from '@angular/material/checkbox';
@@ -27,6 +24,17 @@ import {
   DashboardSections,
 } from './dashboard-preferences.service';
 
+/** Colour role of a status: the stylesheet maps each to a theme colour. */
+type Tone = 'tone-success' | 'tone-warning' | 'tone-danger' | 'tone-neutral';
+
+type SessionStatus = 'active' | 'fetched' | 'completed' | 'expired' | 'failed' | 'cancelled';
+
+interface SessionStatusCount {
+  status: SessionStatus;
+  label: string;
+  count: number;
+}
+
 interface StatCard {
   source: DashboardSource;
   value: string;
@@ -39,18 +47,23 @@ interface StatCard {
   iconClass: string;
   route: string;
   queryParams?: Params;
+  /** Values per bucket of the activity window, drawn as a small trend line. */
+  trend?: number[];
+}
+
+/** SVG paths of a trend line in a 100 by 32 box: the line and the area below it. */
+interface Sparkline {
+  line: string;
+  area: string;
 }
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
   imports: [
-    FlexLayoutModule,
     MatCardModule,
     MatButtonModule,
-    MatDividerModule,
     MatIconModule,
-    MatChipsModule,
     MatProgressBarModule,
     MatProgressSpinnerModule,
     MatSnackBarModule,
@@ -123,6 +136,7 @@ export class DashboardComponent implements OnInit {
         note: buckets.length ? `${service.sessionsInCurrentBucket} ${current}` : undefined,
         icon: 'today',
         iconClass: 'sessions',
+        trend: buckets.map((bucket) => bucket.total),
         route: '/session-management',
         queryParams: since,
       },
@@ -145,6 +159,7 @@ export class DashboardComponent implements OnInit {
         icon: 'error',
         // Red only when something failed
         iconClass: service.failedInWindow > 0 ? 'failed' : 'muted',
+        trend: buckets.map((bucket) => bucket.failed),
         route: '/session-management',
         queryParams: { ...since, status: 'failed' },
       },
@@ -214,6 +229,92 @@ export class DashboardComponent implements OnInit {
     const activity = this.dashboardService.activity;
     if (!retention || !activity?.limitedByRetention) return null;
     return `Only the last ${activity.label}: sessions are deleted ${formatDuration(retention.ttlSeconds)} after creation.`;
+  }
+
+  /** How the readiness line under the title is marked: attention, ready, or neither. */
+  get readinessTone(): 'attention' | 'ready' | 'neutral' {
+    const service = this.dashboardService;
+    if (this.rolesMissing || service.hasWarnings) return 'attention';
+    if (service.isLoading || service.isReadOnly) return 'neutral';
+    return service.isSetupComplete ? 'ready' : 'neutral';
+  }
+
+  /**
+   * Done and total steps the setup guide shows. The issuance and verification steps appear
+   * once the prerequisites are met, so they count only from then on.
+   */
+  get setupProgress(): { done: number; total: number } | null {
+    const service = this.dashboardService;
+    const steps: boolean[] = [];
+    if (service.canManageKeyChains) {
+      steps.push(service.totalKeyChains > 0, service.hasUsableAccessCertificate);
+    }
+    if (service.hasPrerequisites && service.canManageIssuance) {
+      steps.push(service.hasIssuanceConfig, service.credentialConfigs > 0);
+    }
+    if (service.hasPrerequisites && service.canManagePresentation) {
+      steps.push(service.presentationConfigs > 0);
+    }
+    if (steps.length === 0) return null;
+    return { done: steps.filter(Boolean).length, total: steps.length };
+  }
+
+  /** Every session status with its count, in the order of a session's life. */
+  get sessionStatuses(): SessionStatusCount[] {
+    const service = this.dashboardService;
+    return [
+      { status: 'active', label: 'Active', count: service.sessionActive },
+      { status: 'fetched', label: 'Fetched', count: service.sessionFetched },
+      { status: 'completed', label: 'Completed', count: service.sessionCompleted },
+      { status: 'expired', label: 'Expired', count: service.sessionExpired },
+      { status: 'failed', label: 'Failed', count: service.sessionFailed },
+      { status: 'cancelled', label: 'Cancelled', count: service.sessionCancelled },
+    ];
+  }
+
+  /** Share of a status in all sessions, as a whole percentage. */
+  sessionShare(count: number): number {
+    const total = this.dashboardService.totalSessions;
+    return total > 0 ? Math.round((count / total) * 100) : 0;
+  }
+
+  /** Width of a failure reason's bar, relative to the most frequent reason. */
+  failureShare(count: number): number {
+    const max = Math.max(...this.dashboardService.topFailureCodes.map((failure) => failure.count));
+    return max > 0 ? Math.round((count / max) * 100) : 0;
+  }
+
+  /** Trend line of a key figure; null with fewer than two values or when all are zero. */
+  sparkline(values: number[] | undefined): Sparkline | null {
+    if (!values || values.length < 2) return null;
+    const max = Math.max(...values);
+    if (max <= 0) return null;
+    const step = 100 / (values.length - 1);
+    // Keep 2 units free at the top and bottom, so the stroke is not cut off
+    const points = values.map(
+      (value, index) => `${(index * step).toFixed(1)},${(30 - (value / max) * 28).toFixed(1)}`
+    );
+    const line = `M${points.join(' L')}`;
+    return { line, area: `${line} L100,32 L0,32 Z` };
+  }
+
+  get accessCertificateTone(): Tone {
+    if (!this.dashboardService.isLoaded('keyChains')) return 'tone-neutral';
+    switch (this.dashboardService.accessCertificateStatus) {
+      case 'healthy':
+        return 'tone-success';
+      case 'expiring':
+        return 'tone-warning';
+      default:
+        return 'tone-danger';
+    }
+  }
+
+  get kmsTone(): Tone {
+    if (!this.dashboardService.isLoaded('kmsHealth')) return 'tone-neutral';
+    return this.dashboardService.unhealthyKmsProviders.length === 0
+      ? 'tone-success'
+      : 'tone-danger';
   }
 
   get kmsSummary(): string {
