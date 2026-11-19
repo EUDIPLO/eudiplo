@@ -568,6 +568,15 @@ describe('Verification config editor', () => {
     expect(component.form.dirty).toBe(true);
 
     component.form.markAsPristine();
+    dialog.open.mockReturnValue({ afterClosed: () => of(query) });
+    component.importFromCredentialConfig();
+    expect(dialog.open).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({ data: { source: 'tenant' } })
+    );
+    expect(component.form.dirty).toBe(true);
+
+    component.form.markAsPristine();
     dialog.open.mockReturnValue({ afterClosed: () => of({ dcqlQuery: query }) });
     component.importFromSchemaMetadata();
     expect(component.form.dirty).toBe(true);

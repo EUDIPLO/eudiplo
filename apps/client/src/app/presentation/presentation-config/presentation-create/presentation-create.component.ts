@@ -48,7 +48,10 @@ import {
 import { PresentationManagementService } from '../presentation-management.service';
 import { MatDialog } from '@angular/material/dialog';
 import { JsonViewDialogComponent } from '../../../issuance/credential-config/credential-config-create/json-view-dialog/json-view-dialog.component';
-import { IssuerMetadataBrowserComponent } from '../issuer-metadata-browser/issuer-metadata-browser.component';
+import {
+  IssuerMetadataBrowserComponent,
+  type IssuerMetadataBrowserDialogData,
+} from '../issuer-metadata-browser/issuer-metadata-browser.component';
 import { SchemaBrowserComponent } from '../schema-browser/schema-browser.component';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTabsModule } from '@angular/material/tabs';
@@ -921,8 +924,20 @@ export class PresentationCreateComponent implements OnInit {
    * Open the issuer metadata browser dialog to import DCQL from an issuer
    */
   importFromIssuer(): void {
+    this.openClaimPicker({}, 'DCQL query imported from issuer');
+  }
+
+  /**
+   * Open the same claim picker on the credential configs this tenant issues, so
+   * the query asks only for credential types and claims that exist.
+   */
+  importFromCredentialConfig(): void {
+    this.openClaimPicker({ source: 'tenant' }, 'DCQL query imported from credential config');
+  }
+
+  private openClaimPicker(data: IssuerMetadataBrowserDialogData, importedMessage: string): void {
     const dialogRef = this.dialog.open(IssuerMetadataBrowserComponent, {
-      data: {},
+      data,
       disableClose: false,
       minWidth: '60vw',
       maxWidth: '95vw',
@@ -934,7 +949,7 @@ export class PresentationCreateComponent implements OnInit {
         // Set the DCQL query in the form
         this.form.get('dcql_query')?.setValue(JSON.stringify(dcqlQuery, null, 2));
         this.form.get('dcql_query')?.markAsDirty();
-        this.snackBar.open('DCQL query imported from issuer', 'OK', {
+        this.snackBar.open(importedMessage, 'OK', {
           duration: 3000,
         });
       }
