@@ -99,7 +99,7 @@ export interface NormalizedCredential {
   textColor?: string;
 }
 
-@Injectable()
+@Injectable({ providedIn: 'root' })
 export class IssuerMetadataService {
   constructor(
     private readonly http: HttpClient,

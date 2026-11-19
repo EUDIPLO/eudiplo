@@ -180,7 +180,10 @@
               </div>
               <mat-card appearance="outlined">
                 <mat-card-content>
-                  <app-dcql-query-editor [control]="queryControl" />
+                  <app-dcql-query-editor
+                    [control]="queryControl"
+                    [knownCredentials]="knownCredentials"
+                  />
                 </mat-card-content>
               </mat-card>
             </section>
