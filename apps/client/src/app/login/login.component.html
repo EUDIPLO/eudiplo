@@ -1,30 +1,28 @@
-<div class="login-container">
-  <mat-card class="login-card">
-    <div class="brand-header">
+<main class="login-container">
+  <mat-card appearance="outlined" class="login-card">
+    <header class="brand-header">
       <app-diplo-logo class="logo" [eyesClosed]="secretFocused()" />
-
-      <div class="brand-copy">
-        <p class="eyebrow">EUDIPLO Console</p>
-        <h1 class="brand-title">Sign in</h1>
-        <p class="brand-subtitle">
-          @if (keptSession()) {
-            Your previous session continues as soon as the backend answers.
-          } @else {
-            Choose single sign-on or authenticate with a client ID and secret.
-          }
-        </p>
-        @if (isDevelopmentMode) {
-          <span class="dev-indicator"
-            >Development mode enabled. Form values may be pre-filled.</span
-          >
+      <p class="eyebrow">EUDIPLO Console</p>
+      <h1 class="brand-title">Sign in</h1>
+      <p class="brand-subtitle">
+        @if (keptSession()) {
+          Your previous session continues as soon as the backend answers.
+        } @else {
+          Choose single sign-on or authenticate with a client ID and secret.
         }
-      </div>
-    </div>
+      </p>
+      @if (isDevelopmentMode) {
+        <span class="dev-indicator">
+          <mat-icon aria-hidden="true">construction</mat-icon>
+          Development mode enabled. Form values may be pre-filled.
+        </span>
+      }
+    </header>
 
     <mat-card-content>
       @if (keptSession(); as session) {
         <div class="kept-session">
-          <div class="kept-session-status">
+          <div class="notice kept-session-status">
             <mat-spinner diameter="24" aria-hidden="true"></mat-spinner>
             <p>
               <output>
@@ -92,16 +90,26 @@
                 </p>
 
                 @if (detectedMode === 'loading') {
-                  <p class="mode-hint">Checking whether this instance exposes SSO login.</p>
+                  <p class="notice mode-hint">
+                    <mat-icon aria-hidden="true">hourglass_empty</mat-icon>
+                    <span>Checking whether this instance exposes SSO login.</span>
+                  </p>
                 }
 
                 @if (detectedMode === 'oidc') {
-                  <p class="mode-hint">SSO is configured. Continue to the provider login page.</p>
+                  <p class="notice mode-hint ok">
+                    <mat-icon aria-hidden="true">check_circle</mat-icon>
+                    <span>SSO is configured. Continue to the provider login page.</span>
+                  </p>
                 }
 
                 @if (!isSsoAvailable && detectedMode !== 'loading') {
-                  <p class="mode-hint mode-hint-warning">
-                    SSO is not available for this instance. Use the client credentials tab instead.
+                  <p class="notice mode-hint warning">
+                    <mat-icon aria-hidden="true">warning</mat-icon>
+                    <span
+                      >SSO is not available for this instance. Use the client credentials tab
+                      instead.</span
+                    >
                   </p>
                 }
               </div>
@@ -160,12 +168,7 @@
           </mat-tab-group>
 
           <!-- Login Button -->
-          <div
-            class="button-container"
-            fxLayout="column"
-            fxLayoutAlign="center center"
-            fxLayoutGap="8px"
-          >
+          <div class="button-container">
             <button
               matButton="filled"
               color="primary"
@@ -186,7 +189,7 @@
               }
             </button>
 
-            <a mat-button href="https://eudiplo.dev/main/" target="_blank" rel="noopener">
+            <a matButton href="https://eudiplo.dev/main/" target="_blank" rel="noopener">
               <mat-icon>help_outline</mat-icon>
               Help
             </a>
@@ -195,4 +198,4 @@
       }
     </mat-card-content>
   </mat-card>
-</div>
+</main>

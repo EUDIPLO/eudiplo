@@ -1,51 +1,65 @@
 @use 'sass:map';
+@use '@angular/material' as mat;
 @use '../../styles/theme-colors';
 
 $brand-blue: map.get(theme-colors.$primary-palette, 40);
 $brand-indigo: #1b2160;
 $brand-navy: #070f24; // eudiplo.dev background
 
-// Ensure login component fills available space
+// Material 3 sign-in page: one outlined card on the brand backdrop, with Diplo, the heading and
+// the form centred in it. Colours come from the theme (--mat-sys-*) and the status colours in
+// styles.scss (--eudiplo-*), as on the other pages.
 :host {
   display: flex;
   flex: 1;
   min-height: 100vh;
+  min-height: 100dvh;
+
+  @include mat.card-overrides(
+    (
+      outlined-container-color: var(--mat-sys-surface),
+      outlined-outline-color: var(--mat-sys-outline-variant),
+      outlined-container-shape: var(--mat-sys-corner-extra-large),
+    )
+  );
 }
 
 .login-container {
   display: flex;
+  flex: 1;
   justify-content: center;
   align-items: center;
-  flex: 1;
+  box-sizing: border-box;
   width: 100%;
+  padding: 32px 16px;
   background:
     radial-gradient(circle at top, color-mix(in srgb, white 18%, transparent), transparent 32%),
     // Brand blue to the eudiplo.dev navy, the same in both themes
     linear-gradient(145deg, $brand-blue 0%, $brand-indigo 50%, $brand-navy 100%);
-  padding: 24px;
 }
 
 .login-card {
+  box-sizing: border-box;
   width: 100%;
-  max-width: 520px;
-  padding: 28px 28px 20px;
+  max-width: 480px;
+  padding: 32px 24px 16px;
   box-shadow: 0 24px 60px rgba(4, 18, 31, 0.28);
-  border-radius: 24px;
-  border: 1px solid color-mix(in srgb, var(--mat-sys-primary) 4%, transparent);
 }
 
+// Diplo above the name, the heading and what to do, centred
 .brand-header {
-  display: grid;
-  grid-template-columns: 72px 1fr;
-  gap: 18px;
-  align-items: center;
-  padding-bottom: 18px;
-}
-
-.brand-copy {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  align-items: center;
+  gap: 4px;
+  padding: 0 16px 24px;
+  text-align: center;
+}
+
+.logo {
+  width: 80px;
+  height: 80px;
+  margin-bottom: 12px;
 }
 
 .eyebrow,
@@ -55,77 +69,98 @@ $brand-navy: #070f24; // eudiplo.dev background
 }
 
 .eyebrow {
-  color: var(--mat-sys-primary);
-  text-transform: uppercase;
+  font: var(--mat-sys-label-large);
   letter-spacing: 0.12em;
-  font-size: 12px;
-  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--mat-sys-primary);
 }
 
 .brand-title {
+  font: var(--mat-sys-headline-medium);
   color: var(--mat-sys-on-surface);
-  font-size: 34px;
-  line-height: 1;
-  font-weight: 700;
 }
 
 .brand-subtitle {
-  color: var(--mat-sys-on-surface-variant);
-  line-height: 1.5;
-}
-
-.logo {
-  width: 72px;
-  height: 72px;
-}
-
-.dev-indicator {
-  color: var(--eudiplo-warning);
-  background: var(--eudiplo-warning-soft);
-  border-radius: 999px;
-  padding: 6px 10px;
-  font-weight: 600;
-  font-size: 12px;
-  display: inline-flex;
-  align-self: flex-start;
+  max-width: 36ch;
   margin-top: 4px;
+  font: var(--mat-sys-body-medium);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+// Tonal badge, as for states on the other pages
+.dev-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 4px 12px;
+  border-radius: var(--mat-sys-corner-full);
+  background: var(--eudiplo-warning-soft);
+  font: var(--mat-sys-label-medium);
+  color: var(--mat-sys-on-surface);
+
+  mat-icon {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    font-size: 16px;
+    color: var(--eudiplo-warning);
+  }
+}
+
+// More specific than Material's own :first-child padding rule of the card content
+mat-card mat-card-content {
+  padding: 0;
 }
 
 .login-form {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  padding: 8px 0 0;
-}
-
-.login-tabs {
-  margin-top: 2px;
+  gap: 16px;
 }
 
 .tab-panel {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding: 18px 0 4px;
-}
-
-.mode-description,
-.mode-hint {
-  margin: 0;
+  padding: 20px 0 0;
 }
 
 .mode-description {
+  margin: 0;
+  font: var(--mat-sys-body-medium);
   color: var(--mat-sys-on-surface-variant);
-  line-height: 1.5;
 }
 
-.mode-hint {
-  color: var(--mat-sys-on-surface-variant);
-  font-size: 14px;
-}
+// Status line with an icon: neutral by default, green or orange for the outcome
+.notice {
+  --tone: var(--mat-sys-on-surface-variant);
 
-.mode-hint-warning {
-  color: var(--eudiplo-danger);
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 0;
+  padding: 12px 16px;
+  border-radius: var(--mat-sys-corner-medium);
+  background: color-mix(in srgb, var(--tone) 8%, var(--mat-sys-surface));
+  font: var(--mat-sys-body-medium);
+  color: var(--mat-sys-on-surface);
+
+  > mat-icon {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    font-size: 20px;
+    color: var(--tone);
+  }
+
+  &.ok {
+    --tone: var(--eudiplo-success);
+  }
+
+  &.warning {
+    --tone: var(--eudiplo-warning);
+  }
 }
 
 .kept-session {
@@ -135,9 +170,7 @@ $brand-navy: #070f24; // eudiplo.dev background
 }
 
 .kept-session-status {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
+  --tone: var(--mat-sys-primary);
 
   p {
     margin: 0;
@@ -152,32 +185,31 @@ $brand-navy: #070f24; // eudiplo.dev background
 
 .kept-session-actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: stretch;
   gap: 8px;
 }
 
-.full-width {
-  width: 100%;
-}
-
+// Full-width sign-in button with the help link centred below
 .button-container {
   display: flex;
-  justify-content: center;
-  margin-top: 12px;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
 }
 
 .login-button {
+  position: relative;
   width: 100%;
   height: 48px;
-  font-size: 16px;
-  font-weight: 500;
-  position: relative;
+  font: var(--mat-sys-label-large);
 }
 
 .button-spinner {
   position: absolute;
-  left: 50%;
   top: 50%;
+  left: 50%;
   transform: translate(-50%, -50%);
 }
 
@@ -192,34 +224,26 @@ $brand-navy: #070f24; // eudiplo.dev background
   color: white !important;
 }
 
-// Material form field customization
-.mat-mdc-form-field {
-  margin-bottom: 4px;
-}
-
-// Responsive design
+// Phone width: the card fills the screen width minus the gutter
 @media (max-width: 600px) {
   .login-container {
-    padding: 12px;
+    padding: 16px;
   }
 
   .login-card {
-    max-width: 100%;
-    margin: 0 6px;
-    padding: 22px 18px 16px;
+    padding: 24px 16px 12px;
   }
 
   .brand-header {
-    grid-template-columns: 56px 1fr;
-    gap: 14px;
+    padding: 0 0 20px;
   }
 
   .logo {
-    width: 56px;
-    height: 56px;
+    width: 64px;
+    height: 64px;
   }
 
   .brand-title {
-    font-size: 28px;
+    font: var(--mat-sys-headline-small);
   }
 }
