@@ -7,11 +7,7 @@ import { MatTableModule } from '@angular/material/table';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { FormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
-import {
-  ManagedUserDto,
-  userControllerDeleteUser,
-  userControllerGetUsers,
-} from '@eudiplo/sdk-core';
+import type { ManagedUserDto } from '@eudiplo/sdk-core';
 import { JwtService } from '../../services/jwt.service';
 import { canManageRoles } from '../../services/role-grants';
 import { apiErrorDetail, hasHttpStatus } from '../../utils/error-message';
@@ -20,6 +16,7 @@ import { BaseAsyncListComponent } from '../../common/base-async-list.component';
 import { UnavailableCardComponent } from '../../common/unavailable-card.component';
 import { LoadErrorComponent } from '../../common/load-error.component';
 import { ItemRoutePipe } from '../../common/item-route.pipe';
+import { UserService } from '../user.service';
 
 @Component({
   selector: 'app-user-list',
@@ -58,7 +55,10 @@ export class UserListComponent extends BaseAsyncListComponent<ManagedUserDto> {
   /** Roles of the signed-in caller, read once instead of per row */
   private readonly callerRoles: string[];
 
-  constructor(jwtService: JwtService) {
+  constructor(
+    jwtService: JwtService,
+    private readonly userService: UserService
+  ) {
     super();
     this.callerRoles = jwtService.getRoles();
   }
@@ -68,7 +68,7 @@ export class UserListComponent extends BaseAsyncListComponent<ManagedUserDto> {
   }
 
   protected fetchItems(): Promise<ManagedUserDto[]> {
-    return userControllerGetUsers<true>().then((res) => res.data);
+    return this.userService.getAll();
   }
 
   protected override unavailableReason(error: unknown): string | undefined {
@@ -104,7 +104,7 @@ export class UserListComponent extends BaseAsyncListComponent<ManagedUserDto> {
       item: user,
       id,
       question: `Delete user "${user.username}"? This cannot be undone.`,
-      request: () => userControllerDeleteUser({ path: { id } }),
+      request: () => this.userService.delete(id),
       deleted: 'User deleted successfully',
       failed: 'Failed to delete user',
     });

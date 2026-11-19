@@ -127,17 +127,17 @@
             <td mat-cell *matCellDef="let user">
               @let manageable = canManage(user);
               <span class="row-actions">
-                <span [matTooltip]="manageDeniedHint" [matTooltipDisabled]="manageable">
-                  <button
-                    matIconButton
-                    [routerLink]="user.id | itemRoute: 'edit'"
-                    [disabled]="!manageable"
-                    matTooltip="Edit User"
-                    [attr.aria-label]="manageable ? 'Edit User' : 'Edit User: ' + manageDeniedHint"
-                  >
-                    <mat-icon>edit</mat-icon>
-                  </button>
-                </span>
+                <!-- A locked Edit stays focusable so its tooltip can say why, and links nowhere. -->
+                <button
+                  matIconButton
+                  [routerLink]="manageable ? (user.id | itemRoute: 'edit') : null"
+                  [disabled]="!manageable"
+                  disabledInteractive
+                  [matTooltip]="manageable ? 'Edit User' : manageDeniedHint"
+                  [attr.aria-label]="manageable ? 'Edit User' : 'Edit User: ' + manageDeniedHint"
+                >
+                  <mat-icon>edit</mat-icon>
+                </button>
                 <span>
                   <button
                     matIconButton

@@ -1,6 +1,6 @@
 import { Component, OnInit, ChangeDetectionStrategy } from '@angular/core';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
-import { ManagedUserDto, userControllerDeleteUser, userControllerGetUser } from '@eudiplo/sdk-core';
+import type { ManagedUserDto } from '@eudiplo/sdk-core';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
@@ -13,6 +13,7 @@ import { groupRoles, type RoleGroup, uniqueRoles } from '../../services/role-gro
 import { RoleLockNoticeComponent } from '../../common/role-lock-notice.component';
 import { getApiErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
+import { UserService } from '../user.service';
 
 @Component({
   selector: 'app-user-show',
@@ -39,7 +40,8 @@ export class UserShowComponent implements OnInit {
     private readonly route: ActivatedRoute,
     private readonly snackBar: MatSnackBar,
     private readonly router: Router,
-    private readonly jwtService: JwtService
+    private readonly jwtService: JwtService,
+    private readonly userService: UserService
   ) {}
 
   /** Roles of the user that keep the signed-in caller from editing or deleting it */
@@ -64,8 +66,8 @@ export class UserShowComponent implements OnInit {
 
   ngOnInit(): void {
     const userId = this.route.snapshot.paramMap.get('id')!;
-    userControllerGetUser({ path: { id: userId } }).then(
-      (user) => (this.user = user.data),
+    this.userService.getById(userId).then(
+      (user) => (this.user = user),
       (err) => {
         openErrorSnackBar(this.snackBar, getApiErrorMessage(err, 'Failed to load user'));
         this.router.navigate(['..'], { relativeTo: this.route });
@@ -85,7 +87,7 @@ export class UserShowComponent implements OnInit {
 
     this.deleting = true;
     try {
-      await userControllerDeleteUser({ path: { id: this.user.id } });
+      await this.userService.delete(this.user.id);
       this.snackBar.open('User deleted successfully', 'Close', { duration: 3000 });
       await this.router.navigate(['../'], { relativeTo: this.route });
     } catch (error) {

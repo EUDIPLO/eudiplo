@@ -74,7 +74,7 @@
       </div>
 
       <div class="table-scroll">
-        <table mat-table [dataSource]="shownItems" class="linked">
+        <table mat-table [dataSource]="shownItems" [trackBy]="trackById" class="linked">
           <ng-container matColumnDef="id">
             <th mat-header-cell *matHeaderCellDef>Status list</th>
             <td mat-cell *matCellDef="let list">

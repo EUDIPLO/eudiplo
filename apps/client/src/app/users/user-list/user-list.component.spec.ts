@@ -1,11 +1,133 @@
 import { client } from '@eudiplo/sdk-core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { TestBed } from '@angular/core/testing';
+import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
+import { describeListStates } from '../../common/base-async-list.testing';
+import { expectAvailable, expectUnavailable } from '../../common/unavailable-action.testing';
 import { JwtService } from '../../services/jwt.service';
+import { UserService } from '../user.service';
 import { UserListComponent } from './user-list.component';
+
+describeListStates({
+  component: UserListComponent,
+  service: UserService,
+  fetchMethod: 'getAll',
+  item: { id: 'u-1', username: 'alice', enabled: true, roles: [] },
+  loading: 'Loading users',
+  empty: 'No users yet',
+  create: 'Create user',
+  failure: 'Failed to load users',
+  heading: 'h1',
+  firstCell: 'alice',
+  providers: [{ provide: JwtService, useValue: { getRoles: () => ['tenant:admin'] } }],
+});
+
+describe('UserListComponent row actions', () => {
+  const alice = { id: 'u-1', username: 'alice', enabled: true, roles: ['issuance:offer'] };
+  const bob = { id: 'u-2', username: 'bob', enabled: true, roles: ['issuance:offer'] };
+  // The caller can neither hold nor grant tenant:admin.
+  const carol = { id: 'u-3', username: 'carol', enabled: true, roles: ['tenant:admin'] };
+  const hint = 'This user has roles you neither hold nor may grant';
+
+  /** Renders the list of `users` for a caller with `roles`; `remove` answers each delete. */
+  async function render(
+    users: object[],
+    remove: (id: string) => Promise<void> = async () => undefined,
+    roles = ['issuance:offer']
+  ): Promise<{ fixture: ComponentFixture<UserListComponent>; page: HTMLElement }> {
+    TestBed.configureTestingModule({
+      imports: [UserListComponent],
+      providers: [
+        provideRouter([]),
+        { provide: MatSnackBar, useValue: { open: vi.fn() } },
+        { provide: JwtService, useValue: { getRoles: () => roles } },
+        { provide: UserService, useValue: { getAll: async () => users, delete: vi.fn(remove) } },
+      ],
+    });
+    const fixture = TestBed.createComponent(UserListComponent);
+    fixture.detectChanges();
+    const page = fixture.nativeElement as HTMLElement;
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(page.querySelectorAll('a.item-link')).toHaveLength(users.length);
+    });
+    return { fixture, page };
+  }
+
+  /** The row's button whose accessible name starts with `action`. */
+  function button(page: HTMLElement, username: string, action: string): HTMLButtonElement {
+    const row = [...page.querySelectorAll('tr.mat-mdc-row')].find(
+      (candidate) => candidate.querySelector('a.item-link')?.textContent?.trim() === username
+    );
+    return row!.querySelector<HTMLButtonElement>(`button[aria-label^="${action}"]`)!;
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("holds back the other rows' Delete while one delete runs", async () => {
+    const confirm = vi.fn(() => true);
+    vi.stubGlobal('confirm', confirm);
+    let finish: () => void = () => undefined;
+    const { fixture, page } = await render(
+      [alice, bob],
+      () => new Promise<void>((resolve) => (finish = resolve))
+    );
+    const service = TestBed.inject(UserService);
+
+    button(page, 'alice', 'Delete User').click();
+    fixture.detectChanges();
+
+    expectUnavailable(fixture, button(page, 'alice', 'Delete User'), 'Deleting the user…');
+    const other = button(page, 'bob', 'Delete User');
+    expectUnavailable(fixture, other, 'Wait until the other delete has finished');
+    other.click();
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(service.delete).toHaveBeenCalledTimes(1);
+
+    finish();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(page.querySelectorAll('a.item-link')).toHaveLength(1);
+    });
+    expectAvailable(fixture, button(page, 'bob', 'Delete User'), 'Delete User');
+  });
+
+  it('focuses the heading after deleting the last user', async () => {
+    vi.stubGlobal('confirm', () => true);
+    const { fixture, page } = await render([alice]);
+    const remove = button(page, 'alice', 'Delete User');
+    remove.focus();
+
+    remove.click();
+
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(page.querySelector('.empty-state')).not.toBeNull();
+      expect(document.activeElement).toBe(page.querySelector('h1'));
+    });
+  });
+
+  it('keeps a locked Edit focusable, says why and leads nowhere', async () => {
+    const { fixture, page } = await render([alice, carol]);
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+
+    const locked = button(page, 'carol', 'Edit User');
+    expect(locked.getAttribute('aria-label')).toBe(`Edit User: ${hint}`);
+    expectUnavailable(fixture, locked, hint);
+    locked.click();
+    expect(navigate).not.toHaveBeenCalled();
+
+    const edit = button(page, 'alice', 'Edit User');
+    expectAvailable(fixture, edit, 'Edit User');
+    edit.click();
+    expect(navigate.mock.lastCall?.[0].toString()).toBe('/u-1/edit');
+  });
+});
 
 describe('UserListComponent', () => {
   /** The list without rendering it, so nothing loads before the test calls loadItems. */
