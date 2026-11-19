@@ -11,7 +11,7 @@ If a conformant wallet does not work with EUDIPLO, [open an issue](https://githu
 
 ## Wallet QA results
 
-[Wallet QA](https://github.com/EUDIPLO/wallet-qa) runs a wallet through a catalog of issuance, presentation and rejection tests against EUDIPLO and decides each verdict from EUDIPLO's session evidence. Its published results are on the [Wallet QA results page](https://wallet-qa.eudi-wallet.dev/results), with a JSON feed at [`/v1/published`](https://wallet-qa.eudi-wallet.dev/v1/published).
+[Wallet QA](https://github.com/EUDIPLO/wallet-qa) runs a wallet through a catalog of issuance, presentation and rejection tests against EUDIPLO and decides each verdict from EUDIPLO's session evidence. Its published results are on the [Wallet QA results page](https://conformance.eudiplo.dev/results), with a JSON feed at [`/v1/published`](https://conformance.eudiplo.dev/v1/published).
 
 The results are not a certification. Each entry shows one wallet build on one date, and you can repeat a test with the same build. An entry is either recorded by the Wallet QA instance itself or self-reported from another instance, and a pass that rests on the tester's answers instead of protocol evidence is marked as tester-attested.
 
@@ -99,7 +99,7 @@ Protocol conformance is tested automatically; wallet-specific behavior still nee
 
 ## Report results
 
-- **Tested with Wallet QA:** publish the results from your workspace (**Publish results**), or upload the workspace JSON report on a hosted instance. They appear on the [results page](https://wallet-qa.eudi-wallet.dev/results).
+- **Tested with Wallet QA:** publish the results from your workspace (**Publish results**), or upload the workspace JSON report on a hosted instance. They appear on the [results page](https://conformance.eudiplo.dev/results).
 - **Wallet works:** open an issue with the [wallet compatibility template](https://github.com/EUDIPLO/eudiplo/issues/new?template=wallet-compatibility.md) and include the results from step 5, so the wallet can be added to this page.
 - **Wallet fails:** check the notes above, then open an [issue](https://github.com/EUDIPLO/eudiplo/issues/new) with reproduction steps, EUDIPLO and wallet versions, and the [session logs](../operate/logging.md).
 - **Questions:** ask in the [Discord community](https://discord.gg/5Q4bgBQABa).
