@@ -110,7 +110,7 @@
   padding: 12px 0;
 }
 
-// One colour per usage, as a tint, so the list is easy to scan
+// One tint for every usage; the icon tells them apart
 .usage-icon {
   --tone: var(--mat-sys-primary);
 
@@ -127,26 +127,6 @@
     width: 20px;
     height: 20px;
     font-size: 20px;
-  }
-
-  &.usage-access {
-    --tone: var(--mat-sys-tertiary);
-  }
-
-  &.usage-authorizationServer {
-    --tone: var(--eudiplo-accent);
-  }
-
-  &.usage-statusList {
-    --tone: var(--eudiplo-success);
-  }
-
-  &.usage-trustList {
-    --tone: var(--eudiplo-warning);
-  }
-
-  &.usage-federation {
-    --tone: var(--mat-sys-secondary);
   }
 }
 
