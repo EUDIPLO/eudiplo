@@ -28,7 +28,7 @@
   <app-load-error [message]="loadError" (retry)="refresh()" />
 } @else if (dataSource.data.length === 0) {
   <div class="empty-state" fxLayout="column" fxLayoutAlign="center center" fxLayoutGap="16px">
-    <mat-icon class="empty-icon">list_alt</mat-icon>
+    <mat-icon class="empty-icon">format_list_bulleted</mat-icon>
     <p>No status lists found</p>
     <p class="hint">
       Status lists are created automatically when issuing credentials with revocation support

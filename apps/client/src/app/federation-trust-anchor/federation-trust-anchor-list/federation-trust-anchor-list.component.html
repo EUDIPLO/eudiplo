@@ -28,7 +28,7 @@
     <app-load-error [message]="loadError" (retry)="loadItems()" />
   } @else if (anchors.length === 0) {
     <div class="list-state empty">
-      <span class="empty-icon"><mat-icon>account_tree</mat-icon></span>
+      <span class="empty-icon"><mat-icon>hub</mat-icon></span>
       <p>No federation trust anchors yet.</p>
       <span class="muted">Register the trust anchor of a federation to trust its members.</span>
       <a matButton="tonal" [routerLink]="['create']">
