@@ -2,7 +2,7 @@
 title: EUDI Hub
 ---
 
-The German EUDI Hub ([portal.eudi-hub.gov.de](https://portal.eudi-hub.gov.de/)) is the registrar of the German wallet ecosystem and the registrar EUDIPLO integrates with: organizations register there and get access and registration certificates for their relying parties. EUDIPLO requests an access certificate for one of its access key chains, so the private key stays in EUDIPLO, and registration certificates for its presentation configurations and its issuer. It works with an access token you copy from the portal, so there is no EUDI Hub configuration to save.
+The German EUDI Hub ([portal.eudi-hub.gov.de](https://portal.eudi-hub.gov.de/)) is the registrar of the German wallet ecosystem and the registrar EUDIPLO integrates with: organizations register there and get access and registration certificates for their relying parties. EUDIPLO requests an access certificate for one of its access key chains, so the private key stays in EUDIPLO, and registration certificates for its presentation configurations and its issuer. It works with an access token you copy from the portal, so there is no EUDI Hub configuration to save. [Certificates from the EUDI Hub](../cookbooks/eudi-hub-certificates.md) walks through all three requests for the cookbook tenant.
 
 ## Prerequisites
 
