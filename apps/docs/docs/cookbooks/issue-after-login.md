@@ -73,7 +73,7 @@ In the Keycloak admin console at `https://YOUR-KEYCLOAK-HOST/admin`:
 
 ## Step 3: Add the chained authorization server
 
-In the Web Client, open **Credential Issuance → Issuer Settings** and go to the **Wallet access** tab. Under **Authorization Servers**, choose **Add Authorization Server** and enter:
+In the Web Client, open **Credential Issuance → Issuer Settings**, choose **Edit** and go to the **Wallet access** tab. Under **Authorization Servers**, choose **Add Authorization Server** and enter:
 
 | Field               | Value                                          |
 | ------------------- | ---------------------------------------------- |

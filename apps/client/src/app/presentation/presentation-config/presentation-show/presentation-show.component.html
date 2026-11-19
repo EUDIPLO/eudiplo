@@ -41,7 +41,7 @@
           appConfigManaged
           managedKind="PresentationConfig"
           [managedResourceId]="config.id"
-          aria-label="Edit configuration"
+          aria-label="Edit verification config"
         >
           <mat-icon>edit</mat-icon>
           Edit
@@ -50,8 +50,8 @@
           <button
             matIconButton
             [routerLink]="['copy']"
-            matTooltip="Copy configuration"
-            aria-label="Copy configuration"
+            matTooltip="Copy verification config"
+            aria-label="Copy verification config"
           >
             <mat-icon>content_copy</mat-icon>
           </button>
@@ -74,8 +74,10 @@
             (click)="deletePresentation()"
             [disabled]="deleting"
             disabledInteractive
-            [matTooltip]="deleting ? 'Deleting the configuration…' : 'Delete configuration'"
-            aria-label="Delete configuration"
+            [matTooltip]="
+              deleting ? 'Deleting the verification config…' : 'Delete verification config'
+            "
+            aria-label="Delete verification config"
             appConfigManaged
             managedKind="PresentationConfig"
             [managedResourceId]="config.id"
@@ -101,13 +103,13 @@
           <mat-card appearance="outlined">
             <mat-card-header>
               <mat-icon mat-card-avatar>settings</mat-icon>
-              <h2 mat-card-title>Configuration Details</h2>
+              <h2 mat-card-title>Details</h2>
               <mat-card-subtitle>How a request with this config behaves</mat-card-subtitle>
             </mat-card-header>
             <mat-card-content>
               <dl class="details">
                 <div>
-                  <dt>Configuration ID</dt>
+                  <dt>ID</dt>
                   <dd>
                     <code>{{ config.id }}</code>
                   </dd>
@@ -124,7 +126,7 @@
                 </div>
                 <div>
                   <dt>Request Lifetime</dt>
-                  <dd>{{ config.lifeTime ? formatLifetime(config.lifeTime) : 'Not set' }}</dd>
+                  <dd>{{ formatLifetime(config.lifeTime) }}</dd>
                 </div>
                 <div>
                   <dt>Status List Check Mode</dt>
@@ -266,7 +268,7 @@
                           }
                           @if (cred.claims?.length === 0) {
                             <p>
-                              Empty claims list. Edit the configuration and remove "claims" to
+                              Empty claims list. Edit the verification config and remove "claims" to
                               request no claims.
                             </p>
                           } @else if (cred.claims) {
@@ -584,7 +586,7 @@
     </app-load-error>
   } @else {
     <div class="loading-state">
-      <mat-spinner diameter="40" aria-label="Loading presentation configuration"></mat-spinner>
+      <mat-spinner diameter="40" aria-label="Loading verification config"></mat-spinner>
     </div>
   }
 </div>

@@ -2,6 +2,7 @@
   <a
     class="back-link"
     matButton
+    [title]="isEditMode ? 'Trust anchor ' + anchorId : 'Federation Trust Anchors'"
     [routerLink]="
       isEditMode ? ['/federation-trust-anchor', anchorId] : ['/federation-trust-anchor']
     "

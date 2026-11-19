@@ -24,7 +24,6 @@ import {
 import { MatInputModule } from '@angular/material/input';
 import { SchemaValidation } from '../schemas';
 import schemas from '../schemas.json';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { Subscription } from 'rxjs';
 import { ThemeService } from '../../services/theme.service';
 import { focusWasLost } from '../../common/focus-if-lost.util';
@@ -47,7 +46,7 @@ export function extractSchema(obj: any) {
 @Component({
   selector: 'app-editor',
   standalone: true,
-  imports: [FormsModule, ReactiveFormsModule, MonacoEditorModule, MatInputModule, FlexLayoutModule],
+  imports: [FormsModule, ReactiveFormsModule, MonacoEditorModule, MatInputModule],
   templateUrl: './editor.component.html',
   styleUrls: ['./editor.component.scss'],
   changeDetection: ChangeDetectionStrategy.Eager,

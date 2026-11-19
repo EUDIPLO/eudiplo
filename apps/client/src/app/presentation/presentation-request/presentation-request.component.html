@@ -11,7 +11,7 @@
 
   @if (loading) {
     <div class="loading-state">
-      <mat-spinner diameter="40" aria-label="Loading presentation configurations"></mat-spinner>
+      <mat-spinner diameter="40" aria-label="Loading verification configs"></mat-spinner>
     </div>
   } @else {
     @if (configsLoadFailed) {
@@ -19,14 +19,12 @@
     } @else if (configs.length === 0) {
       <div class="empty-state">
         <span class="empty-icon"><mat-icon>tune</mat-icon></span>
-        <strong>No presentation configurations</strong>
-        <p>
-          You need to create at least one presentation configuration before generating requests.
-        </p>
+        <strong>No verification configs</strong>
+        <p>You need to create at least one verification config before generating requests.</p>
         @if (canManagePresentationConfigs) {
           <a matButton="filled" [routerLink]="['/presentation-config/create']">
             <mat-icon>add</mat-icon>
-            Create Presentation Configuration
+            Create Verification Config
           </a>
         } @else {
           <p>Ask an administrator with presentation:manage to create one.</p>
@@ -37,17 +35,15 @@
         <!-- Each section: what it is for on the left, its fields on the right -->
         <section class="form-section" aria-labelledby="request-config-heading">
           <div class="section-intro">
-            <h2 id="request-config-heading">Configuration</h2>
-            <p>
-              The presentation configuration says which credentials and claims the wallet presents.
-            </p>
+            <h2 id="request-config-heading">Verification config</h2>
+            <p>The verification config says which credentials and claims the wallet presents.</p>
           </div>
           <mat-card appearance="outlined">
             <mat-card-content class="field-stack">
               <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                <mat-label>Presentation Configuration</mat-label>
+                <mat-label>Verification Config</mat-label>
                 <mat-select formControlName="requestId">
-                  <mat-option value="">Select a configuration</mat-option>
+                  <mat-option value="">Select a verification config</mat-option>
                   @for (config of configs; track config.id) {
                     <mat-option [value]="config.id">
                       {{ config.id }}
@@ -56,7 +52,7 @@
                 </mat-select>
                 <mat-icon matSuffix>rule</mat-icon>
                 @if (form.get('requestId')?.invalid && form.get('requestId')?.touched) {
-                  <mat-error>Please select a presentation configuration</mat-error>
+                  <mat-error>Please select a verification config</mat-error>
                 }
               </mat-form-field>
 
@@ -140,14 +136,14 @@
                       {{ problem }}
                       @if (canManagePresentationConfigs && selectedConfig) {
                         Add it under Settings, Request and verification options, or for a
-                        file-managed configuration to allowedOrigins in its source file.
+                        file-managed verification config to allowedOrigins in its source file.
                         <a
                           matButton
                           [routerLink]="['/presentation-config', selectedConfig.id, 'edit']"
                           appConfigManaged
                           managedKind="PresentationConfig"
                           [managedResourceId]="selectedConfig.id"
-                          >Edit the configuration</a
+                          >Edit the verification config</a
                         >
                       } @else {
                         Ask an administrator with presentation:manage to add it.
@@ -182,7 +178,9 @@
         <section class="form-section" aria-labelledby="request-transaction-heading">
           <div class="section-intro">
             <h2 id="request-transaction-heading">Transaction data</h2>
-            <p>Optional. Replaces the transaction data of the configuration for this request.</p>
+            <p>
+              Optional. Replaces the transaction data of the verification config for this request.
+            </p>
           </div>
           <mat-card appearance="outlined">
             <mat-card-content class="field-stack">
@@ -201,7 +199,8 @@
                     [errors]="$safeNavigationMigration(form.get('transaction_data')?.errors)"
                   ></app-editor>
                   <mat-hint>
-                    Provide custom transaction data to override the configuration default. Format:
+                    Provide custom transaction data to override the default of the verification
+                    config. Format:
                     <code>[{{ '{' }}"type": "...", "credential_ids": [...]{{ '}' }}]</code>
                   </mat-hint>
                 </div>

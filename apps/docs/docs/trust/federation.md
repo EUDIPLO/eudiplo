@@ -137,7 +137,7 @@ When the federation cannot be reached (a timeout, a failed request, a `429` or `
 
 ## Configure federation for issuance
 
-Set `federation` in the issuance configuration (`POST /api/issuer/config`, or **Issuer Settings → Trust → OpenID Federation** in the Web Client):
+Set `federation` in the issuance configuration (`POST /api/issuer/config`, or **Issuer Settings**, then **Edit**, the **Trust** tab and **OpenID Federation** in the Web Client):
 
 ```json
 {

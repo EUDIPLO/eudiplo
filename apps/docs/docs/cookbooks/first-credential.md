@@ -105,7 +105,7 @@ Enter **Display Name** `Membership`, **Description** `Example membership card` a
 
 Choose **Continue**, check the review, and choose **Create Configuration**.
 
-**Checkpoint:** `membership` appears under **Credential Configs** with VCT `urn:example:membership:1` and the two claims. Other formats and settings are in [Credential configuration](../issuance/credential-configuration.md).
+**Checkpoint:** `membership` appears under **Credential Configs** with the description `Example membership card`, format **SD-JWT VC**, a lifetime of 1 day, **No status** and **Key binding**. Open it to check VCT `urn:example:membership:1` and the two claims. Other formats and settings are in [Credential configuration](../issuance/credential-configuration.md).
 
 :::note[Why status management is off]
 It keeps status lists out of the first run. [Revocable credentials](revocable-credentials.md) turns it on.

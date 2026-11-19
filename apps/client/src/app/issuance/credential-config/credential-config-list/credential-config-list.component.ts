@@ -82,7 +82,7 @@ export class CredentialConfigListComponent extends BaseAsyncListComponent<Creden
     return formatLifetime(seconds);
   }
 
-  deleteConfig(config: CredentialConfig): Promise<void> {
+  deleteConfig(config: CredentialConfig): Promise<boolean> {
     return this.deleteItem({
       item: config,
       id: config.id,

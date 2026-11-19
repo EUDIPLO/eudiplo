@@ -34,6 +34,7 @@ import {
 } from '../oidc-client-secret-dialog/oidc-client-secret-dialog.component';
 import { MAX_SECRETS, PROFILE_LABELS } from '../oidc-client-create/oidc-client-form';
 import { OidcClientService } from '../oidc-client.service';
+import { oidcClientDeleteConfirmation } from '../oidc-client-delete-confirmation';
 
 /** The value of a `datetime-local` input for an ISO timestamp, in local time. */
 export function toLocalDateTime(iso: string | null | undefined): string {
@@ -157,9 +158,7 @@ export class OidcClientShowComponent implements OnInit {
       !client ||
       this.deleting ||
       !this.jwtService.hasRole('presentation:manage') ||
-      !confirm(
-        `Delete OIDC client "${client.name}"? Applications using it can no longer sign users in. This cannot be undone.`
-      )
+      !confirm(oidcClientDeleteConfirmation(client.name))
     ) {
       return;
     }

@@ -6,7 +6,7 @@ import { tenantToken, writeConfig } from './support/clients';
 async function selectPidPresentationConfig(page: Page): Promise<void> {
   await page.goto('/');
   await page.getByText('New Verification').click();
-  await page.getByRole('combobox', { name: 'Presentation Configuration' }).click();
+  await page.getByRole('combobox', { name: 'Verification Config' }).click();
   await page.getByRole('option', { name: 'pid', exact: true }).click();
 }
 
@@ -80,7 +80,7 @@ test.describe('presentation offer with dc api', () => {
   test('names this page for a configuration that does not list it', async ({ page }) => {
     await page.goto('/');
     await page.getByText('New Verification').click();
-    await page.getByRole('combobox', { name: 'Presentation Configuration' }).click();
+    await page.getByRole('combobox', { name: 'Verification Config' }).click();
     await page.getByRole('option', { name: configId, exact: true }).click();
     await page.getByRole('switch', { name: 'Use DC-API instead of QR-Code' }).click();
     await expect(page.getByRole('status')).toContainText(

@@ -15,6 +15,7 @@ import {
   ViewChildren,
 } from '@angular/core';
 import { focusAfterRenderIfLost, focusRowAfterRemoval } from '../../../common/focus-if-lost.util';
+import { firstFieldWithError, focusFieldToFix } from '../../../common/field-to-fix.util';
 import { httpUrlValidator } from '../../../utils/http-url-validator';
 import {
   AbstractControl,
@@ -52,7 +53,6 @@ import { SchemaBrowserComponent } from '../schema-browser/schema-browser.compone
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatDividerModule } from '@angular/material/divider';
-import { MatExpansionModule } from '@angular/material/expansion';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { configs } from './pre-config';
 import { MonacoEditorModule } from 'ngx-monaco-editor-v2';
@@ -101,7 +101,6 @@ import { jsonViewUnavailableReason } from '../../../common/json-view';
     MatMenuModule,
     MatDividerModule,
     MatTabsModule,
-    MatExpansionModule,
     MatTooltipModule,
     DcqlQueryEditorComponent,
     MonacoEditorModule,
@@ -155,7 +154,6 @@ export class PresentationCreateComponent implements OnInit {
   public guided = true;
   public activeStep = 0;
   public furthestStep = 0;
-  public showSettingsErrors = false;
   public validationMessage = '';
   public saving = false;
   /** While the configuration to edit or copy loads; saving before would overwrite it. */
@@ -169,7 +167,7 @@ export class PresentationCreateComponent implements OnInit {
     'Name your reusable request',
     'Choose credentials and claims',
     'Review defaults and optional settings',
-    'Check the configuration before saving',
+    'Check the verification config before saving',
   ];
 
   transactionDataArraySchema = transactionDataArraySchema;
@@ -181,20 +179,21 @@ export class PresentationCreateComponent implements OnInit {
 
   readonly languageOptionsWith = languageOptionsWith;
 
-  /**
-   * Whether the registration certificate panel is open. It opens for a loaded
-   * certificate and then follows the user, so removing the last purpose does
-   * not close it under the user's focus.
-   */
-  registrationCertExpanded = false;
-
   private readonly injector = inject(Injector);
   /** Takes the focus after a successful Retry, which removed the focused Retry button. */
   @ViewChild('pageHeading', { read: ElementRef })
   private readonly pageHeading?: ElementRef<HTMLElement>;
+  /** The form, whose steps hold the fields to fix after a refused Continue or Save. */
+  @ViewChild('editorForm', { read: ElementRef })
+  private readonly editorForm?: ElementRef<HTMLFormElement>;
   /** The purpose text of each row, which takes focus after a removal. */
   @ViewChildren('purposeContent', { read: ElementRef })
   private readonly purposeContents?: QueryList<ElementRef<HTMLElement>>;
+  /** The attachment rows, whose first field takes focus after a removal. */
+  @ViewChildren(CredentialIdsComponent, { read: ElementRef })
+  private readonly attachmentRows?: QueryList<ElementRef<HTMLElement>>;
+  @ViewChild('addAttachmentButton', { read: ElementRef })
+  private readonly addAttachmentButton?: ElementRef<HTMLElement>;
   @ViewChild('addPurposeButton', { read: ElementRef })
   private readonly addPurposeButton?: ElementRef<HTMLElement>;
 
@@ -286,7 +285,7 @@ export class PresentationCreateComponent implements OnInit {
       .then(
         (config) => {
           if (!config) {
-            this.snackBar.open('Presentation not found', 'Close', {
+            this.snackBar.open('Verification config not found', 'Close', {
               duration: 3000,
             });
             this.router.navigate(['../'], { relativeTo: this.route });
@@ -335,8 +334,8 @@ export class PresentationCreateComponent implements OnInit {
           }
         },
         (error) => {
-          console.error('Error loading presentation configuration:', error);
-          this.loadError = getApiErrorMessage(error, 'Failed to load presentation configuration');
+          console.error('Error loading verification config:', error);
+          this.loadError = getApiErrorMessage(error, 'Failed to load verification config');
         }
       )
       .finally(() => (this.loadingConfig = false));
@@ -362,18 +361,66 @@ export class PresentationCreateComponent implements OnInit {
   private validateStep(step: number): boolean {
     const controls = this.stepFields(step).map((key) => this.form.controls[key]);
     controls.forEach((control) => control.markAllAsTouched());
-    if (step === 2 && this.integrationReferenceError) {
-      this.validationMessage = this.integrationReferenceError;
-      this.showSettingsErrors = true;
+    const referenceError = step === 2 ? this.integrationReference : null;
+    if (referenceError) {
+      this.validationMessage = referenceError.message;
+      this.focusStepFieldToFix(step, () => this.referenceField(referenceError.section));
       return false;
     }
     if (controls.some((control) => control.invalid)) {
-      this.validationMessage = `Check the highlighted fields in ${['Name', 'Credentials', 'Settings'][step]}.`;
-      if (step === 2) this.showSettingsErrors = true;
+      // The query builder shows its errors as messages next to its fields, not as invalid fields.
+      this.validationMessage =
+        step === 1
+          ? 'Check the errors in Credentials.'
+          : `Check the highlighted fields in ${['Name', 'Credentials', 'Settings'][step]}.`;
+      this.focusStepFieldToFix(step, () => (step === 1 ? this.queryErrorField() : undefined));
       return false;
     }
     this.validationMessage = '';
     return true;
+  }
+
+  /** The element of a step of the editor; the steps stay rendered once shown. */
+  private stepElement(step: number): HTMLElement | null | undefined {
+    return this.editorForm?.nativeElement.querySelector<HTMLElement>(`[data-step="${step}"]`);
+  }
+
+  /**
+   * After the step is shown, moves focus to `field`, else to the step's first field with an error,
+   * which the refused Continue or Save may have left in another step, out of view.
+   */
+  private focusStepFieldToFix(step: number, field: () => HTMLElement | null | undefined): void {
+    focusFieldToFix(this.injector, () => this.stepElement(step), {
+      field: () => field() ?? firstFieldWithError(this.stepElement(step)),
+    });
+  }
+
+  /**
+   * The first field of the query builder's credential that shows an error, else the first field
+   * of the builder or of its JSON editor.
+   */
+  private queryErrorField(): HTMLElement | null | undefined {
+    const editor = this.stepElement(1)?.querySelector<HTMLElement>('app-dcql-query-editor');
+    const scope = editor?.querySelector('.query-error')?.closest<HTMLElement>('fieldset') ?? editor;
+    return (
+      scope?.querySelector<HTMLElement>('app-editor, input, textarea, mat-select') ??
+      editor?.querySelector<HTMLElement>('button')
+    );
+  }
+
+  /** Where a missing credential reference is fixed: the attachments or the transaction data. */
+  private referenceField(
+    section: 'Attachments' | 'Transaction data'
+  ): HTMLElement | null | undefined {
+    const settings = this.stepElement(2);
+    if (section === 'Transaction data') {
+      return settings?.querySelector<HTMLElement>('app-editor[formcontrolname="transaction_data"]');
+    }
+    return (
+      settings?.querySelector<HTMLElement>(
+        '[formarrayname="attached"] input, [formarrayname="attached"] textarea'
+      ) ?? this.addAttachmentButton?.nativeElement
+    );
   }
 
   nextStep(): void {
@@ -397,17 +444,6 @@ export class PresentationCreateComponent implements OnInit {
     this.createOrUpdatePresentation();
   }
 
-  get hasRequestOverrides(): boolean {
-    const value = this.form.getRawValue();
-    return (
-      value.lifeTime !== 300 ||
-      value.statusCheckMode !== 'strict' ||
-      !!value.accessKeyChainId ||
-      !!value.redirectUri ||
-      parseAllowedOrigins(value.allowedOrigins).length > 0
-    );
-  }
-
   /** Origin of this Web Client, which DC API requests started from it need in the list. */
   readonly pageOrigin = window.location.origin;
 
@@ -417,13 +453,9 @@ export class PresentationCreateComponent implements OnInit {
     return origins.length ? origins.join(', ') : NO_ALLOWED_ORIGINS;
   }
 
-  get hasRegistrationCertificate(): boolean {
-    return !!this.buildRegistrationCertFromForm();
-  }
-
   /**
-   * Summary of the registration certificate settings for the panel header and
-   * the Review step: it names a JWT only when there is one.
+   * Summary of the registration certificate settings for the Review step: it names a JWT only
+   * when there is one.
    */
   get registrationCertSummary(): string {
     const registrationCert = this.buildRegistrationCertFromForm();
@@ -433,10 +465,6 @@ export class PresentationCreateComponent implements OnInit {
       registrationCertStatusSentence(this.registrationCertStatus, this.registrationCertExpiresIn) ??
       'Configured'
     );
-  }
-
-  get hasIntegrationOptions(): boolean {
-    return !!this.form.get('webhookEndpointId')?.value || this.getFormArray('attached').length > 0;
   }
 
   get accessSetupMessage(): string | null {
@@ -538,8 +566,14 @@ export class PresentationCreateComponent implements OnInit {
     }));
   }
 
-  /** Renamed/deleted query IDs must also be repaired in integration settings before saving. */
-  get integrationReferenceError(): string | null {
+  /**
+   * The first attachment or transaction data entry that names a credential the query lacks:
+   * renamed or deleted query IDs must also be repaired in the integration settings before saving.
+   */
+  private get integrationReference(): {
+    message: string;
+    section: 'Attachments' | 'Transaction data';
+  } | null {
     const query = parseDcql(this.queryControl.value) as any;
     const ids = new Set(
       Array.isArray(query?.credentials) ? query.credentials.map((entry: any) => entry?.id) : []
@@ -548,16 +582,19 @@ export class PresentationCreateComponent implements OnInit {
     const entries = [
       ...this.getFormArray('attached')
         .getRawValue()
-        .map((entry: any) => ({ entry, section: 'Attachments' })),
+        .map((entry: any) => ({ entry, section: 'Attachments' as const })),
       ...(Array.isArray(transactions)
-        ? transactions.map((entry) => ({ entry, section: 'Transaction data' }))
+        ? transactions.map((entry) => ({ entry, section: 'Transaction data' as const }))
         : []),
     ];
     for (const { entry, section } of entries) {
       if (!Array.isArray(entry?.credential_ids)) continue;
       const missing = entry.credential_ids.find((id: unknown) => !ids.has(id));
       if (missing !== undefined)
-        return `${section} references missing credential "${missing}". Update its credential IDs in Settings.`;
+        return {
+          message: `${section} references missing credential "${missing}". Update its credential IDs in Settings.`,
+          section,
+        };
     }
     return null;
   }
@@ -566,6 +603,7 @@ export class PresentationCreateComponent implements OnInit {
     return this.form.get(value) as FormArray;
   }
 
+  /** Adds an empty attachment row; loading uses it too, so it leaves the form pristine. */
   addAttachment(): void {
     this.getFormArray('attached').push(
       new FormGroup({
@@ -576,8 +614,25 @@ export class PresentationCreateComponent implements OnInit {
     );
   }
 
+  /** Add Attachment: a new, empty attachment, which is an unsaved change. */
+  addAttachmentByUser(): void {
+    this.addAttachment();
+    this.form.markAsDirty();
+  }
+
+  /** Removes an attachment; focus moves to the row now in its place, else to Add Attachment. */
   removeAttachment(index: number) {
     (this.form.get('attached') as FormArray).removeAt(index);
+    this.form.markAsDirty();
+    focusRowAfterRemoval(
+      this.injector,
+      () =>
+        this.attachmentRows
+          ?.map((row) => row.nativeElement.querySelector<HTMLElement>('input'))
+          .filter((input): input is HTMLElement => !!input),
+      index,
+      () => this.addAttachmentButton?.nativeElement
+    );
   }
 
   getFormGroup(value: string) {
@@ -595,7 +650,7 @@ export class PresentationCreateComponent implements OnInit {
 
   /** Save and Back stay focusable while a save runs, so their tooltip says why they wait. */
   get saveTooltip(): string {
-    return this.saving ? 'Saving the presentation configuration…' : '';
+    return this.saving ? 'Saving the verification config…' : '';
   }
 
   createOrUpdatePresentation(): void {
@@ -635,14 +690,14 @@ export class PresentationCreateComponent implements OnInit {
             // In copy mode, navigate up two levels (past :id/copy), otherwise one level
             const navigatePath = this.copyMode ? ['../../', res.id] : ['../', res.id];
             this.router.navigate(navigatePath, { relativeTo: this.route });
-            this.snackBar.open('Presentation created successfully', 'Close', {
+            this.snackBar.open('Verification config created', 'Close', {
               duration: 3000,
             });
           },
           (err: unknown) =>
             openErrorSnackBar(
               this.snackBar,
-              getApiErrorMessage(err, 'Failed to create presentation', { allIssues: true })
+              getApiErrorMessage(err, 'Failed to create verification config', { allIssues: true })
             )
         )
         .finally(() => (this.saving = false));
@@ -654,14 +709,14 @@ export class PresentationCreateComponent implements OnInit {
         .then(
           () => {
             this.router.navigate(['../'], { relativeTo: this.route });
-            this.snackBar.open('Presentation updated successfully', 'Close', {
+            this.snackBar.open('Verification config saved', 'Close', {
               duration: 3000,
             });
           },
           (err: unknown) => {
             openErrorSnackBar(
               this.snackBar,
-              getApiErrorMessage(err, 'Failed to update presentation', { allIssues: true })
+              getApiErrorMessage(err, 'Failed to save verification config', { allIssues: true })
             );
           }
         )
@@ -687,7 +742,7 @@ export class PresentationCreateComponent implements OnInit {
   get jsonViewUnavailableReason(): string {
     return jsonViewUnavailableReason(
       { loading: this.loadingConfig, loadError: this.loadError, saving: this.saving },
-      'the presentation configuration'
+      'the verification config'
     );
   }
 
@@ -700,7 +755,7 @@ export class PresentationCreateComponent implements OnInit {
     const currentConfig = this.getCompleteConfiguration();
     const dialogRef = this.dialog.open(JsonViewDialogComponent, {
       data: {
-        title: 'Presentation Configuration JSON',
+        title: 'Verification Config JSON',
         jsonData: currentConfig,
         readonly: false,
         schema: presentationConfigSchema,
@@ -851,12 +906,12 @@ export class PresentationCreateComponent implements OnInit {
       this.form.patchValue(formData);
       if (!this.create) this.form.get('id')?.setValue(existingId);
       this.form.markAsDirty();
-      this.snackBar.open('Configuration loaded from JSON successfully', 'OK', {
+      this.snackBar.open('Verification config loaded from JSON', 'OK', {
         duration: 3000,
       });
     } catch (error) {
       console.error('Error loading configuration from JSON:', error);
-      this.snackBar.open('Error loading configuration from JSON', 'Close', {
+      this.snackBar.open('Could not load the verification config from JSON', 'Close', {
         duration: 3000,
       });
     }
@@ -878,6 +933,7 @@ export class PresentationCreateComponent implements OnInit {
       if (dcqlQuery) {
         // Set the DCQL query in the form
         this.form.get('dcql_query')?.setValue(JSON.stringify(dcqlQuery, null, 2));
+        this.form.get('dcql_query')?.markAsDirty();
         this.snackBar.open('DCQL query imported from issuer', 'OK', {
           duration: 3000,
         });
@@ -901,6 +957,7 @@ export class PresentationCreateComponent implements OnInit {
       if (result) {
         const dcqlQuery = result.dcqlQuery ? result.dcqlQuery : result;
         this.form.get('dcql_query')?.setValue(JSON.stringify(dcqlQuery, null, 2));
+        this.form.get('dcql_query')?.markAsDirty();
 
         const idControl = this.form.get('id');
         const descriptionControl = this.form.get('description');
@@ -936,6 +993,7 @@ export class PresentationCreateComponent implements OnInit {
     );
   }
 
+  /** Adds a purpose row; loading uses it too, so it leaves the form pristine. */
   addRegistrationCertPurpose(lang = DEFAULT_LANGUAGE, value = ''): void {
     // Any stored tag is kept, also one the list lacks such as pt-BR; only a
     // missing one becomes the default.
@@ -949,9 +1007,16 @@ export class PresentationCreateComponent implements OnInit {
     );
   }
 
+  /** Add Purpose: a new purpose in a language no purpose has yet, which is an unsaved change. */
+  addPurposeByUser(): void {
+    this.addRegistrationCertPurpose(this.unusedPurposeLanguage);
+    this.form.markAsDirty();
+  }
+
   /** Removes a purpose; focus moves to the row now in its place, else to Add Purpose. */
   removeRegistrationCertPurpose(index: number): void {
     this.registrationCertPurposeArray.removeAt(index);
+    this.form.markAsDirty();
     focusRowAfterRemoval(
       this.injector,
       () => this.purposeContents?.map((content) => content.nativeElement),
@@ -1015,12 +1080,6 @@ export class PresentationCreateComponent implements OnInit {
     });
 
     this.registrationCertPurposeArray.clear();
-    this.registrationCertExpanded = !!(
-      registrationCert?.jwt ||
-      registrationCert?.privacy_policy ||
-      registrationCert?.purpose?.length ||
-      registrationCert?.body
-    );
     // Files saved before the body was removed keep the purpose under it.
     let purposes: { lang?: string; content?: string }[] = [];
     if (Array.isArray(registrationCert?.purpose)) {

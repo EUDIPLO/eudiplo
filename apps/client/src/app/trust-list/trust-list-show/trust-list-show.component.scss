@@ -1,5 +1,5 @@
 @use '@angular/material' as mat;
-@use '../../tenants/tenant-page' as page;
+@use 'page';
 
 // Page heading and outlined cards, as on the key and tenant pages
 @include page.base;

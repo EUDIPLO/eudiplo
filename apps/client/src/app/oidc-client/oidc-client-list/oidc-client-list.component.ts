@@ -11,6 +11,7 @@ import type { OidcClientResponseDto } from '@eudiplo/sdk-core';
 import { BaseAsyncListComponent } from '../../common/base-async-list.component';
 import { LoadErrorComponent } from '../../common/load-error.component';
 import { PROFILE_LABELS } from '../oidc-client-create/oidc-client-form';
+import { oidcClientDeleteConfirmation } from '../oidc-client-delete-confirmation';
 import { OidcClientService } from '../oidc-client.service';
 
 @Component({
@@ -59,11 +60,11 @@ export class OidcClientListComponent extends BaseAsyncListComponent<OidcClientRe
     return PROFILE_LABELS[client.profile];
   }
 
-  deleteClient(client: OidcClientResponseDto): Promise<void> {
+  deleteClient(client: OidcClientResponseDto): Promise<boolean> {
     return this.deleteItem({
       item: client,
       id: client.id,
-      question: `Delete OIDC client "${client.name}"? Applications using it can no longer sign users in. This cannot be undone.`,
+      question: oidcClientDeleteConfirmation(client.name),
       request: () => this.oidcClientService.delete(client.id),
       deleted: 'OIDC client deleted',
       failed: 'Failed to delete OIDC client',

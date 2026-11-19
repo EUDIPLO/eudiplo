@@ -1,5 +1,11 @@
 <div class="page form-page">
-  <a class="back-link" matButton [routerLink]="['../']" [attr.aria-label]="'Back to ' + backLabel">
+  <a
+    class="back-link"
+    matButton
+    [title]="backLabel"
+    [routerLink]="['../']"
+    [attr.aria-label]="'Back to ' + backLabel"
+  >
     <mat-icon>arrow_back</mat-icon>
     {{ backLabel }}
   </a>
@@ -93,7 +99,7 @@
                 type="url"
                 placeholder="https://example.com/webhook"
               />
-              <mat-error>{{ fieldError('url', 'URL is required') }}</mat-error>
+              <mat-error>{{ urlError }}</mat-error>
             </mat-form-field>
           </mat-card-content>
         </mat-card>

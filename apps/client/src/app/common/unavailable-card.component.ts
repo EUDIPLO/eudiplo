@@ -1,7 +1,6 @@
 import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 
 /**
  * Takes the place of a list this instance does not serve (the backend answers
@@ -11,12 +10,12 @@ import { FlexLayoutModule } from 'ngx-flexible-layout';
 @Component({
   selector: 'app-unavailable-card',
   standalone: true,
-  imports: [FlexLayoutModule, MatCardModule, MatIconModule],
+  imports: [MatCardModule, MatIconModule],
   template: `
     <mat-card class="mat-elevation-z2">
       <mat-card-content>
-        <div fxLayout="column" fxLayoutGap="8px">
-          <div fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px">
+        <div class="unavailable-copy">
+          <div class="unavailable-heading">
             <mat-icon color="warn">info</mat-icon>
             <strong>{{ heading }}</strong>
           </div>
@@ -25,6 +24,7 @@ import { FlexLayoutModule } from 'ngx-flexible-layout';
       </mat-card-content>
     </mat-card>
   `,
+  styleUrl: './unavailable-card.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class UnavailableCardComponent {

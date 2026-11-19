@@ -152,7 +152,7 @@ test('picks the registered trust anchor as a federation authority of a presentat
   await expect(page.getByText(`Federation: ${entityId}`)).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
-  await page.getByRole('button', { name: 'Create Configuration' }).click();
+  await page.getByRole('button', { name: 'Create Verification Config' }).click();
   await expect(page).toHaveURL(/\/presentation-config\/federation-check$/);
 
   const config = await (await apiRequest('GET', '/verifier/config/federation-check')).json();

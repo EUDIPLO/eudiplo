@@ -8,7 +8,6 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { MonacoEditorModule } from 'ngx-monaco-editor-v2';
 import { EditorComponent } from '../../../../utils/editor/editor.component';
 import { SchemaValidation } from '../../../../utils/schemas';
@@ -36,7 +35,6 @@ export interface JsonViewDialogData {
     MatTooltipModule,
     MatSnackBarModule,
     ReactiveFormsModule,
-    FlexLayoutModule,
     MonacoEditorModule,
     EditorComponent,
   ],

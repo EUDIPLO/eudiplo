@@ -19,7 +19,6 @@ import { MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { NavigationEnd, Router, RouterModule, RouterOutlet } from '@angular/router';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { Subscription } from 'rxjs';
 import { filter } from 'rxjs/operators';
 import { JwtService, Role } from './services/jwt.service';
@@ -38,7 +37,6 @@ import { KEY_CHAIN_ROLES } from './key-management/key-chain.service';
   selector: 'app-root',
   imports: [
     RouterOutlet,
-    FlexLayoutModule,
     MatCardModule,
     MatButtonModule,
     MatToolbarModule,

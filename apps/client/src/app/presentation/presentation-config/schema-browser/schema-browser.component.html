@@ -1,14 +1,14 @@
-<h2 mat-dialog-title fxLayout="row" fxLayoutAlign="space-between center">
+<h2 class="fx-row justify-space-between align-center" mat-dialog-title>
   <span>Import from Schema</span>
   <button mat-icon-button (click)="close()" matTooltip="Close" aria-label="Close">
     <mat-icon>close</mat-icon>
   </button>
 </h2>
 
-<mat-dialog-content fxLayout="column" fxLayoutGap="16px">
-  <div fxLayout="column" fxLayoutGap="16px">
-    <div fxLayout="column" fxLayoutGap="8px">
-      <mat-form-field appearance="outline" fxFlex>
+<mat-dialog-content class="fx-col gap-16">
+  <div class="fx-col gap-16">
+    <div class="fx-col gap-8">
+      <mat-form-field class="flex-1" appearance="outline">
         <mat-label>Schema URL</mat-label>
         <input
           id="schema-url"
@@ -46,7 +46,7 @@
 
     @if (error) {
       <mat-card class="error-card">
-        <mat-card-content fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px">
+        <mat-card-content class="fx-row align-center gap-8">
           <mat-icon color="warn">error</mat-icon>
           <span>{{ error }}</span>
         </mat-card-content>
@@ -55,7 +55,7 @@
 
     @if (resolved) {
       <mat-card>
-        <mat-card-content fxLayout="column" fxLayoutGap="8px">
+        <mat-card-content class="fx-col gap-8">
           @if (resolved.schema.name) {
             <div><strong>Name:</strong> {{ resolved.schema.name }}</div>
           }
@@ -71,7 +71,7 @@
         </mat-card-content>
       </mat-card>
 
-      <div fxLayout="column" fxLayoutGap="8px">
+      <div class="fx-col gap-8">
         <h3>Supported Credential Formats</h3>
         @for (format of resolved.schema.supportedFormats; track format) {
           <mat-checkbox
@@ -86,7 +86,7 @@
 
     @if (resolved && hasSelections()) {
       <mat-divider></mat-divider>
-      <div fxLayout="column" fxLayoutGap="8px">
+      <div class="fx-col gap-8">
         <h3>Generated DCQL Query</h3>
         <pre class="dcql-preview">{{ getGeneratedDcql() | json }}</pre>
       </div>

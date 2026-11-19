@@ -1,16 +1,8 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  ElementRef,
-  Injector,
-  OnInit,
-  ViewChild,
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTableModule } from '@angular/material/table';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { FormsModule } from '@angular/forms';
@@ -22,13 +14,11 @@ import {
 } from '@eudiplo/sdk-core';
 import { JwtService } from '../../services/jwt.service';
 import { canManageRoles } from '../../services/role-grants';
-import { apiErrorDetail, getApiErrorMessage, hasHttpStatus } from '../../utils/error-message';
-import { openErrorSnackBar } from '../../utils/error-snackbar';
-import { searchAndSort } from '../../utils/search-list';
+import { apiErrorDetail, hasHttpStatus } from '../../utils/error-message';
 import { uniqueRoles } from '../../services/role-groups';
+import { BaseAsyncListComponent } from '../../common/base-async-list.component';
 import { UnavailableCardComponent } from '../../common/unavailable-card.component';
 import { LoadErrorComponent } from '../../common/load-error.component';
-import { focusAfterRenderIfLost } from '../../common/focus-if-lost.util';
 
 @Component({
   selector: 'app-user-list',
@@ -48,13 +38,9 @@ import { focusAfterRenderIfLost } from '../../common/focus-if-lost.util';
   templateUrl: './user-list.component.html',
   styleUrl: './user-list.component.scss',
 })
-export class UserListComponent implements OnInit {
-  users: ManagedUserDto[] = [];
-  loading = false;
-  /** Set when the list could not be loaded, so it is not shown as empty. */
-  loadError = '';
-  isUnavailable = false;
-  unavailableMessage = '';
+export class UserListComponent extends BaseAsyncListComponent<ManagedUserDto> {
+  protected readonly loadFailedMessage = 'Failed to load users';
+
   /** The user column also shows the e-mail address. */
   displayedColumns: (keyof ManagedUserDto | 'actions')[] = [
     'username',
@@ -65,27 +51,36 @@ export class UserListComponent implements OnInit {
 
   /** Roles a row shows before "+N more". */
   readonly visibleRoleCount = 4;
-  /** Text to find in a user's username, e-mail address or roles. */
-  search = '';
-  /** The last search result, kept until the users or the search change. */
-  private shown?: { users: ManagedUserDto[]; search: string; result: ManagedUserDto[] };
 
-  /** The users that match the search, sorted by username. */
-  get shownUsers(): ManagedUserDto[] {
-    if (this.shown?.users !== this.users || this.shown.search !== this.search) {
-      const result = searchAndSort(
-        this.users,
-        this.search,
-        (user) => [user.username, user.email ?? '', ...(user.roles ?? [])],
-        (user) => user.username
-      );
-      this.shown = { users: this.users, search: this.search, result };
-    }
-    return this.shown.result;
+  readonly manageDeniedHint = 'This user has roles you neither hold nor may grant';
+  /** Roles of the signed-in caller, read once instead of per row */
+  private readonly callerRoles: string[];
+
+  constructor(jwtService: JwtService) {
+    super();
+    this.callerRoles = jwtService.getRoles();
   }
 
-  clearSearch(): void {
-    this.search = '';
+  get users(): ManagedUserDto[] {
+    return this.items;
+  }
+
+  protected fetchItems(): Promise<ManagedUserDto[]> {
+    return userControllerGetUsers<true>().then((res) => res.data);
+  }
+
+  protected override unavailableReason(error: unknown): string | undefined {
+    if (!hasHttpStatus(error, 501)) return undefined;
+    return apiErrorDetail(error) ?? 'This instance does not manage people.';
+  }
+
+  /** Text to find in a user's username, e-mail address or roles. */
+  protected override searchTexts(user: ManagedUserDto): string[] {
+    return [user.username, user.email ?? '', ...(user.roles ?? [])];
+  }
+
+  protected override sortName(user: ManagedUserDto): string {
+    return user.username;
   }
 
   /** A user's roles without repeats. */
@@ -93,79 +88,23 @@ export class UserListComponent implements OnInit {
     return uniqueRoles(user.roles);
   }
 
-  /** Where focus goes after a successful Retry removed the error card with its Retry button. */
-  @ViewChild('listHeading') private readonly listHeading?: ElementRef<HTMLElement>;
-
-  /** The user whose delete runs; its Delete waits for it. */
-  deletingId?: string;
-
-  readonly manageDeniedHint = 'This user has roles you neither hold nor may grant';
-  /** Roles of the signed-in caller, read once instead of per row */
-  private readonly callerRoles: string[];
-
-  constructor(
-    private readonly snackBar: MatSnackBar,
-    jwtService: JwtService,
-    private readonly injector: Injector
-  ) {
-    this.callerRoles = jwtService.getRoles();
-  }
-
   /** Whether the signed-in caller may edit or delete the user. */
   canManage(user: ManagedUserDto): boolean {
     return canManageRoles(this.callerRoles, user.roles ?? []);
   }
 
-  ngOnInit(): void {
-    void this.loadUsers();
-  }
-
-  async loadUsers(): Promise<void> {
-    const retrying = this.loadError !== '';
-    this.loading = true;
-    this.loadError = '';
-    this.isUnavailable = false;
-    this.unavailableMessage = '';
-
-    try {
-      this.users = await userControllerGetUsers<true>().then((res) => res.data);
-    } catch (error) {
-      if (hasHttpStatus(error, 501)) {
-        this.isUnavailable = true;
-        this.unavailableMessage = apiErrorDetail(error) ?? 'This instance does not manage people.';
-        this.users = [];
-      } else {
-        console.error('Error loading users:', error);
-        this.loadError = getApiErrorMessage(error, 'Failed to load users');
-      }
-    } finally {
-      this.loading = false;
-    }
-    if (retrying && !this.loadError) {
-      focusAfterRenderIfLost(this.injector, () => this.listHeading?.nativeElement);
-    }
-  }
-
   async deleteUser(user: ManagedUserDto): Promise<void> {
-    if (
-      !user.id ||
-      !this.canManage(user) ||
-      this.deletingId === user.id ||
-      !confirm(`Delete user "${user.username}"? This cannot be undone.`)
-    ) {
+    if (!user.id || !this.canManage(user)) {
       return;
     }
-
-    this.deletingId = user.id;
-    try {
-      await userControllerDeleteUser({ path: { id: user.id } });
-      await this.loadUsers();
-      this.snackBar.open('User deleted successfully', 'Close', { duration: 3000 });
-    } catch (error) {
-      console.error('Error deleting user:', error);
-      openErrorSnackBar(this.snackBar, getApiErrorMessage(error, 'Failed to delete user'));
-    } finally {
-      this.deletingId = undefined;
-    }
+    const id = user.id;
+    await this.deleteItem({
+      item: user,
+      id,
+      question: `Delete user "${user.username}"? This cannot be undone.`,
+      request: () => userControllerDeleteUser({ path: { id } }),
+      deleted: 'User deleted successfully',
+      failed: 'Failed to delete user',
+    });
   }
 }

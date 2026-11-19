@@ -1,9 +1,10 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Injector } from '@angular/core';
+import { ApplicationRef, Injector } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatDialog } from '@angular/material/dialog';
 import { By } from '@angular/platform-browser';
-import { provideRouter } from '@angular/router';
+import { ActivatedRoute, Router, provideRouter } from '@angular/router';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import type { Session } from '@eudiplo/sdk-core';
 import { JwtService } from '../../services/jwt.service';
 import { CredentialStatusCardComponent } from '../credential-status/credential-status-card.component';
@@ -13,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SessionManagementShowComponent } from './session-management-show.component';
 import { SessionManagementService } from '../session-management.service';
 import { expectAvailable, expectUnavailable } from '../../common/unavailable-action.testing';
+import { findButton } from '../../common/settings-screen.testing';
 
 describe('SessionManagementShowComponent', () => {
   let component: SessionManagementShowComponent;
@@ -689,5 +691,98 @@ describe('SessionManagementShowComponent errors', () => {
 
     expect(snackBar.open.mock.lastCall?.[0]).toBe('DC API error: access_denied: User declined');
     expect(httpClient.post).not.toHaveBeenCalled();
+  });
+});
+
+describe('SessionManagementShowComponent load error', () => {
+  let getSession: ReturnType<typeof vi.fn>;
+  let snackBar: { open: ReturnType<typeof vi.fn> };
+
+  beforeEach(async () => {
+    getSession = vi.fn();
+    snackBar = { open: vi.fn() };
+    await TestBed.configureTestingModule({
+      imports: [SessionManagementShowComponent],
+      providers: [
+        provideRouter([]),
+        { provide: ActivatedRoute, useValue: { snapshot: { params: { id: 'session-1' } } } },
+        {
+          provide: SessionManagementService,
+          useValue: { getSession, getSessionLogs: vi.fn().mockResolvedValue([]) },
+        },
+        { provide: JwtService, useValue: { hasRole: () => true } },
+      ],
+    })
+      .overrideProvider(MatSnackBar, { useValue: snackBar })
+      .compileComponents();
+  });
+
+  afterEach(() => TestBed.resetTestingModule());
+
+  async function render() {
+    const fixture = TestBed.createComponent(SessionManagementShowComponent);
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(fixture.componentInstance.loading).toBe(false));
+    fixture.detectChanges();
+    return { fixture, page: fixture.nativeElement as HTMLElement };
+  }
+
+  it('stays on the page with the reason, the back link and Retry when the session does not load', async () => {
+    getSession.mockRejectedValue({ statusCode: 404, message: 'Session not found' });
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate');
+    const { fixture, page } = await render();
+
+    expect(page.querySelector('app-load-error')?.textContent).toContain('Session not found');
+    expect(page.querySelector('app-load-error a')?.getAttribute('href')).toBe('/');
+    expect(findButton(page, 'Retry')).toBeTruthy();
+    expect(page.querySelector('mat-spinner')).toBeNull();
+    expect(snackBar.open).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.isPolling()).toBe(false);
+  });
+
+  it('shows the session after Retry and moves the focus from the removed card to the heading', async () => {
+    getSession
+      .mockRejectedValueOnce({ statusCode: 500, message: 'Unavailable' })
+      .mockResolvedValue({ id: 'session-1', status: 'failed', requestId: 'age-check' });
+    const { fixture, page } = await render();
+    const retry = findButton(page, 'Retry');
+
+    retry.focus();
+    retry.click();
+    await vi.waitFor(() => expect(fixture.componentInstance.session).not.toBeNull());
+    fixture.detectChanges();
+    TestBed.inject(ApplicationRef).tick();
+
+    const heading = page.querySelector<HTMLElement>('h1');
+    expect(page.querySelector('app-load-error')).toBeNull();
+    expect(heading).not.toBeNull();
+    expect(document.activeElement).toBe(heading);
+  });
+
+  it('polls a pending session once Retry has loaded it', async () => {
+    getSession
+      .mockRejectedValueOnce({ statusCode: 500, message: 'Unavailable' })
+      .mockResolvedValue({ id: 'session-1', status: 'active', requestId: 'age-check' });
+    const { fixture, page } = await render();
+
+    findButton(page, 'Retry').click();
+    await vi.waitFor(() => expect(fixture.componentInstance.session).not.toBeNull());
+
+    expect(fixture.componentInstance.isPolling()).toBe(true);
+    fixture.componentInstance.stopPolling();
+  });
+
+  it('keeps a loaded session on the page when a refresh fails, and says why', async () => {
+    getSession.mockResolvedValueOnce({ id: 'session-1', status: 'failed', requestId: 'age-check' });
+    const { fixture, page } = await render();
+    getSession.mockRejectedValue({ statusCode: 500, message: 'Unavailable' });
+
+    await fixture.componentInstance.loadSession('session-1');
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.session?.id).toBe('session-1');
+    expect(page.querySelector('app-load-error')).toBeNull();
+    expect(snackBar.open.mock.lastCall?.[0]).toBe('Failed to load session: Unavailable');
   });
 });
