@@ -130,7 +130,7 @@ export class StatusListEditComponent implements OnInit {
     () => Promise<LabelledFailure | undefined>
   > = {
     credentialConfigs: () =>
-      loadSource(this.loadState, 'credentialConfigs', 'credential configurations', async () => {
+      loadSource(this.loadState, 'credentialConfigs', 'credential configs', async () => {
         this.credentialConfigs = await this.credentialConfigService.loadConfigurations();
       }),
     keyChains: () =>

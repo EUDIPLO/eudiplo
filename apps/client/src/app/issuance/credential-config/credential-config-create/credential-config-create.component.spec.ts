@@ -860,7 +860,7 @@ describe('CredentialConfigCreateComponent editing', () => {
     await vi.waitFor(() => expect(component.loadingConfig).toBe(false));
 
     expect(component.create).toBe(false);
-    expect(component.loadError).toBe('Failed to load credential configuration: Forbidden resource');
+    expect(component.loadError).toBe('Failed to load credential config: Forbidden resource');
     component.onSubmit();
     expect(update).not.toHaveBeenCalled();
   });
@@ -942,14 +942,12 @@ describe('CredentialConfigCreateComponent JSON View', () => {
     const { component, open } = editor({ id: 'pid' }, { getConfig });
 
     component.loadConfigForEdit();
-    expect(component.jsonViewUnavailableReason).toBe(
-      'Wait until the credential configuration has loaded'
-    );
+    expect(component.jsonViewUnavailableReason).toBe('Wait until the credential config has loaded');
     // The button stays clickable while it cannot be used, so the handler checks again.
     component.viewAsJson();
     await vi.waitFor(() => expect(component.loadingConfig).toBe(false));
     expect(component.jsonViewUnavailableReason).toBe(
-      'Retry loading the credential configuration before opening JSON View'
+      'Retry loading the credential config before opening JSON View'
     );
     component.viewAsJson();
     expect(open).not.toHaveBeenCalled();
@@ -980,7 +978,7 @@ describe('CredentialConfigCreateComponent JSON View', () => {
     for (let i = 0; i < 5; i++) component.submitCredential();
     expect(saveConfiguration).toHaveBeenCalledOnce();
     expect(component.jsonViewUnavailableReason).toBe(
-      'Wait until the credential configuration has been saved'
+      'Wait until the credential config has been saved'
     );
     component.viewAsJson();
     expect(open).toHaveBeenCalledOnce();
@@ -1046,7 +1044,7 @@ describe('CredentialConfigCreateComponent Save', () => {
     fixture.detectChanges();
 
     expect(save).toHaveBeenCalledOnce();
-    expectUnavailable(fixture, button, 'Saving the credential configuration…');
+    expectUnavailable(fixture, button, 'Saving the credential config…');
   });
 
   it('steps back while idle and keeps Back focusable while the configuration is saved', async () => {
@@ -1071,6 +1069,6 @@ describe('CredentialConfigCreateComponent Save', () => {
 
     expect(save).toHaveBeenCalledOnce();
     expect(component.activeStep).toBe(4);
-    expectUnavailable(fixture, back, 'Saving the credential configuration…');
+    expectUnavailable(fixture, back, 'Saving the credential config…');
   });
 });

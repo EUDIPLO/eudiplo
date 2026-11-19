@@ -166,7 +166,7 @@ eudiplo config operations --instance cookbook | jq '.[0] | {mode, status}'
 
 ## Step 5: Change the tenant through its files
 
-Sign in to the Web Client (`eudiplo open --instance cookbook`) with **Client ID** `membership-files-admin` and the secret from `echo "$MEMBERSHIP_FILES_ADMIN_SECRET"`. Open **Credential Issuance → Credential Types → membership**: the page shows **Managed by a configuration bundle**, and editing and deleting are disabled. The API refuses such changes with `409 Conflict`, so a manual edit cannot be overwritten silently by the next import.
+Sign in to the Web Client (`eudiplo open --instance cookbook`) with **Client ID** `membership-files-admin` and the secret from `echo "$MEMBERSHIP_FILES_ADMIN_SECRET"`. Open **Credential Issuance → Credential Configs → membership**: the page shows **Managed by a configuration bundle**, and editing and deleting are disabled. The API refuses such changes with `409 Conflict`, so a manual edit cannot be overwritten silently by the next import.
 
 Change the file instead. In `issuance/credentials/membership.json`, rename the display from `Membership` to `Membership card`, then:
 

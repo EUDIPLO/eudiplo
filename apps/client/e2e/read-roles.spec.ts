@@ -170,7 +170,7 @@ test.describe('read and status roles', () => {
     const { clientId, clientSecret } = credentials.keys;
     await loginWithClientCredentials(page, clientId, clientSecret);
     const nav = page.locator('mat-sidenav');
-    await expect(nav.getByText('Credential Types')).toHaveCount(0);
+    await expect(nav.getByText('Credential Configs')).toHaveCount(0);
 
     const keyChains = page.waitForResponse(
       (response) =>

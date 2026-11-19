@@ -81,7 +81,7 @@ describe('IssuanceConfigShowComponent page', () => {
       (action) => action.textContent?.trim()
     );
     expect(actions).toEqual(
-      expect.arrayContaining(['edit Edit', 'Use guided setup', 'Configure a credential type'])
+      expect.arrayContaining(['edit Edit', 'Use guided setup', 'Create a credential config'])
     );
   });
 

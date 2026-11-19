@@ -131,10 +131,10 @@ test('issue and verify cookbook', async ({ page }) => {
   });
 
   await test.step('chapter 2, step 4: define the membership credential', async () => {
-    await openNav(page, 'Credential Types');
+    await openNav(page, 'Credential Configs');
     // The new tenant has none yet, so the list offers to create the first one.
-    await expect(page.getByText('No credential configurations yet.')).toBeVisible();
-    await page.getByRole('link', { name: 'Create credential configuration' }).first().click();
+    await expect(page.getByText('No credential configs yet.')).toBeVisible();
+    await page.getByRole('link', { name: 'Create credential config' }).first().click();
 
     // Basics
     await page.getByRole('textbox', { name: 'Configuration ID' }).fill('membership');
@@ -200,7 +200,7 @@ test('issue and verify cookbook', async ({ page }) => {
     await page.getByRole('radio', { name: /Pre-Authorized Code/ }).check();
     await page.getByRole('button', { name: 'Next' }).click();
     // The tenant's only credential type is preselected.
-    const selectedConfigs = page.getByRole('grid', { name: 'Selected credential configurations' });
+    const selectedConfigs = page.getByRole('grid', { name: 'Selected credential configs' });
     await expect(selectedConfigs.getByRole('row')).toHaveCount(1);
     await expect(selectedConfigs.getByRole('row', { name: 'membership' })).toBeVisible();
     await page.getByRole('button', { name: 'Next' }).click();

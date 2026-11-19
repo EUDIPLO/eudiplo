@@ -309,7 +309,7 @@ describe('IssuanceOfferComponent', () => {
     );
   });
 
-  describe('credential configuration picker', () => {
+  describe('credential config picker', () => {
     beforeEach(() => {
       component.credentialConfigs = [
         { id: 'pid', description: 'Person identification data' },
@@ -393,7 +393,7 @@ describe('IssuanceOfferComponent', () => {
 
         expect(component.selectedCredentialConfigIds).toEqual([]);
         expect(fixture.nativeElement.textContent).toContain(
-          'At least one credential configuration is required'
+          'At least one credential config is required'
         );
       });
 
@@ -460,13 +460,13 @@ describe('IssuanceOfferComponent', () => {
         await render();
 
         expect(openSuggestions('mdoc')).toEqual(['pid-mdoc PID in ISO mdoc format']);
-        expect(openSuggestions('zzz')).toEqual(['No credential configuration matches "zzz"']);
+        expect(openSuggestions('zzz')).toEqual(['No credential config matches "zzz"']);
       });
 
       it('says when every config is selected', async () => {
         await render(['pid', 'pid-mdoc', 'membership']);
 
-        expect(openSuggestions('')).toEqual(['All credential configurations are selected']);
+        expect(openSuggestions('')).toEqual(['All credential configs are selected']);
       });
     });
   });
@@ -617,7 +617,7 @@ describe('IssuanceOfferComponent', () => {
       });
     }
 
-    it('says on Next that a credential configuration is missing and focuses the picker', async () => {
+    it('says on Next that a credential config is missing and focuses the picker', async () => {
       await render();
       component.stepper.next();
       fixture.detectChanges();
@@ -637,7 +637,7 @@ describe('IssuanceOfferComponent', () => {
         expect.anything()
       );
       expect(fixture.nativeElement.textContent).toContain(
-        'At least one credential configuration is required'
+        'At least one credential config is required'
       );
       expect(component.stepper.selectedIndex).toBe(1);
     });
@@ -654,16 +654,12 @@ describe('IssuanceOfferComponent', () => {
       expect(open).not.toHaveBeenCalled();
     });
 
-    it('says why Next cannot be used when no credential configuration fits the flow', async () => {
+    it('says why Next cannot be used when no credential config fits the flow', async () => {
       await render({ configs: [] });
       component.stepper.next();
       fixture.detectChanges();
       const next = credentialStepNext();
-      expectUnavailable(
-        fixture,
-        next,
-        'No credential configuration can be selected for this flow.'
-      );
+      expectUnavailable(fixture, next, 'No credential config can be selected for this flow.');
 
       next.click();
       fixture.detectChanges();
@@ -718,7 +714,7 @@ describe('IssuanceOfferComponent', () => {
       );
     });
 
-    it('focuses a missing claim and names its credential configuration', async () => {
+    it('focuses a missing claim and names its credential config', async () => {
       await render({ configs: [buildMdocConfig()] });
       await fixture.whenStable();
       openLastStep();

@@ -253,7 +253,7 @@ export class CredentialConfigShowComponent implements OnInit {
         },
         (error) => {
           console.error('Load error:', error);
-          this.loadError = getApiErrorMessage(error, 'Failed to load credential configuration');
+          this.loadError = getApiErrorMessage(error, 'Failed to load credential config');
         }
       );
     }
@@ -281,7 +281,7 @@ export class CredentialConfigShowComponent implements OnInit {
       return;
     }
     const deleted = await confirmAndDelete(this.snackBar, {
-      question: `Delete credential configuration "${config.id}"? This cannot be undone.`,
+      question: `Delete credential config "${config.id}"? This cannot be undone.`,
       request: () => this.credentialConfigService.deleteConfiguration(config.id),
       deleted: 'Configuration deleted successfully',
       failed: 'Failed to delete configuration',
@@ -297,7 +297,7 @@ export class CredentialConfigShowComponent implements OnInit {
       return;
     }
 
-    if (!confirm(`Unlink schema '${this.schemaMetadataId}' from this credential configuration?`)) {
+    if (!confirm(`Unlink schema '${this.schemaMetadataId}' from this credential config?`)) {
       return;
     }
 

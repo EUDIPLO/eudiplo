@@ -16,7 +16,7 @@ const entry = (
 });
 
 describe('groupCredentialStatus', () => {
-  it('groups entries by credential configuration and counts their statuses', () => {
+  it('groups entries by credential config and counts their statuses', () => {
     const groups = groupCredentialStatus([
       entry('pid', 2, 2, 0),
       entry('pid', 0, 2, 1),

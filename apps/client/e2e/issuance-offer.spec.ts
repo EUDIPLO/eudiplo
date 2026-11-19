@@ -10,9 +10,7 @@ async function startOffer(page: Page, credentialConfigId: string, flow?: RegExp)
     await page.getByRole('radio', { name: flow }).check();
   }
   await page.getByRole('button', { name: 'Next' }).click();
-  await page
-    .getByRole('combobox', { name: 'Credential Configuration IDs' })
-    .fill(credentialConfigId);
+  await page.getByRole('combobox', { name: 'Credential Config IDs' }).fill(credentialConfigId);
   // Options read as "<id> <description>", so match the ID as the first word.
   await page
     .getByRole('option', {

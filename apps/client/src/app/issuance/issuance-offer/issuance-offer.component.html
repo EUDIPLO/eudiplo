@@ -82,15 +82,17 @@
       <mat-step [stepControl]="credentialStepForm" label="Select Credentials">
         <form class="fx-col gap-24" #credentialStepElement [formGroup]="credentialStepForm">
           <div class="step-content">
-            <h2>Select Credential Configurations</h2>
-            <p class="step-description">Choose which credential types to include in this offer.</p>
+            <h2>Select Credential Configs</h2>
+            <p class="step-description">
+              Choose which credential configs to include in this offer.
+            </p>
 
             @if (availableCredentialConfigs.length === 0) {
               <div class="no-configs-hint">
                 <mat-icon>info</mat-icon>
                 @if (credentialConfigs.length === 0) {
                   <span>
-                    No credential configurations available.
+                    No credential configs available.
                     @if (canManageCredentialConfigs) {
                       <a routerLink="/credential-config/create">Create one</a> to get started.
                     } @else {
@@ -99,23 +101,23 @@
                   </span>
                 } @else if (isIaeFlow) {
                   <span>
-                    No credential configurations with IAE available. This flow requires credential
-                    configurations with Interactive Authorization Endpoint (IAE) configured.
+                    No credential configs with IAE available. This flow requires credential configs
+                    with Interactive Authorization Endpoint (IAE) configured.
                   </span>
                 } @else {
                   <span>
-                    No credential configurations without IAE available. All existing configurations
+                    No credential configs without IAE available. All existing credential configs
                     have IAE configured. Use the "Authorization Code (IAE)" flow instead.
                   </span>
                 }
               </div>
             } @else {
               <mat-form-field class="full-width">
-                <mat-label>Credential Configuration IDs</mat-label>
+                <mat-label>Credential Config IDs</mat-label>
                 <mat-chip-grid
                   #credentialConfigChips
                   formControlName="credentialConfigurationIds"
-                  aria-label="Selected credential configurations"
+                  aria-label="Selected credential configs"
                 >
                   @for (id of selectedCredentialConfigIds; track id) {
                     <mat-chip-row [value]="id" (removed)="removeCredentialConfig(id)">
@@ -131,7 +133,7 @@
                   <input
                     #credentialConfigInput
                     id="credential-config-filter"
-                    aria-label="Credential Configuration IDs"
+                    aria-label="Credential Config IDs"
                     placeholder="Type to filter by ID or description"
                     [value]="credentialConfigFilter"
                     (input)="credentialConfigFilter = credentialConfigInput.value"
@@ -163,16 +165,16 @@
                     <mat-option disabled>
                       {{
                         credentialConfigFilter
-                          ? 'No credential configuration matches "' + credentialConfigFilter + '"'
-                          : 'All credential configurations are selected'
+                          ? 'No credential config matches "' + credentialConfigFilter + '"'
+                          : 'All credential configs are selected'
                       }}
                     </mat-option>
                   }
                 </mat-autocomplete>
                 <mat-icon matSuffix>badge</mat-icon>
-                <mat-hint>Select one or more credential configurations</mat-hint>
+                <mat-hint>Select one or more credential configs</mat-hint>
                 @if (credentialStepForm.get('credentialConfigurationIds')?.errors) {
-                  <mat-error>At least one credential configuration is required</mat-error>
+                  <mat-error>At least one credential config is required</mat-error>
                 }
               </mat-form-field>
             }
@@ -216,7 +218,7 @@
             @if (isPreAuthFlow) {
               <h2>Configure Credential Claims</h2>
               <p class="step-description">
-                Provide the claims data for each selected credential configuration.
+                Provide the claims data for each selected credential config.
               </p>
 
               @if (preAuthAuthorizationServerOptions.length > 1) {
@@ -485,7 +487,7 @@
               </h3>
               <p class="step-description">
                 Optionally select an attribute provider to fetch claims after IAE completes. If not
-                configured, claims will be taken from the credential configuration or IAE results.
+                configured, claims will be taken from the credential config or IAE results.
               </p>
 
               <div class="webhook-configs-container">

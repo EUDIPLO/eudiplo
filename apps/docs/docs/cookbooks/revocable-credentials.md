@@ -51,7 +51,7 @@ Open **Cryptographic Assets → Keys** and check that the key chain `Membership 
 
 ## Step 3: Turn on status management
 
-Open **Credential Issuance → Credential Types → membership** and choose **Edit**. On **Settings**, under **Credential Features**, turn **Status Management** on. Choose **Save Configuration**. The API equivalent is `PATCH /api/issuer/credentials/membership` with `{"statusManagement": true}`.
+Open **Credential Issuance → Credential Configs → membership** and choose **Edit**. On **Settings**, under **Credential Features**, turn **Status Management** on. Choose **Save Configuration**. The API equivalent is `PATCH /api/issuer/credentials/membership` with `{"statusManagement": true}`.
 
 **Checkpoint:** the credential type shows **Status Management** as enabled.
 

@@ -117,14 +117,14 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
       label: 'Credential Signing (Attestation)',
       icon: keyUsages.attestation.icon,
       description: 'Create a key for signing verifiable credentials (SD-JWT VC, mDOC).',
-      hint: 'Create one key per credential type (e.g., diplomas, membership cards)',
+      hint: 'Create one key per credential config (e.g., diplomas, membership cards)',
     },
     {
       value: 'statusList' as KeyUsageType,
       label: 'Status List Signing',
       icon: keyUsages.statusList.icon,
       description: 'Create a key for signing revocation/suspension status lists.',
-      hint: 'Create one per credential type to manage its lifecycle separately',
+      hint: 'Create one per credential config to manage its lifecycle separately',
     },
     {
       value: 'access' as KeyUsageType,
@@ -667,7 +667,7 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
       }
     } else if (usage === 'statusList') {
       this.snackBar.open(
-        'Status list key created! Your credential type setup is complete.',
+        'Status list key created! Your credential config setup is complete.',
         'View Key',
         { duration: 5000 }
       );
