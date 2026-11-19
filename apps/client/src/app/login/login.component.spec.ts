@@ -1368,11 +1368,20 @@ describe('LoginComponent with a kept session', () => {
       expect(notice?.classList).toContain('warning');
     });
 
+    it('asks for the instance URL instead of a warning before any instance check ran', () => {
+      const notice = ssoNotice(null);
+
+      expect(notice?.textContent).toContain('Enter the instance URL');
+      expect(notice?.textContent).not.toContain('SSO is not available');
+      expect(notice?.classList).not.toContain('warning');
+      expect(page().querySelectorAll('.tab-panel .notice')).toHaveLength(1);
+    });
+
     it('hides the status line icons from assistive technology', () => {
-      for (const mode of ['loading', 'oidc', 'local'] as const) {
+      for (const mode of [null, 'loading', 'oidc', 'local'] as const) {
         const icon = ssoNotice(mode)?.querySelector('mat-icon');
 
-        expect(icon?.getAttribute('aria-hidden'), mode).toBe('true');
+        expect(icon?.getAttribute('aria-hidden'), String(mode)).toBe('true');
       }
     });
 

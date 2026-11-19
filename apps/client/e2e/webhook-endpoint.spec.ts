@@ -67,7 +67,8 @@ test('finds a webhook endpoint by its URL, opens it and deletes it from the list
   const create = page.getByRole('button', { name: 'Create', exact: true });
   await expect(create).not.toHaveAttribute('aria-busy', 'true');
   await create.click();
-  await expect(page).toHaveURL(/\/webhook-endpoints$/);
+  await expect(page).toHaveURL(/\/webhook-endpoints\/audit-events$/);
+  await page.getByRole('link', { name: 'Back to Webhook Endpoints' }).click();
 
   await page.getByRole('searchbox', { name: /Search webhook endpoints/ }).fill('audit.example');
   await expect(page.locator('a.endpoint-link')).toHaveText(['Audit events']);

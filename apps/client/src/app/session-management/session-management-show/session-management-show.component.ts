@@ -51,6 +51,7 @@ import { decodeJwt } from 'jose';
 import { getApiErrorMessage, getHttpErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { focusAfterRenderIfLost } from '../../common/focus-if-lost.util';
+import { LoadErrorComponent } from '../../common/load-error.component';
 import { copyToClipboard } from '../../utils/copy-to-clipboard';
 import {
   isFinishedSession,
@@ -73,6 +74,7 @@ import { presentedCredentials, type PresentedCredential } from '../presented-cla
     MatTooltipModule,
     UpperCasePipe,
     CredentialStatusCardComponent,
+    LoadErrorComponent,
   ],
   templateUrl: './session-management-show.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
@@ -81,6 +83,8 @@ import { presentedCredentials, type PresentedCredential } from '../presented-cla
 export class SessionManagementShowComponent implements OnInit, OnDestroy {
   session: Session | null = null;
   loading = false;
+  /** Why the session could not be loaded; shown with a Retry instead of the page. */
+  loadError = '';
   sessionLogs: SessionLogEntry[] = [];
   grafanaEnabled = false;
 
@@ -219,16 +223,31 @@ export class SessionManagementShowComponent implements OnInit, OnDestroy {
   }
 
   async ngOnInit(): Promise<void> {
-    const sessionId = this.route.snapshot.params['id'];
-    await this.loadSession(sessionId);
-    this.loadSessionLogs(sessionId);
-    // A finished session does not change any more.
-    if (this.session && !isFinishedSession(this.getSessionStatusValue(this.session))) {
-      this.startPolling(sessionId);
-    }
+    await this.open();
     this.grafanaLinkService.getConfig().then(() => {
       this.grafanaEnabled = this.grafanaLinkService.isEnabled();
     });
+  }
+
+  /**
+   * Loads the session with its logs and polls it while it is pending. Also
+   * the Retry of the load-error card.
+   */
+  async open(): Promise<void> {
+    // A second click on Retry waits for the load already running.
+    if (this.loading) return;
+    const sessionId = this.route.snapshot.params['id'];
+    const retrying = this.loadError !== '';
+    this.loadError = '';
+    await this.loadSession(sessionId);
+    if (!this.session) return;
+    // The retry removed the error card with its focused Retry button.
+    if (retrying) focusAfterRenderIfLost(this.injector, () => this.pageHeading?.nativeElement);
+    this.loadSessionLogs(sessionId);
+    // A finished session does not change any more.
+    if (!isFinishedSession(this.getSessionStatusValue(this.session))) {
+      this.startPolling(sessionId);
+    }
   }
 
   ngOnDestroy(): void {
@@ -242,8 +261,10 @@ export class SessionManagementShowComponent implements OnInit, OnDestroy {
       this.generateQRCode(this.session.offerUrl || this.session.requestUrl!);
     } catch (error) {
       console.error('Error loading session:', error);
-      openErrorSnackBar(this.snackBar, getApiErrorMessage(error, 'Failed to load session'));
-      this.router.navigate(['../'], { relativeTo: this.route });
+      const message = getApiErrorMessage(error, 'Failed to load session');
+      // A failed refresh keeps the session on the page; a failed first load shows why.
+      if (this.session) openErrorSnackBar(this.snackBar, message);
+      else this.loadError = message;
     } finally {
       this.loading = false;
     }
