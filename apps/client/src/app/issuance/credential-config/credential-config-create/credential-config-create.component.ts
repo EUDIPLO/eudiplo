@@ -445,7 +445,7 @@ export class CredentialConfigCreateComponent implements OnInit {
         this.keyChains = response.data || [];
       }),
     presentationConfigs: () =>
-      loadSource(this.loadState, 'presentationConfigs', 'presentation configurations', async () => {
+      loadSource(this.loadState, 'presentationConfigs', 'verification configs', async () => {
         this.presentationConfigs =
           (await this.presentationManagementService.loadConfigurations()) || [];
       }),

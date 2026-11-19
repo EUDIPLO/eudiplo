@@ -249,7 +249,7 @@ export class OidcClientCreateComponent implements OnInit {
         },
         (error) => {
           console.error('Load error:', error);
-          this.configsError = getApiErrorMessage(error, 'Failed to load the presentation configs');
+          this.configsError = getApiErrorMessage(error, 'Failed to load the verification configs');
         }
       )
       .finally(() => (this.configsLoading = false));

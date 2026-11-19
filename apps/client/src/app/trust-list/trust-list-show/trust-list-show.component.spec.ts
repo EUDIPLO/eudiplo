@@ -247,7 +247,7 @@ describe('TrustListShowComponent references', () => {
     return (await referencesCard(fixture, expected, title)).textContent ?? '';
   }
 
-  const presentationsTitle = 'Referenced by Presentation Configs';
+  const presentationsTitle = 'Referenced by Verification Configs';
 
   afterEach(() => {
     vi.restoreAllMocks();
@@ -301,7 +301,7 @@ describe('TrustListShowComponent references', () => {
     expect(text).not.toContain('No credential configs');
   });
 
-  it('lists and links the presentation configs that accept issuers from the list', async () => {
+  it('lists and links the verification configs that accept issuers from the list', async () => {
     const { fixture } = await render(['presentation:manage'], {
       presentationConfigs: async () => [checkById, checkByUrl, checkOtherList],
     });
@@ -312,25 +312,25 @@ describe('TrustListShowComponent references', () => {
     const links = Array.from(card.querySelectorAll('a')).map((a) => a.getAttribute('href'));
     expect(links).toEqual(['/presentation-config/door-check', '/presentation-config/age-check']);
     expect(card.querySelector('a')?.getAttribute('aria-label')).toBe(
-      'Open presentation config Door check'
+      'Open verification config Door check'
     );
   });
 
-  it('says that no presentation config references the list', async () => {
+  it('says that no verification config references the list', async () => {
     const { fixture } = await render(['presentation:manage'], {
       presentationConfigs: async () => [checkOtherList],
     });
 
     const text = await referencesText(
       fixture,
-      'No presentation configs reference this trust list.',
+      'No verification configs reference this trust list.',
       presentationsTitle
     );
     expect(text).not.toContain('Legacy check');
   });
 
   // GET /api/verifier/config also admits presentation:request.
-  it('reads the presentation configs with presentation:request', async () => {
+  it('reads the verification configs with presentation:request', async () => {
     const { fixture, loadPresentations } = await render(
       ['issuance:manage', 'presentation:request'],
       {
@@ -342,7 +342,7 @@ describe('TrustListShowComponent references', () => {
     expect(loadPresentations).toHaveBeenCalledOnce();
   });
 
-  it('tells issuer admins that they cannot see the presentation config references', async () => {
+  it('tells issuer admins that they cannot see the verification config references', async () => {
     const { fixture, loadPresentations } = await render(['issuance:manage'], {
       presentationConfigs: async () => [checkById],
     });
@@ -352,21 +352,21 @@ describe('TrustListShowComponent references', () => {
       'You need the presentation:manage or presentation:request role',
       presentationsTitle
     );
-    expect(text).not.toContain('No presentation configs');
+    expect(text).not.toContain('No verification configs');
     expect(loadPresentations).not.toHaveBeenCalled();
   });
 
-  it('says it is loading the presentation configs instead of claiming that none uses the list', async () => {
+  it('says it is loading the verification configs instead of claiming that none uses the list', async () => {
     const { fixture } = await render(['presentation:manage'], {
       presentationConfigs: () => new Promise(() => undefined),
     });
 
-    const card = await referencesCard(fixture, 'Loading presentation configs', presentationsTitle);
-    expect(card.textContent).not.toContain('No presentation configs');
-    expect(card.querySelector('output')?.textContent?.trim()).toBe('Loading presentation configs…');
+    const card = await referencesCard(fixture, 'Loading verification configs', presentationsTitle);
+    expect(card.textContent).not.toContain('No verification configs');
+    expect(card.querySelector('output')?.textContent?.trim()).toBe('Loading verification configs…');
   });
 
-  it('reports a failed presentation config load instead of claiming that none uses the list', async () => {
+  it('reports a failed verification config load instead of claiming that none uses the list', async () => {
     const { fixture } = await render(['presentation:manage'], {
       presentationConfigs: async () => {
         throw new Error('503');
@@ -375,10 +375,10 @@ describe('TrustListShowComponent references', () => {
 
     const card = await referencesCard(
       fixture,
-      'Could not load the presentation configs',
+      'Could not load the verification configs',
       presentationsTitle
     );
-    expect(card.textContent).not.toContain('No presentation configs');
+    expect(card.textContent).not.toContain('No verification configs');
     expect(card.querySelector('[role="alert"]')).not.toBeNull();
   });
 
@@ -433,7 +433,7 @@ describe('TrustListShowComponent references', () => {
       expect(deletes).toEqual([]);
       expect(snackBar).toHaveBeenCalledWith(
         'Trust list "Membership issuers" (membership-issuers) is still referenced by' +
-          ' 1 credential config and 2 presentation configs. Remove these references before' +
+          ' 1 credential config and 2 verification configs. Remove these references before' +
           ' deleting it.',
         'Close',
         expect.anything()
@@ -453,7 +453,7 @@ describe('TrustListShowComponent references', () => {
       expect(confirm).not.toHaveBeenCalled();
       expect(snackBar).toHaveBeenCalledWith(
         'Trust list "Membership issuers" (membership-issuers) is still referenced by' +
-          ' 1 presentation config. Remove these references before deleting it.',
+          ' 1 verification config. Remove these references before deleting it.',
         'Close',
         expect.anything()
       );
@@ -467,7 +467,7 @@ describe('TrustListShowComponent references', () => {
           throw new Error('503');
         },
       });
-      await referencesCard(fixture, 'Could not load the presentation configs', presentationsTitle);
+      await referencesCard(fixture, 'Could not load the verification configs', presentationsTitle);
 
       expect(askedQuestion(fixture)).toBe(
         'Delete trust list "Membership issuers" (membership-issuers)? If a configuration still' +
@@ -489,7 +489,7 @@ describe('TrustListShowComponent references', () => {
       const { fixture, loadPresentations } = await render(['presentation:manage'], {
         presentationConfigs: async () => presentationConfigs,
       });
-      await referencesCard(fixture, 'No presentation configs', presentationsTitle);
+      await referencesCard(fixture, 'No verification configs', presentationsTitle);
       // Another admin adds a reference after the page loaded.
       presentationConfigs = [checkById];
       const deletes = answerDelete(409, {
@@ -516,7 +516,7 @@ describe('TrustListShowComponent references', () => {
           return [checkById];
         },
       });
-      await referencesCard(fixture, 'Could not load the presentation configs', presentationsTitle);
+      await referencesCard(fixture, 'Could not load the verification configs', presentationsTitle);
       fail = false;
       answerDelete(409, {
         statusCode: 409,
@@ -534,7 +534,7 @@ describe('TrustListShowComponent references', () => {
 
     it('does not reload the references when the delete fails for another reason', async () => {
       const { fixture, loadPresentations } = await render(['presentation:manage']);
-      await referencesCard(fixture, 'No presentation configs', presentationsTitle);
+      await referencesCard(fixture, 'No verification configs', presentationsTitle);
       answerDelete(500, { statusCode: 500, message: 'Internal Server Error' });
       vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
       const snackBar = vi.spyOn(fixture.debugElement.injector.get(MatSnackBar), 'open');

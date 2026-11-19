@@ -74,7 +74,7 @@ export class ClientShowComponent implements OnInit {
   get restrictions(): { title: string; ids: string[] }[] {
     return [
       {
-        title: 'Presentation configurations',
+        title: 'Verification configs',
         ids: this.client?.allowedPresentationConfigs ?? [],
       },
       { title: 'Credential configurations', ids: this.client?.allowedIssuanceConfigs ?? [] },

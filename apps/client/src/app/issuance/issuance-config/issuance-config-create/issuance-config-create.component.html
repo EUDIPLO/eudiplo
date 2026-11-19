@@ -433,11 +433,11 @@
                               @if (server.get('type')?.value === 'oid4vp') {
                                 <div class="fx-col gap-16" formGroupName="oid4vp">
                                   <mat-form-field>
-                                    <mat-label>Presentation Configuration ID</mat-label>
+                                    <mat-label>Verification Config ID</mat-label>
                                     <mat-select formControlName="presentationConfigId">
                                       @if (availablePresentationConfigIds.length === 0) {
                                         <mat-option disabled value="">
-                                          No presentation configurations found
+                                          No verification configs found
                                         </mat-option>
                                       }
                                       @for (

@@ -335,7 +335,7 @@ describe('OidcClientCreateComponent', () => {
     expect(component.subjectQueryProblem('pid')).toBe('');
   });
 
-  it('keeps stored values selectable while the presentation configs load', async () => {
+  it('keeps stored values selectable while the verification configs load', async () => {
     const { component } = await render(
       'c7d1',
       { getById: vi.fn().mockResolvedValue(stored) },
@@ -369,7 +369,7 @@ describe('OidcClientCreateComponent', () => {
     expect(component.staleSubjectCredentialId).toBe('pid');
   });
 
-  it('says when the presentation configs cannot be loaded, and retries', async () => {
+  it('says when the verification configs cannot be loaded, and retries', async () => {
     let calls = 0;
     const { component } = await render(null, {}, async () => {
       calls += 1;
@@ -379,21 +379,21 @@ describe('OidcClientCreateComponent', () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
     await vi.waitFor(() =>
-      expect(component.configsError).toBe('Failed to load the presentation configs: down')
+      expect(component.configsError).toBe('Failed to load the verification configs: down')
     );
     component.loadConfigs(true);
     await vi.waitFor(() => expect(component.configs).toHaveLength(2));
     expect(component.configsError).toBe('');
   });
 
-  it('links to creating a presentation config when the tenant has none', async () => {
+  it('links to creating a verification config when the tenant has none', async () => {
     const { fixture } = await render(null, {}, async () => []);
     fixture.detectChanges();
     const element = fixture.nativeElement as HTMLElement;
 
-    expect(element.textContent).toContain('This tenant has no presentation configs yet.');
+    expect(element.textContent).toContain('This tenant has no verification configs yet.');
     expect(element.querySelector('a[href="/presentation-config/create"]')?.textContent).toContain(
-      'Create a presentation config'
+      'Create a verification config'
     );
   });
 

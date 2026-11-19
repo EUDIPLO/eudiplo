@@ -57,14 +57,14 @@ test.describe('verifier admin', () => {
     await expect(page.getByText('No credential configs reference this trust list.')).toHaveCount(0);
   });
 
-  test('sees which presentation configs reference the trust list', async ({ page }) => {
+  test('sees which verification configs reference the trust list', async ({ page }) => {
     await signInOnKeys(page);
     // The demo trust list; the demo presentation configs pid and age-over-18 accept its issuers.
     await openTrustList(page, '580831bc-ef11-43f4-a3be-a2b6bf1b29a3');
 
     const card = page
       .locator('mat-card')
-      .filter({ has: page.getByText('Referenced by Presentation Configs', { exact: true }) });
+      .filter({ has: page.getByText('Referenced by Verification Configs', { exact: true }) });
     await expect(card.locator('a[href="/presentation-config/pid"]')).toBeVisible();
     await expect(card.locator('a[href="/presentation-config/age-over-18"]')).toBeVisible();
   });

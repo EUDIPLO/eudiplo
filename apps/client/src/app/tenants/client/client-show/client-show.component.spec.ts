@@ -363,7 +363,7 @@ describe('ClientShowComponent details', () => {
         text(section.querySelector('ul, .unrestricted'))?.replace(/^all_inclusive /, ''),
       ])
     ).toEqual([
-      ['Presentation configurations', 'pid'],
+      ['Verification configs', 'pid'],
       ['Credential configurations', 'All of them, including those created later'],
     ]);
   });

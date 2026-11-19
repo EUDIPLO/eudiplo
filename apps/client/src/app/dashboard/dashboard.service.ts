@@ -69,7 +69,7 @@ const sourceLabels: Record<DashboardSource, string> = {
   keyChains: 'key chains',
   credentials: 'credential configs',
   issuance: 'issuer settings',
-  presentations: 'presentation configs',
+  presentations: 'verification configs',
   trustLists: 'trust lists',
   sessionStats: 'session counts',
   recentSessions: 'recent sessions',
@@ -513,7 +513,7 @@ export class DashboardService {
   // Verification readiness
   get isReadyToVerify(): boolean {
     if (!this.canReadPresentationConfigs) {
-      return false; // User can't see presentation configs
+      return false; // User can't see verification configs
     }
     return this.verifyReadinessReason === null;
   }
@@ -573,12 +573,12 @@ export class DashboardService {
       return prerequisite;
     }
     if (this.hasFailed('presentations')) {
-      return 'Presentation configs could not be loaded';
+      return 'Verification configs could not be loaded';
     }
     if (this.presentationConfigs === 0) {
       return this.canManagePresentation
-        ? 'No presentation config'
-        : 'No presentation config; ask a user with presentation:manage to create one';
+        ? 'No verification config'
+        : 'No verification config; ask a user with presentation:manage to create one';
     }
     return null;
   }
@@ -890,12 +890,12 @@ function presentationRegistrationCertificateWarnings(
     const name = description ? `"${description}" (${config.id})` : config.id;
     return [
       {
-        message: `Registration certificate of presentation configuration ${name}: ${sentence}.`,
+        message: `Registration certificate of verification config ${name}: ${sentence}.`,
         action: {
           label: 'Open Security Tab',
           route: ['/presentation-config', config.id],
           fragment: 'security',
-          ariaLabel: `Open the Security tab of presentation configuration ${name}`,
+          ariaLabel: `Open the Security tab of verification config ${name}`,
         },
       },
     ];

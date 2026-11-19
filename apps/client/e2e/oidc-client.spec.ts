@@ -46,7 +46,7 @@ test('registers, rotates the secret of, edits and deletes a client', async ({ pa
   await page.getByRole('textbox', { name: 'Redirect URI 1' }).fill('http://portal.example/cb');
   await page.getByRole('textbox', { name: 'Scope' }).fill('pid');
   // The empty select's floating label covers its centre, where a click would land.
-  await page.getByRole('combobox', { name: 'Presentation config' }).focus();
+  await page.getByRole('combobox', { name: 'Verification config' }).focus();
   await page.keyboard.press('Enter');
   await page.getByRole('option', { name: /pid-login/ }).click();
   const create = page.getByRole('button', { name: 'Create', exact: true });

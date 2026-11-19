@@ -14,7 +14,7 @@ import { JwtService } from '../../../services/jwt.service';
 import { grantHint } from '../../../services/role-grants';
 import { ClientCreateComponent, type ConfigSource } from './client-create.component';
 
-const PRESENTATION = 'Allowed Presentation Configurations';
+const PRESENTATION = 'Allowed Verification Configs';
 const CREDENTIAL = 'Allowed Credential Configurations';
 const ALL_ROLES = ['clients:manage', 'issuance:manage', 'presentation:manage'];
 
@@ -202,9 +202,7 @@ describe('ClientCreateComponent config restrictions', () => {
       'other-presentation',
       'stored-presentation',
     ]);
-    expect(hint(fixture, PRESENTATION)).toBe(
-      'Leave empty to allow all presentation configurations'
-    );
+    expect(hint(fixture, PRESENTATION)).toBe('Leave empty to allow all verification configs');
 
     expect(await submit(fixture)).toMatchObject({
       allowedPresentationConfigs: ['stored-presentation'],
@@ -297,12 +295,12 @@ describe('ClientCreateComponent config restrictions', () => {
 
     expect(snackBar.open).toHaveBeenCalledTimes(1);
     const message = snackBar.open.mock.lastCall?.[0] as string;
-    expect(message).toContain('presentation configurations');
+    expect(message).toContain('verification configs');
     expect(message).toContain('credential configurations');
     for (const label of [PRESENTATION, CREDENTIAL]) {
       expect(select(fixture, label).getAttribute('aria-disabled')).toBe('true');
     }
-    expect(button(fixture, 'refresh Retry loading presentation configurations')).toBeDefined();
+    expect(button(fixture, 'refresh Retry loading verification configs')).toBeDefined();
     expect(retryCredentials(fixture)).toBeDefined();
   });
 
@@ -342,7 +340,7 @@ describe('ClientCreateComponent config restrictions', () => {
     expect(requests).not.toContain('GET /api/issuer/credentials');
     expect(snackBar.open).not.toHaveBeenCalled();
     expect(hint(fixture, PRESENTATION)).toBe(
-      'Locked: listing presentation configurations needs presentation:manage or presentation:request. The client stays limited to stored-presentation.'
+      'Locked: listing verification configs needs presentation:manage or presentation:request. The client stays limited to stored-presentation.'
     );
     expect(hint(fixture, CREDENTIAL)).toBe(
       'Locked: listing credential configurations needs issuance:manage. The client stays limited to stored-issuance-a, stored-issuance-b.'
@@ -416,7 +414,7 @@ describe('ClientCreateComponent config restrictions', () => {
     const fixture = create(ALL_ROLES, null);
     await settleRender(fixture);
 
-    expect(hint(fixture, PRESENTATION)).toBe('Loading presentation configurations…');
+    expect(hint(fixture, PRESENTATION)).toBe('Loading verification configs…');
     expect(hint(fixture, CREDENTIAL)).toBe('Loading credential configurations…');
     for (const label of [PRESENTATION, CREDENTIAL]) {
       expect(select(fixture, label).getAttribute('aria-disabled')).toBe('true');

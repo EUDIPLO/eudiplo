@@ -121,12 +121,8 @@ describe('FederationTrustAnchorShowComponent', () => {
     );
     expect(keyRow).toEqual(['ta-2026', 'EC', 'P-256', '—', '—']);
     expect(element.querySelector('[aria-label="Open issuance configuration"]')).not.toBeNull();
-    expect(
-      element.querySelector('[aria-label="Open presentation configuration pid"]')
-    ).not.toBeNull();
-    expect(
-      element.querySelector('[aria-label="Open presentation configuration other"]')
-    ).toBeNull();
+    expect(element.querySelector('[aria-label="Open verification config pid"]')).not.toBeNull();
+    expect(element.querySelector('[aria-label="Open verification config other"]')).toBeNull();
   });
 
   it('refuses up front to delete a trust anchor that known configurations name', async () => {
@@ -139,7 +135,7 @@ describe('FederationTrustAnchorShowComponent', () => {
 
     expect(open.mock.calls[0][0]).toBe(
       'Trust anchor "EU federation" (eu-federation) is still named by the issuance configuration' +
-        ' and 1 presentation configuration. Remove these references before deleting it.'
+        ' and 1 verification config. Remove these references before deleting it.'
     );
     expect(confirm).not.toHaveBeenCalled();
     expect(service['delete']).not.toHaveBeenCalled();
@@ -237,7 +233,7 @@ describe('FederationTrustAnchorShowComponent', () => {
     });
     const element = await loaded(fixture);
 
-    expect(element.textContent).toContain('Could not load the presentation configurations.');
+    expect(element.textContent).toContain('Could not load the verification configs.');
     expect(element.textContent).toContain('https://ta.example');
   });
 
@@ -259,9 +255,7 @@ describe('FederationTrustAnchorShowComponent', () => {
     const element = await loaded(fixture);
 
     expect(element.textContent).toContain('You need the issuance:manage role');
-    expect(
-      element.querySelector('[aria-label="Open presentation configuration pid"]')
-    ).not.toBeNull();
+    expect(element.querySelector('[aria-label="Open verification config pid"]')).not.toBeNull();
   });
 
   it('shows a load error with Retry', async () => {
