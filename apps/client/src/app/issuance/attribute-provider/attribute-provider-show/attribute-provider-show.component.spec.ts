@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AttributeProviderShowComponent } from './attribute-provider-show.component';
 import { renderDownloadButton } from '../../../config-portability/config-document.testing';
@@ -98,5 +98,73 @@ describe('AttributeProviderShowComponent download', () => {
     expect(button).not.toBeNull();
     expect(button?.getAttribute('aria-disabled')).not.toBe('true');
     expect(button?.getAttribute('aria-busy')).toBe('false');
+  });
+});
+
+describe('AttributeProviderShowComponent delete', () => {
+  function create(
+    remove: ReturnType<typeof vi.fn>,
+    navigate = vi.fn(),
+    snackBar = { open: vi.fn() }
+  ) {
+    const component = new AttributeProviderShowComponent(
+      { delete: remove } as never,
+      {} as never,
+      snackBar as never,
+      { navigate } as never,
+      {} as never
+    );
+    component.provider = { id: 'registry', name: 'Registry' } as never;
+    return component;
+  }
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('deletes once after confirming and returns to the list, ignoring a second click', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    let finish!: () => void;
+    const remove = vi.fn(() => new Promise<void>((resolve) => (finish = () => resolve())));
+    const navigate = vi.fn();
+    const component = create(remove, navigate);
+
+    const first = component.deleteProvider();
+    expect(component.deleting).toBe(true);
+    await component.deleteProvider();
+    finish();
+    await first;
+
+    expect(window.confirm).toHaveBeenCalledExactlyOnceWith(
+      'Delete attribute provider "Registry"? This cannot be undone.'
+    );
+    expect(remove).toHaveBeenCalledExactlyOnceWith('registry');
+    expect(navigate).toHaveBeenCalledWith(['../'], expect.anything());
+    expect(component.deleting).toBe(false);
+  });
+
+  it('sends nothing when the question is declined', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const remove = vi.fn();
+
+    await create(remove).deleteProvider();
+
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it('reports a failed delete with the reason and stays on the page', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const navigate = vi.fn();
+    const snackBar = { open: vi.fn() };
+    const component = create(
+      vi.fn().mockRejectedValue({ statusCode: 409, message: 'In use' }),
+      navigate,
+      snackBar
+    );
+
+    await component.deleteProvider();
+
+    expect(snackBar.open.mock.lastCall?.[0]).toBe('Failed to delete attribute provider: In use');
+    expect(navigate).not.toHaveBeenCalled();
+    expect(component.deleting).toBe(false);
   });
 });

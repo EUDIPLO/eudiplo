@@ -1,12 +1,22 @@
-<div fxLayout="column" fxFlex fxLayoutGap="24px">
+<div class="page form-page">
+  <a class="back-link" matButton [routerLink]="['../']" aria-label="Back to Issuer Settings">
+    <mat-icon>arrow_back</mat-icon>
+    Issuer Settings
+  </a>
+
   <app-config-ownership-notice kind="IssuanceConfig" resourceId="issuance" />
-  <!-- Header -->
-  <div class="settings-header" fxLayout="row" fxLayoutAlign="space-between center">
-    <h2 #pageHeading tabindex="-1">Issuer Settings</h2>
-    <div class="header-actions" fxLayout="row" fxLayoutAlign="end center">
-      <!-- JSON View Button -->
+
+  <header class="page-header">
+    <div class="heading">
+      <span class="form-avatar" aria-hidden="true"><mat-icon>tune</mat-icon></span>
+      <div>
+        <h1 #pageHeading tabindex="-1">Issuer Settings</h1>
+        <p>How wallets see this issuer, how they get access, and which trust it requires.</p>
+      </div>
+    </div>
+    <div class="header-actions">
       <button
-        mat-stroked-button
+        matButton="outlined"
         type="button"
         (click)="viewAsJson()"
         [disabled]="!!jsonViewUnavailableReason"
@@ -17,7 +27,7 @@
         JSON View
       </button>
       <a
-        mat-stroked-button
+        matButton
         href="https://docs.eudiplo.dev/issuance/issuance-configuration"
         target="_blank"
         rel="noopener"
@@ -25,16 +35,8 @@
         <mat-icon>open_in_new</mat-icon>
         Documentation
       </a>
-      <button
-        matIconButton
-        [routerLink]="['../']"
-        matTooltip="Back to list"
-        aria-label="Back to list"
-      >
-        <mat-icon>arrow_back</mat-icon>
-      </button>
     </div>
-  </div>
+  </header>
 
   @if (loadingConfig) {
     <p role="status">Loading issuer settings…</p>
@@ -79,29 +81,23 @@
             Identity
           </ng-template>
 
-          <div fxLayout="column" fxLayoutGap="24px" class="tab-content">
+          <div class="tab-content fx-col gap-24">
             <!-- Issuer identity Card -->
-            <mat-card>
+            <mat-card appearance="outlined">
               <mat-card-header>
-                <mat-card-title>
-                  <mat-icon>view_carousel</mat-icon>
-                  Issuer identity
-                </mat-card-title>
+                <mat-icon mat-card-avatar aria-hidden="true">view_carousel</mat-icon>
+                <mat-card-title>Issuer identity</mat-card-title>
                 <mat-card-subtitle
                   >Choose the issuer name and logo wallets show to users</mat-card-subtitle
                 >
               </mat-card-header>
-              <mat-card-content fxLayout="column" fxLayoutGap="16px">
+              <mat-card-content class="fx-col gap-16">
                 <div formArrayName="display">
                   <!-- Track by group: inputs bind to their control only once, so a row must not move to another group. -->
                   @for (display of displays.controls; track display; let i = $index) {
                     <div [formGroupName]="i" class="mat-elevation-z2 display-entry">
-                      <div
-                        fxLayout="row"
-                        fxLayoutAlign="space-between center"
-                        class="display-entry-header"
-                      >
-                        <h3>Language {{ i + 1 }}</h3>
+                      <div class="display-entry-header fx-row justify-space-between align-center">
+                        <h2>Language {{ i + 1 }}</h2>
                         @if (displays.length > 1) {
                           <button
                             matIconButton
@@ -115,9 +111,9 @@
                           </button>
                         }
                       </div>
-                      <div fxLayout="column" fxLayoutGap="16px">
-                        <div fxLayout="row" fxLayoutGap="16px">
-                          <mat-form-field fxFlex>
+                      <div class="fx-col gap-16">
+                        <div class="fx-row gap-16">
+                          <mat-form-field class="flex-1">
                             <mat-label>Name</mat-label>
                             <input
                               #displayName
@@ -130,7 +126,7 @@
                             <mat-icon matSuffix>badge</mat-icon
                             ><mat-error>Enter an issuer name</mat-error>
                           </mat-form-field>
-                          <mat-form-field fxFlex>
+                          <mat-form-field class="flex-1">
                             <mat-label>Locale</mat-label>
                             <mat-select formControlName="locale" required>
                               @for (
@@ -154,7 +150,7 @@
                     </div>
                   }
                 </div>
-                <div fxLayout="row" fxLayoutAlign="center center">
+                <div class="fx-row justify-center align-center">
                   <button mat-raised-button type="button" (click)="addDisplay()">
                     <mat-icon>add</mat-icon> Add language
                   </button>
@@ -169,7 +165,7 @@
           </ng-template>
 
           <ng-template matTabContent>
-            <div fxLayout="column" fxLayoutGap="24px" class="tab-content">
+            <div class="tab-content fx-col gap-24">
               <p>
                 Choose how people authorize issuance. The built-in server supports pre-authorized
                 offers; use a hosted presentation flow, an upstream login, or an external
@@ -179,19 +175,17 @@
                 The first enabled server is preferred. Review each server before changing its order.
               </p>
               <!-- Authorization Servers Card -->
-              <mat-card>
+              <mat-card appearance="outlined">
                 <mat-card-header>
-                  <mat-card-title>
-                    <mat-icon>dns</mat-icon>
-                    Authorization Servers
-                  </mat-card-title>
+                  <mat-icon mat-card-avatar aria-hidden="true">dns</mat-icon>
+                  <mat-card-title>Authorization Servers</mat-card-title>
                   <mat-card-subtitle
                     >Configure external, hosted, chained, and built-in authorization servers in one
                     place. The first enabled server in this list is treated as the default
                     (preferred) server.</mat-card-subtitle
                   >
                 </mat-card-header>
-                <mat-card-content fxLayout="column" fxLayoutGap="16px">
+                <mat-card-content class="fx-col gap-16">
                   <mat-divider></mat-divider>
 
                   <div formArrayName="authorizationServers">
@@ -226,7 +220,7 @@
                           </mat-expansion-panel-header>
 
                           @if (server.get('type')?.value === 'external') {
-                            <div fxLayout="column" fxLayoutGap="16px">
+                            <div class="fx-col gap-16">
                               <mat-form-field>
                                 <mat-label>ID</mat-label>
                                 <input
@@ -290,9 +284,9 @@
                               </mat-form-field>
                             </div>
                           } @else {
-                            <div fxLayout="column" fxLayoutGap="16px">
-                              <div fxLayout="row" fxLayoutGap="16px">
-                                <mat-form-field fxFlex>
+                            <div class="fx-col gap-16">
+                              <div class="fx-row gap-16">
+                                <mat-form-field class="flex-1">
                                   <mat-label>ID</mat-label>
                                   <input
                                     (keydown.enter)="onInputEnter($event)"
@@ -304,7 +298,7 @@
                                     >Unique identifier for this authorization server</mat-hint
                                   >
                                 </mat-form-field>
-                                <mat-form-field fxFlex>
+                                <mat-form-field class="flex-1">
                                   <mat-label>Label</mat-label>
                                   <input
                                     (keydown.enter)="onInputEnter($event)"
@@ -315,8 +309,8 @@
                                 </mat-form-field>
                               </div>
 
-                              <div fxLayout="row" fxLayoutGap="16px" fxLayoutAlign="start center">
-                                <mat-form-field fxFlex>
+                              <div class="fx-row gap-16 justify-start align-center">
+                                <mat-form-field class="flex-1">
                                   <mat-label>Type</mat-label>
                                   <mat-select
                                     #serverType
@@ -347,11 +341,7 @@
                                 >
                               </div>
 
-                              <div
-                                fxLayout="row wrap"
-                                fxLayoutGap="16px"
-                                fxLayoutAlign="start start"
-                              >
+                              <div class="fx-row fx-wrap gap-16 justify-start align-start">
                                 <mat-form-field>
                                   <mat-label>Wallet Attestation</mat-label>
                                   <mat-select formControlName="walletAttestationRequired">
@@ -385,12 +375,7 @@
                                 lists.
                               </p>
                               @if (!server.get('inheritWalletProviderTrustLists')?.value) {
-                                <div
-                                  #serverTrustLists
-                                  fxLayout="column"
-                                  fxLayoutGap="12px"
-                                  class="trust-lists-section"
-                                >
+                                <div #serverTrustLists class="trust-lists-section fx-col gap-12">
                                   @for (
                                     trustList of getAuthorizationServerWalletProviderTrustLists(i)
                                       .controls;
@@ -421,11 +406,7 @@
                                       "
                                     />
                                   }
-                                  <div
-                                    fxLayout="row"
-                                    fxLayoutAlign="center center"
-                                    fxLayoutGap="8px"
-                                  >
+                                  <div class="fx-row justify-center align-center gap-8">
                                     <button
                                       #addManagedTrustListButton
                                       mat-raised-button
@@ -450,7 +431,7 @@
                               }
 
                               @if (server.get('type')?.value === 'oid4vp') {
-                                <div formGroupName="oid4vp" fxLayout="column" fxLayoutGap="16px">
+                                <div class="fx-col gap-16" formGroupName="oid4vp">
                                   <mat-form-field>
                                     <mat-label>Presentation Configuration ID</mat-label>
                                     <mat-select formControlName="presentationConfigId">
@@ -475,7 +456,7 @@
                               }
 
                               @if (server.get('type')?.value === 'chained') {
-                                <div formGroupName="chained" fxLayout="column" fxLayoutGap="16px">
+                                <div class="fx-col gap-16" formGroupName="chained">
                                   <mat-form-field>
                                     <mat-label>Upstream Issuer URL</mat-label>
                                     <input
@@ -487,8 +468,8 @@
                                     />
                                   </mat-form-field>
 
-                                  <div fxLayout="row" fxLayoutGap="16px">
-                                    <mat-form-field fxFlex>
+                                  <div class="fx-row gap-16">
+                                    <mat-form-field class="flex-1">
                                       <mat-label>Client ID</mat-label>
                                       <input
                                         (keydown.enter)="onInputEnter($event)"
@@ -497,7 +478,7 @@
                                         placeholder="eudiplo-client"
                                       />
                                     </mat-form-field>
-                                    <mat-form-field fxFlex>
+                                    <mat-form-field class="flex-1">
                                       <mat-label>Client Secret</mat-label>
                                       <input
                                         (keydown.enter)="onInputEnter($event)"
@@ -526,8 +507,8 @@
                                 </div>
                               }
 
-                              <div formGroupName="token" fxLayout="row" fxLayoutGap="16px">
-                                <mat-form-field fxFlex>
+                              <div class="fx-row gap-16" formGroupName="token">
+                                <mat-form-field class="flex-1">
                                   <mat-label>Token Lifetime (seconds)</mat-label>
                                   <input
                                     (keydown.enter)="onInputEnter($event)"
@@ -545,7 +526,7 @@
                                     seconds</mat-hint
                                   >
                                 </mat-form-field>
-                                <mat-form-field fxFlex subscriptSizing="dynamic">
+                                <mat-form-field class="flex-1" subscriptSizing="dynamic">
                                   <mat-label>Authorization Server Key</mat-label>
                                   <mat-select formControlName="signingKeyId">
                                     <mat-option value=""
@@ -587,11 +568,7 @@
                                 authorizationServerKeyChainsLoadFailed ||
                                 authorizationServerKeyChains?.length === 0
                               ) {
-                                <div
-                                  class="authorization-server-key-notice"
-                                  fxLayout="column"
-                                  fxLayoutGap="8px"
-                                >
+                                <div class="authorization-server-key-notice fx-col gap-8">
                                   <p class="section-hint">
                                     <mat-icon>{{
                                       signingKeyIdInvalid(server.get('token.signingKeyId')?.value)
@@ -632,7 +609,7 @@
                                       >
                                     }
                                   </p>
-                                  <div fxLayout="row" fxLayoutAlign="start center">
+                                  <div class="fx-row justify-start align-center">
                                     <button
                                       mat-stroked-button
                                       type="button"
@@ -647,9 +624,9 @@
                                 </div>
                               }
 
-                              <div formGroupName="token" fxLayout="column" fxLayoutGap="16px">
+                              <div class="fx-col gap-16" formGroupName="token">
                                 <mat-slide-toggle formControlName="refreshTokenEnabled">
-                                  <div fxLayout="column">
+                                  <div class="fx-col">
                                     <span><strong>Issue Refresh Tokens</strong></span>
                                     <span class="toggle-description"
                                       >Allow wallets to exchange refresh tokens for new access
@@ -677,7 +654,7 @@
                             </div>
                           }
                           <!-- One action row for every type, below the fields of the panel. -->
-                          <div class="server-actions" fxLayout="row" fxLayoutAlign="end center">
+                          <div class="server-actions fx-row justify-end align-center">
                             <button
                               #moveUpButton
                               matIconButton
@@ -726,7 +703,7 @@
                     </mat-accordion>
                   </div>
 
-                  <div fxLayout="row" fxLayoutGap="12px" fxLayoutAlign="start center">
+                  <div class="fx-row gap-12 justify-start align-center">
                     <button
                       #addServerButton
                       mat-raised-button
@@ -750,14 +727,12 @@
                 ></mat-expansion-panel-header
               >
               <!-- Issuance behavior Card -->
-              <mat-card>
+              <mat-card appearance="outlined">
                 <mat-card-header>
-                  <mat-card-title>
-                    <mat-icon>settings</mat-icon>
-                    Issuance behavior
-                  </mat-card-title>
+                  <mat-icon mat-card-avatar aria-hidden="true">settings</mat-icon>
+                  <mat-card-title>Issuance behavior</mat-card-title>
                 </mat-card-header>
-                <mat-card-content fxLayout="column" fxLayoutGap="16px">
+                <mat-card-content class="fx-col gap-16">
                   <!-- Batch Size -->
                   <mat-form-field>
                     <mat-label>Batch Size</mat-label>
@@ -776,7 +751,7 @@
                     }
                   </mat-form-field>
                   <mat-slide-toggle formControlName="dPopRequired">
-                    <div fxLayout="column">
+                    <div class="fx-col">
                       <span><strong>DPoP Required</strong></span>
                       <span class="toggle-description"
                         >Enable DPoP (Demonstrated Proof of Possession) for sender-constrained
@@ -786,7 +761,7 @@
                   </mat-slide-toggle>
 
                   <mat-slide-toggle formControlName="credentialResponseEncryption">
-                    <div fxLayout="column">
+                    <div class="fx-col">
                       <span><strong>Advertise Credential Response Encryption</strong></span>
                       <span class="toggle-description"
                         >Advertise `credential_response_encryption` (ECDH-ES, A128GCM/A256GCM) in
@@ -798,7 +773,7 @@
                   </mat-slide-toggle>
 
                   <mat-slide-toggle formControlName="credentialRequestEncryption">
-                    <div fxLayout="column">
+                    <div class="fx-col">
                       <span><strong>Require Credential Request Encryption</strong></span>
                       <span class="toggle-description"
                         >Advertise `credential_request_encryption` in the credential issuer
@@ -809,7 +784,7 @@
                   </mat-slide-toggle>
 
                   <mat-slide-toggle formControlName="notificationEndpointEnabled">
-                    <div fxLayout="column">
+                    <div class="fx-col">
                       <span><strong>Enable Notification Endpoint</strong></span>
                       <span class="toggle-description"
                         >Advertise the issuer notification endpoint in metadata and accept
@@ -825,13 +800,13 @@
         ><mat-tab [disabled]="guidedMode && furthestStep < 2" label="Trust"
           ><ng-template matTabContent
             ><div class="tab-content trust-sections">
-              <h3>Review trust requirements</h3>
+              <h2>Review trust requirements</h2>
               <p>
                 These settings depend on your wallet ecosystem. Open a section to configure its
                 requirements.
               </p>
               <p>{{ trustSummary }}</p>
-              <div fxLayout="column" fxLayoutGap="24px" class="tab-content">
+              <div class="tab-content fx-col gap-24">
                 <!-- tx_code Brute-Force Protection Card -->
                 <mat-expansion-panel
                   [expanded]="expandedSections.has('wallet')"
@@ -841,18 +816,16 @@
                     ><mat-panel-title
                       >Transaction Code (tx_code) Protection</mat-panel-title
                     ></mat-expansion-panel-header
-                  ><mat-card>
+                  ><mat-card appearance="outlined">
                     <mat-card-header>
-                      <mat-card-title>
-                        <mat-icon>pin</mat-icon>
-                        Transaction Code (tx_code) Protection
-                      </mat-card-title>
+                      <mat-icon mat-card-avatar aria-hidden="true">pin</mat-icon>
+                      <mat-card-title>Transaction Code (tx_code) Protection</mat-card-title>
                       <mat-card-subtitle
                         >Limit failed PIN/OTP attempts in the pre-authorized code
                         flow</mat-card-subtitle
                       >
                     </mat-card-header>
-                    <mat-card-content fxLayout="column" fxLayoutGap="16px">
+                    <mat-card-content class="fx-col gap-16">
                       <mat-form-field>
                         <mat-label>Max Failed tx_code Attempts</mat-label>
                         <input
@@ -889,20 +862,18 @@
                     ><mat-panel-title
                       >Wallet Provider Trust and Defaults</mat-panel-title
                     ></mat-expansion-panel-header
-                  ><mat-card>
+                  ><mat-card appearance="outlined">
                     <mat-card-header>
-                      <mat-card-title>
-                        <mat-icon>verified_user</mat-icon>
-                        Wallet Provider Trust and Defaults
-                      </mat-card-title>
+                      <mat-icon mat-card-avatar aria-hidden="true">verified_user</mat-icon>
+                      <mat-card-title>Wallet Provider Trust and Defaults</mat-card-title>
                       <mat-card-subtitle
                         >Shared provider trust for key attestations and wallet
                         authentication</mat-card-subtitle
                       >
                     </mat-card-header>
-                    <mat-card-content fxLayout="column" fxLayoutGap="16px">
+                    <mat-card-content class="fx-col gap-16">
                       <mat-slide-toggle formControlName="walletAttestationRequired">
-                        <div fxLayout="column">
+                        <div class="fx-col">
                           <span><strong>Require Wallet Attestation by Default</strong></span>
                           <span class="toggle-description"
                             >When enabled, wallets must provide OAuth-Client-Attestation headers at
@@ -932,12 +903,7 @@
                         >
                       </mat-form-field>
 
-                      <div
-                        #sharedTrustLists
-                        fxLayout="column"
-                        fxLayoutGap="16px"
-                        class="trust-lists-section"
-                      >
+                      <div #sharedTrustLists class="trust-lists-section fx-col gap-16">
                         <p class="section-hint">
                           <mat-icon>info</mat-icon>
                           These lists validate key attestations during issuance and are the default
@@ -970,7 +936,7 @@
                             "
                           />
                         }
-                        <div fxLayout="row" fxLayoutAlign="center center" fxLayoutGap="8px">
+                        <div class="fx-row justify-center align-center gap-8">
                           <button
                             #addManagedTrustListButton
                             mat-raised-button
@@ -1007,22 +973,20 @@
                 ><mat-expansion-panel-header
                   ><mat-panel-title>OpenID Federation</mat-panel-title></mat-expansion-panel-header
                 >
-                <div fxLayout="column" fxLayoutGap="24px" class="tab-content">
+                <div class="tab-content fx-col gap-24">
                   <!-- OpenID Federation Card -->
-                  <mat-card formGroupName="federation">
+                  <mat-card appearance="outlined" formGroupName="federation">
                     <mat-card-header>
-                      <mat-card-title>
-                        <mat-icon>security</mat-icon>
-                        OpenID Federation
-                      </mat-card-title>
+                      <mat-icon mat-card-avatar aria-hidden="true">security</mat-icon>
+                      <mat-card-title>OpenID Federation</mat-card-title>
                       <mat-card-subtitle
                         >Evaluate trust through federation trust anchors and, with an entity ID,
                         publish this tenant's entity configuration</mat-card-subtitle
                       >
                     </mat-card-header>
-                    <mat-card-content fxLayout="column" fxLayoutGap="16px">
+                    <mat-card-content class="fx-col gap-16">
                       <mat-slide-toggle formControlName="enabled">
-                        <div fxLayout="column">
+                        <div class="fx-col">
                           <span><strong>Enable OpenID Federation</strong></span>
                           <span class="toggle-description"
                             >When enabled, uses federation trust anchors for entity validation</span
@@ -1092,7 +1056,7 @@
                         </mat-form-field>
 
                         @if (expectedEntityId && entityId !== expectedEntityId) {
-                          <div fxLayout="row" fxLayoutAlign="start center">
+                          <div class="fx-row justify-start align-center">
                             <button
                               mat-stroked-button
                               type="button"
@@ -1118,7 +1082,7 @@
                         }
 
                         @if (federationKeyMissing) {
-                          <div class="federation-key-missing" fxLayout="column" fxLayoutGap="8px">
+                          <div class="federation-key-missing fx-col gap-8">
                             <p class="section-hint">
                               <mat-icon>warning</mat-icon>
                               @if (pinnedFederationKeyChainId) {
@@ -1144,7 +1108,7 @@
                                 >
                               }
                             </p>
-                            <div fxLayout="row" fxLayoutAlign="start center">
+                            <div class="fx-row justify-start align-center">
                               <button
                                 mat-stroked-button
                                 type="button"
@@ -1198,21 +1162,16 @@
 
                         <!-- Trust Anchors -->
                         <div formArrayName="trustAnchors">
-                          <h4>
+                          <h3>
                             <mat-icon>hub</mat-icon>
                             Federation Trust Anchors
-                          </h4>
+                          </h3>
                           <!-- Track by group: inputs bind to their control only once, so a row must not move to another group. -->
                           @for (anchor of trustAnchors.controls; track anchor; let i = $index) {
-                            <div
-                              [formGroupName]="i"
-                              fxLayout="column"
-                              fxLayoutGap="16px"
-                              class="trust-anchor-entry"
-                            >
-                              <div fxLayout="row" fxLayoutAlign="start start" fxLayoutGap="16px">
+                            <div [formGroupName]="i" class="trust-anchor-entry fx-col gap-16">
+                              <div class="fx-row justify-start align-start gap-16">
                                 <app-federation-trust-anchor-select
-                                  fxFlex
+                                  class="flex-1"
                                   formControlName="entityId"
                                   [label]="'Trust Anchor ' + (i + 1)"
                                   (anchorSelected)="onTrustAnchorSelected(i, $event)"
@@ -1228,7 +1187,7 @@
                                 </button>
                               </div>
 
-                              <mat-form-field fxFull>
+                              <mat-form-field class="full-width">
                                 <mat-label>Entity Configuration URI</mat-label>
                                 <input
                                   (keydown.enter)="onInputEnter($event)"
@@ -1243,7 +1202,7 @@
                             </div>
                           }
 
-                          <div fxLayout="row" fxLayoutAlign="center center">
+                          <div class="fx-row justify-center align-center">
                             <button
                               #addTrustAnchorButton
                               mat-raised-button
@@ -1268,22 +1227,20 @@
                     >Issuer registration certificate</mat-panel-title
                   ></mat-expansion-panel-header
                 >
-                <div fxLayout="column" fxLayoutGap="24px" class="tab-content">
-                  <mat-card formGroupName="registrationCertificate">
+                <div class="tab-content fx-col gap-24">
+                  <mat-card appearance="outlined" formGroupName="registrationCertificate">
                     <mat-card-header>
-                      <mat-card-title>
-                        <mat-icon>verified</mat-icon>
-                        Issuer Registration Certificate
-                      </mat-card-title>
+                      <mat-icon mat-card-avatar aria-hidden="true">verified</mat-icon>
+                      <mat-card-title>Issuer Registration Certificate</mat-card-title>
                       <mat-card-subtitle
                         >Configure `issuer_info` registration certificate advertisement in issuer
                         metadata</mat-card-subtitle
                       >
                     </mat-card-header>
 
-                    <mat-card-content fxLayout="column" fxLayoutGap="16px">
+                    <mat-card-content class="fx-col gap-16">
                       <mat-slide-toggle formControlName="enabled">
-                        <div fxLayout="column">
+                        <div class="fx-col">
                           <span
                             ><strong
                               >Enable Registration Certificate in Issuer Metadata</strong
@@ -1381,15 +1338,15 @@
         ><mat-tab [disabled]="guidedMode && furthestStep < 3" label="Review"
           ><ng-template matTabContent
             ><div class="tab-content review-summary">
-              <h3>Review issuer settings</h3>
-              <h4>Issuer identity</h4>
+              <h2>Review issuer settings</h2>
+              <h3>Issuer identity</h3>
               @for (display of displays.controls; track display) {
                 <p>{{ display.get('name')?.value }} ({{ display.get('locale')?.value }})</p>
               }
               @if (!displays.length) {
                 <p>No issuer display information configured.</p>
               }
-              <h4>Wallet access</h4>
+              <h3>Wallet access</h3>
               @for (server of authorizationServers.controls; track server) {
                 <p>
                   {{ server.get('label')?.value || server.get('id')?.value }} ·
@@ -1398,7 +1355,7 @@
                 </p>
               }
               <p>{{ behaviorSummary }}</p>
-              <h4>Trust</h4>
+              <h3>Trust</h3>
               <p>{{ trustSummary }}</p>
               <p>
                 Credential signing keys are selected per credential configuration. Check
@@ -1417,12 +1374,18 @@
         ></mat-tab-group
       >
 
-      <!-- Action Buttons -->
-      <div class="form-actions" fxLayout="row" fxLayoutGap="16px" fxLayoutAlign="end center">
-        <button mat-button type="button" [routerLink]="['../']">Cancel</button>
+      <!-- Stays in view at the bottom while the form scrolls -->
+      <div class="action-bar">
+        <!-- Says only what it knows: row buttons do not mark the form dirty, so no "No changes" -->
+        <output class="change-state" [class.dirty]="form.dirty">
+          @if (form.dirty) {
+            Unsaved changes
+          }
+        </output>
+        <a matButton [routerLink]="['../']">Cancel</a>
         @if (guidedMode && activeStep > 0) {
           <button
-            mat-stroked-button
+            matButton="outlined"
             type="button"
             (click)="previousStep()"
             [disabled]="loading"
@@ -1433,7 +1396,7 @@
           </button>
         }
         <button
-          mat-flat-button
+          matButton="filled"
           type="submit"
           [disabled]="loading"
           disabledInteractive
@@ -1462,10 +1425,10 @@
   let-index="index"
   let-section="section"
 >
-  <div fxLayout="column" fxLayoutGap="8px" class="trust-list-entry">
-    <div fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px">
+  <div class="trust-list-entry fx-col gap-8">
+    <div class="fx-row justify-start align-center gap-8">
       @if (trustList.get('mode')?.value === 'managed') {
-        <mat-form-field fxFlex>
+        <mat-form-field class="flex-1">
           <mat-label>Managed trust list {{ index + 1 }}</mat-label>
           <mat-select
             #trustListField
@@ -1498,7 +1461,7 @@
           }
         </mat-form-field>
       } @else {
-        <mat-form-field fxFlex>
+        <mat-form-field class="flex-1">
           <mat-label>Trust list URL {{ index + 1 }}</mat-label>
           <input
             #trustListField

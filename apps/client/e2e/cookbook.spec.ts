@@ -134,7 +134,7 @@ test('issue and verify cookbook', async ({ page }) => {
     await openNav(page, 'Credential Types');
     // The new tenant has none yet, so the list offers to create the first one.
     await expect(page.getByText('No credential configurations yet.')).toBeVisible();
-    await iconButton(page, 'Create New Credential Configuration').click();
+    await page.getByRole('link', { name: 'Create credential configuration' }).first().click();
 
     // Basics
     await page.getByRole('textbox', { name: 'Configuration ID' }).fill('membership');

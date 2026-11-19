@@ -1,15 +1,17 @@
 import { Component, ChangeDetectionStrategy } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
+import { MatCardModule } from '@angular/material/card';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTableModule } from '@angular/material/table';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { RouterModule } from '@angular/router';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { CredentialConfig } from '@eudiplo/sdk-core';
 import { BaseAsyncListComponent } from '../../../common/base-async-list.component';
 import { CredentialConfigService } from '../credential-config.service';
 import { DisplayFormValue } from '../credential-config.types';
+import { formatLifetime } from '../../../utils/duration';
 import { ConfigOwnershipDirective } from '../../../config-portability/config-ownership.directive';
 import { LoadErrorComponent } from '../../../common/load-error.component';
 
@@ -19,9 +21,10 @@ import { LoadErrorComponent } from '../../../common/load-error.component';
     MatTableModule,
     MatIconModule,
     MatButtonModule,
+    MatCardModule,
     MatTooltipModule,
+    FormsModule,
     RouterModule,
-    FlexLayoutModule,
     ConfigOwnershipDirective,
     LoadErrorComponent,
     MatProgressSpinnerModule,
@@ -37,15 +40,8 @@ export class CredentialConfigListComponent extends BaseAsyncListComponent<Creden
     return this.items;
   }
 
-  displayedColumns: (keyof CredentialConfig | 'actions')[] = [
-    'id',
-    'description',
-    'keyBinding',
-    'lifeTime',
-    'embeddedDisclosurePolicy',
-    'statusManagement',
-    'actions',
-  ];
+  /** The configuration column also shows the description. */
+  displayedColumns: string[] = ['id', 'format', 'lifeTime', 'features', 'actions'];
 
   constructor(private readonly credentialConfigService: CredentialConfigService) {
     super();
@@ -55,12 +51,44 @@ export class CredentialConfigListComponent extends BaseAsyncListComponent<Creden
     return this.credentialConfigService.loadConfigurations();
   }
 
+  protected override searchTexts(config: CredentialConfig): string[] {
+    return [
+      config.id,
+      this.getDescription(config),
+      this.getFormat(config),
+      config.config?.format ?? '',
+    ];
+  }
+
+  protected override sortName(config: CredentialConfig): string {
+    return config.id;
+  }
+
   /** The wallet description of the first display entry, which is optional, else the configuration's own. */
   getDescription(config: CredentialConfig): string {
     return (
-      ((config.config as any).display as DisplayFormValue[])[0]?.description ||
+      (((config.config as any).display ?? []) as DisplayFormValue[])[0]?.description ||
       config.description ||
       'No description available'
     );
+  }
+
+  /** The credential format, such as "SD-JWT VC" or "mDOC". */
+  getFormat(config: CredentialConfig): string {
+    return config.config?.format === 'mso_mdoc' ? 'mDOC' : 'SD-JWT VC';
+  }
+
+  formatLifetime(seconds?: number | null): string {
+    return formatLifetime(seconds);
+  }
+
+  deleteConfig(config: CredentialConfig): Promise<void> {
+    return this.deleteItem({
+      id: config.id,
+      question: `Delete credential configuration "${config.id}"? This cannot be undone.`,
+      request: () => this.credentialConfigService.deleteConfiguration(config.id),
+      deleted: 'Configuration deleted successfully',
+      failed: 'Failed to delete configuration',
+    });
   }
 }

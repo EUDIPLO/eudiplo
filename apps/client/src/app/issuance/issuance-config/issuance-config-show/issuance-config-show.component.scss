@@ -1,24 +1,103 @@
-.value-text {
+@use '../../../tenants/tenant-page' as page;
+
+// Header card and detail cards, as on the key and attribute provider pages
+@include page.base;
+@include page.detail-page;
+@include page.details-list;
+
+// Two cards side by side on wide pages
+.page {
+  --content-columns: repeat(2, minmax(0, 1fr));
+}
+
+// The ownership notice shows only when it applies; without content it takes no gap
+app-config-ownership-notice {
+  display: contents;
+}
+
+.hero-avatar mat-icon {
+  width: 32px;
+  height: 32px;
+  font-size: 32px;
+}
+
+.tab-icon {
+  margin-right: 8px;
+}
+
+// Each tab: its cards below the tab bar, a grid where cards sit side by side
+.tab-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 16px;
+
+  &.content-grid {
+    display: grid;
+    margin-top: 0;
+  }
+
+  > .content-grid {
+    margin-top: 0;
+  }
+}
+
+// The authorization server table fills the card to its edges
+.table-card {
+  overflow: hidden;
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.auth-server-table {
+  @include page.data-table;
+
+  min-width: 960px;
+
+  td code {
+    font-size: 12px;
+  }
+}
+
+.card-note {
+  margin: 12px 0 0;
+  font: var(--mat-sys-body-small);
   color: var(--mat-sys-on-surface-variant);
-  margin-top: 4px;
-  word-break: break-word;
+}
 
-  a {
-    color: var(--eudiplo-info);
-    text-decoration: none;
+.card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
+}
 
-    &:hover {
-      text-decoration: underline;
-    }
+.jwt-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+mat-card-content h3 {
+  margin: 16px 0 0;
+  font: var(--mat-sys-title-small);
+  color: var(--mat-sys-on-surface);
+
+  &:first-child {
+    margin-top: 0;
   }
 }
 
 .config-value {
-  background-color: var(--mat-sys-surface-container);
-  border: 1px solid var(--mat-sys-outline-variant);
-  border-radius: 4px;
+  margin: 8px 0 0;
   padding: 12px;
-  margin-top: 8px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: var(--mat-sys-corner-small);
+  background-color: var(--mat-sys-surface-container);
   font-family: 'Roboto Mono', monospace;
   font-size: 12px;
   line-height: 1.4;
@@ -27,184 +106,55 @@
   word-break: break-word;
 }
 
-.binding-card {
-  margin: 8px 0;
-  border-left: 4px solid var(--eudiplo-info);
-
-  mat-card-content {
-    padding: 16px !important;
-  }
-}
-
-.empty-state {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--mat-sys-on-surface-variant);
-  font-style: italic;
-  padding: 16px;
-
-  mat-icon {
-    opacity: 0.7;
-  }
-}
-
-.display-entry-card {
-  margin: 8px 0;
-  border-left: 4px solid #2196f3;
-
-  mat-card-content {
-    padding: 16px !important;
-  }
-}
-
-// Config list styling
-.config-list {
-  padding: 0;
-
-  mat-list-item {
-    height: auto !important;
-    padding: 12px 0;
-
-    // Long values (ids, URLs, free text) wrap instead of widening the page
-    // or ending in an ellipsis. Nested so it outranks Material's nowrap rule.
-    [matListItemLine] {
-      white-space: normal;
-      overflow-wrap: anywhere;
-    }
-
-    border-bottom: 1px solid var(--mat-sys-outline-variant);
-
-    &:last-child {
-      border-bottom: none;
-    }
-  }
-}
-
-.icon-disabled {
-  color: var(--mat-sys-on-surface-variant);
-}
-
-.icon-chained-as {
-  color: var(--eudiplo-accent);
-}
-
 .warning-text {
   color: var(--eudiplo-warning);
   font-weight: 500;
 }
 
-// Chained AS card styling
-.chained-as-card {
-  border-left: 4px solid var(--eudiplo-accent);
-
-  mat-card-header {
-    mat-card-title {
-      mat-icon {
-        color: var(--eudiplo-accent);
-      }
-    }
-  }
-}
-
-// Issuer preview styling
+// How the issuer appears to wallets
 .preview-card {
   .issuer-preview {
-    border-radius: 12px;
-    padding: 24px;
-    max-width: 400px;
     display: flex;
     align-items: center;
     gap: 16px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    max-width: 400px;
+    padding: 24px;
+    border: 1px solid var(--mat-sys-outline-variant);
+    border-radius: var(--mat-sys-corner-medium);
+    background: var(--mat-sys-surface-container-low);
 
     .preview-logo {
       max-width: 80px;
       max-height: 80px;
-      object-fit: contain;
-      border-radius: 8px;
-      background: white;
       padding: 8px;
+      border-radius: var(--mat-sys-corner-small);
+      background: white;
+      object-fit: contain;
     }
 
-    .preview-content {
-      .preview-name {
-        font-size: 24px;
-        font-weight: 600;
-        margin-bottom: 4px;
-      }
+    .preview-name {
+      margin-bottom: 4px;
+      font: var(--mat-sys-title-large);
+      color: var(--mat-sys-on-surface);
+    }
 
-      .preview-locale {
-        font-size: 14px;
-        opacity: 0.8;
-        text-transform: uppercase;
-      }
+    .preview-locale {
+      font: var(--mat-sys-label-medium);
+      color: var(--mat-sys-on-surface-variant);
+      text-transform: uppercase;
     }
   }
 
   .locale-chips {
-    margin-top: 16px;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 12px;
-    flex-wrap: wrap;
+    margin-top: 16px;
   }
 }
 
-.locale-icon {
-  vertical-align: middle;
-  font-size: 18px;
-  margin-right: 4px;
-}
-
-.logo-container {
-  margin-top: 8px;
-}
-
-.logo-image {
-  max-width: 200px;
-  max-height: 100px;
-  border-radius: 4px;
-  border: 1px solid var(--mat-sys-outline-variant);
-  display: block;
-}
-
-.logo-url {
-  font-size: 12px;
-  color: var(--mat-sys-on-surface-variant);
-  margin-top: 4px;
-  word-break: break-all;
-}
-
-mat-card-header {
-  margin-bottom: 16px;
-
-  mat-card-title {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 20px;
-    font-weight: 500;
-  }
-}
-
-mat-expansion-panel {
-  margin-top: 16px;
-
-  mat-expansion-panel-header {
-    mat-panel-title {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-  }
-}
-
-.table-container {
-  overflow-x: auto;
-}
-
-.auth-server-table {
-  width: 100%;
-  min-width: 960px;
+// A status sentence wraps inside its badge instead of widening the card
+.details .badge {
+  white-space: normal;
 }

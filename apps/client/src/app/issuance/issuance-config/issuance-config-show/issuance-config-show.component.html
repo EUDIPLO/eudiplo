@@ -1,57 +1,65 @@
-@if (config) {
-  <div fxLayout="column" fxFlex fxLayoutGap="24px">
+<div class="page">
+  @if (config) {
     <app-config-ownership-notice kind="IssuanceConfig" resourceId="issuance" />
-    <!-- Header -->
-    <div fxLayout="row" fxLayoutAlign="space-between center">
-      <h2>Issuer Settings</h2>
-      <div>
+
+    <!-- What the issuer settings are, and what can be done with them -->
+    <mat-card appearance="outlined" class="hero">
+      <span class="hero-avatar" aria-hidden="true"><mat-icon>tune</mat-icon></span>
+      <div class="hero-copy">
+        <h1>Issuer Settings</h1>
+        <div class="hero-meta">
+          @if (primaryDisplay?.name) {
+            <span class="badge">{{ primaryDisplay.name }}</span>
+          }
+          <span class="badge" [class.status-warning]="authorizationServerRows.length === 0">
+            {{ authorizationServerRows.length }} authorization
+            {{ authorizationServerRows.length === 1 ? 'server' : 'servers' }}
+          </span>
+        </div>
+        <p class="hero-description">
+          How wallets see this issuer, how users are authorized and which security checks apply to
+          every credential type.
+        </p>
+      </div>
+      <div class="hero-actions">
         <button
-          mat-icon-button
-          [routerLink]="['../']"
-          matTooltip="Back to list"
-          aria-label="Back to list"
-        >
-          <mat-icon>arrow_back</mat-icon>
-        </button>
-        <button
-          mat-icon-button
+          matButton="tonal"
           [routerLink]="['edit']"
-          matTooltip="Edit configuration"
-          aria-label="Edit configuration"
           appConfigManaged
           managedKind="IssuanceConfig"
           managedResourceId="issuance"
         >
           <mat-icon>edit</mat-icon>
+          Edit
         </button>
+        <a
+          matButton="outlined"
+          [routerLink]="['edit']"
+          [queryParams]="{ setup: true }"
+          appConfigManaged
+          managedKind="IssuanceConfig"
+          managedResourceId="issuance"
+          >Use guided setup</a
+        >
+        <a matButton routerLink="/credential-config/create">Configure a credential type</a>
         @if (canDownloadConfig) {
-          <button
-            mat-icon-button
-            aria-label="Download configuration"
-            [disabled]="downloadingConfig"
-            [attr.aria-busy]="downloadingConfig"
-            disabledInteractive
-            (click)="downloadConfig()"
-            matTooltip="Download configuration"
-          >
-            <mat-icon>download</mat-icon>
-          </button>
+          <span class="icon-actions">
+            <button
+              mat-icon-button
+              aria-label="Download configuration"
+              [disabled]="downloadingConfig"
+              [attr.aria-busy]="downloadingConfig"
+              disabledInteractive
+              (click)="downloadConfig()"
+              matTooltip="Download configuration"
+            >
+              <mat-icon>download</mat-icon>
+            </button>
+          </span>
         }
       </div>
-    </div>
+    </mat-card>
 
-    <div fxLayout="row wrap" fxLayoutGap="12px">
-      <a
-        mat-stroked-button
-        [routerLink]="['edit']"
-        [queryParams]="{ setup: true }"
-        appConfigManaged
-        managedKind="IssuanceConfig"
-        managedResourceId="issuance"
-        >Use guided setup</a
-      >
-      <a mat-stroked-button routerLink="/credential-config/create">Configure a credential type</a>
-    </div>
     <mat-tab-group
       animationDuration="200ms"
       [selectedIndex]="selectedTab"
@@ -63,53 +71,43 @@
           Metadata
         </ng-template>
 
-        <div fxLayout="column" fxLayoutGap="24px" class="tab-content">
-          <mat-card>
+        <div class="tab-content content-grid">
+          <mat-card appearance="outlined">
             <mat-card-header>
-              <mat-card-title>
-                <mat-icon>settings</mat-icon>
-                Configuration Details
-              </mat-card-title>
+              <mat-icon mat-card-avatar>settings</mat-icon>
+              <h2 mat-card-title>Configuration Details</h2>
+              <mat-card-subtitle>What applies to every credential request</mat-card-subtitle>
             </mat-card-header>
             <mat-card-content>
-              <mat-list class="config-list">
-                <mat-list-item>
-                  <mat-icon matListItemIcon>schedule</mat-icon>
-                  <span matListItemTitle>Created At</span>
-                  <span matListItemLine>{{ formatDate(config.createdAt) }}</span>
-                </mat-list-item>
-                <mat-list-item>
-                  <mat-icon matListItemIcon>layers</mat-icon>
-                  <span matListItemTitle>Batch Size</span>
-                  <span matListItemLine>{{ config.batchSize || 1 }} credential(s) per request</span>
-                </mat-list-item>
-                <mat-list-item>
-                  <mat-icon
-                    matListItemIcon
-                    [class]="config.notificationEndpointEnabled === false ? 'icon-disabled' : ''"
-                  >
-                    {{
-                      config.notificationEndpointEnabled === false
-                        ? 'notifications_off'
-                        : 'notifications'
-                    }}
-                  </mat-icon>
-                  <span matListItemTitle>Notification Endpoint</span>
-                  <span matListItemLine>
-                    {{ config.notificationEndpointEnabled === false ? 'Disabled' : 'Enabled' }}
-                  </span>
-                </mat-list-item>
-              </mat-list>
+              <dl class="details">
+                <div>
+                  <dt>Created At</dt>
+                  <dd>{{ formatDate(config.createdAt) }}</dd>
+                </div>
+                <div>
+                  <dt>Batch Size</dt>
+                  <dd>{{ config.batchSize || 1 }} credential(s) per request</dd>
+                </div>
+                <div>
+                  <dt>Notification Endpoint</dt>
+                  <dd>
+                    <span
+                      class="badge"
+                      [class.status-active]="config.notificationEndpointEnabled !== false"
+                    >
+                      {{ config.notificationEndpointEnabled === false ? 'Disabled' : 'Enabled' }}
+                    </span>
+                  </dd>
+                </div>
+              </dl>
             </mat-card-content>
           </mat-card>
 
           @if (primaryDisplay) {
-            <mat-card class="preview-card">
+            <mat-card appearance="outlined" class="preview-card">
               <mat-card-header>
-                <mat-card-title>
-                  <mat-icon>preview</mat-icon>
-                  Issuer Preview
-                </mat-card-title>
+                <mat-icon mat-card-avatar>preview</mat-icon>
+                <h2 mat-card-title>Issuer Preview</h2>
                 <mat-card-subtitle>How the issuer appears to wallets</mat-card-subtitle>
               </mat-card-header>
               <mat-card-content>
@@ -144,85 +142,86 @@
           Authorize User
         </ng-template>
 
-        <div fxLayout="column" fxLayoutGap="24px" class="tab-content">
-          <mat-card>
+        <div class="tab-content">
+          <mat-card appearance="outlined" class="table-card">
             <mat-card-header>
-              <mat-card-title>
-                <mat-icon>sync_alt</mat-icon>
-                Authorization Servers
-              </mat-card-title>
+              <mat-icon mat-card-avatar>sync_alt</mat-icon>
+              <h2 mat-card-title>Authorization Servers</h2>
+              <mat-card-subtitle
+                >Where users sign in before a credential is issued</mat-card-subtitle
+              >
             </mat-card-header>
-            <mat-card-content>
-              @if (authorizationServerRows.length === 0) {
+            @if (authorizationServerRows.length === 0) {
+              <mat-card-content>
                 <p class="warning-text">
                   No authorization servers configured. Add at least one external, oid4vp, chained,
                   or built-in authorization server before using this issuer.
                 </p>
-              } @else {
-                <div class="table-container">
-                  <table
-                    mat-table
-                    [dataSource]="authorizationServerRows"
-                    class="mat-elevation-z1 auth-server-table"
-                  >
-                    <ng-container matColumnDef="label">
-                      <th mat-header-cell *matHeaderCellDef>Label</th>
-                      <td mat-cell *matCellDef="let row">{{ row.label }}</td>
-                    </ng-container>
+              </mat-card-content>
+            } @else {
+              <div class="table-scroll">
+                <table mat-table [dataSource]="authorizationServerRows" class="auth-server-table">
+                  <ng-container matColumnDef="label">
+                    <th mat-header-cell *matHeaderCellDef>Label</th>
+                    <td mat-cell *matCellDef="let row">{{ row.label }}</td>
+                  </ng-container>
 
-                    <ng-container matColumnDef="id">
-                      <th mat-header-cell *matHeaderCellDef>ID</th>
-                      <td mat-cell *matCellDef="let row">{{ row.id }}</td>
-                    </ng-container>
+                  <ng-container matColumnDef="id">
+                    <th mat-header-cell *matHeaderCellDef>ID</th>
+                    <td mat-cell *matCellDef="let row">
+                      <code>{{ row.id }}</code>
+                    </td>
+                  </ng-container>
 
-                    <ng-container matColumnDef="type">
-                      <th mat-header-cell *matHeaderCellDef>Type</th>
-                      <td mat-cell *matCellDef="let row">{{ row.type }}</td>
-                    </ng-container>
+                  <ng-container matColumnDef="type">
+                    <th mat-header-cell *matHeaderCellDef>Type</th>
+                    <td mat-cell *matCellDef="let row">
+                      <span class="badge">{{ row.type }}</span>
+                    </td>
+                  </ng-container>
 
-                    <ng-container matColumnDef="preferred">
-                      <th mat-header-cell *matHeaderCellDef>Default</th>
-                      <td mat-cell *matCellDef="let row">{{ row.preferred ? 'yes' : 'no' }}</td>
-                    </ng-container>
+                  <ng-container matColumnDef="preferred">
+                    <th mat-header-cell *matHeaderCellDef>Default</th>
+                    <td mat-cell *matCellDef="let row">{{ row.preferred ? 'yes' : 'no' }}</td>
+                  </ng-container>
 
-                    <ng-container matColumnDef="enabled">
-                      <th mat-header-cell *matHeaderCellDef>Enabled</th>
-                      <td mat-cell *matCellDef="let row">{{ row.enabled ? 'yes' : 'no' }}</td>
-                    </ng-container>
+                  <ng-container matColumnDef="enabled">
+                    <th mat-header-cell *matHeaderCellDef>Enabled</th>
+                    <td mat-cell *matCellDef="let row">{{ row.enabled ? 'yes' : 'no' }}</td>
+                  </ng-container>
 
-                    <ng-container matColumnDef="dpop">
-                      <th mat-header-cell *matHeaderCellDef>DPoP</th>
-                      <td mat-cell *matCellDef="let row">{{ row.dpop }}</td>
-                    </ng-container>
+                  <ng-container matColumnDef="dpop">
+                    <th mat-header-cell *matHeaderCellDef>DPoP</th>
+                    <td mat-cell *matCellDef="let row">{{ row.dpop }}</td>
+                  </ng-container>
 
-                    <ng-container matColumnDef="statusCheck">
-                      <th mat-header-cell *matHeaderCellDef>Wallet attestation status check</th>
-                      <td mat-cell *matCellDef="let row">{{ row.statusCheck }}</td>
-                    </ng-container>
+                  <ng-container matColumnDef="statusCheck">
+                    <th mat-header-cell *matHeaderCellDef>Wallet attestation status check</th>
+                    <td mat-cell *matCellDef="let row">{{ row.statusCheck }}</td>
+                  </ng-container>
 
-                    <ng-container matColumnDef="token">
-                      <th mat-header-cell *matHeaderCellDef>Token</th>
-                      <td mat-cell *matCellDef="let row">
-                        {{ row.tokenLifetime > 0 ? row.tokenLifetime + 's' : '-' }}
-                      </td>
-                    </ng-container>
+                  <ng-container matColumnDef="token">
+                    <th mat-header-cell *matHeaderCellDef>Token</th>
+                    <td mat-cell *matCellDef="let row">
+                      {{ row.tokenLifetime > 0 ? row.tokenLifetime + 's' : '-' }}
+                    </td>
+                  </ng-container>
 
-                    <ng-container matColumnDef="refresh">
-                      <th mat-header-cell *matHeaderCellDef>Refresh</th>
-                      <td mat-cell *matCellDef="let row">{{ row.refresh }}</td>
-                    </ng-container>
+                  <ng-container matColumnDef="refresh">
+                    <th mat-header-cell *matHeaderCellDef>Refresh</th>
+                    <td mat-cell *matCellDef="let row">{{ row.refresh }}</td>
+                  </ng-container>
 
-                    <ng-container matColumnDef="details">
-                      <th mat-header-cell *matHeaderCellDef>Details</th>
-                      <td mat-cell *matCellDef="let row">{{ row.details }}</td>
-                    </ng-container>
+                  <ng-container matColumnDef="details">
+                    <th mat-header-cell *matHeaderCellDef>Details</th>
+                    <td mat-cell *matCellDef="let row">{{ row.details }}</td>
+                  </ng-container>
 
-                    <tr mat-header-row *matHeaderRowDef="authServerDisplayedColumns"></tr>
-                    <tr mat-row *matRowDef="let row; columns: authServerDisplayedColumns"></tr>
-                  </table>
-                </div>
-              }
-            </mat-card-content>
+                  <tr mat-header-row *matHeaderRowDef="authServerDisplayedColumns"></tr>
+                  <tr mat-row *matRowDef="let row; columns: authServerDisplayedColumns"></tr>
+                </table>
+              </div>
+            }
           </mat-card>
         </div>
       </mat-tab>
@@ -233,88 +232,53 @@
           Security
         </ng-template>
 
-        <div fxLayout="column" fxLayoutGap="24px" class="tab-content">
-          <!-- tx_code Brute-Force Protection Card -->
-          <mat-card>
+        <div class="tab-content content-grid">
+          <mat-card appearance="outlined">
             <mat-card-header>
-              <mat-card-title>
-                <mat-icon>pin</mat-icon>
-                Transaction Code (tx_code) Protection
-              </mat-card-title>
+              <mat-icon mat-card-avatar>verified_user</mat-icon>
+              <h2 mat-card-title>Security Policies</h2>
+              <mat-card-subtitle
+                >What a wallet must prove before it gets a credential</mat-card-subtitle
+              >
             </mat-card-header>
             <mat-card-content>
-              <mat-list class="config-list">
-                <mat-list-item>
-                  <mat-icon matListItemIcon>lock</mat-icon>
-                  <span matListItemTitle>Max Failed tx_code Attempts</span>
-                  <span matListItemLine>
-                    {{
-                      config.txCodeMaxAttempts !== null && config.txCodeMaxAttempts !== undefined
-                        ? config.txCodeMaxAttempts
-                        : 'Default (5)'
-                    }}
-                  </span>
-                </mat-list-item>
-              </mat-list>
-            </mat-card-content>
-          </mat-card>
-
-          <mat-card>
-            <mat-card-header>
-              <mat-card-title>
-                <mat-icon>verified_user</mat-icon>
-                Security Policies
-              </mat-card-title>
-            </mat-card-header>
-            <mat-card-content>
-              <mat-list class="config-list">
-                <mat-list-item>
-                  <mat-icon matListItemIcon>
-                    {{ config.dPopRequired ? 'verified_user' : 'no_encryption' }}
-                  </mat-icon>
-                  <span matListItemTitle>DPoP</span>
-                  <span matListItemLine>{{
-                    config.dPopRequired ? 'Required' : 'Not required'
-                  }}</span>
-                </mat-list-item>
-                <mat-list-item>
-                  <mat-icon
-                    matListItemIcon
-                    [class]="config.walletAttestationRequired ? '' : 'icon-disabled'"
-                  >
-                    {{ config.walletAttestationRequired ? 'verified_user' : 'no_encryption' }}
-                  </mat-icon>
-                  <span matListItemTitle>Wallet Attestation</span>
-                  <span matListItemLine>{{
-                    config.walletAttestationRequired ? 'Required' : 'Not required'
-                  }}</span>
-                </mat-list-item>
-                <mat-list-item>
-                  <mat-icon
-                    matListItemIcon
-                    [class]="
-                      config.walletAttestationStatusCheckMode === 'disabled' ? 'icon-disabled' : ''
-                    "
-                    >fact_check</mat-icon
-                  >
-                  <span matListItemTitle>Attestation Status Check</span>
-                  <span matListItemLine
-                    >{{ statusCheckModeLabel(config.walletAttestationStatusCheckMode) }}
-                    @if (!config.walletAttestationStatusCheckMode) {
-                      (default)
-                    }
-                    @if (config.walletAttestationStatusCheckMode === 'disabled') {
-                      (revoked attestations accepted)
-                    }
-                    · key attestations at the credential endpoint, wallet attestations unless an
-                    authorization server overrides it
-                  </span>
-                </mat-list-item>
+              <dl class="details">
+                <div>
+                  <dt>DPoP</dt>
+                  <dd>
+                    <span class="badge" [class.status-active]="config.dPopRequired">
+                      {{ config.dPopRequired ? 'Required' : 'Not required' }}
+                    </span>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Wallet Attestation</dt>
+                  <dd>
+                    <span class="badge" [class.status-active]="config.walletAttestationRequired">
+                      {{ config.walletAttestationRequired ? 'Required' : 'Not required' }}
+                    </span>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Attestation Status Check</dt>
+                  <dd>
+                    <span
+                      class="badge"
+                      [class.status-warning]="
+                        config.walletAttestationStatusCheckMode === 'disabled'
+                      "
+                    >
+                      {{ statusCheckModeLabel(config.walletAttestationStatusCheckMode) }}
+                      @if (!config.walletAttestationStatusCheckMode) {
+                        (default)
+                      }
+                    </span>
+                  </dd>
+                </div>
                 @if (config.walletAttestationRequired) {
-                  <mat-list-item>
-                    <mat-icon matListItemIcon>security</mat-icon>
-                    <span matListItemTitle>Wallet Provider Trust Lists</span>
-                    <span matListItemLine>
+                  <div>
+                    <dt>Wallet Provider Trust Lists</dt>
+                    <dd>
                       @if (
                         config.walletProviderTrustLists &&
                         config.walletProviderTrustLists.length > 0
@@ -325,10 +289,42 @@
                           >No trust lists configured - all wallets rejected</span
                         >
                       }
-                    </span>
-                  </mat-list-item>
+                    </dd>
+                  </div>
                 }
-              </mat-list>
+              </dl>
+              <p class="card-note">
+                @if (config.walletAttestationStatusCheckMode === 'disabled') {
+                  Revoked attestations are accepted.
+                }
+                The status check applies to key attestations at the credential endpoint, and to
+                wallet attestations unless an authorization server overrides it.
+              </p>
+            </mat-card-content>
+          </mat-card>
+
+          <!-- tx_code brute-force protection -->
+          <mat-card appearance="outlined">
+            <mat-card-header>
+              <mat-icon mat-card-avatar>pin</mat-icon>
+              <h2 mat-card-title>Transaction Code (tx_code) Protection</h2>
+              <mat-card-subtitle
+                >Failed PIN or OTP attempts in the pre-authorized code flow</mat-card-subtitle
+              >
+            </mat-card-header>
+            <mat-card-content>
+              <dl class="details">
+                <div>
+                  <dt>Max Failed tx_code Attempts</dt>
+                  <dd>
+                    {{
+                      config.txCodeMaxAttempts !== null && config.txCodeMaxAttempts !== undefined
+                        ? config.txCodeMaxAttempts
+                        : 'Default (5)'
+                    }}
+                  </dd>
+                </div>
+              </dl>
             </mat-card-content>
           </mat-card>
         </div>
@@ -340,159 +336,131 @@
           Registration Certificate
         </ng-template>
 
-        <div fxLayout="column" fxLayoutGap="24px" class="tab-content">
-          <mat-card>
-            <mat-card-header>
-              <mat-card-title>
-                <mat-icon>verified_user</mat-icon>
-                Certificate Status
-              </mat-card-title>
-              <mat-card-subtitle
-                >Issued by a registrar such as the EUDI Hub; request a new one before it expires or
-                after the credential types change</mat-card-subtitle
-              >
-            </mat-card-header>
-            <mat-card-content>
-              <mat-list class="config-list">
-                <mat-list-item>
-                  <mat-icon
-                    matListItemIcon
-                    [class]="registrationCertificateConfig?.enabled ? '' : 'icon-disabled'"
-                  >
-                    {{ registrationCertificateConfig?.enabled ? 'verified' : 'block' }}
-                  </mat-icon>
-                  <span matListItemTitle>Enabled</span>
-                  <span matListItemLine>{{
-                    registrationCertificateConfig?.enabled ? 'Yes' : 'No'
-                  }}</span>
-                </mat-list-item>
+        <div class="tab-content">
+          <div class="content-grid">
+            <mat-card appearance="outlined">
+              <mat-card-header>
+                <mat-icon mat-card-avatar>verified_user</mat-icon>
+                <h2 mat-card-title>Certificate Status</h2>
+                <mat-card-subtitle
+                  >Issued by a registrar such as the EUDI Hub; request a new one before it expires
+                  or after the credential types change</mat-card-subtitle
+                >
+              </mat-card-header>
+              <mat-card-content>
+                <dl class="details">
+                  <div>
+                    <dt>Enabled</dt>
+                    <dd>{{ registrationCertificateConfig?.enabled ? 'Yes' : 'No' }}</dd>
+                  </div>
 
-                @if (registrationCertificateConfig?.enabled) {
-                  <mat-list-item>
-                    <mat-icon matListItemIcon>
-                      {{
-                        registrationCertificateStatus === 'active'
-                          ? 'verified'
-                          : registrationCertificateStatus === 'expiring'
-                            ? 'warning'
-                            : registrationCertificateStatus === 'expired'
-                              ? 'error'
-                              : registrationCertificateStatus === 'missing'
-                                ? 'report'
-                                : registrationCertificateStatus === 'invalid'
-                                  ? 'gpp_bad'
-                                  : registrationCertificateStatus === 'notYetValid'
-                                    ? 'pending'
-                                    : 'block'
-                      }}
-                    </mat-icon>
-                    <span matListItemTitle>Status</span>
-                    <span matListItemLine>{{ registrationCertificateStatusText }}</span>
-                  </mat-list-item>
+                  @if (registrationCertificateConfig?.enabled) {
+                    <div>
+                      <dt>Status</dt>
+                      <dd>
+                        <span [class]="'badge ' + registrationCertificateBadgeClass">{{
+                          registrationCertificateStatusText
+                        }}</span>
+                      </dd>
+                    </div>
 
-                  @if (registrationCertificateCache?.issuedAt) {
-                    <mat-list-item>
-                      <mat-icon matListItemIcon>schedule</mat-icon>
-                      <span matListItemTitle>Issued At</span>
-                      <span matListItemLine>
-                        {{ registrationCertificateCache.issuedAt * 1000 | date: 'medium' }}
-                      </span>
-                    </mat-list-item>
+                    @if (registrationCertificateCache?.issuedAt) {
+                      <div>
+                        <dt>Issued At</dt>
+                        <dd>{{ registrationCertificateCache.issuedAt * 1000 | date: 'medium' }}</dd>
+                      </div>
+                    }
+
+                    @if (registrationCertificateCache?.expiresAt) {
+                      <div>
+                        <dt>Expires At</dt>
+                        <dd>
+                          {{ registrationCertificateCache.expiresAt * 1000 | date: 'medium' }}
+                        </dd>
+                      </div>
+                    }
                   }
 
-                  @if (registrationCertificateCache?.expiresAt) {
-                    <mat-list-item>
-                      <mat-icon matListItemIcon>event</mat-icon>
-                      <span matListItemTitle>Expires At</span>
-                      <span matListItemLine>
-                        {{ registrationCertificateCache.expiresAt * 1000 | date: 'medium' }}
-                      </span>
-                    </mat-list-item>
+                  @if (registrationCertificateConfig?.privacyPolicy) {
+                    <div>
+                      <dt>Privacy Policy</dt>
+                      <dd>{{ registrationCertificateConfig.privacyPolicy }}</dd>
+                    </div>
                   }
+
+                  @if (registrationCertificateConfig?.supportUri) {
+                    <div>
+                      <dt>Support URI</dt>
+                      <dd>{{ registrationCertificateConfig.supportUri }}</dd>
+                    </div>
+                  }
+                </dl>
+
+                @if (canRequestFromEudiHub) {
+                  <div class="card-actions">
+                    <button
+                      matButton="outlined"
+                      type="button"
+                      (click)="requestFromEudiHub()"
+                      matTooltip="Register your credential types at the German EUDI Hub and store the registration certificate it issues, with a token from its portal"
+                      appConfigManaged
+                      managedKind="IssuanceConfig"
+                      managedResourceId="issuance"
+                    >
+                      <mat-icon>verified</mat-icon>
+                      Request from EUDI Hub
+                    </button>
+                  </div>
                 }
+              </mat-card-content>
+            </mat-card>
 
-                @if (registrationCertificateConfig?.privacyPolicy) {
-                  <mat-list-item>
-                    <mat-icon matListItemIcon>policy</mat-icon>
-                    <span matListItemTitle>Privacy Policy</span>
-                    <span matListItemLine>{{ registrationCertificateConfig.privacyPolicy }}</span>
-                  </mat-list-item>
+            <mat-card appearance="outlined">
+              <mat-card-header>
+                <mat-icon mat-card-avatar>key</mat-icon>
+                <h2 mat-card-title>JWT</h2>
+                <mat-card-subtitle>The certificate the issuer serves to wallets</mat-card-subtitle>
+              </mat-card-header>
+              <mat-card-content>
+                @if (registrationCertificateJwt) {
+                  <div class="jwt-header">
+                    <strong>Certificate JWT</strong>
+                    <button
+                      matButton="outlined"
+                      (click)="copyRegistrationCertificateJwt(registrationCertificateJwt!)"
+                    >
+                      <mat-icon>content_copy</mat-icon>
+                      Copy
+                    </button>
+                  </div>
+                  <pre class="config-value">{{ registrationCertificateJwt }}</pre>
+                } @else {
+                  <p class="muted">No registration certificate JWT available.</p>
                 }
+              </mat-card-content>
+            </mat-card>
+          </div>
 
-                @if (registrationCertificateConfig?.supportUri) {
-                  <mat-list-item>
-                    <mat-icon matListItemIcon>support_agent</mat-icon>
-                    <span matListItemTitle>Support URI</span>
-                    <span matListItemLine>{{ registrationCertificateConfig.supportUri }}</span>
-                  </mat-list-item>
-                }
-              </mat-list>
-
-              @if (canRequestFromEudiHub) {
-                <div fxLayout="row" fxLayoutGap="12px" style="margin-top: 16px">
-                  <button
-                    mat-stroked-button
-                    type="button"
-                    (click)="requestFromEudiHub()"
-                    matTooltip="Register your credential types at the German EUDI Hub and store the registration certificate it issues, with a token from its portal"
-                    appConfigManaged
-                    managedKind="IssuanceConfig"
-                    managedResourceId="issuance"
-                  >
-                    <mat-icon>verified</mat-icon>
-                    Request from EUDI Hub
-                  </button>
-                </div>
-              }
-            </mat-card-content>
-          </mat-card>
-
-          <mat-card>
+          <mat-card appearance="outlined">
             <mat-card-header>
-              <mat-card-title>
-                <mat-icon>key</mat-icon>
-                JWT
-              </mat-card-title>
+              <mat-icon mat-card-avatar>data_object</mat-icon>
+              <h2 mat-card-title>Decoded Payload</h2>
             </mat-card-header>
             <mat-card-content>
-              @if (registrationCertificateJwt) {
-                <div fxLayout="row" fxLayoutAlign="space-between center" style="margin-bottom: 8px">
-                  <strong>Certificate JWT</strong>
-                  <button
-                    mat-stroked-button
-                    (click)="copyRegistrationCertificateJwt(registrationCertificateJwt!)"
-                  >
-                    <mat-icon>content_copy</mat-icon>
-                    Copy
-                  </button>
-                </div>
-                <pre class="config-value">{{ registrationCertificateJwt }}</pre>
-              } @else {
-                <p>No registration certificate JWT available.</p>
-              }
-            </mat-card-content>
-          </mat-card>
-
-          <mat-card>
-            <mat-card-header>
-              <mat-card-title>
-                <mat-icon>data_object</mat-icon>
-                Decoded Payload
-              </mat-card-title>
-            </mat-card-header>
-            <mat-card-content>
-              <h4>Header</h4>
+              <h3>Header</h3>
               <pre class="config-value">{{ parsedRegistrationCertHeader }}</pre>
-              <h4>Payload</h4>
+              <h3>Payload</h3>
               <pre class="config-value">{{ parsedRegistrationCertPayload }}</pre>
             </mat-card-content>
           </mat-card>
         </div>
       </mat-tab>
     </mat-tab-group>
-  </div>
-} @else if (loadError) {
-  <app-load-error [message]="loadError" (retry)="loadConfig()" />
-} @else {
-  <p><output>Loading issuer settings…</output></p>
-}
+  } @else if (loadError) {
+    <app-load-error [message]="loadError" (retry)="loadConfig()" />
+  } @else {
+    <div class="loading-state">
+      <mat-spinner diameter="40" aria-label="Loading issuer settings"></mat-spinner>
+    </div>
+  }
+</div>

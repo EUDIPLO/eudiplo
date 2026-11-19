@@ -72,24 +72,4 @@ export class StatusListManagementService {
       path: { listId },
     });
   }
-
-  /**
-   * Calculate usage percentage
-   */
-  getUsagePercentage(list: StatusListResponseDto): number {
-    return (list.usedEntries / list.capacity) * 100;
-  }
-
-  /**
-   * Format capacity for display
-   */
-  formatCapacity(capacity: number): string {
-    if (capacity >= 1000000) {
-      return `${(capacity / 1000000).toFixed(1)}M`;
-    }
-    if (capacity >= 1000) {
-      return `${(capacity / 1000).toFixed(1)}K`;
-    }
-    return capacity.toString();
-  }
 }

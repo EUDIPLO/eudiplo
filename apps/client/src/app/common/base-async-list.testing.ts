@@ -11,16 +11,22 @@ export interface ListStatesScenario<S> {
   /** The feature service whose `fetchMethod` the screen's `fetchItems()` calls. */
   service: Type<S>;
   fetchMethod: keyof S & string;
-  /** An item as the service returns it; `id` is the first column of the table. */
+  /** An item as the service returns it; the first column of the table shows its `id`. */
   item: { id: string; [field: string]: unknown };
   /** Accessible name of the loading indicator. */
   loading: string;
   /** Text of the empty state. */
   empty: string;
-  /** Text of the empty state's link to the create page. */
+  /**
+   * Text of the empty state's link to the create page; a list without `createButton` has a
+   * header link with the same text.
+   */
   create: string;
-  /** Accessible name of the header's Create icon button, which is also its tooltip. */
-  createButton: string;
+  /**
+   * Accessible name of the header's Create icon button, which is also its tooltip. Leave it out
+   * when the header has a Create link with visible text instead.
+   */
+  createButton?: string;
   /** `loadFailedMessage`, the prefix of the message when loading fails. */
   failure: string;
   /** Further providers the screen needs, such as a JwtService with the roles to create. */
@@ -43,6 +49,21 @@ async function waitUntil(
 async function settle(fixture: ComponentFixture<unknown>): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 50));
   fixture.detectChanges();
+}
+
+/** The page heading, an h1 or on older screens an h2, that takes focus after a retry. */
+function heading(element: HTMLElement): Element | null {
+  return element.querySelector('h1, h2');
+}
+
+/**
+ * Checks that the first cell names the item: the cell, or an element in it such as the row link
+ * or the ID below a name, shows exactly the ID, not just text that contains it.
+ */
+function firstCellNames(element: HTMLElement, id: string): void {
+  const cell = element.querySelector('td.mat-mdc-cell');
+  const texts = [cell, ...(cell?.querySelectorAll('*') ?? [])].map((e) => e?.textContent?.trim());
+  expect(texts).toContain(id);
 }
 
 function loadingIndicator(element: HTMLElement, label: string): Element | null {
@@ -135,18 +156,34 @@ export function describeListStates<S>(screen: ListStatesScenario<S>): void {
       expect(element.querySelector('[role="alert"]')).toBeNull();
       // Only a retry moves focus; opening the page leaves it alone.
       await settle(fixture);
-      expect(document.activeElement).not.toBe(element.querySelector('h2'));
+      expect(document.activeElement).not.toBe(heading(element));
     });
 
-    it('names the Create button like its tooltip', () => {
-      fetchItems.mockResolvedValue([]);
-      const fixture = render();
+    if (!screen.createButton) {
+      it('links to the create page from the page header', async () => {
+        fetchItems.mockResolvedValue([screen.item]);
+        const fixture = render();
+        const element = await waitUntil(fixture, (el) =>
+          expect(el.querySelector('table')).not.toBeNull()
+        );
 
-      const button = fixture.debugElement.query(
-        By.css(`button[aria-label="${screen.createButton}"]`)
-      );
-      expect(button.injector.get(MatTooltip).message).toBe(screen.createButton);
-    });
+        const link = Array.from(element.querySelectorAll('header a')).find((a) =>
+          a.textContent?.trim().includes(screen.create)
+        );
+        expect(link?.getAttribute('href')).toBe('/create');
+      });
+    }
+
+    if (screen.createButton) {
+      const createButton = screen.createButton;
+      it('names the Create button like its tooltip', () => {
+        fetchItems.mockResolvedValue([]);
+        const fixture = render();
+
+        const button = fixture.debugElement.query(By.css(`button[aria-label="${createButton}"]`));
+        expect(button.injector.get(MatTooltip).message).toBe(createButton);
+      });
+    }
 
     it('reports a failed load instead of an empty list and focuses the heading after Retry', async () => {
       fetchItems
@@ -160,13 +197,11 @@ export function describeListStates<S>(screen: ListStatesScenario<S>): void {
       retry.focus();
       retry.click();
 
-      await waitUntil(fixture, (el) =>
-        expect(el.querySelector('td.mat-mdc-cell')?.textContent).toBe(screen.item.id)
-      );
+      await waitUntil(fixture, (el) => firstCellNames(el, screen.item.id));
       expect(element.querySelector('[role="alert"]')).toBeNull();
       expect(fetchItems).toHaveBeenCalledTimes(2);
       // Retry left with the error card, so focus continues from the page heading.
-      await waitUntil(fixture, (el) => expect(document.activeElement).toBe(el.querySelector('h2')));
+      await waitUntil(fixture, (el) => expect(document.activeElement).toBe(heading(el)));
     });
 
     it('leaves focus alone that the user moved elsewhere during the retry', async () => {
@@ -184,9 +219,7 @@ export function describeListStates<S>(screen: ListStatesScenario<S>): void {
       succeed([screen.item]);
 
       try {
-        await waitUntil(fixture, (el) =>
-          expect(el.querySelector('td.mat-mdc-cell')?.textContent).toBe(screen.item.id)
-        );
+        await waitUntil(fixture, (el) => firstCellNames(el, screen.item.id));
         await settle(fixture);
         expect(document.activeElement).toBe(search);
       } finally {

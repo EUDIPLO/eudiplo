@@ -10,7 +10,7 @@ import { findButton, loseFocus } from './settings-screen.testing';
  *
  * The first load (`fixture.detectChanges()`, which runs `ngOnInit`) succeeds and leaves focus
  * alone. `reload` loads again and fails. The Retry button then loads successfully, which removes
- * the card with the focused button, so focus moves to the page heading `h2`.
+ * the card with the focused button, so focus moves to the page heading, its `h1` or on older screens its `h2`.
  */
 export async function expectHeadingFocusOnlyAfterRetry(
   fixture: ComponentFixture<unknown>,
@@ -23,7 +23,7 @@ export async function expectHeadingFocusOnlyAfterRetry(
     fixture.detectChanges();
     TestBed.inject(ApplicationRef).tick();
   };
-  const heading = page.querySelector<HTMLElement>('h2')!;
+  const heading = page.querySelector<HTMLElement>('h1, h2')!;
 
   loseFocus();
   fixture.detectChanges();

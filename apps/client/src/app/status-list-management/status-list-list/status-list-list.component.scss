@@ -1,39 +1,35 @@
+@use '../../tenants/tenant-page' as page;
+
+// Heading, table card with search and states, as on the user and API client lists
+@include page.base;
+@include page.list-page;
+
 table {
-  width: 100%;
+  @include page.data-table;
+  @include page.linked-rows;
 }
 
-.loading-container {
-  padding: 48px;
+.header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
-.empty-state {
-  padding: 48px 24px;
-  text-align: center;
-
-  .empty-icon {
-    font-size: 64px;
-    width: 64px;
-    height: 64px;
-    color: var(--mat-sys-on-surface-variant);
-  }
-
-  p {
-    color: var(--mat-sys-on-surface-variant);
-    margin: 0;
-  }
-
-  .hint {
-    font-size: 14px;
-    color: var(--mat-sys-on-surface-variant);
-  }
+// Copy URI and the JWT status tooltip sit above the link that covers the row
+.above-link {
+  position: relative;
+  z-index: 1;
 }
 
-.muted {
-  color: var(--mat-sys-on-surface-variant);
-  font-style: italic;
+.badge.above-link:focus-visible {
+  outline: 2px solid var(--mat-sys-primary);
+  outline-offset: 2px;
 }
 
 .usage-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   min-width: 150px;
 
   mat-progress-bar {
@@ -42,29 +38,24 @@ table {
   }
 }
 
-// JWT Status chips
-.status-valid,
-.status-expiring,
-.status-expired {
-  mat-icon {
-    font-size: 16px;
-    width: 16px;
-    height: 16px;
-    margin-right: 4px;
+.usage-numbers {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font: var(--mat-sys-body-medium);
+}
+
+@container (max-width: 600px) {
+  .search-bar {
+    flex: 1 1 100%;
   }
 }
 
-.status-valid {
-  background-color: var(--mat-sys-secondary-container) !important;
-  color: var(--eudiplo-success) !important;
-}
-
-.status-expiring {
-  background-color: var(--mat-sys-tertiary-container) !important;
-  color: var(--eudiplo-warning) !important;
-}
-
-.status-expired {
-  background-color: var(--mat-sys-error-container) !important;
-  color: var(--eudiplo-danger) !important;
+// Phones: the list leaves bits and key chain to the list's page
+@container (max-width: 560px) {
+  .mat-column-bits,
+  .mat-column-keyChainId {
+    display: none;
+  }
 }

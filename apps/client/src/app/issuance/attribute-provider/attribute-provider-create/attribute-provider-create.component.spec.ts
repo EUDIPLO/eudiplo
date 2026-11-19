@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, provideRouter } from '@angular/router';
-import { EMPTY } from 'rxjs';
+import { EMPTY, of } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { expectHeadingFocusOnlyAfterRetry } from '../../../common/retry-focus.testing';
@@ -261,6 +261,29 @@ describe('AttributeProviderCreateComponent JSON View', () => {
     rejectSave({ statusCode: 500, message: 'Unavailable' });
     await vi.waitFor(() => expect(component.saving).toBe(false));
     expect(component.jsonViewUnavailableReason).toBe('');
+  });
+
+  it('marks the form as changed when JSON View returns a document', () => {
+    const open = vi.fn(() => ({
+      afterClosed: () => of({ id: 'example', name: 'From JSON', url: 'https://json.example' }),
+    }));
+    const component = TestBed.runInInjectionContext(
+      () =>
+        new AttributeProviderCreateComponent(
+          {} as never,
+          { navigate: vi.fn() } as never,
+          { snapshot: { paramMap: { get: () => null } } } as never,
+          { open: vi.fn() } as never,
+          { open } as never
+        )
+    );
+    component.ngOnInit();
+    expect(component.form.dirty).toBe(false);
+
+    component.viewAsJson();
+
+    expect(component.form.value.name).toBe('From JSON');
+    expect(component.form.dirty).toBe(true);
   });
 
   it('moves focus to the heading only after a retry loads the attribute provider', async () => {

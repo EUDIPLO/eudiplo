@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
-import { describe, expect, it, vi } from 'vitest';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { BaseAsyncListComponent } from './base-async-list.component';
 
@@ -7,7 +8,7 @@ class TestList extends BaseAsyncListComponent<string> {
   protected readonly loadFailedMessage = 'Failed to load things';
   readonly fetch = vi.fn<() => Promise<string[]>>();
 
-  get shown(): string[] {
+  get loaded(): string[] {
     return this.items;
   }
 
@@ -32,6 +33,91 @@ describe('BaseAsyncListComponent', () => {
     await list.loadItems();
 
     expect(list.loadError).toBe('');
-    expect(list.shown).toEqual(['a']);
+    expect(list.loaded).toEqual(['a']);
+  });
+});
+
+describe('BaseAsyncListComponent delete', () => {
+  class DeletingList extends TestList {
+    remove(request: () => Promise<unknown>): Promise<void> {
+      return this.deleteItem({
+        id: 'a',
+        question: 'Delete "a"?',
+        request,
+        deleted: 'Thing deleted',
+        failed: 'Failed to delete thing',
+      });
+    }
+  }
+
+  function render() {
+    const snackBar = { open: vi.fn() };
+    TestBed.configureTestingModule({ providers: [{ provide: MatSnackBar, useValue: snackBar }] });
+    const list = TestBed.runInInjectionContext(() => new DeletingList());
+    list.fetch.mockResolvedValue([]);
+    return { list, snackBar };
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    TestBed.resetTestingModule();
+  });
+
+  it('deletes once after confirming, says so and loads the list again', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const { list, snackBar } = render();
+    let finish: () => void = () => undefined;
+    const request = vi.fn(() => new Promise<void>((resolve) => (finish = resolve)));
+
+    const first = list.remove(request);
+    expect(list.deletingId).toBe('a');
+    // A second click while the first delete runs sends nothing.
+    await list.remove(request);
+    finish();
+    await first;
+
+    expect(request).toHaveBeenCalledOnce();
+    expect(window.confirm).toHaveBeenCalledOnce();
+    expect(snackBar.open).toHaveBeenCalledWith('Thing deleted', 'Close', { duration: 3000 });
+    expect(list.fetch).toHaveBeenCalledOnce();
+    expect(list.deletingId).toBeUndefined();
+  });
+
+  it('sends nothing when the question is declined', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const { list } = render();
+    const request = vi.fn();
+
+    await list.remove(request);
+
+    expect(request).not.toHaveBeenCalled();
+    expect(list.deletingId).toBeUndefined();
+  });
+
+  it('says on the other rows that their Delete waits for the running one', () => {
+    const { list } = render();
+    expect(list.deleteTooltip('b', 'Delete thing', 'Deleting the thing…')).toBe('Delete thing');
+
+    list.deletingId = 'a';
+
+    expect(list.deleteTooltip('a', 'Delete thing', 'Deleting the thing…')).toBe(
+      'Deleting the thing…'
+    );
+    expect(list.deleteTooltip('b', 'Delete thing', 'Deleting the thing…')).toBe(
+      'Wait until the other delete has finished'
+    );
+  });
+
+  it('reports a failed delete with the reason and keeps the list', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { list, snackBar } = render();
+
+    await list.remove(() => Promise.reject({ statusCode: 409, message: 'In use' }));
+
+    expect(snackBar.open.mock.lastCall?.[0]).toBe('Failed to delete thing: In use');
+    expect(consoleError).toHaveBeenCalledWith('Failed to delete thing:', expect.anything());
+    expect(list.fetch).not.toHaveBeenCalled();
+    expect(list.deletingId).toBeUndefined();
   });
 });

@@ -1,78 +1,156 @@
-<div fxLayout="row" fxLayoutAlign="space-between center">
-  <h2 #listHeading tabindex="-1">Attribute Providers</h2>
-  <button
-    matIconButton
-    [routerLink]="['create']"
-    matTooltip="Create New Attribute Provider"
-    aria-label="Create New Attribute Provider"
-  >
-    <mat-icon>add</mat-icon>
-  </button>
-</div>
-
-@if (loading) {
-  <div class="list-state">
-    <mat-spinner diameter="40" aria-label="Loading attribute providers"></mat-spinner>
-  </div>
-} @else if (loadError) {
-  <app-load-error [message]="loadError" (retry)="loadItems()" />
-} @else if (providers.length === 0) {
-  <div class="list-state">
-    <mat-icon class="empty-icon">dataset</mat-icon>
-    <p>No attribute providers yet.</p>
-    <a mat-flat-button [routerLink]="['create']">
+<div class="page">
+  <header class="page-header">
+    <div>
+      <h1 #listHeading tabindex="-1">Attribute Providers</h1>
+      <p>
+        Services that EUDIPLO asks for the claims of a credential while it issues the credential.
+      </p>
+    </div>
+    <a matButton="filled" [routerLink]="['create']">
       <mat-icon>add</mat-icon>
-      Create Attribute Provider
+      Create attribute provider
     </a>
-  </div>
-} @else {
-  <table mat-table [dataSource]="providers" class="mat-elevation-z8">
-    <ng-container matColumnDef="id">
-      <th mat-header-cell *matHeaderCellDef>ID</th>
-      <td mat-cell *matCellDef="let provider">{{ provider.id }}</td>
-    </ng-container>
+  </header>
 
-    <ng-container matColumnDef="name">
-      <th mat-header-cell *matHeaderCellDef>Name</th>
-      <td mat-cell *matCellDef="let provider">{{ provider.name }}</td>
-    </ng-container>
+  @if (loading) {
+    <div class="loading-state">
+      <mat-spinner diameter="40" aria-label="Loading attribute providers"></mat-spinner>
+    </div>
+  } @else if (loadError) {
+    <app-load-error [message]="loadError" (retry)="loadItems()" />
+  } @else if (providers.length === 0) {
+    <div class="empty-state">
+      <span class="empty-icon"><mat-icon>cloud_download</mat-icon></span>
+      <strong>No attribute providers yet.</strong>
+      <p>Add a service that returns the claims of a credential when a wallet asks for it.</p>
+      <a matButton="filled" [routerLink]="['create']">
+        <mat-icon>add</mat-icon>
+        Create attribute provider
+      </a>
+    </div>
+  } @else {
+    <mat-card appearance="outlined" class="table-card">
+      <div class="table-header">
+        <div class="table-title">
+          <h2>All attribute providers</h2>
+          <output>
+            @if (search.trim()) {
+              {{ shownItems.length }} of {{ providers.length }} attribute providers
+            } @else {
+              {{ providers.length }}
+              {{ providers.length === 1 ? 'attribute provider' : 'attribute providers' }}
+            }
+          </output>
+        </div>
+        <div class="search-bar" role="search">
+          <mat-icon class="search-icon" aria-hidden="true">search</mat-icon>
+          <input
+            type="search"
+            [(ngModel)]="search"
+            placeholder="Search attribute providers"
+            aria-label="Search attribute providers by ID, name or URL"
+          />
+          @if (search) {
+            <button
+              matIconButton
+              type="button"
+              class="clear-search"
+              aria-label="Clear search"
+              matTooltip="Clear search"
+              (click)="clearSearch()"
+            >
+              <mat-icon>close</mat-icon>
+            </button>
+          }
+        </div>
+      </div>
 
-    <ng-container matColumnDef="url">
-      <th mat-header-cell *matHeaderCellDef>URL</th>
-      <td mat-cell *matCellDef="let provider">{{ provider.url }}</td>
-    </ng-container>
+      <div class="table-scroll">
+        <table mat-table [dataSource]="shownItems" class="linked">
+          <ng-container matColumnDef="id">
+            <th mat-header-cell *matHeaderCellDef>Attribute provider</th>
+            <td mat-cell *matCellDef="let provider">
+              <span class="item-cell">
+                <span class="item-icon" aria-hidden="true"
+                  ><mat-icon>cloud_download</mat-icon></span
+                >
+                <span class="item-copy">
+                  <!-- The name links to the provider and its link covers the row -->
+                  <a class="item-link" [routerLink]="provider.id">{{
+                    provider.name || provider.id
+                  }}</a>
+                  <small
+                    ><code>{{ provider.id }}</code></small
+                  >
+                </span>
+              </span>
+            </td>
+          </ng-container>
 
-    <ng-container matColumnDef="auth">
-      <th mat-header-cell *matHeaderCellDef>Auth</th>
-      <td mat-cell *matCellDef="let provider">{{ getAuthType(provider) }}</td>
-    </ng-container>
+          <ng-container matColumnDef="url">
+            <th mat-header-cell *matHeaderCellDef>URL</th>
+            <td mat-cell *matCellDef="let provider" class="url-cell">{{ provider.url }}</td>
+          </ng-container>
 
-    <ng-container matColumnDef="actions">
-      <th mat-header-cell *matHeaderCellDef>Actions</th>
-      <td mat-cell *matCellDef="let provider">
-        <button
-          matIconButton
-          [routerLink]="[provider.id]"
-          matTooltip="View attribute provider"
-          [attr.aria-label]="'View attribute provider ' + provider.id"
-        >
-          <mat-icon>visibility</mat-icon>
-        </button>
-        <button
-          matIconButton
-          [routerLink]="[provider.id, 'edit']"
-          appConfigManaged
-          managedKind="AttributeProvider"
-          [managedResourceId]="provider.id"
-          matTooltip="Edit attribute provider"
-          [attr.aria-label]="'Edit attribute provider ' + provider.id"
-        >
-          <mat-icon>edit</mat-icon>
-        </button>
-      </td>
-    </ng-container>
+          <ng-container matColumnDef="auth">
+            <th mat-header-cell *matHeaderCellDef>Authentication</th>
+            <td mat-cell *matCellDef="let provider">
+              <span class="badge">{{ getAuthType(provider) }}</span>
+            </td>
+          </ng-container>
 
-    <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-    <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
-  </table>
-}
+          <ng-container matColumnDef="actions">
+            <th mat-header-cell *matHeaderCellDef>
+              <span class="visually-hidden">Actions</span>
+            </th>
+            <td mat-cell *matCellDef="let provider">
+              <span class="row-actions">
+                <button
+                  matIconButton
+                  [routerLink]="[provider.id, 'edit']"
+                  appConfigManaged
+                  managedKind="AttributeProvider"
+                  [managedResourceId]="provider.id"
+                  matTooltip="Edit attribute provider"
+                  [attr.aria-label]="'Edit attribute provider ' + provider.id"
+                >
+                  <mat-icon>edit</mat-icon>
+                </button>
+                <button
+                  matIconButton
+                  class="delete-action"
+                  (click)="deleteProvider(provider)"
+                  [disabled]="deletingId !== undefined"
+                  disabledInteractive
+                  appConfigManaged
+                  managedKind="AttributeProvider"
+                  [managedResourceId]="provider.id"
+                  [matTooltip]="
+                    deleteTooltip(
+                      provider.id,
+                      'Delete attribute provider',
+                      'Deleting the attribute provider…'
+                    )
+                  "
+                  [attr.aria-label]="'Delete attribute provider ' + provider.id"
+                >
+                  <mat-icon>delete_outline</mat-icon>
+                </button>
+              </span>
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+          <tr class="mat-mdc-row no-match" *matNoDataRow>
+            <td class="mat-mdc-cell" [attr.colspan]="displayedColumns.length">
+              <mat-icon aria-hidden="true">search_off</mat-icon>
+              <span>No attribute provider matches "{{ search.trim() }}".</span>
+              <button matButton type="button" (click)="clearSearch()">Clear search</button>
+            </td>
+          </tr>
+        </table>
+      </div>
+    </mat-card>
+  }
+</div>

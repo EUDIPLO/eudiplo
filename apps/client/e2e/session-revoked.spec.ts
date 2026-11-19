@@ -118,9 +118,9 @@ test.describe('reloaded session that saves after its roles changed', () => {
     await loginWithClientCredentials(page, clientId, clientSecret);
     // Opening the page by address reloads the app, which drops the client secret.
     await page.goto('/attribute-providers/create');
-    await page.getByLabel('ID').fill('reloaded-save');
-    await page.getByLabel('Name').fill('Reloaded save');
-    await page.getByLabel('URL').fill('https://example.com/attributes');
+    await page.getByRole('textbox', { name: 'ID' }).fill('reloaded-save');
+    await page.getByRole('textbox', { name: 'Name' }).fill('Reloaded save');
+    await page.getByRole('textbox', { name: 'URL' }).fill('https://example.com/attributes');
     const create = page.getByRole('button', { name: 'Create' });
     await expect(create).toBeEnabled();
     await page.waitForLoadState('networkidle');

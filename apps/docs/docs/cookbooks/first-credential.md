@@ -68,7 +68,7 @@ Open **Credential Issuance → Issuer Settings** and choose **Use guided setup**
 
 ## Step 4: Define the membership credential
 
-Open **Credential Issuance → Credential Types** and choose **+** (**Create New Credential Configuration**). Use exactly these values; chapter 3 requests the credential by its VCT and claim paths.
+Open **Credential Issuance → Credential Types** and choose **Create credential configuration**. Use exactly these values; chapter 3 requests the credential by its VCT and claim paths.
 
 ### Basics
 

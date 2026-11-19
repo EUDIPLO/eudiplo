@@ -1,0 +1,29 @@
+@use '../../../tenants/tenant-page' as page;
+
+// Heading, table card with search and states, as on the user and API client lists
+@include page.base;
+@include page.list-page;
+
+table {
+  @include page.data-table;
+  @include page.linked-rows;
+}
+
+.url-cell {
+  font: var(--mat-sys-body-medium);
+  color: var(--mat-sys-on-surface-variant);
+  overflow-wrap: anywhere;
+}
+
+@container (max-width: 600px) {
+  .search-bar {
+    flex: 1 1 100%;
+  }
+}
+
+// Phones: the list leaves the URL to the provider's page
+@container (max-width: 560px) {
+  .mat-column-url {
+    display: none;
+  }
+}

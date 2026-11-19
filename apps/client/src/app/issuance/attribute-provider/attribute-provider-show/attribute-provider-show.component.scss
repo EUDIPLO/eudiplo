@@ -1,32 +1,22 @@
-.config-list {
-  padding: 0;
+@use '../../../tenants/tenant-page' as page;
 
-  mat-list-item {
-    height: auto !important;
-    padding: 12px 0;
-    border-bottom: 1px solid var(--mat-sys-outline-variant);
+// Back link, header card and detail cards, as on the key and user pages
+@include page.base;
+@include page.detail-page;
+@include page.details-list;
 
-    // Long values (ids, URLs, free text) wrap instead of widening the page
-    // or ending in an ellipsis. Nested so it outranks Material's nowrap rule.
-    [matListItemLine] {
-      white-space: normal;
-      overflow-wrap: anywhere;
-    }
-
-    &:last-child {
-      border-bottom: none;
-    }
-  }
+// Endpoint beside its authentication
+.page {
+  --content-columns: minmax(0, 3fr) minmax(0, 2fr);
 }
 
-mat-card-header {
-  mat-card-title {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+// The ownership notice shows only when it applies; without content it takes no gap
+app-config-ownership-notice {
+  display: contents;
+}
 
-    mat-icon {
-      color: var(--mat-sys-on-surface-variant);
-    }
-  }
+.hero-avatar mat-icon {
+  width: 32px;
+  height: 32px;
+  font-size: 32px;
 }

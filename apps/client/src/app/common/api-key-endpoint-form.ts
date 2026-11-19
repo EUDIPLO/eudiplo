@@ -209,6 +209,8 @@ export abstract class ApiKeyEndpointFormComponent implements OnInit {
     dialogRef.afterClosed().subscribe((result) => {
       if (result) {
         this.loadFromJson(result);
+        // A document from JSON View is a change, although patching does not mark it as one
+        this.form.markAsDirty();
       }
     });
   }
