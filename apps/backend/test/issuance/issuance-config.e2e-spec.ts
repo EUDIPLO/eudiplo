@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { INestApplication } from "@nestjs/common";
 import request from "supertest";
 import { App } from "supertest/types";
@@ -7,7 +8,11 @@ import { AttributeProviderService } from "../../src/issuer/configuration/attribu
 import { IssuanceDto } from "../../src/issuer/configuration/issuance/dto/issuance.dto.js";
 import { IssuanceService } from "../../src/issuer/configuration/issuance/issuance.service.js";
 import { WebhookEndpointService } from "../../src/issuer/configuration/webhook-endpoint/webhook-endpoint.service.js";
-import { IssuanceTestContext, setupIssuanceTestApp } from "../utils.js";
+import {
+    IssuanceTestContext,
+    readConfig,
+    setupIssuanceTestApp,
+} from "../utils.js";
 
 setGlobalDispatcher(
     new Agent({
@@ -491,5 +496,75 @@ describe("Issuance - Configuration", () => {
                 );
             },
         );
+    });
+
+    describe("attribute providers in use", () => {
+        const api = () => request(app.getHttpServer());
+        const auth = () => `Bearer ${authToken}`;
+
+        test("refuses to delete a provider a credential config names, until the config is gone", async () => {
+            await api()
+                .post("/issuer/attribute-providers")
+                .trustLocalhost()
+                .set("Authorization", auth())
+                .send({
+                    id: "in-use-ap",
+                    name: "In use",
+                    url: "https://attributes.example.com/request",
+                    auth: { type: "none" },
+                })
+                .expect(201);
+            const config = readConfig<Record<string, unknown>>(
+                resolve(
+                    __dirname,
+                    "../fixtures/haip/issuance/credentials/pid-no-key.json",
+                ),
+            );
+            await api()
+                .post("/issuer/credentials")
+                .trustLocalhost()
+                .set("Authorization", auth())
+                .send({
+                    ...config,
+                    id: "uses-in-use-ap",
+                    description: "Uses the provider",
+                    attributeProviderId: "in-use-ap",
+                })
+                .expect(201);
+
+            const refused = await api()
+                .delete("/issuer/attribute-providers/in-use-ap")
+                .trustLocalhost()
+                .set("Authorization", auth())
+                .expect(409);
+            expect(refused.body).toMatchObject({
+                code: "ATTRIBUTE_PROVIDER_IN_USE",
+                message:
+                    'Attribute provider "in-use-ap" is still used by 1 credential config ("uses-in-use-ap"). Remove these references before deleting the attribute provider.',
+                references: [
+                    {
+                        kind: "CredentialConfig",
+                        id: "uses-in-use-ap",
+                        description: "Uses the provider",
+                    },
+                ],
+            });
+            await api()
+                .get("/issuer/attribute-providers/in-use-ap")
+                .trustLocalhost()
+                .set("Authorization", auth())
+                .expect(200);
+
+            await api()
+                .delete("/issuer/credentials/uses-in-use-ap")
+                .trustLocalhost()
+                .set("Authorization", auth())
+                .expect(204);
+            await api()
+                .delete("/issuer/attribute-providers/in-use-ap")
+                .trustLocalhost()
+                .set("Authorization", auth())
+                .expect(204);
+        });
     });
 });

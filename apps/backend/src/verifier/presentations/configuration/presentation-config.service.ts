@@ -1,8 +1,8 @@
 import {
     BadRequestException,
-    ConflictException,
     Inject,
     Injectable,
+    NotFoundException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
@@ -130,19 +130,19 @@ export class PresentationConfigService {
      * @param id - The ID of the presentation configuration to retrieve.
      * @param tenantId - The ID of the tenant for which to retrieve the configuration.
      * @returns A promise that resolves to the requested PresentationConfig entity.
+     * @throws NotFoundException when the tenant has no configuration with this ID
      */
-    getPresentationConfig(
+    async getPresentationConfig(
         id: string,
         tenantId: string,
     ): Promise<PresentationConfig> {
-        return this.repository
-            .findOneByOrFail({
-                id,
-                tenantId,
-            })
-            .catch(() => {
-                throw new ConflictException(`Request ID ${id} not found`);
-            });
+        const config = await this.repository.findOneBy({ id, tenantId });
+        if (!config) {
+            throw new NotFoundException(
+                `Presentation config ${JSON.stringify(id)} not found`,
+            );
+        }
+        return config;
     }
 
     /**

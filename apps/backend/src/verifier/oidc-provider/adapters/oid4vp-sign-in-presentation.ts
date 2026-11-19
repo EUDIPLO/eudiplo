@@ -28,8 +28,8 @@ export class Oid4vpSignInPresentation implements SignInPresentation {
         presentationConfigId: string,
         subjectCredentialId?: string,
     ): Promise<string | undefined> {
-        // The list, not getPresentationConfig: that one turns every failure
-        // into a 409, so a database error would read as a missing config.
+        // The list, not getPresentationConfig: a missing config is a reason
+        // here, not an HTTP exception.
         const config = (
             await this.configs.getPresentationConfigs(tenantId)
         ).find((entry) => entry.id === presentationConfigId);

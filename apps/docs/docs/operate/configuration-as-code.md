@@ -310,8 +310,9 @@ deleting a federation trust anchor whose entity ID such a configuration still
 names (`FEDERATION_TRUST_ANCHOR_IN_USE`, see
 [Delete a trust anchor](../trust/federation.md#delete-a-trust-anchor)),
 or deleting a key chain that such a configuration names (`KEY_CHAIN_IN_USE`, see
-[Delete a key chain](../trust/keys-and-certificates.md#delete-a-key-chain)). It needs
-its own plan and an explicit confirmation:
+[Delete a key chain](../trust/keys-and-certificates.md#delete-a-key-chain)). It does
+not block deleting an attribute provider that such a configuration still names.
+It needs its own plan and an explicit confirmation:
 
 ```bash
 eudiplo config plan acme.zip --instance staging --mode replace --output replace-plan.json

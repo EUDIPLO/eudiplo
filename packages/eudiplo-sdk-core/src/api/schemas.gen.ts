@@ -3837,6 +3837,78 @@ export const UpdateAttributeProviderDtoSchema = {
     additionalProperties: false
 } as const;
 
+export const AttributeProviderReferenceDtoSchema = {
+    type: 'object',
+    properties: {
+        kind: {
+            enum: [
+                'CredentialConfig'
+            ],
+            type: 'string',
+            description: 'Kind of configuration that names the attribute provider.'
+        },
+        id: {
+            type: 'string',
+            description: 'ID of the credential config.'
+        },
+        description: {
+            type: 'string',
+            description: 'Description of the credential config.'
+        }
+    },
+    required: [
+        'kind',
+        'id'
+    ]
+} as const;
+
+export const AttributeProviderInUseDtoSchema = {
+    type: 'object',
+    properties: {
+        statusCode: {
+            type: 'number',
+            description: 'HTTP status code.',
+            example: 409
+        },
+        timestamp: {
+            type: 'string',
+            description: 'Time of the response.',
+            example: '2026-11-19T12:00:00.000Z'
+        },
+        path: {
+            type: 'string',
+            description: 'Path of the request.',
+            example: '/api/issuer/attribute-providers/crm'
+        },
+        code: {
+            enum: [
+                'ATTRIBUTE_PROVIDER_IN_USE'
+            ],
+            type: 'string',
+            description: 'Credential configs still name the attribute provider.'
+        },
+        message: {
+            type: 'string',
+            description: 'Names the credential configs that use the provider.',
+            example: 'Attribute provider "crm" is still used by 1 credential config ("pid"). Remove these references before deleting the attribute provider.'
+        },
+        references: {
+            type: 'array',
+            items: {
+                $ref: '#/components/schemas/AttributeProviderReferenceDto'
+            }
+        }
+    },
+    required: [
+        'statusCode',
+        'timestamp',
+        'path',
+        'code',
+        'message',
+        'references'
+    ]
+} as const;
+
 export const ClaimsQuerySchema = {
     type: 'object',
     properties: {

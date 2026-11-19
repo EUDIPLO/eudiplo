@@ -1644,6 +1644,45 @@ export type UpdateAttributeProviderDto = {
     };
 };
 
+export type AttributeProviderReferenceDto = {
+    /**
+     * Kind of configuration that names the attribute provider.
+     */
+    kind: 'CredentialConfig';
+    /**
+     * ID of the credential config.
+     */
+    id: string;
+    /**
+     * Description of the credential config.
+     */
+    description?: string;
+};
+
+export type AttributeProviderInUseDto = {
+    /**
+     * HTTP status code.
+     */
+    statusCode: number;
+    /**
+     * Time of the response.
+     */
+    timestamp: string;
+    /**
+     * Path of the request.
+     */
+    path: string;
+    /**
+     * Credential configs still name the attribute provider.
+     */
+    code: 'ATTRIBUTE_PROVIDER_IN_USE';
+    /**
+     * Names the credential configs that use the provider.
+     */
+    message: string;
+    references: Array<AttributeProviderReferenceDto>;
+};
+
 export type ClaimsQuery = {
     /**
      * Allowed values of the claim. A disclosed value must equal one of them in type and value.
@@ -7567,7 +7606,13 @@ export type AttributeProviderControllerDeleteErrors = {
      * Attribute provider not found
      */
     404: unknown;
+    /**
+     * Credential configs of the tenant still name the attribute provider; the response names them
+     */
+    409: AttributeProviderInUseDto;
 };
+
+export type AttributeProviderControllerDeleteError = AttributeProviderControllerDeleteErrors[keyof AttributeProviderControllerDeleteErrors];
 
 export type AttributeProviderControllerDeleteResponses = {
     /**
@@ -7813,6 +7858,13 @@ export type PresentationManagementControllerDeleteConfigurationData = {
     url: '/api/verifier/config/{id}';
 };
 
+export type PresentationManagementControllerDeleteConfigurationErrors = {
+    /**
+     * The tenant has no presentation config with this ID
+     */
+    404: unknown;
+};
+
 export type PresentationManagementControllerDeleteConfigurationResponses = {
     /**
      * Presentation configuration deleted
@@ -7829,6 +7881,13 @@ export type PresentationManagementControllerGetConfigurationData = {
     };
     query?: never;
     url: '/api/verifier/config/{id}';
+};
+
+export type PresentationManagementControllerGetConfigurationErrors = {
+    /**
+     * The tenant has no presentation config with this ID
+     */
+    404: unknown;
 };
 
 export type PresentationManagementControllerGetConfigurationResponses = {
@@ -7851,6 +7910,10 @@ export type PresentationManagementControllerUpdateConfigurationErrors = {
      * The configuration is invalid: a field fails validation, a DCQL credential query has no trusted_authorities (unless SKIP_TRUST_AUTHORITY is set), or the imported registration certificate (registration_cert.jwt) is refused because it is not a JWT, is expired or not yet valid, or does not authorize the requested DCQL credentials.
      */
     400: unknown;
+    /**
+     * The tenant has no presentation config with this ID
+     */
+    404: unknown;
 };
 
 export type PresentationManagementControllerUpdateConfigurationResponses = {
@@ -8652,6 +8715,17 @@ export type StatusListManagementControllerDeleteListData = {
     url: '/api/status-lists/{listId}';
 };
 
+export type StatusListManagementControllerDeleteListErrors = {
+    /**
+     * Status list not found
+     */
+    404: unknown;
+    /**
+     * Credentials issued with the status list still use it; the message gives their number
+     */
+    409: unknown;
+};
+
 export type StatusListManagementControllerDeleteListResponses = {
     /**
      * Status list deleted successfully
@@ -8913,6 +8987,13 @@ export type VerifierOfferControllerGetOfferData = {
     path?: never;
     query?: never;
     url: '/api/verifier/offer';
+};
+
+export type VerifierOfferControllerGetOfferErrors = {
+    /**
+     * The tenant has no presentation config with this `requestId`
+     */
+    404: unknown;
 };
 
 export type VerifierOfferControllerGetOfferResponses = {
@@ -9217,7 +9298,7 @@ export type EudiHubControllerRequestPresentationRegistrationCertificateErrors = 
     /**
      * Presentation configuration not found
      */
-    409: unknown;
+    404: unknown;
     /**
      * The EUDI Hub could not be reached, answered with a server error, or answered with something other than its API describes. When this happens while finding or registering the credential request, before a certificate is requested, the body has the code EUDI_HUB_NO_CERTIFICATE_REQUESTED
      */

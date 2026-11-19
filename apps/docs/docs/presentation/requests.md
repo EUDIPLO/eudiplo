@@ -49,8 +49,7 @@ The request expires after the configuration's `lifeTime` (default 300 seconds). 
 | ------ | ---------------------------------------------------------------------------------------- |
 | `400`  | The body does not match the schema, `x509_san_dns` was requested for a certificate without DNS name, or `openid_federation` for a tenant without federation verifier entity, or, for `dc-api` and `iso-18013-7`, `expected_origin` is missing (unless `allowedOrigins` lists exactly one origin), not an `http(s)` origin, or not in the configuration's [`allowedOrigins`](configure-verification.md#allowed-origins-digital-credentials-api). Also when a `transaction_data` entry, from the request or else the configuration, breaks the rules in [Which credentials an entry may reference](transaction-data.md#which-credentials-an-entry-may-reference), or an `iso-18013-7` request would carry transaction data. |
 | `403`  | The API client is not allowed to use this `requestId`.                                   |
-| `404`  | No usable access key chain: none exists, `accessKeyChainId` points to none, or its certificate is invalid. |
-| `409`  | No presentation configuration with this `requestId` exists.                              |
+| `404`  | No presentation configuration with this `requestId` exists, or no usable access key chain: none exists, `accessKeyChainId` points to none, or its certificate is invalid. |
 
 ## QR code and same-device redirect
 

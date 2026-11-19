@@ -358,6 +358,55 @@ describe("StatusListService SQLite concurrency", () => {
         expect(list.elements).toEqual([1, 1, 0, 0]);
     });
 
+    describe("deleting a status list", () => {
+        const mapping = (sessionId: string, index: number) => ({
+            tenantId: "tenant-1",
+            sessionId,
+            statusListId: "list-1",
+            index,
+            list: "https://issuer.example/issuers/tenant-1/status-management/status-list/list-1",
+            credentialConfigurationId: "pid",
+        });
+
+        test("deletes a list no credential uses", async () => {
+            await service.deleteList("tenant-1", "list-1");
+
+            expect(
+                await dataSource
+                    .getRepository(StatusListEntity)
+                    .countBy({ tenantId: "tenant-1" }),
+            ).toBe(0);
+        });
+
+        test.each([
+            [1, "1 credential is using it"],
+            [2, "2 credentials are using it"],
+        ])(
+            "refuses a list %i credential(s) use with 409",
+            async (count, text) => {
+                await dataSource
+                    .getRepository(StatusMapping)
+                    .save(
+                        Array.from({ length: count }, (_, i) =>
+                            mapping(`session-${i}`, i),
+                        ),
+                    );
+
+                await expect(
+                    service.deleteList("tenant-1", "list-1"),
+                ).rejects.toMatchObject({
+                    status: 409,
+                    message: `Cannot delete status list list-1: ${text}`,
+                });
+                expect(
+                    await dataSource
+                        .getRepository(StatusListEntity)
+                        .countBy({ tenantId: "tenant-1" }),
+                ).toBe(1);
+            },
+        );
+    });
+
     describe("status values wider than a list's bits per entry", () => {
         const mapping = (
             sessionId: string,
