@@ -209,4 +209,11 @@ export const routes: Routes = [
     data: { role: [getRole('issuance:manage'), getRole('presentation:manage')] },
     children: federationTrustAnchorRoutes,
   },
+
+  // Last: an address no route above matches, such as a mistyped one or a page of an older version.
+  {
+    path: '**',
+    loadComponent: () => import('./common/not-found.component').then((m) => m.NotFoundComponent),
+    canActivate: [AuthGuard],
+  },
 ];

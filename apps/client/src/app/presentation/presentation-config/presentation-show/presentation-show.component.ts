@@ -99,7 +99,7 @@ export class PresentationShowComponent implements OnInit {
     private readonly injector: Injector
   ) {}
 
-  /** Create offer opens the request page, which needs `presentation:request`. */
+  /** New Verification opens the request page, which needs `presentation:request`. */
   get canRequestPresentation(): boolean {
     return this.jwtService.hasRole('presentation:request');
   }

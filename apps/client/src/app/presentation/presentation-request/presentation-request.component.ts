@@ -141,9 +141,9 @@ export class PresentationRequestComponent implements OnInit {
         await this.evaluateReadiness(prefillData.requestId);
       } else if (this.route.snapshot.params['id']) {
         this.form.patchValue({ requestId: this.route.snapshot.params['id'] });
+        // Only preselected: a request generated on arrival would be generated again by
+        // every Back or reload, and the options below could not be chosen.
         await this.evaluateReadiness(this.route.snapshot.params['id']);
-        //since we do not have any other values for now, we can submit the form
-        this.onSubmit();
       } else {
         // Auto-select if only one configuration is available
         if (this.configs.length === 1) {
@@ -243,6 +243,11 @@ export class PresentationRequestComponent implements OnInit {
       openErrorSnackBar(this.snackBar, this.noConfigurationReason);
       return;
     }
+    if (!this.showTransactionDataOverride) {
+      // The hidden editor no longer validates what it held, and its content is not sent,
+      // so an error it left behind must not keep the request from being generated.
+      this.form.get('transaction_data')?.setErrors(null);
+    }
     if (this.form.invalid) {
       showFieldsToFix(this.form, {
         snackBar: this.snackBar,
@@ -269,9 +274,10 @@ export class PresentationRequestComponent implements OnInit {
     try {
       const formValue = this.form.value;
 
-      // Parse transaction_data if provided
+      // Parse transaction_data if provided. With the override switched off its editor is
+      // hidden, so what was typed there before is not sent.
       let transactionData = undefined;
-      if (formValue.transaction_data) {
+      if (this.showTransactionDataOverride && formValue.transaction_data) {
         try {
           transactionData = extractSchema(formValue.transaction_data);
         } catch (error) {
@@ -330,6 +336,7 @@ export class PresentationRequestComponent implements OnInit {
       clientIdScheme: 'x509_hash',
       transaction_data: undefined,
     });
+    this.showTransactionDataOverride = false;
     this.readinessError = null;
     this.isReadyToGenerate = false;
     this.offerResult = null;

@@ -163,17 +163,65 @@ describe('PresentationRequestComponent', () => {
       expect(component.configs.map((config) => config.id)).toEqual(['pid', 'mdl']);
     });
 
-    it('generates the request of a configuration the page was opened for', async () => {
+    it('selects the configuration the page was opened for and generates nothing by itself', async () => {
       TestBed.inject(ActivatedRoute).snapshot.params['id'] = 'pid';
-      const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
       fixture.detectChanges();
       await fixture.whenStable();
 
-      await vi.waitFor(() =>
-        expect(service.getOffer).toHaveBeenCalledWith({ requestId: 'pid', response_type: 'uri' })
-      );
-      expect(service.getOffer).toHaveBeenCalledOnce();
-      expect(navigate).toHaveBeenCalledWith(['/session-management', 'session-id']);
+      await vi.waitFor(() => expect(component.loading).toBe(false));
+      await vi.waitFor(() => {
+        expect(service.checkPresentationReadiness).toHaveBeenCalled();
+        expect(component.checkingReadiness).toBe(false);
+      });
+      // A submit on arrival would check the readiness again before it generates.
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(component.form.value.requestId).toBe('pid');
+      expect(service.checkPresentationReadiness).toHaveBeenCalledWith('pid');
+      // Once for the selection and once on arrival; a submit would check a third time.
+      expect(service.checkPresentationReadiness).toHaveBeenCalledTimes(2);
+      expect(service.getOffer).not.toHaveBeenCalled();
+    });
+
+    it('sends transaction data only while the override is switched on', async () => {
+      const transactionData = [{ type: 'payment', credential_ids: ['pid'] }];
+      await choose({ requestId: 'pid', transaction_data: JSON.stringify(transactionData) });
+      vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+
+      component.showTransactionDataOverride = true;
+      await component.onSubmit();
+      expect(service.getOffer).toHaveBeenLastCalledWith({
+        requestId: 'pid',
+        response_type: 'uri',
+        transaction_data: transactionData,
+      });
+
+      // Switched off, the editor is hidden and still holds what was typed.
+      component.showTransactionDataOverride = false;
+      await component.onSubmit();
+      expect(service.getOffer).toHaveBeenLastCalledWith({ requestId: 'pid', response_type: 'uri' });
+    });
+
+    it('generates the request when the hidden override editor was left with an error', async () => {
+      await choose({ requestId: 'pid', transaction_data: '{ not json' });
+      vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+      // What the editor reported before the override was switched off and it went away.
+      component.form.get('transaction_data')!.setErrors({ json: true });
+      component.showTransactionDataOverride = false;
+
+      await component.onSubmit();
+
+      expect(service.getOffer).toHaveBeenCalledWith({ requestId: 'pid', response_type: 'uri' });
+    });
+
+    it('switches the transaction data override off on Reset', async () => {
+      await choose({ requestId: 'pid', transaction_data: '[]' });
+      component.showTransactionDataOverride = true;
+
+      component.resetForm();
+
+      expect(component.showTransactionDataOverride).toBe(false);
+      expect(component.form.value.transaction_data).toBeNull();
     });
 
     it('offers no form and says why on submit when there is no configuration', async () => {

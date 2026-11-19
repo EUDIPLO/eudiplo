@@ -1,0 +1,8 @@
+@use 'page';
+
+@include page.base;
+@include page.list-page;
+
+.address {
+  overflow-wrap: anywhere;
+}

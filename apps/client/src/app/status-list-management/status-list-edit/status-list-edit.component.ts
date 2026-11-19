@@ -269,10 +269,19 @@ export class StatusListEditComponent implements OnInit {
       const formValue = this.form.value;
 
       if (this.isEditMode) {
-        const dto = {
-          credentialConfigurationId: formValue.credentialConfigurationId || undefined,
-          keyChainId: formValue.keyChainId || undefined,
-        };
+        // The backend keeps a binding that is left out and removes one that is null,
+        // so "Shared" and "Default" are sent as null. An unchanged binding is left out:
+        // sending the key chain again discards the signed list.
+        const dto: { credentialConfigurationId?: string | null; keyChainId?: string | null } = {};
+        const credentialConfigurationId: string | null =
+          formValue.credentialConfigurationId || null;
+        if (credentialConfigurationId !== (this.statusList?.credentialConfigurationId ?? null)) {
+          dto.credentialConfigurationId = credentialConfigurationId;
+        }
+        const keyChainId: string | null = formValue.keyChainId || null;
+        if (keyChainId !== (this.statusList?.keyChainId ?? null)) {
+          dto.keyChainId = keyChainId;
+        }
         await this.statusListService.updateList(this.listId!, dto);
         this.snackBar.open('Status list updated successfully', 'Close', { duration: 3000 });
       } else {

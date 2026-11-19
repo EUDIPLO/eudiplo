@@ -32,6 +32,17 @@ import { NavSectionComponent } from './common/nav-section/nav-section.component'
 import { DiploLogoComponent } from './common/diplo-logo.component';
 import { ApiService } from './core';
 import { KEY_CHAIN_ROLES } from './key-management/key-chain.service';
+import { urlPath } from './common/url-path.util';
+
+/**
+ * Whether the URL is the login page, which has no toolbar or navigation. Compares the
+ * whole path, so the page of an item whose ID starts with "login" keeps them, and so
+ * does the not-found page for an address below /login.
+ */
+export function isLoginUrl(url: string): boolean {
+  const path = urlPath(url);
+  return path === '/login' || path === '/login/';
+}
 
 @Component({
   selector: 'app-root',
@@ -87,14 +98,13 @@ export class AppComponent implements OnInit, OnDestroy {
     this.routerSubscription = this.router.events
       .pipe(filter((event) => event instanceof NavigationEnd))
       .subscribe((event: NavigationEnd) => {
-        // Hide toolbar on login page, show on all other pages
-        this.shouldShowToolbar = !event.url.includes('/login');
+        this.shouldShowToolbar = !isLoginUrl(event.url);
         this.navSections.navigatedTo(event.urlAfterRedirects);
         this.checkBackendVersion();
       });
 
     // Initial check for current route
-    this.shouldShowToolbar = !this.router.url.includes('/login');
+    this.shouldShowToolbar = !isLoginUrl(this.router.url);
 
     // Warn about an expiring session on every page
     this.tokenExpiry.start();

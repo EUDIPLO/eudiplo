@@ -76,6 +76,12 @@
           <div class="empty-clients">
             <mat-icon aria-hidden="true">person_off</mat-icon>
             <p>This tenant has no clients yet.</p>
+            <p>
+              The Web Client cannot add one from here. Add its clients through the tenant's
+              configuration folder, or send POST /api/tenant again with the same ID and name and the
+              roles of the admin client. Where an identity provider manages the clients, create them
+              there instead.
+            </p>
           </div>
         }
       </mat-card>

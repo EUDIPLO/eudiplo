@@ -485,11 +485,11 @@ describe('PresentationShowComponent page', () => {
     });
   });
 
-  it('offers Create offer only with presentation:request', async () => {
+  it('offers New Verification only with presentation:request', async () => {
     const config = async () => ({ id: 'age-check', dcql_query: { credentials: [] } });
     const offer = (page: HTMLElement) =>
       [...page.querySelectorAll('.hero-actions a')].find((a) =>
-        a.textContent?.includes('Create offer')
+        a.textContent?.includes('New Verification')
       );
     const manager = await render(config);
     await vi.waitFor(() => {

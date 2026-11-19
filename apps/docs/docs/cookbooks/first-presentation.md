@@ -143,7 +143,7 @@ On **3. Settings**:
 
 ## Step 5: Generate and approve a request
 
-1. Open `membership-check` and choose the **Create offer** button, or open **Credential Verification → New Verification** and select `membership-check` as **Verification Config**.
+1. Open `membership-check` and choose the **New Verification** button, or open **Credential Verification → New Verification** and select `membership-check` as **Verification Config**.
 2. Choose **Generate Request**.
 3. Scan the QR code with the wallet that holds the credential.
 4. Check that the wallet offers the membership credential and asks for name and member ID, then approve before the request expires.

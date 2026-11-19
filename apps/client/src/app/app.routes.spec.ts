@@ -84,3 +84,15 @@ describe('Pages of the removed sandbox registrar integration', () => {
     });
   });
 });
+
+describe('Unknown addresses', () => {
+  it('end in the not-found page, after every other route, and only when signed in', async () => {
+    const last = routes.at(-1)!;
+
+    expect(last.path).toBe('**');
+    expect(routes.filter((route) => route.path === '**')).toHaveLength(1);
+    expect(last.canActivate).toEqual([AuthGuard]);
+    const { NotFoundComponent } = await import('./common/not-found.component');
+    expect(await (last.loadComponent as () => Promise<unknown>)()).toBe(NotFoundComponent);
+  });
+});

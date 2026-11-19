@@ -157,3 +157,17 @@ test('the menu button brings the navigation back after the window widens', async
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
   await expect(navigation).toBeVisible();
 });
+
+test('an address without a page says so inside the shell and leads back to the dashboard', async ({
+  page,
+}) => {
+  // A bookmark of a page that an older version had.
+  await page.goto('/registrar/old-page?tab=keys');
+
+  await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible();
+  await expect(page.getByText('/registrar/old-page', { exact: true })).toBeVisible();
+  await expect(page.locator('mat-sidenav').getByRole('link', { name: 'Dashboard' })).toBeVisible();
+
+  await page.getByRole('link', { name: 'Go to the dashboard' }).click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+});

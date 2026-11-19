@@ -81,7 +81,7 @@ The second call prints a content type that starts with `application/statuslist+j
 
 ## Step 5: Verify while the credential is valid
 
-Open `membership-check`, choose **Create offer**, then **Generate Request**, and approve it in the wallet.
+Open `membership-check`, choose **New Verification**, then **Generate Request**, and approve it in the wallet.
 
 **Checkpoint:** the presentation session is `completed`.
 
