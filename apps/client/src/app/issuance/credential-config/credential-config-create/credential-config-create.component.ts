@@ -6,6 +6,7 @@ import {
 } from '../../../utils/language-options';
 import {
   Component,
+  DestroyRef,
   type OnInit,
   ChangeDetectionStrategy,
   ElementRef,
@@ -41,6 +42,8 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
+import { type CreatedForForm, openedFromForm } from '../../../common/return-to-form';
+import { ReturnToFormComponent } from '../../../common/return-to-form.component';
 import {
   CredentialConfigCreate,
   ClaimFieldDefinitionDto,
@@ -121,6 +124,7 @@ type CredentialConfigSource =
     ImageFieldComponent,
     DragDropModule,
     LoadErrorComponent,
+    ReturnToFormComponent,
   ],
   templateUrl: './credential-config-create.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
@@ -135,6 +139,8 @@ export class CredentialConfigCreateComponent implements OnInit {
 
   public form: FormGroup;
   public create = true;
+  /** The credential config created for that form; the page then says to return to the form's tab. */
+  createdForForm: CreatedForForm | null = null;
   public loading = false;
   /** While the configuration to edit loads; saving before would overwrite it with defaults. */
   loadingConfig = false;
@@ -570,6 +576,10 @@ export class CredentialConfigCreateComponent implements OnInit {
       savePromise
         .then(
           () => {
+            if (this.createdForAnotherTab) {
+              this.returnToForm(formValue.id);
+              return;
+            }
             this.snackBar.open(
               `Configuration ${this.create ? 'created' : 'updated'} successfully`,
               'Close',
@@ -594,6 +604,26 @@ export class CredentialConfigCreateComponent implements OnInit {
       });
       this.loading = false;
     }
+  }
+
+  /** A form in another tab opened this page to get a credential config it misses. */
+  private get createdForAnotherTab(): boolean {
+    return this.create && openedFromForm(this.route.snapshot.queryParamMap);
+  }
+
+  /**
+   * Shows the new credential config in place of the form and says to return to
+   * the form that opened this tab. A user who left the page meanwhile gets the
+   * outcome in a snackbar and stays where they are.
+   */
+  private returnToForm(id: string): void {
+    const heading = `Credential config "${id}" created`;
+    if (this.injector.get(DestroyRef).destroyed) {
+      this.snackBar.open(`${heading}.`, 'Close', { duration: 5000 });
+      return;
+    }
+    this.form.markAsPristine();
+    this.createdForForm = { id, heading };
   }
 
   private countInvalidControls(control: AbstractControl | null): number {
