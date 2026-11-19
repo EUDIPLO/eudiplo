@@ -1021,33 +1021,35 @@ $session-status-tones: (
 }
 
 // Status line with an icon on a tonal background: neutral by default, .ok green and .warning
-// orange. Include inside the line's selector, which sets its own margin. Markup: the line >
+// orange. Pass the line's selector, then set its margin in a rule of its own. Markup: the line >
 // mat-icon + text.
-@mixin status-line {
-  --tone: var(--mat-sys-on-surface-variant);
+@mixin status-line($selector) {
+  #{$selector} {
+    --tone: var(--mat-sys-on-surface-variant);
 
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 12px 16px;
-  border-radius: var(--mat-sys-corner-medium);
-  background: color-mix(in srgb, var(--tone) 8%, var(--mat-sys-surface));
-  font: var(--mat-sys-body-medium);
-  color: var(--mat-sys-on-surface);
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 16px;
+    border-radius: var(--mat-sys-corner-medium);
+    background: color-mix(in srgb, var(--tone) 8%, var(--mat-sys-surface));
+    font: var(--mat-sys-body-medium);
+    color: var(--mat-sys-on-surface);
 
-  > mat-icon {
-    flex: none;
-    width: 20px;
-    height: 20px;
-    font-size: 20px;
-    color: var(--tone);
-  }
+    > mat-icon {
+      flex: none;
+      width: 20px;
+      height: 20px;
+      font-size: 20px;
+      color: var(--tone);
+    }
 
-  &.ok {
-    --tone: var(--eudiplo-success);
-  }
+    &.ok {
+      --tone: var(--eudiplo-success);
+    }
 
-  &.warning {
-    --tone: var(--eudiplo-warning);
+    &.warning {
+      --tone: var(--eudiplo-warning);
+    }
   }
 }

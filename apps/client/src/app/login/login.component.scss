@@ -134,9 +134,9 @@ mat-card mat-card-content {
 }
 
 // Status line with an icon: neutral by default, green or orange for the outcome
-.notice {
-  @include page.status-line;
+@include page.status-line('.notice');
 
+.notice {
   margin: 0;
 }
 

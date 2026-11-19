@@ -82,9 +82,9 @@ mat-card-content {
 }
 
 // Status line below the fields: neutral by default, green when the token renews itself
-.hint-row {
-  @include page.status-line;
+@include page.status-line('.hint-row');
 
+.hint-row {
   margin-top: 16px;
 }
 
