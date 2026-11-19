@@ -412,10 +412,14 @@ function reportApplyFailure(
         counts[state]++;
         return `  ${state.padEnd(9)} ${label}`;
     });
+    let at = "";
     const failed = failure.failedOperation;
-    const at = failed
-        ? ` at ${failed.stage} ${failed.kind ?? ""}${failed.id ? `/${failed.id}` : ""}`
-        : "";
+    if (failed) {
+        // An asset step has neither kind nor ID; its line below names the path.
+        const target = [failed.kind, failed.id].filter(Boolean).join("/");
+        at = ` at ${failed.stage}`;
+        if (target) at += ` ${target}`;
+    }
     context.stderr.write(
         `Import stopped${at}: ${counts.completed} completed, ${counts.failed} failed, ${counts.pending} not started.\n`,
     );
