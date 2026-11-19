@@ -38,10 +38,10 @@ A tenant `membership-demo` that issues an SD-JWT VC of type `urn:example:members
 
 Open **Cryptographic Assets → Keys**, choose **Create Key** and run the wizard twice:
 
-| Purpose                                  | Wizard choices                                                                     | Description                     |
-| ---------------------------------------- | ---------------------------------------------------------------------------------- | ------------------------------- |
-| Sign the issued credential               | **Credential Signing (Attestation)** → **Create Key Chain (Recommended)**          | `Membership credential signing` |
-| Sign presentation requests to the wallet | **Access Certificate** → the certificate source your wallet needs (see below)      | `Membership verifier access`    |
+| Purpose                                  | Wizard choices                                                                | Description                     |
+| ---------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------- |
+| Sign the issued credential               | **Credential Signing (Attestation)** → **Key Chain with Root CA**             | `Membership credential signing` |
+| Sign presentation requests to the wallet | **Access Certificate** → the certificate source your wallet needs (see below) | `Membership verifier access`    |
 
 Keep KMS provider `db` and the other defaults, then choose **Create Key Chain**. For the access certificate, pick the source that matches your wallet:
 
@@ -124,12 +124,12 @@ It keeps status lists out of the first run. [Revocable credentials](revocable-cr
 
 ## Troubleshooting
 
-| Symptom                                          | Cause                                                                  | Fix                                                                                                    |
-| ------------------------------------------------ | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `membership` is missing in the offer form        | Created in another tenant, or saved with authorization actions         | Check the client ID in the account menu (⋮) at the top right; remove interactive authorization actions for this recipe.  |
-| **Credential Issuance** is missing in the menu   | The tenant client lacks `issuance:manage` or `issuance:offer`          | A client cannot add roles to itself. Sign in with the root client, delete `membership-demo` under **Administration → Tenants** and repeat step 1. |
-| Wallet asks for an attestation                   | Proof type **Attestation** or required wallet attestation is set       | Use proof type **JWT** only and keep wallet attestation optional.                                      |
-| Wallet shows other claim values                  | The offer overrode the defaults, or the credential is an older one     | Generate a new offer with the default values; a wallet keeps the claims it was issued with.           |
+| Symptom                                        | Cause                                                              | Fix                                                                                                                                               |
+| ---------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `membership` is missing in the offer form      | Created in another tenant, or saved with authorization actions     | Check the client ID in the account menu (⋮) at the top right; remove interactive authorization actions for this recipe.                           |
+| **Credential Issuance** is missing in the menu | The tenant client lacks `issuance:manage` or `issuance:offer`      | A client cannot add roles to itself. Sign in with the root client, delete `membership-demo` under **Administration → Tenants** and repeat step 1. |
+| Wallet asks for an attestation                 | Proof type **Attestation** or required wallet attestation is set   | Use proof type **JWT** only and keep wallet attestation optional.                                                                                 |
+| Wallet shows other claim values                | The offer overrode the defaults, or the credential is an older one | Generate a new offer with the default values; a wallet keeps the claims it was issued with.                                                       |
 
 Wallet connection, certificate and metadata errors are covered in [Troubleshooting](../troubleshooting.md).
 

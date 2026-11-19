@@ -74,11 +74,17 @@ mat-stepper {
   }
 }
 
-// Choices as selectable tiles, two or three to a row
+// Choices as selectable tiles, at most three to a row so six choices wrap
+// into even rows; auto-fit stretches two or three choices across the row
 .option-grid {
+  --option-gap: 12px;
+
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(max(260px, calc((100% - 2 * var(--option-gap)) / 3)), 1fr)
+  );
+  gap: var(--option-gap);
 }
 
 .option-card {
@@ -122,12 +128,26 @@ mat-stepper {
 .option-top {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
+  gap: 8px;
   margin-bottom: 8px;
 
   mat-radio-button {
-    margin: -8px -8px 0 0;
+    margin: -8px -8px 0 auto;
   }
+}
+
+// The recommended choice carries a badge and a primary outline before it is picked
+.recommended-badge {
+  align-self: center;
+  padding: 2px 10px;
+  border-radius: var(--mat-sys-corner-full);
+  background: var(--mat-sys-primary-container);
+  font: var(--mat-sys-label-medium);
+  color: var(--mat-sys-on-primary-container);
+}
+
+.option-card.recommended:not(.selected) {
+  border-color: color-mix(in srgb, var(--mat-sys-primary) 50%, var(--mat-sys-outline-variant));
 }
 
 // The option's icon on a tonal square

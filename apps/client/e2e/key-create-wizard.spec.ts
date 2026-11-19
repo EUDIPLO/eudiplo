@@ -173,7 +173,7 @@ test.describe('key creation wizard signing algorithm', () => {
     const description = `E2E ES384 ${randomBytes(4).toString('hex')}`;
     await configure(
       page,
-      ['Credential Signing (Attestation)', 'Create Key Chain (Recommended)'],
+      ['Credential Signing (Attestation)', 'Key Chain with Root CA'],
       description
     );
 
@@ -218,7 +218,7 @@ test.describe('key creation wizard status list keys', () => {
 
   test('creates a rotating status list key chain', async ({ page, request }) => {
     const description = `E2E status list ${randomBytes(4).toString('hex')}`;
-    await configure(page, ['Status List Signing', 'Create Key Chain (Recommended)'], description);
+    await configure(page, ['Status List Signing', 'Key Chain with Root CA'], description);
 
     await expect(page.getByRole('switch', { name: 'Enable automatic key rotation' })).toBeChecked();
     await page.getByRole('spinbutton', { name: 'Rotation Interval (days)' }).fill('20');

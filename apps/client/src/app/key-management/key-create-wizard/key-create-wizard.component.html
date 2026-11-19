@@ -110,6 +110,7 @@
                 <!-- The whole tile is the radio's label; the radio is named by the option title -->
                 <label
                   class="option-card"
+                  [class.recommended]="option.recommended"
                   [class.selected]="selectedKeyChainType === option.value"
                   [for]="'chain-type-' + option.value + '-input'"
                 >
@@ -117,11 +118,21 @@
                     <span class="option-icon" aria-hidden="true"
                       ><mat-icon>{{ option.icon }}</mat-icon></span
                     >
+                    @if (option.recommended) {
+                      <span class="recommended-badge" [id]="'chain-type-' + option.value + '-badge'"
+                        >Recommended</span
+                      >
+                    }
                     <mat-radio-button
                       [id]="'chain-type-' + option.value"
                       [value]="option.value"
                       [aria-labelledby]="'chain-type-' + option.value + '-label'"
-                      [aria-describedby]="'chain-type-' + option.value + '-description'"
+                      [aria-describedby]="
+                        (option.recommended ? 'chain-type-' + option.value + '-badge ' : '') +
+                        'chain-type-' +
+                        option.value +
+                        '-description'
+                      "
                     />
                   </span>
                   <span class="option-label" [id]="'chain-type-' + option.value + '-label'">{{

@@ -59,6 +59,24 @@ describe('KeyCreateWizardComponent', () => {
     ]);
   });
 
+  it('marks only the key chain with root CA as recommended, also for screen readers', async () => {
+    const component = await create(['keys:manage']);
+    component.usageForm.patchValue({ usage: 'attestation' });
+    fixture.detectChanges();
+
+    const element: HTMLElement = fixture.nativeElement;
+    const described = (value: string) =>
+      (element.querySelector(`#chain-type-${value}-input`)!.getAttribute('aria-describedby') ?? '')
+        .split(' ')
+        .map((id) => element.querySelector(`#${id}`)?.textContent?.trim());
+    expect(described('internalChain')).toEqual([
+      'Recommended',
+      'Create a key chain with embedded root CA and a signing key under it.',
+    ]);
+    expect(described('standalone')).toEqual(['Create a self-signed standalone key.']);
+    expect(element.querySelectorAll('.recommended-badge')).toHaveLength(1);
+  });
+
   it('keeps the user in the wizard while the key is created', async () => {
     const component = await create(['keys:manage']);
     component.usageForm.patchValue({ usage: 'access' });
@@ -531,7 +549,7 @@ describe('KeyCreateWizardComponent internal chains', () => {
     expect(offered).toEqual(['attestation', 'statusList']);
   });
 
-  it('starts a status list key on Create Key Chain with rotation', () => {
+  it('starts a status list key on Key Chain with Root CA with rotation', () => {
     const component = TestBed.runInInjectionContext(
       () =>
         new KeyCreateWizardComponent(

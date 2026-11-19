@@ -163,10 +163,11 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
   keyChainTypeOptions = [
     {
       value: 'internalChain' as KeyChainTypeSelection,
-      label: 'Create Key Chain (Recommended)',
+      label: 'Key Chain with Root CA',
+      recommended: true,
       icon: 'account_tree',
       description: 'Create a key chain with embedded root CA and a signing key under it.',
-      hint: 'Recommended for production. Verifiers trust its root CA, which stays the same when the signing key rotates.',
+      hint: 'Suited for production. Verifiers trust its root CA, which stays the same when the signing key rotates.',
       features: [
         'Optional rotation (on by default)',
         'Embedded root CA',
