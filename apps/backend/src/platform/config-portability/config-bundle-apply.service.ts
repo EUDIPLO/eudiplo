@@ -155,22 +155,20 @@ export class ConfigBundleApplyService {
     ): Promise<void> {
         const checks = plan.items
             .filter((item) => item.kind === "Client")
-            .map((item) => {
+            .map(async (item): Promise<void> => {
                 if (item.action === "update" || item.action === "delete") {
-                    return this.clientAccess.assertMayManage(
+                    await this.clientAccess.assertMayManage(
+                        callerRoles,
+                        tenantId,
+                        item.id,
+                    );
+                } else if (item.action === "create") {
+                    await this.clientAccess.assertMayCreate(
                         callerRoles,
                         tenantId,
                         item.id,
                     );
                 }
-                if (item.action === "create") {
-                    return this.clientAccess.assertMayCreate(
-                        callerRoles,
-                        tenantId,
-                        item.id,
-                    );
-                }
-                return undefined;
             });
         // All checks run; the refusal reported is the first in plan order.
         const refused = (await Promise.allSettled(checks)).find(
