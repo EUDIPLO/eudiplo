@@ -315,6 +315,9 @@ export class CredentialConfigCreateComponent implements OnInit {
   private publicUrl: string | null = null;
   private tenantId: string | null = null;
 
+  /** Takes the focus after a successful Retry, which removed the focused Retry button. */
+  @ViewChild('pageHeading', { read: ElementRef })
+  private readonly pageHeading?: ElementRef<HTMLElement>;
   // Where focus goes when the row holding it is removed or moved, in the order of the rows.
   @ViewChildren('claimHeader', { read: ElementRef })
   private readonly claimHeaders?: QueryList<ElementRef<HTMLElement>>;
@@ -486,6 +489,7 @@ export class CredentialConfigCreateComponent implements OnInit {
   /** Loads the configuration to edit; on failure the form stays hidden behind a retry. */
   loadConfigForEdit(): void {
     const id = this.route.snapshot.params['id'];
+    const retrying = this.loadError !== '';
     this.loadingConfig = true;
     this.loadError = '';
     this.credentialConfigService
@@ -502,6 +506,10 @@ export class CredentialConfigCreateComponent implements OnInit {
 
           this.patchFormFromConfig(config);
           this.form.get('id')?.disable();
+          // The retry removed the error card with its focused Retry button.
+          if (retrying) {
+            focusAfterRenderIfLost(this.injector, () => this.pageHeading?.nativeElement);
+          }
         },
         (error) => {
           console.error('Error loading credential configuration:', error);

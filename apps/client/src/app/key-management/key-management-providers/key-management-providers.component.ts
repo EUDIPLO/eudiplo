@@ -68,6 +68,13 @@ export class KeyManagementProvidersComponent implements OnInit {
   rows: ProviderRow[] = [];
   tenantConfig: KmsConfigDto = { providers: [] };
   hasTenantConfig = false;
+  /**
+   * Whether `tenantConfig` holds the stored tenant configuration. Until then it is an empty
+   * placeholder, and applying it in the editor would replace the stored providers.
+   */
+  tenantConfigLoaded = false;
+  /** Whether the provider list and health loaded; the tenant configuration loads after them. */
+  private providersLoaded = false;
 
   constructor(
     private readonly keyChainService: KeyChainService,
@@ -92,8 +99,28 @@ export class KeyManagementProvidersComponent implements OnInit {
     await this.loadProviders();
   }
 
+  /**
+   * Why the tenant configuration editor cannot be opened right now, or '' when it can. The
+   * button stays focusable with `disabledInteractive` and shows this as its tooltip. Unlike
+   * `jsonViewUnavailableReason` in `common/json-view`, a running save comes first, since a save
+   * reloads the providers, and a failed load names the request that failed.
+   */
+  get tenantConfigUnavailableReason(): string {
+    if (this.isSavingConfig) return 'Wait until the tenant KMS configuration has been saved';
+    if (this.isLoading) return 'Wait until the tenant KMS configuration has loaded';
+    if (!this.providersLoaded) {
+      return 'The KMS providers could not be loaded. Refresh the providers to try again';
+    }
+    if (!this.tenantConfigLoaded) {
+      return 'The tenant KMS configuration could not be loaded. Refresh the providers to try again';
+    }
+    return '';
+  }
+
   private async loadProviders(): Promise<void> {
     this.isLoading = true;
+    this.tenantConfigLoaded = false;
+    this.providersLoaded = false;
     try {
       const [providersRes, healthRes] = await Promise.all([
         this.keyChainService.getProviders(),
@@ -109,25 +136,26 @@ export class KeyManagementProvidersComponent implements OnInit {
       this.rows = providersRes.providers.map((provider) =>
         this.toRow(provider, healthByProvider.get(provider.name))
       );
+      this.providersLoaded = true;
 
       if (this.canManageTenantConfig) {
         await this.loadTenantConfigEditor();
       }
     } catch (error) {
-      console.error('Failed to load KMS providers:', error);
-      openErrorSnackBar(
-        this.snackBar,
-        getApiErrorMessage(error, 'Failed to load KMS providers'),
-        'Dismiss'
-      );
+      // The providers can load while the tenant configuration that follows them fails.
+      const failed = this.providersLoaded
+        ? 'Failed to load the tenant KMS configuration'
+        : 'Failed to load KMS providers';
+      console.error(`${failed}:`, error);
+      openErrorSnackBar(this.snackBar, getApiErrorMessage(error, failed), 'Dismiss');
     } finally {
       this.isLoading = false;
     }
   }
 
   async openTenantConfigEditor(): Promise<void> {
-    // `disabledInteractive` keeps the button clickable while a save runs.
-    if (this.isSavingConfig) return;
+    // `disabledInteractive` keeps the button clickable while it cannot be used.
+    if (this.tenantConfigUnavailableReason) return;
     const dialogRef = this.dialog.open(JsonViewDialogComponent, {
       data: {
         title: 'Tenant KMS Configuration JSON',
@@ -198,6 +226,7 @@ export class KeyManagementProvidersComponent implements OnInit {
     const config = await this.keyChainService.getTenantKmsConfig();
     this.hasTenantConfig = !!config.tenantConfig;
     this.tenantConfig = this.editableConfig(config.tenantConfig);
+    this.tenantConfigLoaded = true;
   }
 
   /**

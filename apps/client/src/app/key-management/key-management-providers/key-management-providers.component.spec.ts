@@ -120,6 +120,24 @@ describe('KeyManagementProvidersComponent tenant KMS configuration', () => {
     );
   });
 
+  it('names the request that failed when the page loads', async () => {
+    roles = ['tenant:admin'];
+    keyChainService['getTenantKmsConfig'].mockRejectedValue({
+      statusCode: 500,
+      message: 'offline',
+    });
+    const component = create();
+
+    await component.refresh();
+    expect(snackBar.open.mock.lastCall?.[0]).toBe(
+      'Failed to load the tenant KMS configuration: offline'
+    );
+
+    keyChainService['getProviders'].mockRejectedValue({ statusCode: 500, message: 'offline' });
+    await component.refresh();
+    expect(snackBar.open.mock.lastCall?.[0]).toBe('Failed to load KMS providers: offline');
+  });
+
   it('edits only the tenant providers, never the global ones', async () => {
     roles = ['tenant:admin'];
     keyChainService['getTenantKmsConfig'].mockResolvedValue({
@@ -135,9 +153,7 @@ describe('KeyManagementProvidersComponent tenant KMS configuration', () => {
     expect(component.tenantConfig).toEqual({ providers: [] });
   });
 
-  it('keeps the tenant config button focusable while the configuration saves', async () => {
-    roles = ['tenant:admin'];
-    keyChainService['updateTenantKmsConfig'].mockReturnValue(new Promise(() => undefined));
+  function render() {
     TestBed.configureTestingModule({
       imports: [KeyManagementProvidersComponent],
       providers: [
@@ -163,10 +179,28 @@ describe('KeyManagementProvidersComponent tenant KMS configuration', () => {
     const button = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
       'button[aria-label="Show tenant config JSON"]'
     )!;
-    // Clicks are held back until the ownership lookup of the managed resource has answered.
+    return { fixture, openDialog, button };
+  }
+
+  /** Clicks are held back until the ownership lookup of the managed resource has answered. */
+  async function ownershipAnswered(
+    fixture: ReturnType<typeof render>['fixture'],
+    button: HTMLButtonElement
+  ): Promise<void> {
     await vi.waitFor(() => {
       fixture.detectChanges();
       expect(button.getAttribute('aria-busy')).toBeNull();
+    });
+  }
+
+  it('keeps the tenant config button focusable while the configuration saves', async () => {
+    roles = ['tenant:admin'];
+    keyChainService['updateTenantKmsConfig'].mockReturnValue(new Promise(() => undefined));
+    const { fixture, openDialog, button } = render();
+    await ownershipAnswered(fixture, button);
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(fixture.componentInstance.tenantConfigLoaded).toBe(true);
     });
     expectAvailable(fixture, button, 'Show tenant config JSON');
 
@@ -177,6 +211,101 @@ describe('KeyManagementProvidersComponent tenant KMS configuration', () => {
 
     expect(openDialog).toHaveBeenCalledOnce();
     expect(keyChainService['updateTenantKmsConfig']).toHaveBeenCalledOnce();
-    expectUnavailable(fixture, button, 'Saving the tenant KMS configuration…');
+    expectUnavailable(fixture, button, 'Wait until the tenant KMS configuration has been saved');
+  });
+
+  it('opens no editor while the tenant configuration loads', async () => {
+    roles = ['tenant:admin'];
+    keyChainService['getTenantKmsConfig'].mockReturnValue(new Promise(() => undefined));
+    const { fixture, openDialog, button } = render();
+    await ownershipAnswered(fixture, button);
+
+    expectUnavailable(fixture, button, 'Wait until the tenant KMS configuration has loaded');
+    button.click();
+    expect(openDialog).not.toHaveBeenCalled();
+  });
+
+  it('opens no editor, and so saves no empty provider list, after a failed load', async () => {
+    roles = ['tenant:admin'];
+    keyChainService['getTenantKmsConfig'].mockRejectedValue(new Error('offline'));
+    const { fixture, openDialog, button } = render();
+    await ownershipAnswered(fixture, button);
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(fixture.componentInstance.isLoading).toBe(false);
+    });
+    fixture.detectChanges();
+
+    expectUnavailable(
+      fixture,
+      button,
+      'The tenant KMS configuration could not be loaded. Refresh the providers to try again'
+    );
+    // Whether tenant providers are set is unknown, so the card does not claim either.
+    expect(fixture.nativeElement.querySelector('.tenant-config .badge')).toBeNull();
+    button.click();
+    expect(openDialog).not.toHaveBeenCalled();
+    expect(keyChainService['updateTenantKmsConfig']).not.toHaveBeenCalled();
+
+    keyChainService['getTenantKmsConfig'].mockResolvedValue({
+      tenantConfig: { providers: [{ id: 'vault', type: 'vault' }] },
+      effectiveConfig: { providers: [] },
+    });
+    await fixture.componentInstance.refresh();
+    fixture.detectChanges();
+
+    expectAvailable(fixture, button, 'Show tenant config JSON');
+    expect(fixture.nativeElement.querySelector('.tenant-config .badge')?.textContent).toContain(
+      'Tenant providers set'
+    );
+    button.click();
+    expect(openDialog).toHaveBeenCalledOnce();
+    expect(openDialog.mock.lastCall?.[1]?.data).toMatchObject({
+      jsonData: { providers: [{ id: 'vault', type: 'vault' }] },
+    });
+  });
+
+  it('names the provider list when that fails before the tenant configuration loads', async () => {
+    roles = ['tenant:admin'];
+    keyChainService['getProviders'].mockRejectedValue(new Error('offline'));
+    const { fixture, openDialog, button } = render();
+    await ownershipAnswered(fixture, button);
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(fixture.componentInstance.isLoading).toBe(false);
+    });
+    fixture.detectChanges();
+
+    expect(keyChainService['getTenantKmsConfig']).not.toHaveBeenCalled();
+    expectUnavailable(
+      fixture,
+      button,
+      'The KMS providers could not be loaded. Refresh the providers to try again'
+    );
+    button.click();
+    expect(openDialog).not.toHaveBeenCalled();
+  });
+
+  it('locks the editor again when a refresh fails after a successful load', async () => {
+    roles = ['tenant:admin'];
+    const { fixture, openDialog, button } = render();
+    await ownershipAnswered(fixture, button);
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(fixture.componentInstance.tenantConfigLoaded).toBe(true);
+    });
+    expectAvailable(fixture, button, 'Show tenant config JSON');
+
+    keyChainService['getTenantKmsConfig'].mockRejectedValue(new Error('offline'));
+    await fixture.componentInstance.refresh();
+    fixture.detectChanges();
+
+    expectUnavailable(
+      fixture,
+      button,
+      'The tenant KMS configuration could not be loaded. Refresh the providers to try again'
+    );
+    button.click();
+    expect(openDialog).not.toHaveBeenCalled();
   });
 });

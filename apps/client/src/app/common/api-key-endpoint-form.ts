@@ -17,6 +17,7 @@ import {
   clearAuthFieldIssuesOnTypeChange,
   toAuthFormValue,
 } from './auth-display.util';
+import { focusAfterRenderIfLost } from './focus-if-lost.util';
 import { jsonViewUnavailableReason } from './json-view';
 
 /** The fields of an endpoint that is called with an optional API key. */
@@ -73,6 +74,9 @@ export abstract class ApiKeyEndpointFormComponent implements OnInit {
   /** Holds the fields; Save focuses the first invalid one. */
   @ViewChild('formElement', { read: ElementRef })
   private readonly formElement?: ElementRef<HTMLFormElement>;
+  /** Takes the focus after a successful Retry, which removed the focused Retry button. */
+  @ViewChild('pageHeading', { read: ElementRef })
+  private readonly pageHeading?: ElementRef<HTMLElement>;
   private readonly injector = inject(Injector);
 
   constructor(
@@ -98,6 +102,7 @@ export abstract class ApiKeyEndpointFormComponent implements OnInit {
   }
 
   private load(id: string): void {
+    const retrying = this.loadError !== '';
     this.loading = true;
     this.loadError = '';
     this.service
@@ -112,6 +117,10 @@ export abstract class ApiKeyEndpointFormComponent implements OnInit {
             ...toAuthFormValue(endpoint.auth as Parameters<typeof toAuthFormValue>[0]),
           });
           this.form.controls.id.disable();
+          // The retry removed the error card with its focused Retry button.
+          if (retrying) {
+            focusAfterRenderIfLost(this.injector, () => this.pageHeading?.nativeElement);
+          }
         },
         (error) => {
           console.error('Load error:', error);

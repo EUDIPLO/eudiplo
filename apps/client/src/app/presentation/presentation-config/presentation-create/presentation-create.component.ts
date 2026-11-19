@@ -14,7 +14,7 @@ import {
   ViewChild,
   ViewChildren,
 } from '@angular/core';
-import { focusRowAfterRemoval } from '../../../common/focus-if-lost.util';
+import { focusAfterRenderIfLost, focusRowAfterRemoval } from '../../../common/focus-if-lost.util';
 import { httpUrlValidator } from '../../../utils/http-url-validator';
 import {
   AbstractControl,
@@ -180,6 +180,9 @@ export class PresentationCreateComponent implements OnInit {
   registrationCertExpanded = false;
 
   private readonly injector = inject(Injector);
+  /** Takes the focus after a successful Retry, which removed the focused Retry button. */
+  @ViewChild('pageHeading', { read: ElementRef })
+  private readonly pageHeading?: ElementRef<HTMLElement>;
   /** The purpose text of each row, which takes focus after a removal. */
   @ViewChildren('purposeContent', { read: ElementRef })
   private readonly purposeContents?: QueryList<ElementRef<HTMLElement>>;
@@ -266,6 +269,7 @@ export class PresentationCreateComponent implements OnInit {
 
   /** Loads the configuration to edit or copy; on failure the form stays hidden behind a retry. */
   loadConfigForEdit(): void {
+    const retrying = this.loadError !== '';
     this.loadingConfig = true;
     this.loadError = '';
     this.presentationService
@@ -315,6 +319,10 @@ export class PresentationCreateComponent implements OnInit {
             this.form.patchValue(formData);
             this.form.get('id')?.disable();
             this.create = false;
+          }
+          // The retry removed the error card with its focused Retry button.
+          if (retrying) {
+            focusAfterRenderIfLost(this.injector, () => this.pageHeading?.nativeElement);
           }
         },
         (error) => {

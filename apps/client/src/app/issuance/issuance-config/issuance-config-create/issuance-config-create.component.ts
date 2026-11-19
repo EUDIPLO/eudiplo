@@ -72,6 +72,7 @@ import { ApiService } from '../../../core';
 import { entityIdUrl } from '../../../utils/public-url';
 import { httpUrlValidator } from '../../../utils/http-url-validator';
 import { focusAfterRenderIfLost, focusRowAfterRemoval } from '../../../common/focus-if-lost.util';
+import { jsonViewUnavailableReason } from '../../../common/json-view';
 import { LoadErrorComponent } from '../../../common/load-error.component';
 import { fromFormQueryParams } from '../../../common/return-to-form';
 import { FederationTrustAnchorSelectComponent } from '../../../federation-trust-anchor/federation-trust-anchor-select/federation-trust-anchor-select.component';
@@ -1625,14 +1626,13 @@ export class IssuanceConfigCreateComponent implements OnInit {
     });
   }
 
-  /**
-   * Why JSON View cannot be opened right now, or '' when it can. It edits the loaded settings,
-   * so it waits for them; the button stays focusable and shows this as its tooltip.
-   */
+  /** Why JSON View cannot be opened right now, or '' when it can; see `jsonViewUnavailableReason`. */
   get jsonViewUnavailableReason(): string {
-    if (this.loadingConfig) return 'Wait until the issuer settings have loaded';
-    if (this.loadError) return 'Retry loading the issuer settings before opening JSON View';
-    return '';
+    return jsonViewUnavailableReason(
+      { loading: this.loadingConfig, loadError: this.loadError, saving: this.loading },
+      'the issuer settings',
+      { plural: true }
+    );
   }
 
   /**
