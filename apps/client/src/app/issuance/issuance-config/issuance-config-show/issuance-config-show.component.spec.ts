@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { of } from 'rxjs';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 
 import { IssuanceConfigShowComponent } from './issuance-config-show.component';
 import { renderDownloadButton } from '../../../config-portability/config-document.testing';
@@ -51,6 +52,59 @@ describe('IssuanceConfigShowComponent', () => {
       'Disabled',
       '-',
     ]);
+  });
+});
+
+describe('IssuanceConfigShowComponent page', () => {
+  async function render(getConfig: ReturnType<typeof vi.fn>) {
+    await TestBed.configureTestingModule({
+      imports: [IssuanceConfigShowComponent],
+      providers: [provideRouter([]), { provide: IssuanceConfigService, useValue: { getConfig } }],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(IssuanceConfigShowComponent);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it('shows the settings under an h1 with Edit and the guided setup', async () => {
+    const fixture = await render(
+      vi.fn().mockResolvedValue({ display: [{ name: 'Example Issuer', locale: 'en' }] })
+    );
+    await vi.waitFor(() => expect(fixture.componentInstance.config).toBeTruthy());
+    fixture.detectChanges();
+    const page = fixture.nativeElement as HTMLElement;
+
+    expect(page.querySelector('h1')?.textContent?.trim()).toBe('Issuer Settings');
+    expect(page.querySelector('.hero-meta')?.textContent).toContain('Example Issuer');
+    expect(page.querySelector('.hero-meta')?.textContent).toContain('0 authorization servers');
+    const actions = [...page.querySelectorAll('.hero-actions a, .hero-actions button')].map(
+      (action) => action.textContent?.trim()
+    );
+    expect(actions).toEqual(
+      expect.arrayContaining(['edit Edit', 'Use guided setup', 'Configure a credential type'])
+    );
+  });
+
+  it('shows a spinner while loading and the reason with Retry when loading fails', async () => {
+    let fail: (error: unknown) => void = () => undefined;
+    const fixture = await render(
+      vi.fn(
+        () =>
+          new Promise((_, reject) => {
+            fail = reject;
+          })
+      )
+    );
+    const page = fixture.nativeElement as HTMLElement;
+    expect(page.querySelector('mat-spinner')?.getAttribute('aria-label')).toBe(
+      'Loading issuer settings'
+    );
+
+    fail({ statusCode: 403, message: 'Forbidden resource' });
+    await vi.waitFor(() => expect(fixture.componentInstance.loadError).not.toBe(''));
+    fixture.detectChanges();
+    expect(page.querySelector('app-load-error')?.textContent).toContain('Forbidden resource');
+    expect(page.querySelector('mat-spinner')).toBeNull();
   });
 });
 
@@ -245,6 +299,45 @@ describe('IssuanceConfigShowComponent EUDI Hub', () => {
     );
     component.ngOnInit();
     expect(component.selectedTab).toBe(IssuanceConfigShowComponent.REGISTRATION_CERTIFICATE_TAB);
+  });
+
+  it('colours the certificate status badge by how usable the certificate is', () => {
+    const { component } = create([]);
+    component.config = { registrationCertificate: { enabled: false } } as never;
+    expect(component.registrationCertificateBadgeClass).toBe('');
+    component.config = {
+      registrationCertificate: { enabled: true, jwt: jwt({ exp: 4_000_000_000 }) },
+    } as never;
+    expect(component.registrationCertificateBadgeClass).toBe('status-active');
+    component.config = {
+      registrationCertificate: { enabled: true, jwt: jwt({ nbf: 4_000_000_000 }) },
+    } as never;
+    expect(component.registrationCertificateBadgeClass).toBe('status-warning');
+    component.config = { registrationCertificate: { enabled: true } } as never;
+    expect(component.registrationCertificateBadgeClass).toBe('status-danger');
+  });
+
+  it.each([
+    ['expiring', { exp: Math.floor(Date.now() / 1000) + 24 * 60 * 60 }, 'status-warning'],
+    ['expired', { exp: Math.floor(Date.now() / 1000) - 60 }, 'status-danger'],
+  ])('colours an %s certificate status badge', (status, payload, badge) => {
+    const { component } = create([]);
+    component.config = {
+      registrationCertificate: { enabled: true, jwt: jwt(payload) },
+    } as never;
+
+    expect(component.registrationCertificateStatus).toBe(status);
+    expect(component.registrationCertificateBadgeClass).toBe(badge);
+  });
+
+  it('colours an undecodable certificate as invalid', () => {
+    const { component } = create([]);
+    component.config = {
+      registrationCertificate: { enabled: true, jwt: 'not-a-jwt' },
+    } as never;
+
+    expect(component.registrationCertificateStatus).toBe('invalid');
+    expect(component.registrationCertificateBadgeClass).toBe('status-danger');
   });
 
   it('reports an enabled registration certificate without JWT as missing', () => {

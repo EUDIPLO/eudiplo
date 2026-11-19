@@ -63,14 +63,17 @@ describe('StatusListEditComponent', () => {
 });
 
 describe('StatusListEditComponent Save', () => {
-  async function render(createList: ReturnType<typeof vi.fn>) {
+  async function render(
+    createList: ReturnType<typeof vi.fn>,
+    { listId = null, getList = vi.fn() }: { listId?: string | null; getList?: unknown } = {}
+  ) {
     TestBed.configureTestingModule({
       imports: [StatusListEditComponent],
       providers: [
         provideRouter([]),
-        { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => null } } } },
+        { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => listId } } } },
         { provide: MatSnackBar, useValue: { open: vi.fn() } },
-        { provide: StatusListManagementService, useValue: { createList } },
+        { provide: StatusListManagementService, useValue: { createList, getList } },
         {
           provide: CredentialConfigService,
           useValue: { loadConfigurations: vi.fn().mockResolvedValue([]) },
@@ -94,6 +97,71 @@ describe('StatusListEditComponent Save', () => {
   }
 
   afterEach(() => vi.restoreAllMocks());
+
+  it('returns to the list from the back link and Cancel, and marks a capacity preset as a change', async () => {
+    const { fixture } = await render(vi.fn());
+    const element = fixture.nativeElement as HTMLElement;
+
+    expect(element.querySelector('h1')?.textContent).toContain('Create Status List');
+    expect(element.querySelector('a.back-link')?.getAttribute('href')).toBe('/status-lists');
+    expect(element.querySelector('a.back-link')?.getAttribute('aria-label')).toBe(
+      'Back to Status Lists'
+    );
+    const cancel = [...element.querySelectorAll('.action-bar a')].find(
+      (link) => link.textContent?.trim() === 'Cancel'
+    );
+    expect(cancel?.getAttribute('href')).toBe('/status-lists');
+    // The section that showFieldsToFix names.
+    expect(element.querySelector('#status-list-settings-heading')?.textContent).toBe(
+      'Status List Settings'
+    );
+    expect(element.querySelector('.change-state')?.textContent?.trim()).toBe('');
+
+    [...element.querySelectorAll<HTMLButtonElement>('.presets button')]
+      .find((button) => button.textContent?.trim() === '100K')!
+      .click();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.form.value.capacity).toBe(100000);
+    expect(element.querySelector('.change-state')?.textContent?.trim()).toBe('Unsaved changes');
+  });
+
+  it('marks the chosen capacity preset as pressed', async () => {
+    const { fixture } = await render(vi.fn());
+    const element = fixture.nativeElement as HTMLElement;
+    const preset = (label: string) =>
+      [...element.querySelectorAll<HTMLButtonElement>('.presets button')].find(
+        (button) => button.textContent?.trim() === label
+      )!;
+    expect(preset('500K').getAttribute('aria-pressed')).toBe('false');
+
+    preset('500K').click();
+    fixture.detectChanges();
+
+    expect(preset('500K').getAttribute('aria-pressed')).toBe('true');
+    expect(preset('10K').getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('shows an existing status list in edit mode with its stats and no changes', async () => {
+    const getList = vi.fn().mockResolvedValue({
+      id: 'list-1',
+      tenantId: 'tenant',
+      capacity: 10000,
+      usedEntries: 2500,
+      availableEntries: 7500,
+      bits: 1,
+      uri: 'https://x/status/list-1',
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    });
+    const { fixture } = await render(vi.fn(), { listId: 'list-1', getList });
+    const element = fixture.nativeElement as HTMLElement;
+
+    expect(getList).toHaveBeenCalledWith('list-1');
+    expect(element.querySelector('h1')?.textContent).toContain('Edit Status List');
+    expect(element.querySelector('.stats dd')?.textContent?.trim()).toBe('10.0K');
+    expect(element.querySelector('.change-state')?.textContent?.trim()).toBe('No changes');
+  });
 
   it('waits while the status list is created: a second click sends nothing', async () => {
     const createList = vi.fn(() => new Promise(() => undefined));

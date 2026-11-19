@@ -96,6 +96,14 @@
     &.status-active {
       --tone: var(--eudiplo-success);
     }
+
+    &.status-warning {
+      --tone: var(--eudiplo-warning);
+    }
+
+    &.status-danger {
+      --tone: var(--eudiplo-danger);
+    }
   }
 
   .muted {
@@ -187,7 +195,8 @@
     align-items: center;
     gap: 2px;
 
-    .delete-action:not([disabled]) mat-icon {
+    // A delete that is locked, by a config file for example, is not shown in red
+    .delete-action:not([disabled]):not(.mat-mdc-button-disabled) mat-icon {
       color: var(--mat-sys-error);
     }
   }
@@ -245,6 +254,94 @@
     border-radius: var(--mat-sys-corner-full);
     background: var(--mat-sys-secondary-container);
     color: var(--mat-sys-on-secondary-container);
+  }
+}
+
+// Rows of a list table whose name links to the item and whose link covers the row, with an icon
+// before the name and the ID below it. Include at the top of the page's styles. Markup: table.linked;
+// .item-cell > .item-icon + .item-copy (a.item-link + small); the actions in .row-actions sit
+// above the link.
+@mixin linked-rows {
+  table.linked tr.mat-mdc-row:not(.no-match) {
+    position: relative;
+    cursor: pointer;
+
+    .row-actions {
+      position: relative;
+      z-index: 1;
+    }
+
+    &:hover .item-link {
+      color: var(--mat-sys-primary);
+    }
+  }
+
+  .item-link {
+    font: var(--mat-sys-title-small);
+    color: var(--mat-sys-on-surface);
+    text-decoration: none;
+    overflow-wrap: anywhere;
+    transition: color 120ms ease;
+
+    &::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--mat-sys-primary);
+      outline-offset: 2px;
+      border-radius: var(--mat-sys-corner-extra-small);
+    }
+  }
+
+  .item-cell {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 0;
+  }
+
+  .item-icon {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--mat-sys-corner-full);
+    background: color-mix(in srgb, var(--mat-sys-primary) 14%, var(--mat-sys-surface));
+    color: var(--mat-sys-primary);
+
+    mat-icon {
+      width: 20px;
+      height: 20px;
+      font-size: 20px;
+    }
+  }
+
+  .item-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+
+    small {
+      font: var(--mat-sys-body-small);
+      color: var(--mat-sys-on-surface-variant);
+      overflow-wrap: anywhere;
+    }
+
+    code {
+      font-size: 12px;
+    }
+  }
+
+  // Narrow pages: the icon gives its room to the name
+  @container (max-width: 600px) {
+    .item-icon {
+      display: none;
+    }
   }
 }
 
@@ -469,6 +566,77 @@
   }
 }
 
+// Details of a resource in the cards of a detail page: label left, value right, and the icon
+// actions beside the hero's Edit button. Markup: dl.details > div > dt + dd; .icon-actions with
+// icon buttons, a .delete-action among them; code.id-badge for the ID in the hero.
+@mixin details-list {
+  // More specific than Material's own :last-child padding rule of the card content
+  mat-card mat-card-content {
+    padding: 0 20px 20px;
+  }
+
+  .details {
+    margin: 0;
+
+    > div {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 4px 16px;
+      padding: 10px 0;
+
+      & + div {
+        border-top: 1px solid var(--mat-sys-outline-variant);
+      }
+    }
+
+    dt {
+      font: var(--mat-sys-body-medium);
+      color: var(--mat-sys-on-surface-variant);
+    }
+
+    dd {
+      display: inline-flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      min-width: 0;
+      margin: 0;
+      font: var(--mat-sys-body-medium);
+      font-weight: 500;
+      color: var(--mat-sys-on-surface);
+      text-align: right;
+      overflow-wrap: anywhere;
+
+      code {
+        font-size: 13px;
+        font-weight: 400;
+      }
+    }
+  }
+
+  // The ID of the resource in the hero, as a quiet chip
+  .id-badge {
+    padding: 4px 12px;
+    border: 1px solid var(--mat-sys-outline-variant);
+    border-radius: var(--mat-sys-corner-small);
+    background: var(--mat-sys-surface);
+    font-size: 13px;
+    color: var(--mat-sys-on-surface);
+    overflow-wrap: anywhere;
+  }
+
+  .icon-actions {
+    display: inline-flex;
+    gap: 2px;
+
+    .delete-action:not([disabled]):not(.mat-mdc-button-disabled) mat-icon {
+      color: var(--mat-sys-error);
+    }
+  }
+}
+
 // A resource's roles grouped by area, as on the client and user pages. Markup:
 // section.role-group > h3 (mat-icon + title) + ul.role-list > li.role-badge, and an a.roles-link
 // to the role reference.
@@ -666,6 +834,64 @@
       .change-state {
         flex-basis: 100%;
       }
+    }
+  }
+}
+
+// Row and column helpers for the large editors (credential configuration, Issuer Settings, offer)
+// in place of the former fxLayout attributes: .fx-row, .fx-col, .fx-wrap, .flex-1, .justify-*,
+// .align-*, .gap-N and .full-width.
+@mixin layout-utilities {
+  .fx-row {
+    display: flex;
+    flex-direction: row;
+  }
+
+  .fx-col {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .fx-wrap {
+    flex-wrap: wrap;
+  }
+
+  .flex-1 {
+    flex: 1 1 0%;
+    min-width: 0;
+  }
+
+  .full-width {
+    width: 100%;
+  }
+
+  .justify-start {
+    justify-content: flex-start;
+  }
+
+  .justify-center {
+    justify-content: center;
+  }
+
+  .justify-end {
+    justify-content: flex-end;
+  }
+
+  .justify-space-between {
+    justify-content: space-between;
+  }
+
+  .align-start {
+    align-items: flex-start;
+  }
+
+  .align-center {
+    align-items: center;
+  }
+
+  @each $gap in (8, 12, 16, 24, 32) {
+    .gap-#{$gap} {
+      gap: #{$gap}px;
     }
   }
 }

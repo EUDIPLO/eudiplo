@@ -1,169 +1,137 @@
-<div fxLayout="column" fxFlex fxLayoutGap="24px">
+<div class="page form-page">
+  <!-- Create and edit both return to the list, as Cancel does -->
+  <a class="back-link" matButton routerLink="/status-lists" aria-label="Back to Status Lists">
+    <mat-icon>arrow_back</mat-icon>
+    Status Lists
+  </a>
+
   @if (isEditMode && listId) {
     <app-config-ownership-notice kind="StatusList" [resourceId]="listId" />
   }
-  <!-- Header -->
-  <div fxLayout="row" fxLayoutAlign="space-between center">
-    <h2>{{ isEditMode ? 'Edit' : 'Create' }} Status List</h2>
-    <button matIconButton routerLink="/status-lists" matTooltip="Back" aria-label="Back">
-      <mat-icon>arrow_back</mat-icon>
-    </button>
-  </div>
+
+  <header class="page-header">
+    <div class="heading">
+      <span class="form-avatar" aria-hidden="true"><mat-icon>format_list_bulleted</mat-icon></span>
+      <div>
+        <h1>{{ isEditMode ? 'Edit' : 'Create' }} Status List</h1>
+        <p>A token status list in which EUDIPLO tracks the status of issued credentials.</p>
+      </div>
+    </div>
+  </header>
 
   @if (isLoading) {
-    <div class="loading-container" fxLayout="row" fxLayoutAlign="center center">
-      <mat-spinner diameter="40"></mat-spinner>
-    </div>
+    <p class="loading-state"><output>Loading status list…</output></p>
   } @else {
-    <form
-      #formElement
-      [formGroup]="form"
-      (ngSubmit)="onSubmit()"
-      fxLayout="column"
-      fxLayoutGap="24px"
-    >
-      <!-- Status List Info Card (Edit mode only) -->
+    <form #formElement [formGroup]="form" (ngSubmit)="onSubmit()">
+      <!-- Each section: what it is for on the left, its fields on the right -->
       @if (isEditMode && statusList) {
-        <mat-card>
-          <mat-card-header>
-            <mat-card-title>
-              <mat-icon class="title-icon">info</mat-icon>
-              Status List Information
-            </mat-card-title>
-            <mat-card-subtitle>Read-only details about this status list</mat-card-subtitle>
-          </mat-card-header>
+        <section class="form-section" aria-labelledby="status-list-info-heading">
+          <div class="section-intro">
+            <h2 id="status-list-info-heading">Status List Information</h2>
+            <p>
+              Read-only details about this status list. Bits and capacity are fixed when the list is
+              created.
+            </p>
+          </div>
+          <mat-card appearance="outlined">
+            <mat-card-content class="field-stack">
+              <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-label>ID</mat-label>
+                <input matInput [value]="statusList.id" readonly title="Status List ID" />
+                <mat-icon matSuffix aria-hidden="true">tag</mat-icon>
+              </mat-form-field>
 
-          <mat-card-content>
-            <div fxLayout="column" fxLayoutGap="16px">
-              <!-- ID and URI -->
-              <div fxLayout="row" fxLayoutGap="16px" fxLayout.lt-md="column">
-                <mat-form-field appearance="outline" fxFlex>
-                  <mat-label>ID</mat-label>
-                  <input matInput [value]="statusList.id" readonly title="Status List ID" />
-                  <mat-icon matSuffix>tag</mat-icon>
-                </mat-form-field>
+              <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-label>URI</mat-label>
+                <input matInput [value]="statusList.uri" readonly title="Status List URI" />
+                <button
+                  type="button"
+                  matSuffix
+                  matIconButton
+                  (click)="copyUri()"
+                  matTooltip="Copy URI"
+                  aria-label="Copy URI"
+                >
+                  <mat-icon>content_copy</mat-icon>
+                </button>
+              </mat-form-field>
 
-                <mat-form-field appearance="outline" fxFlex>
-                  <mat-label>URI</mat-label>
-                  <input matInput [value]="statusList.uri" readonly title="Status List URI" />
-                  <button
-                    type="button"
-                    matSuffix
-                    matIconButton
-                    (click)="copyUri()"
-                    matTooltip="Copy URI"
-                    aria-label="Copy URI"
-                  >
-                    <mat-icon>content_copy</mat-icon>
-                  </button>
-                </mat-form-field>
-              </div>
-
-              <!-- Usage Stats -->
-              <div class="stats-section">
-                <div fxLayout="row" fxLayoutGap="24px" fxLayout.lt-sm="column">
-                  <div class="stat-item" fxFlex>
-                    <span class="stat-label">Capacity</span>
-                    <span class="stat-value">{{ formatCapacity(statusList.capacity) }}</span>
-                  </div>
-                  <div class="stat-item" fxFlex>
-                    <span class="stat-label">Used</span>
-                    <span class="stat-value">{{ statusList.usedEntries | number }}</span>
-                  </div>
-                  <div class="stat-item" fxFlex>
-                    <span class="stat-label">Available</span>
-                    <span class="stat-value">{{ statusList.availableEntries | number }}</span>
-                  </div>
-                  <div class="stat-item" fxFlex>
-                    <span class="stat-label">Bits per Status</span>
-                    <span class="stat-value">{{ statusList.bits }}</span>
-                  </div>
+              <dl class="stats">
+                <div>
+                  <dt>Capacity</dt>
+                  <dd>{{ formatCapacity(statusList.capacity) }}</dd>
                 </div>
-
-                <div class="usage-bar">
-                  <div fxLayout="row" fxLayoutAlign="space-between center">
-                    <span class="usage-label">Usage</span>
-                    <span class="usage-percentage"
-                      >{{ getUsagePercentage() | number: '1.0-1' }}%</span
-                    >
-                  </div>
-                  <mat-progress-bar
-                    [value]="getUsagePercentage()"
-                    [color]="getUsageColor()"
-                  ></mat-progress-bar>
+                <div>
+                  <dt>Used</dt>
+                  <dd>{{ statusList.usedEntries | number }}</dd>
                 </div>
-              </div>
-
-              <!-- JWT Status -->
-              <div class="jwt-status-section">
-                <span class="stat-label">JWT Status</span>
-                <div fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px">
-                  @switch (getExpirationStatus()) {
-                    @case ('valid') {
-                      <mat-chip class="status-valid">
-                        <mat-icon>check_circle</mat-icon>
-                        {{ getExpirationLabel() }}
-                      </mat-chip>
-                      <span class="muted">
-                        Expires {{ statusList.expiresAt | date: 'medium' }}
-                      </span>
-                    }
-                    @case ('expiring') {
-                      <mat-chip class="status-expiring">
-                        <mat-icon>schedule</mat-icon>
-                        {{ getExpirationLabel() }}
-                      </mat-chip>
-                      <span class="muted">
-                        Expires {{ statusList.expiresAt | date: 'medium' }}
-                      </span>
-                    }
-                    @case ('expired') {
-                      <mat-chip class="status-expired">
-                        <mat-icon>refresh</mat-icon>
-                        {{ getExpirationLabel() }}
-                      </mat-chip>
-                      <span class="muted">Will regenerate on next request</span>
-                    }
-                    @default {
-                      <span class="muted">JWT not generated yet</span>
-                    }
-                  }
+                <div>
+                  <dt>Available</dt>
+                  <dd>{{ statusList.availableEntries | number }}</dd>
                 </div>
+                <div>
+                  <dt>Bits per Status</dt>
+                  <dd>{{ statusList.bits }}</dd>
+                </div>
+              </dl>
+
+              <div class="usage-bar">
+                <div class="usage-numbers">
+                  <span class="label">Usage</span>
+                  <span>{{ getUsagePercentage() | number: '1.0-1' }}%</span>
+                </div>
+                <mat-progress-bar
+                  [value]="getUsagePercentage()"
+                  [color]="getUsageColor()"
+                  aria-label="Usage of the status list"
+                ></mat-progress-bar>
               </div>
 
-              <!-- Timestamps -->
-              <div fxLayout="row" fxLayoutGap="16px" fxLayout.lt-md="column">
-                <mat-form-field appearance="outline" fxFlex>
-                  <mat-label>Created</mat-label>
-                  <input
-                    matInput
-                    [value]="statusList.createdAt | date: 'medium'"
-                    readonly
-                    title="Creation date"
-                  />
-                  <mat-icon matSuffix>calendar_today</mat-icon>
-                </mat-form-field>
-              </div>
-            </div>
-          </mat-card-content>
-        </mat-card>
+              <dl class="details">
+                <div>
+                  <dt>JWT Status</dt>
+                  <dd>
+                    @switch (getExpirationStatus()) {
+                      @case ('valid') {
+                        <span class="badge status-active">{{ getExpirationLabel() }}</span>
+                        <span class="muted"
+                          >Expires {{ statusList.expiresAt | date: 'medium' }}</span
+                        >
+                      }
+                      @case ('expiring') {
+                        <span class="badge status-warning">{{ getExpirationLabel() }}</span>
+                        <span class="muted"
+                          >Expires {{ statusList.expiresAt | date: 'medium' }}</span
+                        >
+                      }
+                      @case ('expired') {
+                        <span class="badge status-danger">{{ getExpirationLabel() }}</span>
+                        <span class="muted">Will regenerate on next request</span>
+                      }
+                      @default {
+                        <span class="muted">JWT not generated yet</span>
+                      }
+                    }
+                  </dd>
+                </div>
+                <div>
+                  <dt>Created</dt>
+                  <dd>{{ statusList.createdAt | date: 'medium' }}</dd>
+                </div>
+              </dl>
+            </mat-card-content>
+          </mat-card>
+        </section>
       }
 
-      <!-- Binding Configuration Card -->
-      <mat-card>
-        <mat-card-header>
-          <mat-card-title>
-            <mat-icon class="title-icon">link</mat-icon>
-            Binding Configuration
-          </mat-card-title>
-          <mat-card-subtitle>
-            Configure which credential configuration and certificate this status list uses
-          </mat-card-subtitle>
-        </mat-card-header>
-
-        <mat-card-content>
-          <div fxLayout="column" fxLayoutGap="16px">
-            <mat-form-field appearance="outline">
+      <section class="form-section" aria-labelledby="status-list-binding-heading">
+        <div class="section-intro">
+          <h2 id="status-list-binding-heading">Binding Configuration</h2>
+          <p>Which credential configuration uses this status list, and which key chain signs it.</p>
+        </div>
+        <mat-card appearance="outlined">
+          <mat-card-content class="field-stack">
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
               <mat-label>Credential Configuration</mat-label>
               <mat-select formControlName="credentialConfigurationId">
                 <mat-option [value]="null">Shared (no binding)</mat-option>
@@ -171,7 +139,7 @@
                   <mat-option [value]="config.id">{{ config.id }}</mat-option>
                 }
               </mat-select>
-              <mat-icon matSuffix>badge</mat-icon>
+              <mat-icon matSuffix aria-hidden="true">badge</mat-icon>
               @if (loadState.credentialConfigs === 'failed') {
                 <mat-hint>Could not load credential configurations.</mat-hint>
               } @else {
@@ -181,13 +149,18 @@
               }
             </mat-form-field>
             @if (loadState.credentialConfigs === 'failed') {
-              <button mat-button type="button" (click)="retrySource('credentialConfigs')">
+              <button
+                matButton
+                type="button"
+                class="retry-source"
+                (click)="retrySource('credentialConfigs')"
+              >
                 <mat-icon>refresh</mat-icon>
                 Retry loading credential configurations
               </button>
             }
 
-            <mat-form-field appearance="outline">
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
               <mat-label>Key Chain</mat-label>
               <mat-select formControlName="keyChainId">
                 <mat-option [value]="null">Default (auto-managed)</mat-option>
@@ -197,7 +170,7 @@
                   >
                 }
               </mat-select>
-              <mat-icon matSuffix>key</mat-icon>
+              <mat-icon matSuffix aria-hidden="true">key</mat-icon>
               @if (loadState.keyChains === 'failed') {
                 <mat-hint>Could not load key chains.</mat-hint>
               } @else {
@@ -207,7 +180,12 @@
               }
             </mat-form-field>
             @if (loadState.keyChains === 'failed') {
-              <button mat-button type="button" (click)="retrySource('keyChains')">
+              <button
+                matButton
+                type="button"
+                class="retry-source"
+                (click)="retrySource('keyChains')"
+              >
                 <mat-icon>refresh</mat-icon>
                 Retry loading key chains
               </button>
@@ -215,7 +193,7 @@
 
             @if (loadState.keyChains === 'loaded' && keyChains.length === 0) {
               <div class="info-box">
-                <mat-icon>info</mat-icon>
+                <mat-icon aria-hidden="true">info</mat-icon>
                 <span>
                   No key chains with <strong>statusList</strong> or
                   <strong>attestation</strong> usage found. The tenant's default key chain will be
@@ -223,27 +201,22 @@
                 </span>
               </div>
             }
-          </div>
-        </mat-card-content>
-      </mat-card>
+          </mat-card-content>
+        </mat-card>
+      </section>
 
-      <!-- Status List Settings Card (Create mode only) -->
       @if (!isEditMode) {
-        <mat-card>
-          <mat-card-header>
-            <mat-card-title>
-              <mat-icon class="title-icon">tune</mat-icon>
-              Status List Settings
-            </mat-card-title>
-            <mat-card-subtitle>
-              Configure the capacity and bit size for this status list. Leave empty to use tenant
-              defaults.
-            </mat-card-subtitle>
-          </mat-card-header>
-
-          <mat-card-content>
-            <div fxLayout="column" fxLayoutGap="16px">
-              <mat-form-field appearance="outline">
+        <section class="form-section" aria-labelledby="status-list-settings-heading">
+          <div class="section-intro">
+            <h2 id="status-list-settings-heading">Status List Settings</h2>
+            <p>
+              The capacity and bit size of this status list, fixed once it is created. Leave them
+              empty to use the tenant defaults.
+            </p>
+          </div>
+          <mat-card appearance="outlined">
+            <mat-card-content class="field-stack">
+              <mat-form-field appearance="outline" subscriptSizing="dynamic">
                 <mat-label>Bits per Status</mat-label>
                 <mat-select formControlName="bits">
                   <mat-option [value]="null">Use tenant default</mat-option>
@@ -251,12 +224,12 @@
                     <mat-option [value]="bit">{{ bit }} bit{{ bit > 1 ? 's' : '' }}</mat-option>
                   }
                 </mat-select>
-                <mat-icon matSuffix>memory</mat-icon>
-                <mat-hint> More bits allow more status values (e.g., 2 bits = 4 states) </mat-hint>
+                <mat-icon matSuffix aria-hidden="true">memory</mat-icon>
+                <mat-hint>More bits allow more status values (e.g., 2 bits = 4 states)</mat-hint>
               </mat-form-field>
 
-              <div fxLayout="column" fxLayoutGap="8px">
-                <mat-form-field appearance="outline">
+              <div class="capacity">
+                <mat-form-field appearance="outline" subscriptSizing="dynamic">
                   <mat-label>Capacity</mat-label>
                   <input
                     matInput
@@ -264,7 +237,7 @@
                     formControlName="capacity"
                     placeholder="Use tenant default"
                   />
-                  <mat-icon matSuffix>storage</mat-icon>
+                  <mat-icon matSuffix aria-hidden="true">storage</mat-icon>
                   <mat-hint>
                     Maximum number of credential entries in this list, from 1,000 to 1,000,000
                   </mat-hint>
@@ -277,29 +250,38 @@
                   }
                 </mat-form-field>
 
-                <div fxLayout="row wrap" fxLayoutGap="8px">
+                <div class="presets">
                   @for (preset of capacityPresets; track preset.value) {
                     <button
                       type="button"
-                      mat-stroked-button
-                      (click)="form.get('capacity')?.setValue(preset.value)"
+                      [matButton]="
+                        form.get('capacity')?.value === preset.value ? 'tonal' : 'outlined'
+                      "
+                      [attr.aria-pressed]="form.get('capacity')?.value === preset.value"
+                      (click)="setCapacity(preset.value)"
                     >
                       {{ preset.label }}
                     </button>
                   }
                 </div>
               </div>
-            </div>
-          </mat-card-content>
-        </mat-card>
+            </mat-card-content>
+          </mat-card>
+        </section>
       }
 
-      <!-- Actions -->
-      <div fxLayout="row" fxLayoutAlign="end center" fxLayoutGap="8px">
-        <button mat-button type="button" routerLink="/status-lists">Cancel</button>
+      <!-- Stays in view at the bottom while the form scrolls -->
+      <div class="action-bar">
+        <output class="change-state" [class.dirty]="form.dirty">
+          @if (form.dirty) {
+            Unsaved changes
+          } @else if (isEditMode) {
+            No changes
+          }
+        </output>
+        <a matButton routerLink="/status-lists">Cancel</a>
         <button
-          mat-raised-button
-          color="primary"
+          matButton="filled"
           type="submit"
           [disabled]="isSaving"
           disabledInteractive

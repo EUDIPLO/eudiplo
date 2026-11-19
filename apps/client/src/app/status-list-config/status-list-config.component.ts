@@ -17,8 +17,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { MatDividerModule } from '@angular/material/divider';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
+import { RouterLink } from '@angular/router';
 import { StatusListConfigService, bitsOptions } from './status-list-config.service';
 import { StatusListConfig, UpdateStatusListConfigDto } from '@eudiplo/sdk-core';
 import { ConfigOwnershipDirective } from '../config-portability/config-ownership.directive';
@@ -58,8 +57,7 @@ const newListsOnly = new Set<keyof StatusListConfig>(['capacity', 'bits']);
     MatTooltipModule,
     MatSnackBarModule,
     MatProgressSpinnerModule,
-    MatDividerModule,
-    FlexLayoutModule,
+    RouterLink,
     ConfigOwnershipDirective,
     ConfigOwnershipNoticeComponent,
     LoadErrorComponent,
@@ -80,8 +78,8 @@ export class StatusListConfigComponent implements OnInit {
    * Where focus goes when a retry removes the error card with its focused
    * Retry button, or a reset ends while focus is nowhere.
    */
-  @ViewChild('settingsTitle', { read: ElementRef })
-  private readonly settingsTitle?: ElementRef<HTMLElement>;
+  @ViewChild('pageHeading', { read: ElementRef })
+  private readonly pageHeading?: ElementRef<HTMLElement>;
   /** Takes the focus back after a save that ended with focus nowhere; Safari does not focus a clicked button. */
   @ViewChild('saveButton', { read: ElementRef })
   private readonly saveButton?: ElementRef<HTMLButtonElement>;
@@ -92,6 +90,24 @@ export class StatusListConfigComponent implements OnInit {
 
   bitsOptions = bitsOptions;
   Math = Math;
+
+  /** Values that a click puts into Capacity; null follows the global default. */
+  readonly capacityPresets = [
+    { value: 1000, label: '1,000' },
+    { value: 10000, label: '10,000' },
+    { value: 50000, label: '50,000' },
+    { value: 100000, label: '100,000' },
+    { value: null, label: 'Use default' },
+  ];
+
+  /** Values that a click puts into TTL; null follows the global default. */
+  readonly ttlPresets = [
+    { value: 300, label: '5 min' },
+    { value: 900, label: '15 min' },
+    { value: 3600, label: '1 hour' },
+    { value: 86400, label: '24 hours' },
+    { value: null, label: 'Use default' },
+  ];
 
   constructor(
     private readonly fb: FormBuilder,
@@ -127,7 +143,7 @@ export class StatusListConfigComponent implements OnInit {
     }
     this.patchForm(this.currentConfig);
     if (retrying && !this.loadError) {
-      focusAfterRenderIfLost(this.injector, () => this.settingsTitle?.nativeElement);
+      focusAfterRenderIfLost(this.injector, () => this.pageHeading?.nativeElement);
     }
   }
 
@@ -196,7 +212,7 @@ export class StatusListConfigComponent implements OnInit {
       return;
     } finally {
       this.isSaving = false;
-      focusAfterRenderIfLost(this.injector, () => this.settingsTitle?.nativeElement);
+      focusAfterRenderIfLost(this.injector, () => this.pageHeading?.nativeElement);
     }
     this.currentConfig = null;
     this.patchForm(this.currentConfig);
@@ -259,6 +275,14 @@ export class StatusListConfigComponent implements OnInit {
     return Object.fromEntries(chosen) as UpdateStatusListConfigDto;
   }
 
+  /** Puts a preset into a field, as typing it would. */
+  choosePreset(setting: 'capacity' | 'ttl', value: number | null): void {
+    const control = this.configForm.get(setting);
+    control?.setValue(value);
+    control?.markAsDirty();
+  }
+
+  /** Shows the stored settings; the form has no unsaved changes afterwards. */
   private patchForm(config: StatusListConfig | null): void {
     this.configForm.patchValue({
       capacity: config?.capacity ?? null,
@@ -267,6 +291,7 @@ export class StatusListConfigComponent implements OnInit {
       immediateUpdate: config?.immediateUpdate ?? null,
       enableAggregation: config?.enableAggregation ?? null,
     });
+    this.configForm.markAsPristine();
   }
 
   /** What applies to a setting the tenant does not store. */

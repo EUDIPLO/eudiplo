@@ -11,7 +11,6 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTableModule } from '@angular/material/table';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { RouterModule } from '@angular/router';
@@ -24,7 +23,6 @@ import { ConfigOwnershipDirective } from '../../config-portability/config-owners
 import { getRole, JwtService } from '../../services/jwt.service';
 import { getApiErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
-import { searchAndSort } from '../../utils/search-list';
 import { WebhookEndpointService } from '../webhook-endpoint.service';
 
 /** Roles that may manage webhook endpoints; either one is enough. */
@@ -53,15 +51,6 @@ export class WebhookEndpointListComponent extends BaseAsyncListComponent<Webhook
 
   readonly displayedColumns = ['name', 'url', 'auth', 'actions'];
 
-  /** Text to find in an endpoint's ID, name, description or URL. */
-  search = '';
-  /** The last search result, kept until the endpoints or the search change. */
-  private shown?: {
-    endpoints: WebhookEndpointEntity[];
-    search: string;
-    result: WebhookEndpointEntity[];
-  };
-
   /** IDs of the endpoints whose delete runs; their Delete waits for it. */
   readonly deleting = new Set<string>();
   /** Whether the caller may change webhook endpoints; read once instead of per row. */
@@ -74,7 +63,6 @@ export class WebhookEndpointListComponent extends BaseAsyncListComponent<Webhook
 
   constructor(
     private readonly webhookEndpointService: WebhookEndpointService,
-    private readonly snackBar: MatSnackBar,
     jwtService: JwtService
   ) {
     super();
@@ -85,26 +73,16 @@ export class WebhookEndpointListComponent extends BaseAsyncListComponent<Webhook
     return this.items;
   }
 
-  /** The endpoints that match the search, sorted by name. */
-  get shownEndpoints(): WebhookEndpointEntity[] {
-    if (this.shown?.endpoints !== this.items || this.shown.search !== this.search) {
-      const result = searchAndSort(
-        this.items,
-        this.search,
-        (endpoint) => [endpoint.id, endpoint.name, endpoint.description ?? '', endpoint.url],
-        (endpoint) => endpoint.name || endpoint.id
-      );
-      this.shown = { endpoints: this.items, search: this.search, result };
-    }
-    return this.shown.result;
-  }
-
-  clearSearch(): void {
-    this.search = '';
-  }
-
   protected fetchItems(): Promise<WebhookEndpointEntity[]> {
     return this.webhookEndpointService.getAll();
+  }
+
+  protected override searchTexts(endpoint: WebhookEndpointEntity): string[] {
+    return [endpoint.id, endpoint.name, endpoint.description ?? '', endpoint.url];
+  }
+
+  protected override sortName(endpoint: WebhookEndpointEntity): string {
+    return endpoint.name || endpoint.id;
   }
 
   /** Whether EUDIPLO sends an API key to the endpoint. */
@@ -125,7 +103,7 @@ export class WebhookEndpointListComponent extends BaseAsyncListComponent<Webhook
     this.deleting.add(endpoint.id);
     try {
       await this.webhookEndpointService.delete(endpoint.id);
-      const index = this.shownEndpoints.indexOf(endpoint);
+      const index = this.shownItems.indexOf(endpoint);
       this.items = this.items.filter((item) => item.id !== endpoint.id);
       this.snackBar.open('Webhook endpoint deleted successfully', 'Close', { duration: 3000 });
       // The row with the focused Delete button is gone: focus the endpoint now in its place.

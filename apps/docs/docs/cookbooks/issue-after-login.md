@@ -158,7 +158,7 @@ Start it with `PROVIDER_API_KEY=change-me node attribute-provider.mjs`. EUDIPLO 
 
 The provider runs on plain HTTP on your computer, which EUDIPLO's outbound URL policy blocks by default. For this exercise, add `OUTBOUND_URL_ALLOW_HTTP=true` and `OUTBOUND_URL_ALLOW_PRIVATE_NETWORK=true` to `.eudiplo.env`, then run `eudiplo up --instance cookbook`. Never set them in production.
 
-Then open **Credential Issuance → Attribute Providers**, choose **+** (**Create New Attribute Provider**) and enter ID `membership-directory`, name `Membership directory`, URL `http://host.docker.internal:8788/claims`, **Auth Type** **API Key**, **Header Name** `x-api-key` and **Header Value** `change-me`. Choose **Create**. With Podman, use `host.containers.internal`; with Docker Engine on Linux, use your computer's LAN IP address.
+Then open **Credential Issuance → Attribute Providers**, choose **Create attribute provider** and enter ID `membership-directory`, name `Membership directory`, URL `http://host.docker.internal:8788/claims`, **Auth Type** **API Key**, **Header Name** `x-api-key` and **Header Value** `change-me`. Choose **Create**. With Podman, use `host.containers.internal`; with Docker Engine on Linux, use your computer's LAN IP address.
 
 **Checkpoint:** a test call returns the claims:
 

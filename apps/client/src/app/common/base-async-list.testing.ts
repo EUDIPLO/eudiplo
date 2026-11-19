@@ -152,6 +152,22 @@ export function describeListStates<S>(screen: ListStatesScenario<S>): void {
       expect(document.activeElement).not.toBe(element.querySelector(heading));
     });
 
+    it.skipIf(screen.createButton !== undefined)(
+      'links to the create page from the page header with the empty state link text',
+      async () => {
+        fetchItems.mockResolvedValue([screen.item]);
+        const fixture = render();
+        const element = await waitUntil(fixture, (el) =>
+          expect(el.querySelector('table')).not.toBeNull()
+        );
+
+        const link = Array.from(element.querySelectorAll('header a')).find((a) =>
+          a.textContent?.includes(screen.create)
+        );
+        expect(link?.getAttribute('href')).toBe('/create');
+      }
+    );
+
     it.skipIf(screen.createButton === undefined)('names the Create button like its tooltip', () => {
       fetchItems.mockResolvedValue([]);
       const fixture = render();

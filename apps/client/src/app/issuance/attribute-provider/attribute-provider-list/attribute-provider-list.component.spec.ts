@@ -1,5 +1,10 @@
-import { describe } from 'vitest';
+import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
+import type { AttributeProviderEntity } from '@eudiplo/sdk-core';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { describeListStates } from '../../../common/base-async-list.testing';
+import { ConfigOwnershipService } from '../../../config-portability/config-ownership.service';
+import { JwtService } from '../../../services/jwt.service';
 import { AttributeProviderService } from '../attribute-provider.service';
 import { AttributeProviderListComponent } from './attribute-provider-list.component';
 
@@ -11,8 +16,83 @@ describe('AttributeProviderListComponent', () => {
     item: { id: 'crm', name: 'CRM', url: 'https://crm.example', auth: { type: 'none' } },
     loading: 'Loading attribute providers',
     empty: 'No attribute providers yet.',
-    create: 'Create Attribute Provider',
-    createButton: 'Create New Attribute Provider',
+    create: 'Create attribute provider',
     failure: 'Failed to load attribute providers',
+    heading: 'h1',
+    firstCell: 'CRM',
+  });
+});
+
+describe('AttributeProviderListComponent table', () => {
+  const providers = [
+    { id: 'registry', name: 'Registry', url: 'https://registry.example', auth: { type: 'none' } },
+    { id: 'crm', name: 'CRM', url: 'https://crm.example', auth: { type: 'none' } },
+  ] as AttributeProviderEntity[];
+
+  async function render(service: Partial<AttributeProviderService>, roles = ['issuance:manage']) {
+    TestBed.configureTestingModule({
+      imports: [AttributeProviderListComponent],
+      providers: [
+        provideRouter([]),
+        { provide: AttributeProviderService, useValue: service },
+        { provide: JwtService, useValue: { hasRole: (role: string) => roles.includes(role) } },
+        { provide: ConfigOwnershipService, useValue: { get: async () => undefined } },
+      ],
+    });
+    const fixture = TestBed.createComponent(AttributeProviderListComponent);
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(fixture.componentInstance.loading).toBe(false));
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  const names = (element: HTMLElement) =>
+    [...element.querySelectorAll('.item-link')].map((link) => link.textContent?.trim());
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('sorts by name, links each name to its provider and narrows the rows to the search', async () => {
+    const fixture = await render({ getAll: async () => providers });
+    const element = fixture.nativeElement as HTMLElement;
+
+    expect(names(element)).toEqual(['CRM', 'Registry']);
+    expect(element.querySelector('.item-link')?.getAttribute('href')).toBe('/crm');
+    expect(element.querySelector('output')?.textContent?.trim()).toBe('2 attribute providers');
+
+    fixture.componentInstance.search = 'registry.example';
+    fixture.detectChanges();
+    expect(names(element)).toEqual(['Registry']);
+    expect(element.querySelector('output')?.textContent?.trim()).toBe('1 of 2 attribute providers');
+
+    fixture.componentInstance.search = 'nothing';
+    fixture.detectChanges();
+    expect(element.querySelector('.no-match')?.textContent).toContain(
+      'No attribute provider matches "nothing".'
+    );
+  });
+
+  it('deletes a provider from its row after confirming and takes its row out', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const remove = vi.fn().mockResolvedValue(undefined);
+    const getAll = vi.fn().mockResolvedValue(providers);
+    const fixture = await render({ getAll, delete: remove });
+    const element = fixture.nativeElement as HTMLElement;
+
+    element
+      .querySelector<HTMLButtonElement>('button[aria-label="Delete attribute provider crm"]')!
+      .click();
+
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(
+        [...element.querySelectorAll('.item-link')].map((a) => a.getAttribute('href'))
+      ).not.toContain('/crm');
+    });
+    // The row goes without loading the list again.
+    expect(getAll).toHaveBeenCalledOnce();
+    expect(window.confirm).toHaveBeenCalledWith(
+      'Delete attribute provider "CRM"? This cannot be undone.'
+    );
+    expect(remove).toHaveBeenCalledWith('crm');
   });
 });

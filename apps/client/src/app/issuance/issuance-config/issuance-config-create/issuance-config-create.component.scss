@@ -1,3 +1,21 @@
+@use '../../../tenants/tenant-page' as page;
+
+// Back link, heading and action bar of the form pages; the tabs and panels inside stay as they are
+@include page.base;
+@include page.form-page;
+@include page.layout-utilities;
+
+.form-avatar mat-icon {
+  width: 28px;
+  height: 28px;
+  font-size: 28px;
+}
+
+// The ownership notice shows only when it applies; without content it takes no gap
+app-config-ownership-notice {
+  display: contents;
+}
+
 .json-textarea {
   font-family: 'Roboto Mono', monospace;
   font-size: 13px;
@@ -29,22 +47,6 @@
 
 .button-spinner {
   margin-right: 8px;
-}
-
-mat-card {
-  margin-bottom: 24px;
-
-  mat-card-header {
-    margin-bottom: 16px;
-
-    mat-card-title {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 18px;
-      font-weight: 500;
-    }
-  }
 }
 
 mat-form-field {
@@ -138,26 +140,10 @@ input[readonly] {
   }
 }
 
-:host {
-  display: block;
-  width: 100%;
-  min-width: 0;
-}
-:host > div {
-  width: 100%;
-  min-width: 0;
-}
-form,
-.settings-header,
 .header-actions {
-  min-width: 0;
-  max-width: 100%;
-}
-.settings-header,
-.header-actions,
-.form-actions {
+  display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 8px;
 }
 .setup-guide {
   display: flex;
@@ -183,21 +169,22 @@ form,
   max-width: 900px;
   overflow-wrap: anywhere;
 }
-@media (max-width: 700px) {
-  .settings-header,
+@container (max-width: 700px) {
   .setup-guide {
-    flex-direction: column !important;
-    align-items: stretch !important;
-  }
-  .header-actions {
-    flex-wrap: wrap !important;
+    flex-direction: column;
+    align-items: stretch;
   }
   .display-entry > div:last-child > div {
-    flex-direction: column !important;
+    flex-direction: column;
   }
 }
 
 /* The action row of an authorization server panel, below the fields of its type. */
 .server-actions {
   margin-top: 16px;
+}
+
+// The editor's rows hold several fields side by side, so it keeps the full page width
+.form-page {
+  max-width: 1280px;
 }

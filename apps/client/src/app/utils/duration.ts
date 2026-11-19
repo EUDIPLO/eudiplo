@@ -13,3 +13,8 @@ export function formatDuration(seconds: number): string {
   }
   return `${seconds} ${seconds === 1 ? 'second' : 'seconds'}`;
 }
+
+/** A lifetime in seconds in its largest whole unit, such as "1 day", or "Not set" without one. */
+export function formatLifetime(seconds?: number | null): string {
+  return seconds ? formatDuration(seconds) : 'Not set';
+}

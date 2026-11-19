@@ -81,7 +81,9 @@ test.describe('after signing in', () => {
     backend.recover();
     await page.locator('mat-snack-bar-container').getByRole('button', { name: 'Retry' }).click();
 
-    await expect(page.getByRole('heading', { name: 'Credential Configurations' })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: 'Credential Configurations', level: 1 })
+    ).toBeVisible();
     await expect(page).toHaveURL(/\/credential-config$/);
   });
 });
@@ -94,13 +96,17 @@ test('opens a page whose roles could not be loaded on Retry', async ({ page }) =
   await page.goto('/credential-config');
 
   await expect(page.getByText('Could not load your roles: Service Unavailable.')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Credential Configurations' })).toHaveCount(0);
+  await expect(
+    page.getByRole('heading', { name: 'Credential Configurations', level: 1 })
+  ).toHaveCount(0);
   // AuthGuard and RoleGuard of the route share the failed request.
   expect(backend.requests()).toBe(1);
 
   backend.recover();
   await page.getByRole('button', { name: 'Retry' }).click();
 
-  await expect(page.getByRole('heading', { name: 'Credential Configurations' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Credential Configurations', level: 1 })
+  ).toBeVisible();
   await expect(page).toHaveURL(/\/credential-config$/);
 });

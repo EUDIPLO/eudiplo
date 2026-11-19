@@ -10,7 +10,6 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { AttributeProviderService } from '../attribute-provider.service';
 import { ApiKeyEndpointFormComponent } from '../../../common/api-key-endpoint-form';
 import { LoadErrorComponent } from '../../../common/load-error.component';
@@ -29,7 +28,6 @@ import { ConfigOwnershipNoticeComponent } from '../../../config-portability/conf
     MatSnackBarModule,
     MatTooltipModule,
     MatDialogModule,
-    FlexLayoutModule,
     ReactiveFormsModule,
     RouterModule,
     ConfigOwnershipDirective,

@@ -13,7 +13,7 @@ test('create credential config', async ({ page }) => {
   await page.goto('/');
 
   await page.getByText('Credential Types').click();
-  await page.getByRole('button').filter({ hasText: 'add' }).click();
+  await page.getByRole('link', { name: 'Create credential configuration' }).first().click();
   await page.getByRole('button', { name: 'Templates' }).click();
   await page
     .getByRole('menuitem', {
@@ -67,7 +67,7 @@ test('a failed load says why and loads again on Retry', async ({ page }) => {
   await expect(alert).toHaveCount(0);
   // Retry left with the error card, so keyboard focus continues from the page heading.
   await expect(
-    page.getByRole('heading', { name: 'Credential Configurations', level: 2 })
+    page.getByRole('heading', { name: 'Credential Configurations', level: 1 })
   ).toBeFocused();
 });
 
@@ -721,4 +721,72 @@ test('turns Revoke with Wallet Unit on and off with the settings it needs', asyn
   } finally {
     await writeConfig(() => request.delete(`${url}/${id}`, { headers }), `delete ${id}`);
   }
+});
+
+test('deletes a configuration from its row and keeps file-managed ones locked', async ({
+  page,
+  request,
+}) => {
+  test.skip(
+    !hasAuthCredentials,
+    'Set E2E_TENANT_CLIENT_ID and E2E_TENANT_CLIENT_SECRET for tenant flow tests.'
+  );
+  const id = `e2e-row-delete-${Date.now()}`;
+  const url = `${resolvedE2EConfig.apiBaseUrl}/api/issuer/credentials`;
+  const headers = { Authorization: `Bearer ${await tenantToken(request)}` };
+  await writeConfig(
+    () =>
+      request.post(url, {
+        headers,
+        data: {
+          id,
+          description: 'Deleted from its row',
+          vct: `urn:${id}`,
+          config: { format: 'dc+sd-jwt', display: [] },
+          fields: [],
+        },
+      }),
+    `create ${id}`
+  );
+  const deletes: string[] = [];
+  page.on('request', (r) => {
+    if (r.method() === 'DELETE' && r.url().includes('/api/issuer/credentials/')) {
+      deletes.push(r.url());
+    }
+  });
+  await page.goto('/credential-config');
+
+  // The demo configurations come from the config folder, so their Delete is locked.
+  const locked = page.getByRole('button', {
+    name: 'Delete credential configuration pid',
+    exact: true,
+  });
+  await expect(locked).not.toHaveAttribute('aria-busy', 'true');
+  await expect(locked).toHaveAttribute('aria-disabled', 'true');
+  // A locked Delete neither asks nor sends anything.
+  const lockedDialogs: string[] = [];
+  const recordDialog = (dialog: { message(): string; dismiss(): Promise<void> }) => {
+    lockedDialogs.push(dialog.message());
+    void dialog.dismiss();
+  };
+  page.on('dialog', recordDialog);
+  await locked.click({ force: true });
+  await expect(locked).toHaveAttribute('aria-disabled', 'true');
+  page.off('dialog', recordDialog);
+  expect(lockedDialogs).toEqual([]);
+
+  await page.getByRole('searchbox', { name: /Search credential configurations/ }).fill(id);
+  const remove = page.getByRole('button', { name: `Delete credential configuration ${id}` });
+  await expect(remove).not.toHaveAttribute('aria-busy', 'true');
+  page.once('dialog', (dialog) => {
+    expect(dialog.message()).toBe(
+      `Delete credential configuration "${id}"? This cannot be undone.`
+    );
+    void dialog.accept();
+  });
+  await remove.click();
+
+  await expect(page.getByText('Configuration deleted successfully')).toBeVisible();
+  await expect(page.getByText(id, { exact: true })).toHaveCount(0);
+  expect(deletes).toEqual([`${url}/${id}`]);
 });

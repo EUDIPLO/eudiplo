@@ -1,123 +1,130 @@
-@if (provider) {
-  <div fxLayout="column" fxFlex fxLayoutGap="24px">
+<div class="page">
+  <a class="back-link" matButton [routerLink]="['../']" aria-label="Back to Attribute Providers">
+    <mat-icon>arrow_back</mat-icon>
+    Attribute Providers
+  </a>
+
+  @if (provider) {
     <app-config-ownership-notice kind="AttributeProvider" [resourceId]="provider.id" />
-    <!-- Header -->
-    <div fxLayout="row" fxLayoutAlign="space-between center">
-      <h2>Attribute Provider</h2>
-      <div>
+
+    <!-- What the provider is, and what can be done with it -->
+    <mat-card appearance="outlined" class="hero">
+      <span class="hero-avatar" aria-hidden="true"><mat-icon>cloud_download</mat-icon></span>
+      <div class="hero-copy">
+        <h1>{{ provider.name || provider.id }}</h1>
+        <div class="hero-meta">
+          <code class="id-badge">{{ provider.id }}</code>
+          <span class="badge">{{ getAuthType() }}</span>
+        </div>
+        @if (provider.description) {
+          <p class="hero-description">{{ provider.description }}</p>
+        }
+      </div>
+      <div class="hero-actions">
         <button
-          mat-icon-button
-          [routerLink]="['../']"
-          matTooltip="Back to list"
-          aria-label="Back to list"
-        >
-          <mat-icon>arrow_back</mat-icon>
-        </button>
-        <button
-          mat-icon-button
+          matButton="tonal"
           [routerLink]="['edit']"
-          matTooltip="Edit attribute provider"
-          aria-label="Edit attribute provider"
           appConfigManaged
           managedKind="AttributeProvider"
           [managedResourceId]="provider.id"
         >
           <mat-icon>edit</mat-icon>
+          Edit
         </button>
-        @if (canDownloadConfig) {
+        <span class="icon-actions">
+          @if (canDownloadConfig) {
+            <button
+              mat-icon-button
+              aria-label="Download configuration"
+              [disabled]="downloadingConfig"
+              [attr.aria-busy]="downloadingConfig"
+              disabledInteractive
+              matTooltip="Download configuration"
+              (click)="downloadConfig()"
+            >
+              <mat-icon>download</mat-icon>
+            </button>
+          }
           <button
             mat-icon-button
-            aria-label="Download configuration"
-            [disabled]="downloadingConfig"
-            [attr.aria-busy]="downloadingConfig"
+            class="delete-action"
+            (click)="deleteProvider()"
+            [disabled]="deleting"
             disabledInteractive
-            matTooltip="Download configuration"
-            (click)="downloadConfig()"
+            [matTooltip]="
+              deleting ? 'Deleting the attribute provider…' : 'Delete attribute provider'
+            "
+            aria-label="Delete attribute provider"
+            appConfigManaged
+            managedKind="AttributeProvider"
+            [managedResourceId]="provider.id"
           >
-            <mat-icon>download</mat-icon>
+            <mat-icon>delete_outline</mat-icon>
           </button>
-        }
-        <button
-          mat-icon-button
-          (click)="deleteProvider()"
-          matTooltip="Delete attribute provider"
-          aria-label="Delete attribute provider"
-          color="warn"
-          appConfigManaged
-          managedKind="AttributeProvider"
-          [managedResourceId]="provider.id"
-        >
-          <mat-icon>delete</mat-icon>
-        </button>
+        </span>
       </div>
+    </mat-card>
+
+    <div class="content-grid">
+      <mat-card appearance="outlined">
+        <mat-card-header>
+          <mat-icon mat-card-avatar>link</mat-icon>
+          <h2 mat-card-title>Endpoint</h2>
+          <mat-card-subtitle>Where EUDIPLO asks for the claims</mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
+          <dl class="details">
+            <div>
+              <dt>ID</dt>
+              <dd>
+                <code>{{ provider.id }}</code>
+              </dd>
+            </div>
+            <div>
+              <dt>Name</dt>
+              <dd>{{ provider.name }}</dd>
+            </div>
+            <div>
+              <dt>URL</dt>
+              <dd>
+                <code>{{ provider.url }}</code>
+              </dd>
+            </div>
+          </dl>
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card appearance="outlined">
+        <mat-card-header>
+          <mat-icon mat-card-avatar>security</mat-icon>
+          <h2 mat-card-title>Authentication</h2>
+          <mat-card-subtitle>How EUDIPLO authenticates its requests</mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
+          <dl class="details">
+            <div>
+              <dt>Type</dt>
+              <dd>{{ getAuthType() }}</dd>
+            </div>
+            @if (getAuthHeaderName()) {
+              <div>
+                <dt>Header Name</dt>
+                <dd>
+                  <code>{{ getAuthHeaderName() }}</code>
+                </dd>
+              </div>
+            }
+          </dl>
+        </mat-card-content>
+      </mat-card>
     </div>
-
-    <!-- Details Card -->
-    <mat-card>
-      <mat-card-header>
-        <mat-card-title>
-          <mat-icon>cloud_download</mat-icon>
-          Provider Details
-        </mat-card-title>
-      </mat-card-header>
-      <mat-card-content>
-        <mat-list class="config-list">
-          <mat-list-item>
-            <mat-icon matListItemIcon>fingerprint</mat-icon>
-            <span matListItemTitle>ID</span>
-            <span matListItemLine>{{ provider.id }}</span>
-          </mat-list-item>
-          <mat-list-item>
-            <mat-icon matListItemIcon>label</mat-icon>
-            <span matListItemTitle>Name</span>
-            <span matListItemLine>{{ provider.name }}</span>
-          </mat-list-item>
-          @if (provider.description) {
-            <mat-list-item>
-              <mat-icon matListItemIcon>description</mat-icon>
-              <span matListItemTitle>Description</span>
-              <span matListItemLine>{{ provider.description }}</span>
-            </mat-list-item>
-          }
-          <mat-list-item>
-            <mat-icon matListItemIcon>link</mat-icon>
-            <span matListItemTitle>URL</span>
-            <span matListItemLine>{{ provider.url }}</span>
-          </mat-list-item>
-        </mat-list>
-      </mat-card-content>
-    </mat-card>
-
-    <!-- Authentication Card -->
-    <mat-card>
-      <mat-card-header>
-        <mat-card-title>
-          <mat-icon>security</mat-icon>
-          Authentication
-        </mat-card-title>
-      </mat-card-header>
-      <mat-card-content>
-        <mat-list class="config-list">
-          <mat-list-item>
-            <mat-icon matListItemIcon>vpn_key</mat-icon>
-            <span matListItemTitle>Type</span>
-            <span matListItemLine>{{ getAuthType() }}</span>
-          </mat-list-item>
-          @if (getAuthHeaderName()) {
-            <mat-list-item>
-              <mat-icon matListItemIcon>code</mat-icon>
-              <span matListItemTitle>Header Name</span>
-              <span matListItemLine>{{ getAuthHeaderName() }}</span>
-            </mat-list-item>
-          }
-        </mat-list>
-      </mat-card-content>
-    </mat-card>
-  </div>
-} @else if (loadError) {
-  <app-load-error [message]="loadError" (retry)="load()">
-    <a mat-button [routerLink]="['../']">Back to the list</a>
-  </app-load-error>
-} @else {
-  <p><output>Loading attribute provider…</output></p>
-}
+  } @else if (loadError) {
+    <app-load-error [message]="loadError" (retry)="load()">
+      <a mat-button [routerLink]="['../']">Back to the list</a>
+    </app-load-error>
+  } @else {
+    <div class="loading-state">
+      <mat-spinner diameter="40" aria-label="Loading attribute provider"></mat-spinner>
+    </div>
+  }
+</div>

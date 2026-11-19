@@ -7,11 +7,11 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatIconModule } from '@angular/material/icon';
 import { MatListModule } from '@angular/material/list';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import {
   type ClaimFieldDefinition,
   CredentialConfig,
@@ -20,6 +20,7 @@ import {
 } from '@eudiplo/sdk-core';
 import { CredentialConfigService } from '../credential-config.service';
 import { KEY_ATTESTATION_LEVELS } from '../credential-config.types';
+import { formatLifetime } from '../../../utils/duration';
 import { StatusListManagementService } from '../../../status-list-management/status-list-management.service';
 import { ConfigDocumentService } from '../../../config-portability/config-document.service';
 import { ConfigOwnershipDirective } from '../../../config-portability/config-ownership.directive';
@@ -28,6 +29,7 @@ import { getApiErrorMessage } from '../../../utils/error-message';
 import { openErrorSnackBar } from '../../../utils/error-snackbar';
 import { LoadErrorComponent } from '../../../common/load-error.component';
 import { walletDisplayEntries } from '../../../utils/display-entries';
+import { confirmAndDelete } from '../../../common/confirm-delete';
 
 interface ClaimFieldRow {
   key: string;
@@ -60,7 +62,7 @@ interface SchemaPathInfo {
     MatDividerModule,
     MatListModule,
     MatTabsModule,
-    FlexLayoutModule,
+    MatProgressSpinnerModule,
     RouterModule,
     ConfigOwnershipDirective,
     ConfigOwnershipNoticeComponent,
@@ -75,6 +77,8 @@ export class CredentialConfigShowComponent implements OnInit {
   /** Set when the page's data could not be loaded, so the page is not left blank. */
   loadError = '';
   statusListId: string | undefined;
+  /** True while the configuration is deleted; Delete waits for it. */
+  deleting = false;
 
   constructor(
     private readonly credentialConfigService: CredentialConfigService,
@@ -267,26 +271,24 @@ export class CredentialConfigShowComponent implements OnInit {
     }
   }
 
-  deleteConfig() {
-    if (
-      this.config &&
-      confirm(`Delete credential configuration "${this.config.id}"? This cannot be undone.`)
-    ) {
-      this.credentialConfigService
-        .deleteConfiguration(this.config.id)
-        .then(() => {
-          this.snackBar.open('Configuration deleted successfully', 'Close', {
-            duration: 3000,
-          });
-          this.router.navigate(['../'], { relativeTo: this.route });
-        })
-        .catch((error) => {
-          openErrorSnackBar(
-            this.snackBar,
-            getApiErrorMessage(error, 'Failed to delete configuration')
-          );
-          console.error('Delete error:', error);
-        });
+  /**
+   * Deletes the configuration after the caller confirmed it, then returns to the list. A second
+   * click while the delete runs does nothing.
+   */
+  async deleteConfig(): Promise<void> {
+    const config = this.config;
+    if (!config || this.deleting) {
+      return;
+    }
+    const deleted = await confirmAndDelete(this.snackBar, {
+      question: `Delete credential configuration "${config.id}"? This cannot be undone.`,
+      request: () => this.credentialConfigService.deleteConfiguration(config.id),
+      deleted: 'Configuration deleted successfully',
+      failed: 'Failed to delete configuration',
+      busy: (busy) => (this.deleting = busy),
+    });
+    if (deleted) {
+      void this.router.navigate(['../'], { relativeTo: this.route });
     }
   }
 
@@ -320,21 +322,7 @@ export class CredentialConfigShowComponent implements OnInit {
   }
 
   formatLifetime(seconds?: number | null): string {
-    if (!seconds) return 'Not set';
-
-    const days = Math.floor(seconds / (24 * 3600));
-    const hours = Math.floor((seconds % (24 * 3600)) / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-
-    if (days > 0) {
-      return `${days} day${days > 1 ? 's' : ''}`;
-    } else if (hours > 0) {
-      return `${hours} hour${hours > 1 ? 's' : ''}`;
-    } else if (minutes > 0) {
-      return `${minutes} minute${minutes > 1 ? 's' : ''}`;
-    } else {
-      return `${seconds} second${seconds > 1 ? 's' : ''}`;
-    }
+    return formatLifetime(seconds);
   }
 
   /** The claim's JSON Schema constraints, or null when it defines none. */
