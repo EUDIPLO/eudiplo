@@ -76,7 +76,7 @@
                 >
                 <span class="item-copy">
                   <!-- The name links to the provider and its link covers the row -->
-                  <a class="item-link" [routerLink]="provider.id">{{
+                  <a class="item-link" [routerLink]="provider.id | itemRoute">{{
                     provider.name || provider.id
                   }}</a>
                   <small
@@ -107,7 +107,7 @@
               <span class="row-actions">
                 <button
                   matIconButton
-                  [routerLink]="[provider.id, 'edit']"
+                  [routerLink]="provider.id | itemRoute: 'edit'"
                   appConfigManaged
                   managedKind="AttributeProvider"
                   [managedResourceId]="provider.id"

@@ -29,6 +29,7 @@ import { LoadErrorComponent } from '../../../common/load-error.component';
 import { FrontendConfigService } from '../../../services/frontend-config.service';
 import { BaseAsyncListComponent } from '../../../common/base-async-list.component';
 import { uniqueRoles } from '../../../services/role-groups';
+import { ItemRoutePipe } from '../../../common/item-route.pipe';
 
 /** Columns of the client table. */
 type ClientColumn = 'clientId' | 'roles' | 'actions';
@@ -36,6 +37,7 @@ type ClientColumn = 'clientId' | 'roles' | 'actions';
 @Component({
   selector: 'app-client-list',
   imports: [
+    ItemRoutePipe,
     MatTableModule,
     MatIconModule,
     MatButtonModule,

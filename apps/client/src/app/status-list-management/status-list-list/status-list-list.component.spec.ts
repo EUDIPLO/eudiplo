@@ -83,6 +83,13 @@ describe('StatusListListComponent table', () => {
 
   afterEach(() => vi.restoreAllMocks());
 
+  it('links a status list whose ID contains a slash as one segment', async () => {
+    const fixture = await render({ getLists: async () => [statusList('team/pid', {})] });
+    const element = fixture.nativeElement as HTMLElement;
+
+    expect(element.querySelector('.item-link')?.getAttribute('href')).toBe('/team%2Fpid');
+  });
+
   it('sorts by ID, links each ID to its list and narrows the rows to the search', async () => {
     const fixture = await render({ getLists: async () => lists });
     const element = fixture.nativeElement as HTMLElement;

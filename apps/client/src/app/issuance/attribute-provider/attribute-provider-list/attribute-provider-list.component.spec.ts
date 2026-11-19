@@ -51,6 +51,13 @@ describe('AttributeProviderListComponent table', () => {
 
   afterEach(() => vi.restoreAllMocks());
 
+  it('links a provider whose ID contains a slash as one segment', async () => {
+    const fixture = await render({ getAll: async () => [{ ...providers[1], id: 'team/crm' }] });
+    const element = fixture.nativeElement as HTMLElement;
+
+    expect(element.querySelector('.item-link')?.getAttribute('href')).toBe('/team%2Fcrm');
+  });
+
   it('sorts by name, links each name to its provider and narrows the rows to the search', async () => {
     const fixture = await render({ getAll: async () => providers });
     const element = fixture.nativeElement as HTMLElement;

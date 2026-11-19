@@ -56,6 +56,7 @@ import { LoadErrorComponent } from '../../common/load-error.component';
 import { getApiErrorMessage } from '../../utils/error-message';
 import { focusAfterRenderIfLost } from '../../common/focus-if-lost.util';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
+import { ItemRoutePipe } from '../../common/item-route.pipe';
 
 // Define the SessionStatus type
 export type SessionStatus = 'active' | 'fetched' | 'completed' | 'expired' | 'failed' | 'cancelled';
@@ -119,6 +120,7 @@ function endOfDay(date: Date): Date {
 @Component({
   selector: 'app-session-management-list',
   imports: [
+    ItemRoutePipe,
     MatTableModule,
     MatSortModule,
     MatSelectModule,

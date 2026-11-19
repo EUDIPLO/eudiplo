@@ -70,7 +70,7 @@
               <span class="row-actions">
                 <button
                   matIconButton
-                  [routerLink]="[list.id]"
+                  [routerLink]="list.id | itemRoute"
                   matTooltip="View details"
                   [attr.aria-label]="'View trust list ' + list.id"
                 >
@@ -78,7 +78,7 @@
                 </button>
                 <button
                   matIconButton
-                  [routerLink]="[list.id, 'edit']"
+                  [routerLink]="list.id | itemRoute: 'edit'"
                   matTooltip="Edit"
                   appConfigManaged
                   managedKind="TrustList"

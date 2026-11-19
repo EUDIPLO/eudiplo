@@ -25,10 +25,12 @@ import { getApiErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { WEBHOOK_ENDPOINT_ROLES } from '../webhook-endpoint-roles';
 import { WebhookEndpointService } from '../webhook-endpoint.service';
+import { ItemRoutePipe } from '../../common/item-route.pipe';
 
 @Component({
   selector: 'app-webhook-endpoint-list',
   imports: [
+    ItemRoutePipe,
     MatTableModule,
     MatIconModule,
     MatButtonModule,

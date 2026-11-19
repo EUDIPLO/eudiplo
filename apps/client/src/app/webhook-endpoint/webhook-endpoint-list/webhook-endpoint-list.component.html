@@ -74,7 +74,7 @@
                 <span class="endpoint-icon" aria-hidden="true"><mat-icon>webhook</mat-icon></span>
                 <span class="endpoint-copy">
                   <!-- The name links to the endpoint and its link covers the row -->
-                  <a class="endpoint-link" [routerLink]="[endpoint.id]">{{
+                  <a class="endpoint-link" [routerLink]="endpoint.id | itemRoute">{{
                     endpoint.name || endpoint.id
                   }}</a>
                   <small>{{ endpoint.id }}</small>
@@ -105,7 +105,7 @@
               <span class="row-actions">
                 <a
                   matIconButton
-                  [routerLink]="[endpoint.id, 'edit']"
+                  [routerLink]="endpoint.id | itemRoute: 'edit'"
                   appConfigManaged
                   managedKind="WebhookEndpoint"
                   [managedResourceId]="endpoint.id"

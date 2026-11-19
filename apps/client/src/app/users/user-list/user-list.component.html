@@ -75,7 +75,7 @@
                 <span class="item-icon" aria-hidden="true"><mat-icon>person</mat-icon></span>
                 <span class="item-copy">
                   <!-- The username links to the user and its link covers the row -->
-                  <a class="item-link" [routerLink]="user.id">{{ user.username }}</a>
+                  <a class="item-link" [routerLink]="user.id | itemRoute">{{ user.username }}</a>
                   @if (user.email) {
                     <small>{{ user.email }}</small>
                   }
@@ -130,7 +130,7 @@
                 <span [matTooltip]="manageDeniedHint" [matTooltipDisabled]="manageable">
                   <button
                     matIconButton
-                    [routerLink]="[user.id, 'edit']"
+                    [routerLink]="user.id | itemRoute: 'edit'"
                     [disabled]="!manageable"
                     matTooltip="Edit User"
                     [attr.aria-label]="manageable ? 'Edit User' : 'Edit User: ' + manageDeniedHint"

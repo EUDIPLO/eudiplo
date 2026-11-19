@@ -16,10 +16,12 @@ import { BaseAsyncListComponent } from '../../common/base-async-list.component';
 import { ConfigOwnershipDirective } from '../../config-portability/config-ownership.directive';
 import { LoadErrorComponent } from '../../common/load-error.component';
 import { copyToClipboard } from '../../utils/copy-to-clipboard';
+import { ItemRoutePipe } from '../../common/item-route.pipe';
 
 @Component({
   selector: 'app-status-list-list',
   imports: [
+    ItemRoutePipe,
     DecimalPipe,
     FormsModule,
     RouterModule,

@@ -68,7 +68,7 @@
             <th mat-header-cell *matHeaderCellDef>ID</th>
             <td mat-cell *matCellDef="let config">
               <!-- The ID links to the config and its link covers the row -->
-              <a class="item-link" [routerLink]="[config.id]">{{ config.id }}</a>
+              <a class="item-link" [routerLink]="config.id | itemRoute">{{ config.id }}</a>
             </td>
           </ng-container>
 
@@ -112,7 +112,7 @@
               <span class="row-actions">
                 <button
                   matIconButton
-                  [routerLink]="[config.id, 'edit']"
+                  [routerLink]="config.id | itemRoute: 'edit'"
                   matTooltip="Edit verification config"
                   appConfigManaged
                   managedKind="PresentationConfig"

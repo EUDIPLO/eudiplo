@@ -21,10 +21,12 @@ import {
 import { ConfigOwnershipDirective } from '../../../config-portability/config-ownership.directive';
 import { BaseAsyncListComponent } from '../../../common/base-async-list.component';
 import { LoadErrorComponent } from '../../../common/load-error.component';
+import { ItemRoutePipe } from '../../../common/item-route.pipe';
 
 @Component({
   selector: 'app-presentation-list',
   imports: [
+    ItemRoutePipe,
     MatTableModule,
     DatePipe,
     FormsModule,

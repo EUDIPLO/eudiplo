@@ -20,10 +20,12 @@ import { getApiErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { ItemRoutePipe } from '../../common/item-route.pipe';
 
 @Component({
   selector: 'app-tenant-list',
   imports: [
+    ItemRoutePipe,
     MatTableModule,
     MatIconModule,
     MatButtonModule,

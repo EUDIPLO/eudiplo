@@ -19,10 +19,12 @@ import { uniqueRoles } from '../../services/role-groups';
 import { BaseAsyncListComponent } from '../../common/base-async-list.component';
 import { UnavailableCardComponent } from '../../common/unavailable-card.component';
 import { LoadErrorComponent } from '../../common/load-error.component';
+import { ItemRoutePipe } from '../../common/item-route.pipe';
 
 @Component({
   selector: 'app-user-list',
   imports: [
+    ItemRoutePipe,
     MatTableModule,
     MatIconModule,
     MatButtonModule,
