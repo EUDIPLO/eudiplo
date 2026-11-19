@@ -14,7 +14,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: bootstrap
-          image: hashicorp/vault:1.18.3
+          image: hashicorp/vault:2.2.2
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false

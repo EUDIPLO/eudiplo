@@ -20,7 +20,7 @@ spec:
         runAsNonRoot: true
       containers:
         - name: rustfs
-          image: rustfs/rustfs:1.0.0
+          image: rustfs/rustfs:1.0.5
           imagePullPolicy: IfNotPresent
           args: ["/data"]
           securityContext:

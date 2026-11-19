@@ -1,32 +1,99 @@
-.config-list {
-  padding: 0;
+@use '../../tenants/tenant-page' as page;
 
-  mat-list-item {
-    height: auto !important;
-    padding: 12px 0;
-    border-bottom: 1px solid var(--mat-sys-outline-variant);
+// Back link, header card and detail cards, as on the user and API client pages
+@include page.base;
+@include page.detail-page;
 
-    // Long values (ids, URLs, free text) wrap instead of widening the page
-    // or ending in an ellipsis. Nested so it outranks Material's nowrap rule.
-    [matListItemLine] {
-      white-space: normal;
-      overflow-wrap: anywhere;
-    }
+// Where the endpoint is beside how it authenticates
+.page {
+  --content-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
 
-    &:last-child {
-      border-bottom: none;
-    }
+.hero-avatar mat-icon {
+  width: 32px;
+  height: 32px;
+  font-size: 32px;
+}
+
+// An endpoint called with an API key
+.badge.auth-key {
+  --tone: var(--mat-sys-primary);
+}
+
+.endpoint-id {
+  font: var(--mat-sys-body-medium);
+  color: var(--mat-sys-on-surface-variant);
+  overflow-wrap: anywhere;
+
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 13px;
   }
 }
 
-mat-card-header {
-  mat-card-title {
+.danger:not([disabled]) {
+  --mat-button-outlined-label-text-color: var(--mat-sys-error);
+  --mat-button-outlined-outline-color: color-mix(in srgb, var(--mat-sys-error) 50%, transparent);
+}
+
+// The ownership notice shows only when it applies; without content it takes no gap
+app-config-ownership-notice {
+  display: contents;
+}
+
+// More specific than Material's own :last-child padding rule of the card content
+mat-card mat-card-content {
+  padding: 0 20px 20px;
+}
+
+// Each value as a tile with its label above it
+.details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+}
+
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 16px;
+  border-radius: var(--mat-sys-corner-medium);
+  background: var(--mat-sys-surface-container-low);
+
+  dt {
+    font: var(--mat-sys-label-medium);
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  dd {
+    margin: 0;
+    font: var(--mat-sys-body-large);
+    color: var(--mat-sys-on-surface);
+    overflow-wrap: anywhere;
+
+    &.muted {
+      font: var(--mat-sys-body-medium);
+      color: var(--mat-sys-on-surface-variant);
+    }
+  }
+
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 14px;
+  }
+
+  // A value with a copy button at its end
+  .with-action {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 4px;
+    margin-right: -8px;
 
-    mat-icon {
-      color: var(--mat-sys-on-surface-variant);
+    code {
+      flex: 1;
+      min-width: 0;
     }
   }
 }

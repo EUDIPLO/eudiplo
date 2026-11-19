@@ -10,8 +10,8 @@ import { findButton, loseFocus } from './settings-screen.testing';
  *
  * The first load (`fixture.detectChanges()`, which runs `ngOnInit`) succeeds and leaves focus
  * alone. `reload` loads again and fails. The Retry button then loads successfully, which removes
- * the card with the focused button, so focus moves to the page heading, `h2` unless `heading`
- * names another selector, such as `h1` on the restyled forms.
+ * the card with the focused button, so focus moves to the page heading, the first `heading`
+ * (`h2` unless given).
  */
 export async function expectHeadingFocusOnlyAfterRetry(
   fixture: ComponentFixture<unknown>,
@@ -25,13 +25,13 @@ export async function expectHeadingFocusOnlyAfterRetry(
     fixture.detectChanges();
     TestBed.inject(ApplicationRef).tick();
   };
-  const headingElement = page.querySelector<HTMLElement>(heading)!;
+  const pageHeading = page.querySelector<HTMLElement>(heading)!;
 
   loseFocus();
   fixture.detectChanges();
   await settle();
-  expect(headingElement.tabIndex).toBe(-1);
-  expect(document.activeElement).not.toBe(headingElement);
+  expect(pageHeading.tabIndex).toBe(-1);
+  expect(document.activeElement).not.toBe(pageHeading);
 
   reload();
   await settle();
@@ -41,5 +41,5 @@ export async function expectHeadingFocusOnlyAfterRetry(
   retry.click();
   await settle();
   expect(page.querySelector('app-load-error')).toBeNull();
-  expect(document.activeElement).toBe(headingElement);
+  expect(document.activeElement).toBe(pageHeading);
 }

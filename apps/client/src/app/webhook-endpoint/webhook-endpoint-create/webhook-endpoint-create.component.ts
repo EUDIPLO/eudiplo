@@ -10,7 +10,6 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { WebhookEndpointService } from '../webhook-endpoint.service';
 import { ApiKeyEndpointFormComponent } from '../../common/api-key-endpoint-form';
 import { LoadErrorComponent } from '../../common/load-error.component';
@@ -29,7 +28,6 @@ import { ConfigOwnershipNoticeComponent } from '../../config-portability/config-
     MatSnackBarModule,
     MatTooltipModule,
     MatDialogModule,
-    FlexLayoutModule,
     ReactiveFormsModule,
     RouterModule,
     ConfigOwnershipDirective,
@@ -42,8 +40,13 @@ import { ConfigOwnershipNoticeComponent } from '../../config-portability/config-
 })
 export class WebhookEndpointCreateComponent extends ApiKeyEndpointFormComponent {
   protected readonly noun = 'webhook endpoint';
-  protected readonly detailsTitle = 'Endpoint Details';
+  protected readonly detailsTitle = 'Endpoint';
   protected readonly jsonTitle = 'Webhook Endpoint JSON';
+
+  /** Where the back link and Cancel lead: the list, or the endpoint being edited. */
+  get backLabel(): string {
+    return this.create ? 'Webhook Endpoints' : this.loadedTitle || 'Webhook endpoint';
+  }
 
   constructor(
     service: WebhookEndpointService,

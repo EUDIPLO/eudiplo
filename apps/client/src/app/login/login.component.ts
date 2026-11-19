@@ -23,7 +23,6 @@ import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
-import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTabsModule } from '@angular/material/tabs';
@@ -32,7 +31,6 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { OAuth2HttpError } from '@badgateway/oauth2-client';
 import { map, merge, Subscription, take } from 'rxjs';
 
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { EnvironmentService } from '../services/environment.service';
 import { ApiService, withoutTrailingSlashes } from '../core';
 import { type OidcProvider, OidcService, oidcProviderOf } from '../core/oidc.service';
@@ -183,14 +181,12 @@ function appPath(returnUrl: unknown): string | undefined {
     MatCardModule,
     MatFormFieldModule,
     MatInputModule,
-    MatCheckboxModule,
     MatButtonModule,
     MatProgressSpinnerModule,
     MatIconModule,
     MatSnackBarModule,
     MatTabsModule,
     MatTooltipModule,
-    FlexLayoutModule,
     DiploLogoComponent,
   ],
   templateUrl: './login.component.html',
