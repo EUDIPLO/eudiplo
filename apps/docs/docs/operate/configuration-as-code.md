@@ -336,8 +336,26 @@ status updates continue.
 An import is not one transaction. If a step fails, the API returns
 `CONFIG_APPLY_FAILED` with an ordered report: completed steps stay applied, the
 failed step may be partial, later steps (including deletions) do not run.
-Inspect the affected resources, fix the cause, and plan again. Progress is also
-stored in the database:
+Inspect the affected resources, fix the cause, and plan again.
+
+`eudiplo config import` shows that report as one line per resource and exits
+with `1`:
+
+```text
+Import stopped at resource TrustList/eu: 2 completed, 1 failed, 2 not started.
+  completed images/logo.jpg
+  completed KeyChain/signing
+  failed    TrustList/eu
+  pending   PresentationConfig/pid
+  pending   Client/legacy (delete)
+Completed resources stay applied; the failed one may have partial effects.
+Inspect the report with: eudiplo config operations 708f0de1-…
+Then run plan again before retrying.
+```
+
+The full report goes to standard output as JSON. It includes any client secrets
+generated before the failure (`generatedSecrets`); they are not shown again, so
+store them immediately. Progress is also stored in the database:
 
 ```bash
 eudiplo config operations --instance staging                 # latest 50 operations
