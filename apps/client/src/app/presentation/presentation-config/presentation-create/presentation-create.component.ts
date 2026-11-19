@@ -88,6 +88,24 @@ import { openErrorSnackBar } from '../../../utils/error-snackbar';
 import { LoadErrorComponent } from '../../../common/load-error.component';
 import { jsonViewUnavailableReason } from '../../../common/json-view';
 
+/**
+ * How many credentials a DCQL query in the editor asks for: 0 when it is
+ * empty, 'unreadable' when it is text that does not parse.
+ */
+function dcqlCredentialCount(value: unknown): number | 'unreadable' {
+  let query: unknown = value;
+  if (typeof value === 'string') {
+    if (!value.trim()) return 0;
+    try {
+      query = extractSchema(value);
+    } catch {
+      return 'unreadable';
+    }
+  }
+  const credentials = (query as { credentials?: unknown } | null | undefined)?.credentials;
+  return Array.isArray(credentials) ? credentials.length : 0;
+}
+
 @Component({
   selector: 'app-presentation-create',
   imports: [
@@ -855,9 +873,61 @@ export class PresentationCreateComponent implements OnInit {
   }
 
   /**
+   * An import replaces the whole DCQL query. When the current one already asks
+   * for credentials, or is text that does not parse, the user confirms before
+   * the picker opens, so neither a query built by hand nor a selection made in
+   * the picker is lost to a click.
+   */
+  private confirmReplacingQuery(importName: string): boolean {
+    const count = dcqlCredentialCount(this.form.get('dcql_query')?.value);
+    if (count === 0) {
+      return true;
+    }
+    let current = 'which cannot be read as DCQL';
+    if (count !== 'unreadable') {
+      current = count === 1 ? 'which asks for 1 credential' : `which asks for ${count} credentials`;
+    }
+    return confirm(`${importName} replaces the current query, ${current}. Continue?`);
+  }
+
+  /**
+   * Whether the form holds anything a template would replace: a template
+   * resets every setting except ID and Description.
+   */
+  private hasSettingsBeyondName(): boolean {
+    const value = this.form.getRawValue();
+    const filled = (field: unknown) =>
+      field !== undefined && field !== null && `${field}`.trim() !== '';
+    return (
+      dcqlCredentialCount(value.dcql_query) !== 0 ||
+      [
+        value.redirectUri,
+        value.allowedOrigins,
+        value.accessKeyChainId,
+        value.registrationCertJwt,
+        value.registrationCertPrivacyPolicy,
+        value.transaction_data,
+        value.webhookEndpointId,
+      ].some(filled) ||
+      value.registrationCertPurpose.length > 0 ||
+      value.attached.length > 0 ||
+      value.lifeTime !== 300 ||
+      value.statusCheckMode !== 'strict'
+    );
+  }
+
+  /**
    * Load a predefined configuration
    */
   loadPredefinedConfig(configTemplate: any): void {
+    if (
+      this.hasSettingsBeyondName() &&
+      !confirm(
+        `Load the template "${configTemplate.name}"? It replaces all settings except ID and Description.`
+      )
+    ) {
+      return;
+    }
     const config = structuredClone(configTemplate.config); // Deep clone
     // Choosing a starting point in step two must not replace the name from step one.
     config.id = this.form.get('id')?.value || config.id;
@@ -924,6 +994,7 @@ export class PresentationCreateComponent implements OnInit {
    * Open the issuer metadata browser dialog to import DCQL from an issuer
    */
   importFromIssuer(): void {
+    if (!this.confirmReplacingQuery('Import from Issuer')) return;
     this.openClaimPicker({}, 'DCQL query imported from issuer');
   }
 
@@ -932,6 +1003,7 @@ export class PresentationCreateComponent implements OnInit {
    * the query asks only for credential types and claims that exist.
    */
   importFromCredentialConfig(): void {
+    if (!this.confirmReplacingQuery('Import from Credential Config')) return;
     this.openClaimPicker({ source: 'tenant' }, 'DCQL query imported from credential config');
   }
 
@@ -960,6 +1032,7 @@ export class PresentationCreateComponent implements OnInit {
    * Open the schema metadata browser dialog to import DCQL from schema metadata.
    */
   importFromSchemaMetadata(): void {
+    if (!this.confirmReplacingQuery('Import from Schema')) return;
     const dialogRef = this.dialog.open(SchemaBrowserComponent, {
       data: {},
       disableClose: false,
