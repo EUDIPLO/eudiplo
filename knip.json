@@ -66,7 +66,6 @@
         "test/**/*.test.ts"
       ]
     },
-    "apps/webhook": {},
     "packages/eudiplo-config-format": {
       "entry": [
         "src/**/*.spec.ts"

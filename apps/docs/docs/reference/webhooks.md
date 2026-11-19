@@ -17,6 +17,8 @@ EUDIPLO sends a webhook when a presentation ends, when a wallet reports what it 
 
 There is no event subscription model: each webhook goes to the one URL configured for that flow.
 
+An example receiver for the [notification webhook](#notification-webhook), plus an endpoint that logs any webhook it receives, is in [EUDIPLO/examples](https://github.com/EUDIPLO/examples/tree/main/webhook).
+
 ## Configure a webhook
 
 ### Webhook endpoints
