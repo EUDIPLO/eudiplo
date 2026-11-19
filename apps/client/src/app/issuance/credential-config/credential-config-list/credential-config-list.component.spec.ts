@@ -19,6 +19,8 @@ describe('CredentialConfigListComponent', () => {
     empty: 'No credential configurations yet.',
     create: 'Create credential configuration',
     failure: 'Failed to load credential configurations',
+    heading: 'h1',
+    firstCell: 'pid',
   });
 });
 
@@ -129,13 +131,10 @@ describe('CredentialConfigListComponent table', () => {
     );
   });
 
-  it('deletes a configuration from its row after confirming and loads the list again', async () => {
+  it('deletes a configuration from its row after confirming and takes its row out', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     const deleteConfiguration = vi.fn().mockResolvedValue(undefined);
-    const loadConfigurations = vi
-      .fn()
-      .mockResolvedValueOnce(configs)
-      .mockResolvedValueOnce([configs[1]]);
+    const loadConfigurations = vi.fn().mockResolvedValue(configs);
     const fixture = await render({ loadConfigurations, deleteConfiguration });
     const element = fixture.nativeElement as HTMLElement;
 
@@ -143,7 +142,14 @@ describe('CredentialConfigListComponent table', () => {
       .querySelector<HTMLButtonElement>('button[aria-label="Delete credential configuration pid"]')!
       .click();
 
-    await vi.waitFor(() => expect(loadConfigurations).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(
+        [...element.querySelectorAll('.item-link')].map((a) => a.getAttribute('href'))
+      ).not.toContain('/pid');
+    });
+    // The row goes without loading the list again.
+    expect(loadConfigurations).toHaveBeenCalledOnce();
     expect(window.confirm).toHaveBeenCalledWith(
       'Delete credential configuration "pid"? This cannot be undone.'
     );

@@ -103,6 +103,7 @@ export class StatusListListComponent extends BaseAsyncListComponent<StatusListRe
       return Promise.resolve();
     }
     return this.deleteItem({
+      item: list,
       id: list.id,
       question: `Delete status list "${list.id}"? This cannot be undone.`,
       request: () => this.statusListService.deleteList(list.id),

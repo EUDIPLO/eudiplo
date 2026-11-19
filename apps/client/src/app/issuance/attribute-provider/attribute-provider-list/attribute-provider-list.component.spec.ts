@@ -18,6 +18,8 @@ describe('AttributeProviderListComponent', () => {
     empty: 'No attribute providers yet.',
     create: 'Create attribute provider',
     failure: 'Failed to load attribute providers',
+    heading: 'h1',
+    firstCell: 'CRM',
   });
 });
 
@@ -69,10 +71,10 @@ describe('AttributeProviderListComponent table', () => {
     );
   });
 
-  it('deletes a provider from its row after confirming and loads the list again', async () => {
+  it('deletes a provider from its row after confirming and takes its row out', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     const remove = vi.fn().mockResolvedValue(undefined);
-    const getAll = vi.fn().mockResolvedValueOnce(providers).mockResolvedValueOnce([providers[0]]);
+    const getAll = vi.fn().mockResolvedValue(providers);
     const fixture = await render({ getAll, delete: remove });
     const element = fixture.nativeElement as HTMLElement;
 
@@ -80,7 +82,14 @@ describe('AttributeProviderListComponent table', () => {
       .querySelector<HTMLButtonElement>('button[aria-label="Delete attribute provider crm"]')!
       .click();
 
-    await vi.waitFor(() => expect(getAll).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(
+        [...element.querySelectorAll('.item-link')].map((a) => a.getAttribute('href'))
+      ).not.toContain('/crm');
+    });
+    // The row goes without loading the list again.
+    expect(getAll).toHaveBeenCalledOnce();
     expect(window.confirm).toHaveBeenCalledWith(
       'Delete attribute provider "CRM"? This cannot be undone.'
     );

@@ -1,3 +1,4 @@
+import { ElementRef } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -20,6 +21,9 @@ class TestList extends BaseAsyncListComponent<string> {
 describe('BaseAsyncListComponent', () => {
   it('keeps a failed load apart from an empty list and loads again on retry', async () => {
     // The base class injects, as Angular does when it creates a list component.
+    TestBed.configureTestingModule({
+      providers: [{ provide: ElementRef, useValue: new ElementRef(document.createElement('div')) }],
+    });
     const list = TestBed.runInInjectionContext(() => new TestList());
     list.fetch
       .mockRejectedValueOnce({ statusCode: 403, message: 'Forbidden resource' })
@@ -41,6 +45,7 @@ describe('BaseAsyncListComponent delete', () => {
   class DeletingList extends TestList {
     remove(request: () => Promise<unknown>): Promise<void> {
       return this.deleteItem({
+        item: 'a',
         id: 'a',
         question: 'Delete "a"?',
         request,
@@ -52,9 +57,14 @@ describe('BaseAsyncListComponent delete', () => {
 
   function render() {
     const snackBar = { open: vi.fn() };
-    TestBed.configureTestingModule({ providers: [{ provide: MatSnackBar, useValue: snackBar }] });
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: MatSnackBar, useValue: snackBar },
+        { provide: ElementRef, useValue: new ElementRef(document.createElement('div')) },
+      ],
+    });
     const list = TestBed.runInInjectionContext(() => new DeletingList());
-    list.fetch.mockResolvedValue([]);
+    list.fetch.mockResolvedValue(['a', 'b']);
     return { list, snackBar };
   }
 
@@ -63,9 +73,10 @@ describe('BaseAsyncListComponent delete', () => {
     TestBed.resetTestingModule();
   });
 
-  it('deletes once after confirming, says so and loads the list again', async () => {
+  it('deletes once after confirming, says so and takes the row out of the list', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     const { list, snackBar } = render();
+    await list.loadItems();
     let finish: () => void = () => undefined;
     const request = vi.fn(() => new Promise<void>((resolve) => (finish = resolve)));
 
@@ -79,7 +90,9 @@ describe('BaseAsyncListComponent delete', () => {
     expect(request).toHaveBeenCalledOnce();
     expect(window.confirm).toHaveBeenCalledOnce();
     expect(snackBar.open).toHaveBeenCalledWith('Thing deleted', 'Close', { duration: 3000 });
+    // The row goes without loading the list again.
     expect(list.fetch).toHaveBeenCalledOnce();
+    expect(list.loaded).toEqual(['b']);
     expect(list.deletingId).toBeUndefined();
   });
 
@@ -117,7 +130,7 @@ describe('BaseAsyncListComponent delete', () => {
 
     expect(snackBar.open.mock.lastCall?.[0]).toBe('Failed to delete thing: In use');
     expect(consoleError).toHaveBeenCalledWith('Failed to delete thing:', expect.anything());
-    expect(list.fetch).not.toHaveBeenCalled();
+    expect(list.loaded).toEqual([]);
     expect(list.deletingId).toBeUndefined();
   });
 });

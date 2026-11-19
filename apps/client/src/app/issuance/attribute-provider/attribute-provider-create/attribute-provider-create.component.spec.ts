@@ -307,7 +307,8 @@ describe('AttributeProviderCreateComponent JSON View', () => {
     await expectHeadingFocusOnlyAfterRetry(
       fixture,
       () => component.retryLoad(),
-      () => !component.loading
+      () => !component.loading,
+      'h1'
     );
   });
 });

@@ -11,26 +11,27 @@ export interface ListStatesScenario<S> {
   /** The feature service whose `fetchMethod` the screen's `fetchItems()` calls. */
   service: Type<S>;
   fetchMethod: keyof S & string;
-  /** An item as the service returns it; the first column of the table shows its `id`. */
+  /** An item as the service returns it; `id` is the first column of the table. */
   item: { id: string; [field: string]: unknown };
   /** Accessible name of the loading indicator. */
   loading: string;
   /** Text of the empty state. */
   empty: string;
-  /**
-   * Text of the empty state's link to the create page; a list without `createButton` has a
-   * header link with the same text.
-   */
+  /** Text of the empty state's link to the create page. */
   create: string;
   /**
    * Accessible name of the header's Create icon button, which is also its tooltip. Leave it out
-   * when the header has a Create link with visible text instead.
+   * when the header's Create is a link with visible text, which needs no tooltip.
    */
   createButton?: string;
   /** `loadFailedMessage`, the prefix of the message when loading fails. */
   failure: string;
   /** Further providers the screen needs, such as a JwtService with the roles to create. */
   providers?: Provider[];
+  /** The page heading that takes the focus after Retry; `h2` unless given. */
+  heading?: string;
+  /** Text the item's first table cell contains, such as its name; unless given, the cell is the `id`. */
+  firstCell?: string;
 }
 
 async function waitUntil(
@@ -49,21 +50,6 @@ async function waitUntil(
 async function settle(fixture: ComponentFixture<unknown>): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 50));
   fixture.detectChanges();
-}
-
-/** The page heading, an h1 or on older screens an h2, that takes focus after a retry. */
-function heading(element: HTMLElement): Element | null {
-  return element.querySelector('h1, h2');
-}
-
-/**
- * Checks that the first cell names the item: the cell, or an element in it such as the row link
- * or the ID below a name, shows exactly the ID, not just text that contains it.
- */
-function firstCellNames(element: HTMLElement, id: string): void {
-  const cell = element.querySelector('td.mat-mdc-cell');
-  const texts = [cell, ...(cell?.querySelectorAll('*') ?? [])].map((e) => e?.textContent?.trim());
-  expect(texts).toContain(id);
 }
 
 function loadingIndicator(element: HTMLElement, label: string): Element | null {
@@ -88,6 +74,13 @@ function expectFailure(element: HTMLElement, failure: string): void {
  * focus kept on Retry or moved to the page heading afterwards.
  */
 export function describeListStates<S>(screen: ListStatesScenario<S>): void {
+  const heading = screen.heading ?? 'h2';
+  /** Checks that the table shows the item. */
+  const expectItemRow = (element: HTMLElement): void => {
+    const text = element.querySelector('td.mat-mdc-cell')?.textContent;
+    if (screen.firstCell === undefined) expect(text).toBe(screen.item.id);
+    else expect(text).toContain(screen.firstCell);
+  };
   describe('loading, empty and error states', () => {
     let fetchItems: ReturnType<typeof vi.fn>;
 
@@ -156,11 +149,12 @@ export function describeListStates<S>(screen: ListStatesScenario<S>): void {
       expect(element.querySelector('[role="alert"]')).toBeNull();
       // Only a retry moves focus; opening the page leaves it alone.
       await settle(fixture);
-      expect(document.activeElement).not.toBe(heading(element));
+      expect(document.activeElement).not.toBe(element.querySelector(heading));
     });
 
-    if (!screen.createButton) {
-      it('links to the create page from the page header', async () => {
+    it.skipIf(screen.createButton !== undefined)(
+      'links to the create page from the page header with the empty state link text',
+      async () => {
         fetchItems.mockResolvedValue([screen.item]);
         const fixture = render();
         const element = await waitUntil(fixture, (el) =>
@@ -168,22 +162,21 @@ export function describeListStates<S>(screen: ListStatesScenario<S>): void {
         );
 
         const link = Array.from(element.querySelectorAll('header a')).find((a) =>
-          a.textContent?.trim().includes(screen.create)
+          a.textContent?.includes(screen.create)
         );
         expect(link?.getAttribute('href')).toBe('/create');
-      });
-    }
+      }
+    );
 
-    if (screen.createButton) {
-      const createButton = screen.createButton;
-      it('names the Create button like its tooltip', () => {
-        fetchItems.mockResolvedValue([]);
-        const fixture = render();
+    it.skipIf(screen.createButton === undefined)('names the Create button like its tooltip', () => {
+      fetchItems.mockResolvedValue([]);
+      const fixture = render();
 
-        const button = fixture.debugElement.query(By.css(`button[aria-label="${createButton}"]`));
-        expect(button.injector.get(MatTooltip).message).toBe(createButton);
-      });
-    }
+      const button = fixture.debugElement.query(
+        By.css(`button[aria-label="${screen.createButton}"]`)
+      );
+      expect(button.injector.get(MatTooltip).message).toBe(screen.createButton);
+    });
 
     it('reports a failed load instead of an empty list and focuses the heading after Retry', async () => {
       fetchItems
@@ -197,11 +190,13 @@ export function describeListStates<S>(screen: ListStatesScenario<S>): void {
       retry.focus();
       retry.click();
 
-      await waitUntil(fixture, (el) => firstCellNames(el, screen.item.id));
+      await waitUntil(fixture, (el) => expectItemRow(el));
       expect(element.querySelector('[role="alert"]')).toBeNull();
       expect(fetchItems).toHaveBeenCalledTimes(2);
       // Retry left with the error card, so focus continues from the page heading.
-      await waitUntil(fixture, (el) => expect(document.activeElement).toBe(heading(el)));
+      await waitUntil(fixture, (el) =>
+        expect(document.activeElement).toBe(el.querySelector(heading))
+      );
     });
 
     it('leaves focus alone that the user moved elsewhere during the retry', async () => {
@@ -219,7 +214,7 @@ export function describeListStates<S>(screen: ListStatesScenario<S>): void {
       succeed([screen.item]);
 
       try {
-        await waitUntil(fixture, (el) => firstCellNames(el, screen.item.id));
+        await waitUntil(fixture, (el) => expectItemRow(el));
         await settle(fixture);
         expect(document.activeElement).toBe(search);
       } finally {

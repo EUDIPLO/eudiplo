@@ -1,30 +1,36 @@
-<div fxLayout="column" fxFlex fxLayoutGap="24px">
+<div class="page form-page">
+  <a class="back-link" matButton [routerLink]="['../']" [attr.aria-label]="'Back to ' + backLabel">
+    <mat-icon>arrow_back</mat-icon>
+    {{ backLabel }}
+  </a>
+
   @if (!create) {
     <app-config-ownership-notice
       kind="WebhookEndpoint"
       [resourceId]="form.get('id')?.value || ''"
     />
   }
-  <!-- Header -->
-  <div fxLayout="row" fxLayoutAlign="space-between center">
-    <h2 #pageHeading tabindex="-1">{{ create ? 'Create' : 'Edit' }} Webhook Endpoint</h2>
-    <div fxLayout="row" fxLayoutGap="8px">
-      <button
-        mat-stroked-button
-        type="button"
-        (click)="viewAsJson()"
-        [disabled]="!!jsonViewUnavailableReason"
-        disabledInteractive
-        [matTooltip]="jsonViewUnavailableReason || 'View/Edit as JSON'"
-      >
-        <mat-icon>code</mat-icon>
-        JSON View
-      </button>
-      <button mat-icon-button [routerLink]="['../']" matTooltip="Back" aria-label="Back">
-        <mat-icon>arrow_back</mat-icon>
-      </button>
+
+  <header class="page-header">
+    <div class="heading">
+      <span class="form-avatar" aria-hidden="true"><mat-icon>webhook</mat-icon></span>
+      <div>
+        <h1 #pageHeading tabindex="-1">{{ create ? 'Create' : 'Edit' }} webhook endpoint</h1>
+        <p>An address EUDIPLO calls with the status of an issuance or a presentation's result.</p>
+      </div>
     </div>
-  </div>
+    <button
+      matButton="outlined"
+      type="button"
+      (click)="viewAsJson()"
+      [disabled]="!!jsonViewUnavailableReason"
+      disabledInteractive
+      [matTooltip]="jsonViewUnavailableReason || 'View/Edit as JSON'"
+    >
+      <mat-icon>code</mat-icon>
+      JSON View
+    </button>
+  </header>
 
   @if (loadError) {
     <app-load-error
@@ -32,102 +38,127 @@
       hint="The webhook endpoint can only be edited after it has been loaded."
       (retry)="retryLoad()"
     >
-      <a mat-button [routerLink]="['../../']">Back to the list</a>
+      <a matButton [routerLink]="['../../']">Back to the list</a>
     </app-load-error>
   } @else if (loading) {
-    <p><output>Loading webhook endpoint…</output></p>
+    <p class="loading-state"><output>Loading webhook endpoint…</output></p>
   } @else {
-    <!-- Form -->
     <form #formElement [formGroup]="form" (ngSubmit)="onSubmit()">
-      <mat-card>
-        <mat-card-header>
-          <mat-card-title>
-            <mat-icon>webhook</mat-icon>
-            Endpoint Details
-          </mat-card-title>
-        </mat-card-header>
-        <mat-card-content fxLayout="column" fxLayoutGap="16px">
-          <mat-form-field>
-            <mat-label>ID</mat-label>
-            <input matInput formControlName="id" placeholder="unique-endpoint-id" />
-            <mat-icon matSuffix>fingerprint</mat-icon>
-            <mat-error>{{ fieldError('id', 'ID is required') }}</mat-error>
-          </mat-form-field>
-
-          <mat-form-field>
-            <mat-label>Name</mat-label>
-            <input matInput formControlName="name" placeholder="My Webhook Endpoint" />
-            <mat-icon matSuffix>label</mat-icon>
-            <mat-error>{{ fieldError('name', 'Name is required') }}</mat-error>
-          </mat-form-field>
-
-          <mat-form-field>
-            <mat-label>Description</mat-label>
-            <input matInput formControlName="description" placeholder="Optional description" />
-            <mat-icon matSuffix>description</mat-icon>
-            <mat-error>{{ fieldError('description') }}</mat-error>
-          </mat-form-field>
-
-          <mat-form-field>
-            <mat-label>URL</mat-label>
-            <input matInput formControlName="url" placeholder="https://example.com/webhook" />
-            <mat-icon matSuffix>link</mat-icon>
-            <mat-error>{{ fieldError('url', 'URL is required') }}</mat-error>
-          </mat-form-field>
-        </mat-card-content>
-      </mat-card>
-
-      <!-- Authentication Card -->
-      <mat-card>
-        <mat-card-header>
-          <mat-card-title>
-            <mat-icon>security</mat-icon>
-            Authentication
-          </mat-card-title>
-        </mat-card-header>
-        <mat-card-content fxLayout="column" fxLayoutGap="16px">
-          <mat-form-field>
-            <mat-label>Auth Type</mat-label>
-            <mat-select formControlName="authType">
-              <mat-option value="none">None</mat-option>
-              <mat-option value="apiKey">API Key</mat-option>
-            </mat-select>
-            <mat-icon matSuffix>vpn_key</mat-icon>
-            <mat-error>{{ fieldError('authType') }}</mat-error>
-          </mat-form-field>
-
-          @if (form.get('authType')?.value === 'apiKey') {
-            <mat-form-field>
-              <mat-label>Header Name</mat-label>
-              <input matInput formControlName="authHeaderName" placeholder="X-API-Key" />
-              <mat-icon matSuffix>code</mat-icon>
-              <mat-error>{{ fieldError('authHeaderName') }}</mat-error>
+      <!-- Each section: what it is for on the left, its fields on the right -->
+      <section class="form-section" aria-labelledby="webhook-endpoint-heading">
+        <div class="section-intro">
+          <h2 id="webhook-endpoint-heading">Endpoint</h2>
+          <p>
+            @if (create) {
+              The ID names the endpoint in credential offers and presentation configurations. It
+              cannot be changed later.
+            } @else {
+              The ID is fixed once the endpoint exists.
+            }
+          </p>
+        </div>
+        <mat-card appearance="outlined">
+          <mat-card-content class="field-stack">
+            <mat-form-field appearance="outline">
+              <mat-label>ID</mat-label>
+              <input matInput formControlName="id" placeholder="for example order-events" />
+              <mat-icon matSuffix aria-hidden="true">{{
+                create ? 'fingerprint' : 'lock'
+              }}</mat-icon>
+              <mat-error>{{ fieldError('id', 'ID is required') }}</mat-error>
             </mat-form-field>
 
-            <mat-form-field>
-              <mat-label>Header Value</mat-label>
+            <mat-form-field appearance="outline">
+              <mat-label>Name</mat-label>
+              <input matInput formControlName="name" placeholder="for example Order events" />
+              <mat-error>{{ fieldError('name', 'Name is required') }}</mat-error>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Description</mat-label>
+              <textarea
+                matInput
+                formControlName="description"
+                rows="2"
+                placeholder="Optional"
+              ></textarea>
+              <mat-error>{{ fieldError('description') }}</mat-error>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>URL</mat-label>
               <input
                 matInput
-                formControlName="authHeaderValue"
-                type="password"
-                placeholder="secret-value"
+                formControlName="url"
+                type="url"
+                placeholder="https://example.com/webhook"
               />
-              <mat-icon matSuffix>lock</mat-icon>
-              @if (!create) {
-                <mat-hint>Kept unless you enter a new key; enter it again for a new URL.</mat-hint>
-              }
-              <mat-error>{{ fieldError('authHeaderValue') }}</mat-error>
+              <mat-error>{{ fieldError('url', 'URL is required') }}</mat-error>
             </mat-form-field>
-          }
-        </mat-card-content>
-      </mat-card>
+          </mat-card-content>
+        </mat-card>
+      </section>
 
-      <!-- Actions -->
-      <div fxLayout="row" fxLayoutAlign="end center" fxLayoutGap="8px">
-        <button mat-stroked-button type="button" [routerLink]="['../']">Cancel</button>
+      <section class="form-section" aria-labelledby="webhook-auth-heading">
+        <div class="section-intro">
+          <h2 id="webhook-auth-heading">Authentication</h2>
+          <p>
+            How EUDIPLO identifies itself to the endpoint. An API key is sent in a header of your
+            choice and stored encrypted.
+          </p>
+        </div>
+        <mat-card appearance="outlined">
+          <mat-card-content class="field-stack">
+            <mat-form-field appearance="outline">
+              <mat-label>Authentication</mat-label>
+              <mat-select formControlName="authType">
+                <mat-option value="none">None</mat-option>
+                <mat-option value="apiKey">API key</mat-option>
+              </mat-select>
+              <mat-error>{{ fieldError('authType') }}</mat-error>
+            </mat-form-field>
+
+            @if (form.get('authType')?.value === 'apiKey') {
+              <mat-form-field appearance="outline">
+                <mat-label>Header name</mat-label>
+                <input matInput formControlName="authHeaderName" placeholder="X-API-Key" />
+                <mat-error>{{ fieldError('authHeaderName') }}</mat-error>
+              </mat-form-field>
+
+              <mat-form-field appearance="outline">
+                <mat-label>Header value</mat-label>
+                <input
+                  matInput
+                  formControlName="authHeaderValue"
+                  type="password"
+                  autocomplete="new-password"
+                  placeholder="secret-value"
+                />
+                <mat-icon matSuffix aria-hidden="true">lock</mat-icon>
+                @if (!create) {
+                  <mat-hint
+                    >Kept unless you enter a new key; enter it again for a new URL.</mat-hint
+                  >
+                }
+                <mat-error>{{ fieldError('authHeaderValue') }}</mat-error>
+              </mat-form-field>
+            }
+          </mat-card-content>
+        </mat-card>
+      </section>
+
+      <!-- Stays in view at the bottom while the form scrolls -->
+      <div class="action-bar">
+        <output class="change-state" [class.dirty]="form.dirty">
+          @if (form.dirty) {
+            Unsaved changes
+          } @else if (!create) {
+            No changes
+          }
+        </output>
+        <a matButton [routerLink]="['../']">Cancel</a>
         <button
-          mat-flat-button
-          color="primary"
+          matButton="filled"
           type="submit"
           [disabled]="saving"
           disabledInteractive

@@ -64,6 +64,7 @@ export class AttributeProviderListComponent extends BaseAsyncListComponent<Attri
 
   deleteProvider(provider: AttributeProviderEntity): Promise<void> {
     return this.deleteItem({
+      item: provider,
       id: provider.id,
       question: `Delete attribute provider "${provider.name || provider.id}"? This cannot be undone.`,
       request: () => this.attributeProviderService.delete(provider.id),

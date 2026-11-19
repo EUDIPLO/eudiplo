@@ -37,6 +37,8 @@ describe('StatusListListComponent', () => {
     empty: 'No status lists yet.',
     create: 'Create status list',
     failure: 'Failed to load status lists',
+    heading: 'h1',
+    firstCell: 'list-1',
     providers: [
       { provide: JwtService, useValue: { hasRole: () => true } },
       { provide: ConfigOwnershipService, useValue: { get: async () => undefined } },
@@ -131,10 +133,10 @@ describe('StatusListListComponent table', () => {
     );
   });
 
-  it('deletes an unused list from its row after confirming and loads the list again', async () => {
+  it('deletes an unused list from its row after confirming and takes its row out', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     const deleteList = vi.fn().mockResolvedValue(undefined);
-    const getLists = vi.fn().mockResolvedValueOnce(lists).mockResolvedValueOnce([lists[1]]);
+    const getLists = vi.fn().mockResolvedValue(lists);
     const fixture = await render({ getLists, deleteList });
     const element = fixture.nativeElement as HTMLElement;
 
@@ -142,7 +144,14 @@ describe('StatusListListComponent table', () => {
     expectAvailable(fixture, remove, 'Delete status list');
     remove.click();
 
-    await vi.waitFor(() => expect(getLists).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(
+        [...element.querySelectorAll('.item-link')].map((a) => a.getAttribute('href'))
+      ).not.toContain('/shared-b');
+    });
+    // The row goes without loading the list again.
+    expect(getLists).toHaveBeenCalledOnce();
     expect(window.confirm).toHaveBeenCalledWith(
       'Delete status list "shared-b"? This cannot be undone.'
     );

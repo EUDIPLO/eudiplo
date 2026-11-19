@@ -81,7 +81,7 @@ Features follow a list / show / create pattern (`*-list/`, `*-show/`, `*-create/
 pnpm --filter @eudiplo/client test --watch=false
 ```
 
-For a list on `BaseAsyncListComponent`, call `describeListStates()` from `common/base-async-list.testing.ts` in its spec. It tests the loading, empty and error states and the focus after Retry, and expects an `h1` page heading (`h2` on older lists), a Create link in the page header with the same text as the empty state's link, or with `createButton` a Create icon button whose `aria-label` matches its tooltip, a loading indicator with an `aria-label`, an empty state with a link to `create` and the item ID in the first column, as the cell's text or as an element in it such as the row link.
+For a list on `BaseAsyncListComponent`, call `describeListStates()` from `common/base-async-list.testing.ts` in its spec. It tests the loading, empty and error states and the focus after Retry, and expects an `h2` page heading (or the `heading` it is given, such as `h1`), a Create icon button whose `aria-label` matches its tooltip (unless `createButton` is left out for a Create link in the page header with the empty state link's text), a loading indicator with an `aria-label`, an empty state with a link to `create` and the item ID as the first column (or, with `firstCell`, a text the first column contains, such as the item's name).
 
 `src/test-setup.ts` provides in-memory `localStorage`/`sessionStorage`, a `matchMedia` stub and a never-settling `fetch` for the SDK client. To assert API calls, stub `fetch` and inspect the requests; the Angular builder cannot intercept `vi.mock('@eudiplo/sdk-core')`.
 

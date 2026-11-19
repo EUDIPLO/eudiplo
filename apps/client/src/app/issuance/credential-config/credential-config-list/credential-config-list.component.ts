@@ -84,6 +84,7 @@ export class CredentialConfigListComponent extends BaseAsyncListComponent<Creden
 
   deleteConfig(config: CredentialConfig): Promise<void> {
     return this.deleteItem({
+      item: config,
       id: config.id,
       question: `Delete credential configuration "${config.id}"? This cannot be undone.`,
       request: () => this.credentialConfigService.deleteConfiguration(config.id),

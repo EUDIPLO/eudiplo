@@ -63,6 +63,8 @@ export abstract class ApiKeyEndpointFormComponent implements OnInit {
   loading = false;
   /** Set when the endpoint to edit could not be loaded; the form stays hidden. */
   loadError = '';
+  /** The loaded endpoint's name, or its ID without one; the page it was opened from shows it. */
+  loadedTitle = '';
 
   /** The endpoint in messages, such as "webhook endpoint". */
   protected abstract readonly noun: string;
@@ -109,6 +111,7 @@ export abstract class ApiKeyEndpointFormComponent implements OnInit {
       .getById(id)
       .then(
         (endpoint) => {
+          this.loadedTitle = endpoint.name || endpoint.id;
           this.form.patchValue({
             id: endpoint.id,
             name: endpoint.name,
@@ -209,8 +212,6 @@ export abstract class ApiKeyEndpointFormComponent implements OnInit {
     dialogRef.afterClosed().subscribe((result) => {
       if (result) {
         this.loadFromJson(result);
-        // A document from JSON View is a change, although patching does not mark it as one
-        this.form.markAsDirty();
       }
     });
   }
@@ -238,5 +239,7 @@ export abstract class ApiKeyEndpointFormComponent implements OnInit {
       url: json.url || '',
       ...toAuthFormValue(json.auth as Parameters<typeof toAuthFormValue>[0]),
     });
+    // The fields changed without being typed in; the page says there are unsaved changes.
+    this.form.markAsDirty();
   }
 }

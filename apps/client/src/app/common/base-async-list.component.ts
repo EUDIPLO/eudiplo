@@ -4,10 +4,13 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { getApiErrorMessage } from '../utils/error-message';
 import { searchAndSort } from '../utils/search-list';
 import { confirmAndDelete, type DeleteAction } from './confirm-delete';
-import { focusAfterRenderIfLost } from './focus-if-lost.util';
+import { focusAfterRenderIfLost, focusRowAfterRemoval } from './focus-if-lost.util';
 
-/** What a row's Delete asks, sends and reports; `id` is what `deletingId` holds meanwhile. */
-export type ListItemDelete = Omit<DeleteAction, 'busy'> & { id: string };
+/**
+ * What a row's Delete asks, sends and reports: `item` is the row's item, `id` what `deletingId`
+ * holds while the delete runs.
+ */
+export type ListItemDelete<T> = Omit<DeleteAction, 'busy'> & { item: T; id: string };
 
 /**
  * Base of a list screen that loads its items on init and again on Retry.
@@ -31,6 +34,7 @@ export abstract class BaseAsyncListComponent<T> implements OnInit {
 
   @ViewChild('listHeading') private readonly listHeading?: ElementRef<HTMLElement>;
   private readonly injector = inject(Injector);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   protected readonly snackBar = inject(MatSnackBar);
 
   /** Text to find in the items of a list with a search bar. */
@@ -93,11 +97,12 @@ export abstract class BaseAsyncListComponent<T> implements OnInit {
   }
 
   /**
-   * Deletes one item after the caller confirmed it, then loads the list again and, as the
-   * focused Delete left with its row, continues focus from the page heading. A second click
-   * while a delete runs does nothing.
+   * Deletes one item after the caller confirmed it and takes its row out of the list. The
+   * focused Delete left with the row, so focus moves to the row now in its place (its
+   * `.item-link`), or to the page heading when no row is left. A second click while a delete
+   * runs does nothing.
    */
-  protected async deleteItem({ id, ...action }: ListItemDelete): Promise<void> {
+  protected async deleteItem({ item, id, ...action }: ListItemDelete<T>): Promise<void> {
     if (this.deletingId !== undefined) {
       return;
     }
@@ -106,8 +111,14 @@ export abstract class BaseAsyncListComponent<T> implements OnInit {
       busy: (busy) => (this.deletingId = busy ? id : undefined),
     });
     if (deleted) {
-      await this.loadItems();
-      focusAfterRenderIfLost(this.injector, () => this.listHeading?.nativeElement);
+      const index = this.shownItems.indexOf(item);
+      this.items = this.items.filter((other) => other !== item);
+      focusRowAfterRemoval(
+        this.injector,
+        () => [...this.host.nativeElement.querySelectorAll<HTMLElement>('a.item-link')],
+        index,
+        () => this.listHeading?.nativeElement
+      );
     }
   }
 }

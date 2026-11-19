@@ -1318,4 +1318,71 @@ describe('LoginComponent with a kept session', () => {
       );
     });
   });
+
+  describe('layout', () => {
+    /** The SSO tab's status line, with the class that sets its tone. */
+    function ssoNotice(mode: LoginComponent['detectedMode']): HTMLElement | null {
+      const component = fixture.componentInstance;
+      component.detectedMode = mode;
+      component.selectedLoginMode = 'sso';
+      fixture.detectChanges();
+      return page().querySelector<HTMLElement>('.tab-panel .notice');
+    }
+
+    beforeEach(() => {
+      api.kept = false;
+      render();
+    });
+
+    it('puts the heading and the form in the main landmark', () => {
+      const main = page().querySelector('main');
+
+      expect(main?.querySelector('h1')?.textContent?.trim()).toBe('Sign in');
+      expect(main?.querySelector('form')).not.toBeNull();
+      expect(main?.querySelector('app-diplo-logo')).not.toBeNull();
+    });
+
+    it('lays out the form without the flex layout directives', () => {
+      expect(page().querySelector('[fxLayout], [fxLayoutAlign], [fxLayoutGap]')).toBeNull();
+    });
+
+    it('shows a neutral status line while it checks the instance for SSO', () => {
+      const notice = ssoNotice('loading');
+
+      expect(notice?.textContent).toContain('Checking whether this instance exposes SSO login.');
+      expect(notice?.classList).not.toContain('ok');
+      expect(notice?.classList).not.toContain('warning');
+    });
+
+    it('shows a success status line where the instance offers SSO', () => {
+      const notice = ssoNotice('oidc');
+
+      expect(notice?.textContent).toContain('SSO is configured.');
+      expect(notice?.classList).toContain('ok');
+    });
+
+    it('shows a warning status line where the instance offers no SSO', () => {
+      const notice = ssoNotice('local');
+
+      expect(notice?.textContent).toContain('SSO is not available for this instance.');
+      expect(notice?.classList).toContain('warning');
+    });
+
+    it('hides the status line icons from assistive technology', () => {
+      for (const mode of ['loading', 'oidc', 'local'] as const) {
+        const icon = ssoNotice(mode)?.querySelector('mat-icon');
+
+        expect(icon?.getAttribute('aria-hidden'), mode).toBe('true');
+      }
+    });
+
+    it('marks a development build with a badge whose icon is hidden', () => {
+      fixture.componentInstance.isDevelopmentMode = true;
+      fixture.detectChanges();
+      const badge = page().querySelector('.dev-indicator');
+
+      expect(badge?.textContent).toContain('Development mode enabled.');
+      expect(badge?.querySelector('mat-icon')?.getAttribute('aria-hidden')).toBe('true');
+    });
+  });
 });

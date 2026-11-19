@@ -1,78 +1,152 @@
-<div fxLayout="row" fxLayoutAlign="space-between center">
-  <h2 #listHeading tabindex="-1">Webhook Endpoints</h2>
-  <button
-    matIconButton
-    [routerLink]="['create']"
-    matTooltip="Create New Webhook Endpoint"
-    aria-label="Create New Webhook Endpoint"
-  >
-    <mat-icon>add</mat-icon>
-  </button>
-</div>
-
-@if (loading) {
-  <div class="list-state">
-    <mat-spinner diameter="40" aria-label="Loading webhook endpoints"></mat-spinner>
-  </div>
-} @else if (loadError) {
-  <app-load-error [message]="loadError" (retry)="loadItems()" />
-} @else if (endpoints.length === 0) {
-  <div class="list-state">
-    <mat-icon class="empty-icon">webhook</mat-icon>
-    <p>No webhook endpoints yet.</p>
-    <a mat-flat-button [routerLink]="['create']">
+<div class="page">
+  <header class="page-header">
+    <div>
+      <h1 #listHeading tabindex="-1">Webhook Endpoints</h1>
+      <p>
+        Addresses EUDIPLO calls with the status of an issuance or the credentials a wallet
+        presented.
+      </p>
+    </div>
+    <a matButton="filled" [routerLink]="['create']">
       <mat-icon>add</mat-icon>
-      Create Webhook Endpoint
+      Create webhook endpoint
     </a>
-  </div>
-} @else {
-  <table mat-table [dataSource]="endpoints" class="mat-elevation-z8">
-    <ng-container matColumnDef="id">
-      <th mat-header-cell *matHeaderCellDef>ID</th>
-      <td mat-cell *matCellDef="let endpoint">{{ endpoint.id }}</td>
-    </ng-container>
+  </header>
 
-    <ng-container matColumnDef="name">
-      <th mat-header-cell *matHeaderCellDef>Name</th>
-      <td mat-cell *matCellDef="let endpoint">{{ endpoint.name }}</td>
-    </ng-container>
+  @if (loading) {
+    <div class="loading-state">
+      <mat-spinner diameter="40" aria-label="Loading webhook endpoints"></mat-spinner>
+    </div>
+  } @else if (loadError) {
+    <app-load-error [message]="loadError" (retry)="loadItems()" />
+  } @else if (endpoints.length === 0) {
+    <div class="empty-state">
+      <span class="empty-icon"><mat-icon>webhook</mat-icon></span>
+      <strong>No webhook endpoints yet.</strong>
+      <p>Create an endpoint, then name it in a credential offer or a presentation configuration.</p>
+      <a matButton="filled" [routerLink]="['create']">
+        <mat-icon>add</mat-icon>
+        Create webhook endpoint
+      </a>
+    </div>
+  } @else {
+    <mat-card appearance="outlined" class="table-card">
+      <div class="table-header">
+        <div class="table-title">
+          <h2>All webhook endpoints</h2>
+          <output>
+            @if (search.trim()) {
+              {{ shownItems.length }} of {{ endpoints.length }} endpoints
+            } @else {
+              {{ endpoints.length }} {{ endpoints.length === 1 ? 'endpoint' : 'endpoints' }}
+            }
+          </output>
+        </div>
+        <div class="search-bar" role="search">
+          <mat-icon class="search-icon" aria-hidden="true">search</mat-icon>
+          <input
+            type="search"
+            [(ngModel)]="search"
+            placeholder="Search webhook endpoints"
+            aria-label="Search webhook endpoints by ID, name, description or URL"
+          />
+          @if (search) {
+            <button
+              matIconButton
+              type="button"
+              class="clear-search"
+              aria-label="Clear search"
+              matTooltip="Clear search"
+              (click)="clearSearch()"
+            >
+              <mat-icon>close</mat-icon>
+            </button>
+          }
+        </div>
+      </div>
 
-    <ng-container matColumnDef="url">
-      <th mat-header-cell *matHeaderCellDef>URL</th>
-      <td mat-cell *matCellDef="let endpoint">{{ endpoint.url }}</td>
-    </ng-container>
+      <div class="table-scroll">
+        <table #table mat-table [dataSource]="shownItems" class="linked">
+          <ng-container matColumnDef="name">
+            <th mat-header-cell *matHeaderCellDef>Endpoint</th>
+            <td mat-cell *matCellDef="let endpoint">
+              <span class="endpoint-cell">
+                <span class="endpoint-icon" aria-hidden="true"><mat-icon>webhook</mat-icon></span>
+                <span class="endpoint-copy">
+                  <!-- The name links to the endpoint and its link covers the row -->
+                  <a class="endpoint-link" [routerLink]="[endpoint.id]">{{
+                    endpoint.name || endpoint.id
+                  }}</a>
+                  <small>{{ endpoint.id }}</small>
+                </span>
+              </span>
+            </td>
+          </ng-container>
 
-    <ng-container matColumnDef="auth">
-      <th mat-header-cell *matHeaderCellDef>Auth</th>
-      <td mat-cell *matCellDef="let endpoint">{{ getAuthType(endpoint) }}</td>
-    </ng-container>
+          <ng-container matColumnDef="url">
+            <th mat-header-cell *matHeaderCellDef>URL</th>
+            <td mat-cell *matCellDef="let endpoint" class="url">{{ endpoint.url }}</td>
+          </ng-container>
 
-    <ng-container matColumnDef="actions">
-      <th mat-header-cell *matHeaderCellDef>Actions</th>
-      <td mat-cell *matCellDef="let endpoint">
-        <button
-          matIconButton
-          [routerLink]="[endpoint.id]"
-          matTooltip="View webhook endpoint"
-          [attr.aria-label]="'View webhook endpoint ' + endpoint.id"
-        >
-          <mat-icon>visibility</mat-icon>
-        </button>
-        <button
-          matIconButton
-          [routerLink]="[endpoint.id, 'edit']"
-          appConfigManaged
-          managedKind="WebhookEndpoint"
-          [managedResourceId]="endpoint.id"
-          matTooltip="Edit webhook endpoint"
-          [attr.aria-label]="'Edit webhook endpoint ' + endpoint.id"
-        >
-          <mat-icon>edit</mat-icon>
-        </button>
-      </td>
-    </ng-container>
+          <ng-container matColumnDef="auth">
+            <th mat-header-cell *matHeaderCellDef>Authentication</th>
+            <td mat-cell *matCellDef="let endpoint">
+              <span class="badge" [class.auth-key]="hasApiKey(endpoint)">{{
+                hasApiKey(endpoint) ? 'API key' : 'No authentication'
+              }}</span>
+            </td>
+          </ng-container>
 
-    <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-    <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
-  </table>
-}
+          <ng-container matColumnDef="actions">
+            <th mat-header-cell *matHeaderCellDef>
+              <span class="visually-hidden">Actions</span>
+            </th>
+            <td mat-cell *matCellDef="let endpoint">
+              <span class="row-actions">
+                <a
+                  matIconButton
+                  [routerLink]="[endpoint.id, 'edit']"
+                  appConfigManaged
+                  managedKind="WebhookEndpoint"
+                  [managedResourceId]="endpoint.id"
+                  matTooltip="Edit webhook endpoint"
+                  [attr.aria-label]="'Edit webhook endpoint ' + (endpoint.name || endpoint.id)"
+                >
+                  <mat-icon>edit</mat-icon>
+                </a>
+                <button
+                  matIconButton
+                  class="delete-action"
+                  (click)="deleteEndpoint(endpoint)"
+                  [disabled]="!canManage || deleting.has(endpoint.id)"
+                  disabledInteractive
+                  appConfigManaged
+                  managedKind="WebhookEndpoint"
+                  [managedResourceId]="endpoint.id"
+                  [matTooltip]="
+                    deleting.has(endpoint.id)
+                      ? 'Deleting the webhook endpoint…'
+                      : 'Delete webhook endpoint'
+                  "
+                  [attr.aria-label]="'Delete webhook endpoint ' + (endpoint.name || endpoint.id)"
+                >
+                  <mat-icon>delete_outline</mat-icon>
+                </button>
+              </span>
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+          <tr class="mat-mdc-row no-match" *matNoDataRow>
+            <td class="mat-mdc-cell" [attr.colspan]="displayedColumns.length">
+              <mat-icon aria-hidden="true">search_off</mat-icon>
+              <span>No webhook endpoint matches "{{ search.trim() }}".</span>
+              <button matButton type="button" (click)="clearSearch()">Clear search</button>
+            </td>
+          </tr>
+        </table>
+      </div>
+    </mat-card>
+  }
+</div>
