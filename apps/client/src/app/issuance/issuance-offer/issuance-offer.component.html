@@ -26,78 +26,33 @@
             <h2>Choose Issuance Flow Type</h2>
             <p class="step-description">Select how the credential will be issued to the wallet.</p>
 
-            <!-- Each tile is the label of its radio, which the flow title names -->
-            <mat-radio-group formControlName="flow" class="flow-selection">
-              <label
-                class="flow-tile"
-                [class.selected]="flowStepForm.value.flow === 'pre_authorized_code'"
-                for="flow-pre_authorized_code-input"
-              >
-                <span class="flow-tile-top">
-                  <span class="flow-icon" aria-hidden="true"><mat-icon>flash_on</mat-icon></span>
-                  <mat-radio-button
-                    id="flow-pre_authorized_code"
-                    value="pre_authorized_code"
-                    aria-labelledby="flow-pre_authorized_code-label"
-                    aria-describedby="flow-pre_authorized_code-description"
-                  />
-                </span>
-                <span class="flow-title" id="flow-pre_authorized_code-label"
-                  >Pre-Authorized Code</span
+            <mat-radio-group formControlName="flow" class="option-grid">
+              @for (option of flowOptions; track option.value) {
+                <!-- The whole tile is the radio's label; the radio is named by the flow title -->
+                <label
+                  class="option-card"
+                  [class.selected]="flowStepForm.value.flow === option.value"
+                  [for]="'flow-' + option.value + '-input'"
                 >
-                <span class="flow-description" id="flow-pre_authorized_code-description">
-                  Claims are provided upfront. The wallet receives the credential immediately after
-                  scanning the QR code. Best for scenarios where user identity is already verified.
-                </span>
-              </label>
-
-              <label
-                class="flow-tile"
-                [class.selected]="flowStepForm.value.flow === 'authorization_code_external'"
-                for="flow-authorization_code_external-input"
-              >
-                <span class="flow-tile-top">
-                  <span class="flow-icon" aria-hidden="true"><mat-icon>dns</mat-icon></span>
-                  <mat-radio-button
-                    id="flow-authorization_code_external"
-                    value="authorization_code_external"
-                    aria-labelledby="flow-authorization_code_external-label"
-                    aria-describedby="flow-authorization_code_external-description"
-                  />
-                </span>
-                <span class="flow-title" id="flow-authorization_code_external-label"
-                  >Authorization Code (External AS)</span
-                >
-                <span class="flow-description" id="flow-authorization_code_external-description">
-                  User authentication is handled by an external Authorization Server. The AS
-                  provides user claims after authentication.
-                </span>
-              </label>
-
-              <label
-                class="flow-tile"
-                [class.selected]="flowStepForm.value.flow === 'authorization_code_iae'"
-                for="flow-authorization_code_iae-input"
-              >
-                <span class="flow-tile-top">
-                  <span class="flow-icon" aria-hidden="true"
-                    ><mat-icon>verified_user</mat-icon></span
-                  >
-                  <mat-radio-button
-                    id="flow-authorization_code_iae"
-                    value="authorization_code_iae"
-                    aria-labelledby="flow-authorization_code_iae-label"
-                    aria-describedby="flow-authorization_code_iae-description"
-                  />
-                </span>
-                <span class="flow-title" id="flow-authorization_code_iae-label"
-                  >Authorization Code (IAE)</span
-                >
-                <span class="flow-description" id="flow-authorization_code_iae-description">
-                  User authentication is handled by the built-in Interactive Authorization Endpoint.
-                  Claims are collected through configured IAE actions.
-                </span>
-              </label>
+                  <span class="option-top">
+                    <span class="option-icon" aria-hidden="true"
+                      ><mat-icon>{{ option.icon }}</mat-icon></span
+                    >
+                    <mat-radio-button
+                      [id]="'flow-' + option.value"
+                      [value]="option.value"
+                      [aria-labelledby]="'flow-' + option.value + '-label'"
+                      [aria-describedby]="'flow-' + option.value + '-description'"
+                    />
+                  </span>
+                  <span class="option-label" [id]="'flow-' + option.value + '-label'">{{
+                    option.label
+                  }}</span>
+                  <span class="option-description" [id]="'flow-' + option.value + '-description'">{{
+                    option.description
+                  }}</span>
+                </label>
+              }
             </mat-radio-group>
           </div>
 
