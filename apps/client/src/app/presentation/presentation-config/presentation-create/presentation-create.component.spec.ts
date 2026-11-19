@@ -2,6 +2,9 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, provideRouter, Router } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
+import { DcqlQueryEditorComponent } from '../dcql-query-editor/dcql-query-editor.component';
+import { By } from '@angular/platform-browser';
+import { TenantCredentialCatalogService } from '../issuer-metadata-browser/tenant-credential-catalog.service';
 import { EMPTY, of, Subject } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { client } from '@eudiplo/sdk-core';
@@ -25,6 +28,9 @@ const query = {
   ],
 };
 
+/** What the tenant credential catalog returns; reset before every test. */
+let knownCredentials: unknown[] = [];
+
 describe('Verification config editor', () => {
   let component: PresentationCreateComponent;
   let fixture: ComponentFixture<PresentationCreateComponent>;
@@ -35,6 +41,7 @@ describe('Verification config editor', () => {
   let route: { snapshot: { params: Record<string, string>; url: { path: string }[] } };
 
   beforeEach(async () => {
+    knownCredentials = [];
     vi.restoreAllMocks();
     vi.spyOn(client, 'get').mockResolvedValue({ data: [] } as any);
     vi.spyOn(client, 'patch').mockResolvedValue({ data: {} } as any);
@@ -61,6 +68,10 @@ describe('Verification config editor', () => {
         { provide: PresentationManagementService, useValue: service },
         { provide: MatSnackBar, useValue: { open: vi.fn() } },
         { provide: MatDialog, useValue: { open: vi.fn() } },
+        {
+          provide: TenantCredentialCatalogService,
+          useValue: { load: vi.fn(() => Promise.resolve(knownCredentials)) },
+        },
         { provide: ThemeService, useValue: { isDarkMode: false, themeChanges: new Subject() } },
         {
           provide: ConfigOwnershipService,
@@ -568,6 +579,15 @@ describe('Verification config editor', () => {
     expect(component.form.dirty).toBe(true);
 
     component.form.markAsPristine();
+    dialog.open.mockReturnValue({ afterClosed: () => of(query) });
+    component.importFromCredentialConfig();
+    expect(dialog.open).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({ data: { source: 'tenant' } })
+    );
+    expect(component.form.dirty).toBe(true);
+
+    component.form.markAsPristine();
     dialog.open.mockReturnValue({ afterClosed: () => of({ dcqlQuery: query }) });
     component.importFromSchemaMetadata();
     expect(component.form.dirty).toBe(true);
@@ -750,6 +770,35 @@ describe('Verification config editor', () => {
     component.createOrUpdatePresentation();
     expect(component.queryControl.invalid).toBe(true);
     expect(service.createConfiguration).not.toHaveBeenCalled();
+  });
+
+  it("passes the tenant's credential configs to the query builder for hints", async () => {
+    const pid = {
+      id: 'pid',
+      format: 'dc+sd-jwt',
+      displayName: 'PID',
+      vct: 'urn:pid',
+      claims: [{ path: ['given_name'], displayName: 'Given name', mandatory: false }],
+    };
+    knownCredentials = [pid];
+    component.ngOnInit();
+    await vi.waitFor(() => expect(component.knownCredentials).toEqual([pid]));
+    fill();
+    component.activeStep = 1;
+    component.furthestStep = 1;
+    fixture.detectChanges();
+
+    const builder = fixture.debugElement.query(By.directive(DcqlQueryEditorComponent));
+    expect(builder.componentInstance.knownCredentials).toEqual([pid]);
+  });
+
+  it('loads the credential configs again when the user returns to the tab', async () => {
+    const pid = { id: 'pid', format: 'dc+sd-jwt', displayName: 'PID', vct: 'urn:pid', claims: [] };
+    knownCredentials = [pid];
+
+    window.dispatchEvent(new Event('focus'));
+
+    await vi.waitFor(() => expect(component.knownCredentials).toEqual([pid]));
   });
 
   it('keeps entered names when choosing a template', () => {

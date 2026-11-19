@@ -13,16 +13,53 @@ import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { JsonPipe } from '@angular/common';
+import { RouterLink } from '@angular/router';
+import { fromFormQueryParams } from '../../../common/return-to-form';
+import { asSentence, getApiErrorMessage, getHttpErrorMessage } from '../../../utils/error-message';
+import { JwtService } from '../../../services/jwt.service';
+import { CredentialConfigService } from '../../../issuance/credential-config/credential-config.service';
 import {
   IssuerMetadataService,
   CredentialIssuerMetadata,
   NormalizedCredential,
   NormalizedClaim,
 } from './issuer-metadata.service';
+import {
+  isMissingIssuanceConfig,
+  TenantCredentialCatalogService,
+} from './tenant-credential-catalog.service';
+
+const TENANT_CREDENTIALS_FAILURE = 'Failed to load credential configs';
+
+/**
+ * Why the tenant's credential configs could not be loaded. The issuer metadata
+ * endpoint puts its reason in an OAuth-style `error_description`, which the
+ * HTTP error helper does not read, so the response body is passed on as is.
+ */
+function tenantCredentialsErrorMessage(err: unknown): string {
+  const response = err as { status?: number; error?: unknown } | null;
+  if (isMissingIssuanceConfig(err)) {
+    return 'This tenant has credential configs but no Issuer Settings, so its issuer metadata cannot be built. Save the Issuer Settings, then select Reload.';
+  }
+  // An HTTP error carries the response body; anything else is passed as is.
+  const reason = typeof response?.status === 'number' ? response.error : err;
+  const message =
+    response?.status === 0
+      ? getHttpErrorMessage(err, TENANT_CREDENTIALS_FAILURE)
+      : getApiErrorMessage(reason, TENANT_CREDENTIALS_FAILURE);
+  return response?.status
+    ? `${asSentence(message)} Check the credential configs, then select Reload.`
+    : message;
+}
 
 export interface IssuerMetadataBrowserDialogData {
   /** Pre-fill the URL field */
   initialUrl?: string;
+  /**
+   * Where the credentials come from: an issuer URL the user enters (default),
+   * or the credential configs of the signed-in tenant on this instance.
+   */
+  source?: 'issuer' | 'tenant';
 }
 
 @Component({
@@ -43,8 +80,8 @@ export interface IssuerMetadataBrowserDialogData {
     MatTooltipModule,
     ReactiveFormsModule,
     JsonPipe,
+    RouterLink,
   ],
-  providers: [IssuerMetadataService],
   templateUrl: './issuer-metadata-browser.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './issuer-metadata-browser.component.scss',
@@ -57,17 +94,37 @@ export class IssuerMetadataBrowserComponent implements OnInit {
   metadata: CredentialIssuerMetadata | null = null;
   credentials: NormalizedCredential[] = [];
 
+  /** The tenant's credential configs were loaded and there are none. */
+  noTenantCredentials = false;
+
+  /** Lists the tenant's own credential configs instead of asking for an issuer URL. */
+  readonly fromTenant: boolean;
+
+  /** Whether the caller may open the page that creates a credential config. */
+  readonly canCreateCredentialConfig: boolean;
+
+  /** The create page opens in a new tab and then says to return to this one. */
+  readonly createLinkQueryParams = fromFormQueryParams({});
+
   // Selection state: credential ID -> Set of claim paths (as JSON strings)
   selectedCredentials = new Map<string, Set<string>>();
 
   constructor(
     public dialogRef: MatDialogRef<IssuerMetadataBrowserComponent>,
     @Inject(MAT_DIALOG_DATA) public data: IssuerMetadataBrowserDialogData | null,
-    private metadataService: IssuerMetadataService
-  ) {}
+    private metadataService: IssuerMetadataService,
+    private jwtService: JwtService,
+    private credentialConfigService: CredentialConfigService,
+    private catalog: TenantCredentialCatalogService
+  ) {
+    this.fromTenant = data?.source === 'tenant';
+    this.canCreateCredentialConfig = jwtService.hasRole('issuance:manage');
+  }
 
   ngOnInit(): void {
-    if (this.data?.initialUrl) {
+    if (this.fromTenant) {
+      void this.loadTenantCredentials();
+    } else if (this.data?.initialUrl) {
       this.urlControl.setValue(this.data.initialUrl);
       this.fetchMetadata();
     }
@@ -98,6 +155,51 @@ export class IssuerMetadataBrowserComponent implements OnInit {
       }
     } finally {
       this.loading = false;
+    }
+  }
+
+  /** Loads the credential configs of the signed-in tenant from its issuer metadata. */
+  async loadTenantCredentials(): Promise<void> {
+    if (this.loading) return;
+    this.loading = true;
+    this.error = null;
+    this.metadata = null;
+    this.credentials = [];
+    this.noTenantCredentials = false;
+    this.selectedCredentials.clear();
+
+    const tenantId = this.jwtService.getTenantId();
+    try {
+      this.credentials = await this.catalog.fetch();
+      this.noTenantCredentials = this.credentials.length === 0;
+    } catch (err: unknown) {
+      if (tenantId && (await this.hasNoCredentialConfigs(err))) {
+        // A tenant that only verifies has no issuance config, so its issuer
+        // metadata cannot be built; that is not an error here.
+        this.noTenantCredentials = true;
+      } else {
+        console.error('Failed to load credential configs:', err);
+        this.error = tenantCredentialsErrorMessage(err);
+      }
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  /**
+   * Whether the tenant has no credential configs at all. Only a caller who
+   * may list them can tell; for everyone else this is false.
+   */
+  private async hasNoCredentialConfigs(err: unknown): Promise<boolean> {
+    if (!this.canCreateCredentialConfig) {
+      // Without the role to list them, a tenant without Issuer Settings is
+      // taken as one that only verifies.
+      return isMissingIssuanceConfig(err);
+    }
+    try {
+      return (await this.credentialConfigService.loadConfigurations()).length === 0;
+    } catch {
+      return false;
     }
   }
 

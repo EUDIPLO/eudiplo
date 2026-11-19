@@ -96,3 +96,37 @@ test('a locked action on the list says why and lets no click or key through', as
   // Playwright treats aria-disabled as disabled and would wait for it otherwise.
   expect(await opensEditPage(() => edit.click({ force: true }))).toBe(false);
 });
+
+test('Import from Credential Config fills the query from a credential config of the tenant', async ({
+  page,
+}) => {
+  test.skip(
+    !hasAuthCredentials,
+    'Set E2E_TENANT_CLIENT_ID and E2E_TENANT_CLIENT_SECRET for tenant flow tests.'
+  );
+  // Build mode imports the demo tenant, whose credential config "pid" issues
+  // the SD-JWT VC type urn:eudi:pid:de:1.
+  test.skip(!resolvedE2EConfig.useBuild, 'Needs the demo tenant of build mode.');
+
+  await page.goto('/presentation-config/create');
+  await page.getByRole('textbox', { name: 'ID', exact: true }).fill('import-from-config');
+  await page
+    .getByRole('textbox', { name: 'Description' })
+    .fill('Imported from a credential config');
+  await page.getByRole('button', { name: 'Continue' }).click();
+
+  await page.getByRole('button', { name: 'Import from Credential Config' }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(
+    dialog.getByRole('heading', { name: 'Import from Credential Config' })
+  ).toBeVisible();
+  await expect(dialog.getByRole('textbox')).toHaveCount(0);
+
+  await dialog.getByRole('checkbox', { name: 'Use PID (pid)' }).check();
+  await dialog.getByRole('button', { name: 'Insert DCQL' }).click();
+  await expect(dialog).toBeHidden();
+
+  await expect(page.getByRole('textbox', { name: 'Credential type (VCT)' })).toHaveValue(
+    'urn:eudi:pid:de:1'
+  );
+});

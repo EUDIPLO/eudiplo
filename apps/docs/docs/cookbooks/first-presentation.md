@@ -127,7 +127,7 @@ EUDIPLO uses the trust list in two places:
 - **In the request to the wallet**, it replaces the reference with `{"type": "aki", "values": [...]}`, the key identifiers of the listed issuer certificates. If a list cannot be loaded or an entry has no key identifier, it also sends the list URL as `etsi_tl`. An outdated list is left out, unless every list is outdated. Wallets that support `trusted_authorities` offer only matching credentials.
 - **During verification**, the issuer certificate chain of the presented credential must lead to a listed entity. This check happens no matter what the wallet does.
 
-For other credentials, **Import from Issuer** fills in the types and claim paths from issuer metadata. See [DCQL](../presentation/dcql.md) for claim options and alternatives.
+For other credentials, **Import from Issuer** fills in the types and claim paths from issuer metadata. When the same tenant issues the credential, **Import from Credential Config** does the same from its credential configs. See [DCQL](../presentation/dcql.md) for claim options and alternatives.
 
 ## Step 4: Review the verification settings
 

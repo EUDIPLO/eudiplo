@@ -99,7 +99,7 @@ export interface NormalizedCredential {
   textColor?: string;
 }
 
-@Injectable()
+@Injectable({ providedIn: 'root' })
 export class IssuerMetadataService {
   constructor(
     private readonly http: HttpClient,
@@ -111,10 +111,7 @@ export class IssuerMetadataService {
    * Handles both full URLs and base URLs (appending .well-known path).
    */
   async fetchMetadata(issuerUrl: string): Promise<CredentialIssuerMetadata> {
-    const baseUrl = this.apiService.getBaseUrl();
-    if (!baseUrl) {
-      throw new Error('API base URL is not configured. Please log in again.');
-    }
+    const baseUrl = this.requireBaseUrl();
 
     const endpoint = `${baseUrl}/api/verifier/config/issuer-metadata/resolve`;
     return firstValueFrom(
@@ -122,6 +119,31 @@ export class IssuerMetadataService {
         issuerUrl,
       })
     );
+  }
+
+  /**
+   * Fetch the issuer metadata this instance publishes for a tenant, which lists
+   * the tenant's own credential configs with their final vct or doctype and
+   * claims. It is read straight from the instance, not through the resolve
+   * proxy, which may refuse the instance's own address.
+   */
+  async fetchTenantMetadata(tenantId: string): Promise<CredentialIssuerMetadata> {
+    const baseUrl = this.requireBaseUrl();
+
+    const endpoint = `${baseUrl}/.well-known/openid-credential-issuer/issuers/${encodeURIComponent(tenantId)}`;
+    return await firstValueFrom(
+      this.http.get<CredentialIssuerMetadata>(endpoint, {
+        headers: { Accept: 'application/json' },
+      })
+    );
+  }
+
+  private requireBaseUrl(): string {
+    const baseUrl = this.apiService.getBaseUrl();
+    if (!baseUrl) {
+      throw new Error('API base URL is not configured. Please log in again.');
+    }
+    return baseUrl;
   }
 
   /**

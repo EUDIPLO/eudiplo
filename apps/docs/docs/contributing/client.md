@@ -4,7 +4,7 @@ title: Client Development
 
 # Client development
 
-The web client (`apps/client`, package `@eudiplo/client`) is an Angular application with standalone components and Angular Material. It talks to the backend through the generated `@eudiplo/sdk-core` client; a few calls still use Angular `HttpClient`, whose `core/auth.interceptor.ts` adds the token: the issuer metadata import (`presentation/presentation-config/issuer-metadata-browser/issuer-metadata.service.ts`), the authorization server metadata lookup in `core/api.service.ts` and the response submission in `session-management/session-management-show/session-management-show.component.ts`.
+The web client (`apps/client`, package `@eudiplo/client`) is an Angular application with standalone components and Angular Material. It talks to the backend through the generated `@eudiplo/sdk-core` client; a few calls still use Angular `HttpClient`, whose `core/auth.interceptor.ts` adds the token: the issuer metadata import and the tenant's own issuer metadata for Import from Credential Config and the query builder hints (`presentation/presentation-config/issuer-metadata-browser/issuer-metadata.service.ts`, used through `presentation/presentation-config/issuer-metadata-browser/tenant-credential-catalog.service.ts`), the authorization server metadata lookup in `core/api.service.ts` and the response submission in `session-management/session-management-show/session-management-show.component.ts`.
 
 ## Commands
 

@@ -2,7 +2,7 @@ import { LANGUAGE_OPTIONS } from '../../../utils/language-options';
 import { TestBed } from '@angular/core/testing';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { ActivatedRoute, provideRouter } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { EMPTY } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ClaimFieldDefinitionDto, client } from '@eudiplo/sdk-core';
@@ -26,7 +26,7 @@ describe('CredentialConfigCreateComponent', () => {
     component = new CredentialConfigCreateComponent(
       { saveConfiguration: save, updateConfiguration: save } as any,
       { navigate: vi.fn() } as any,
-      { snapshot: { params: {} } } as any,
+      { snapshot: { params: {}, queryParamMap: convertToParamMap({}) } } as any,
       { open: vi.fn() } as any,
       {} as any,
       {} as any,
@@ -88,6 +88,78 @@ describe('CredentialConfigCreateComponent', () => {
     const [display] = (component as any).buildConfigurationPayload().config.display;
     expect(display.logo).toEqual({ uri: 'https://example.com/logo.png' });
     expect(display).not.toHaveProperty('background_image');
+  });
+
+  function openedWith(
+    query: Record<string, string>,
+    params: Record<string, string> = {},
+    destroyed = false
+  ) {
+    const router = { navigate: vi.fn() };
+    const snackBar = { open: vi.fn() };
+    const page = new CredentialConfigCreateComponent(
+      { saveConfiguration: save, updateConfiguration: save } as any,
+      router as any,
+      { snapshot: { params, queryParamMap: convertToParamMap(query) } } as any,
+      snackBar as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      { get: () => ({ destroyed }) } as any
+    );
+    page.form.patchValue({ id: 'member', description: 'Membership', vctString: 'urn:member' });
+    page.displayConfigs.at(0).patchValue({ name: 'Membership', description: 'Member card' });
+    if (page.guidedMode) page.toggleGuidedMode();
+    return { page, router, snackBar };
+  }
+
+  it('says to return to the form that opened it in another tab instead of leaving', async () => {
+    const { page, router } = openedWith({ from: 'form' });
+
+    page.submitCredential();
+
+    await vi.waitFor(() =>
+      expect(page.createdForForm).toEqual({
+        id: 'member',
+        heading: 'Credential config "member" created',
+      })
+    );
+    expect(save).toHaveBeenCalledOnce();
+    expect(router.navigate).not.toHaveBeenCalled();
+    expect(page.form.pristine).toBe(true);
+  });
+
+  it('goes back to the list after creating when no form opened it', async () => {
+    const { page, router } = openedWith({});
+
+    page.submitCredential();
+
+    await vi.waitFor(() => expect(router.navigate).toHaveBeenCalled());
+    expect(page.createdForForm).toBeNull();
+  });
+
+  it('leaves edit mode as before even when a form opened it', async () => {
+    const { page, router } = openedWith({ from: 'form' }, { id: 'member' });
+
+    page.submitCredential();
+
+    await vi.waitFor(() => expect(router.navigate).toHaveBeenCalled());
+    expect(page.createdForForm).toBeNull();
+  });
+
+  it('reports the created config in a snackbar when the page was left during the save', async () => {
+    const { page, router, snackBar } = openedWith({ from: 'form' }, {}, true);
+
+    page.submitCredential();
+
+    await vi.waitFor(() =>
+      expect(snackBar.open).toHaveBeenCalledWith('Credential config "member" created.', 'Close', {
+        duration: 5000,
+      })
+    );
+    expect(page.createdForForm).toBeNull();
+    expect(router.navigate).not.toHaveBeenCalled();
   });
 
   it('keeps status management on while Single Active Credential is enabled', () => {
@@ -498,7 +570,7 @@ describe('CredentialConfigCreateComponent', () => {
     const edit = new CredentialConfigCreateComponent(
       {} as any,
       {} as any,
-      { snapshot: { params: { id: 'existing' } } } as any,
+      { snapshot: { params: { id: 'existing' }, queryParamMap: convertToParamMap({}) } } as any,
       {} as any,
       {} as any,
       {} as any,
@@ -514,7 +586,7 @@ describe('CredentialConfigCreateComponent', () => {
     const hosted = new CredentialConfigCreateComponent(
       {} as any,
       {} as any,
-      { snapshot: { params: {} } } as any,
+      { snapshot: { params: {}, queryParamMap: convertToParamMap({}) } } as any,
       { open: vi.fn() } as any,
       {} as any,
       { loadConfigurations: vi.fn().mockResolvedValue([]) } as any,
@@ -847,7 +919,7 @@ describe('CredentialConfigCreateComponent editing', () => {
         saveConfiguration: update,
       } as any,
       { navigate: vi.fn() } as any,
-      { snapshot: { params: { id: 'pid' } } } as any,
+      { snapshot: { params: { id: 'pid' }, queryParamMap: convertToParamMap({}) } } as any,
       { open: vi.fn() } as any,
       {} as any,
       { loadConfigurations: vi.fn().mockResolvedValue([]) } as any,
@@ -881,7 +953,10 @@ describe('CredentialConfigCreateComponent retry', () => {
       imports: [CredentialConfigCreateComponent],
       providers: [
         provideRouter([]),
-        { provide: ActivatedRoute, useValue: { snapshot: { params: { id: 'pid' } } } },
+        {
+          provide: ActivatedRoute,
+          useValue: { snapshot: { params: { id: 'pid' }, queryParamMap: convertToParamMap({}) } },
+        },
         { provide: CredentialConfigService, useValue: { getConfig } },
         { provide: MatSnackBar, useValue: { open: vi.fn() } },
         { provide: MatDialog, useValue: { open: vi.fn() } },
@@ -923,7 +998,7 @@ describe('CredentialConfigCreateComponent JSON View', () => {
     const component = new CredentialConfigCreateComponent(
       service as any,
       { navigate: vi.fn() } as any,
-      { snapshot: { params } } as any,
+      { snapshot: { params, queryParamMap: convertToParamMap({}) } } as any,
       { open: vi.fn() } as any,
       { open } as any,
       { loadConfigurations: vi.fn().mockResolvedValue([]) } as any,
@@ -992,14 +1067,19 @@ describe('CredentialConfigCreateComponent Save', () => {
   afterEach(() => vi.restoreAllMocks());
 
   /** Renders the create form with a configuration that can be saved; the save never answers. */
-  async function render() {
-    const save = vi.fn(() => new Promise(() => undefined));
+  async function render(
+    query: Record<string, string> = {},
+    save: ReturnType<typeof vi.fn> = vi.fn(() => new Promise(() => undefined))
+  ) {
     vi.spyOn(client, 'get').mockResolvedValue({ data: [] } as any);
     await TestBed.configureTestingModule({
       imports: [CredentialConfigCreateComponent],
       providers: [
         provideRouter([]),
-        { provide: ActivatedRoute, useValue: { snapshot: { params: {} } } },
+        {
+          provide: ActivatedRoute,
+          useValue: { snapshot: { params: {}, queryParamMap: convertToParamMap(query) } },
+        },
         { provide: CredentialConfigService, useValue: { saveConfiguration: save } },
         { provide: MatSnackBar, useValue: { open: vi.fn() } },
         { provide: MatDialog, useValue: { open: vi.fn() } },
@@ -1028,6 +1108,25 @@ describe('CredentialConfigCreateComponent Save', () => {
     component.displayConfigs.at(0).patchValue({ name: 'Membership', description: 'Member card' });
     return { fixture, component, save };
   }
+
+  it('shows only the return card once the config was created for a form in another tab', async () => {
+    const { fixture, component } = await render({ from: 'form' }, vi.fn().mockResolvedValue({}));
+    component.toggleGuidedMode();
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+
+    element.querySelector<HTMLButtonElement>('button[type="submit"]')!.click();
+    await vi.waitFor(() => expect(component.createdForForm).not.toBeNull());
+    fixture.detectChanges();
+
+    expect(element.querySelector('h3')?.textContent).toBe('Credential config "member" created');
+    expect(element.querySelector('a[href="/credential-config/member"]')?.textContent).toContain(
+      'Open credential config'
+    );
+    expect(element.querySelector('button[type="submit"]')).toBeNull();
+    expect(element.textContent).not.toContain('JSON View');
+    expect(element.textContent).not.toContain('Show all settings');
+  });
 
   it('waits while the configuration is saved: a second click sends nothing', async () => {
     const { fixture, component, save } = await render();

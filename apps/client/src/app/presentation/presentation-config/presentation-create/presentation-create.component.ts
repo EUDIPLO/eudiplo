@@ -4,6 +4,7 @@ import {
   languageOptionsWith,
 } from '../../../utils/language-options';
 import {
+  HostListener,
   ChangeDetectionStrategy,
   Component,
   ElementRef,
@@ -48,7 +49,12 @@ import {
 import { PresentationManagementService } from '../presentation-management.service';
 import { MatDialog } from '@angular/material/dialog';
 import { JsonViewDialogComponent } from '../../../issuance/credential-config/credential-config-create/json-view-dialog/json-view-dialog.component';
-import { IssuerMetadataBrowserComponent } from '../issuer-metadata-browser/issuer-metadata-browser.component';
+import { TenantCredentialCatalogService } from '../issuer-metadata-browser/tenant-credential-catalog.service';
+import type { NormalizedCredential } from '../issuer-metadata-browser/issuer-metadata.service';
+import {
+  IssuerMetadataBrowserComponent,
+  type IssuerMetadataBrowserDialogData,
+} from '../issuer-metadata-browser/issuer-metadata-browser.component';
 import { SchemaBrowserComponent } from '../schema-browser/schema-browser.component';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTabsModule } from '@angular/material/tabs';
@@ -180,6 +186,9 @@ export class PresentationCreateComponent implements OnInit {
   readonly languageOptionsWith = languageOptionsWith;
 
   private readonly injector = inject(Injector);
+  private readonly credentialCatalog = inject(TenantCredentialCatalogService);
+  /** The credential configs this tenant issues, for hints in the query builder. */
+  knownCredentials: NormalizedCredential[] = [];
   /** Takes the focus after a successful Retry, which removed the focused Retry button. */
   @ViewChild('pageHeading', { read: ElementRef })
   private readonly pageHeading?: ElementRef<HTMLElement>;
@@ -236,6 +245,7 @@ export class PresentationCreateComponent implements OnInit {
 
   ngOnInit(): void {
     this.guided = !this.route.snapshot.params['id'];
+    this.loadKnownCredentials();
 
     // Load key chains for the select dropdown (filter by access usage type)
     keyChainControllerGetAll({}).then(
@@ -852,6 +862,18 @@ export class PresentationCreateComponent implements OnInit {
   }
 
   /**
+   * Loads the credential configs of this tenant for the query builder hints,
+   * again when the user returns to this tab, where a credential config may
+   * have been created in the meantime.
+   */
+  @HostListener('window:focus')
+  loadKnownCredentials(): void {
+    void this.credentialCatalog.load().then((credentials) => {
+      this.knownCredentials = credentials;
+    });
+  }
+
+  /**
    * Load a predefined configuration
    */
   loadPredefinedConfig(configTemplate: any): void {
@@ -921,8 +943,20 @@ export class PresentationCreateComponent implements OnInit {
    * Open the issuer metadata browser dialog to import DCQL from an issuer
    */
   importFromIssuer(): void {
+    this.openClaimPicker({}, 'DCQL query imported from issuer');
+  }
+
+  /**
+   * Open the same claim picker on the credential configs this tenant issues, so
+   * the query asks only for credential types and claims that exist.
+   */
+  importFromCredentialConfig(): void {
+    this.openClaimPicker({ source: 'tenant' }, 'DCQL query imported from credential config');
+  }
+
+  private openClaimPicker(data: IssuerMetadataBrowserDialogData, importedMessage: string): void {
     const dialogRef = this.dialog.open(IssuerMetadataBrowserComponent, {
-      data: {},
+      data,
       disableClose: false,
       minWidth: '60vw',
       maxWidth: '95vw',
@@ -934,7 +968,7 @@ export class PresentationCreateComponent implements OnInit {
         // Set the DCQL query in the form
         this.form.get('dcql_query')?.setValue(JSON.stringify(dcqlQuery, null, 2));
         this.form.get('dcql_query')?.markAsDirty();
-        this.snackBar.open('DCQL query imported from issuer', 'OK', {
+        this.snackBar.open(importedMessage, 'OK', {
           duration: 3000,
         });
       }

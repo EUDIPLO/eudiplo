@@ -1,46 +1,94 @@
 <h2 class="fx-row justify-space-between align-center" mat-dialog-title>
-  <span>Import from Issuer</span>
+  <span>{{ fromTenant ? 'Import from Credential Config' : 'Import from Issuer' }}</span>
   <button mat-icon-button (click)="close()" matTooltip="Close" aria-label="Close">
     <mat-icon>close</mat-icon>
   </button>
 </h2>
 
 <mat-dialog-content class="fx-col gap-16">
-  <!-- Step 1: Enter URL -->
-  <div class="fx-col gap-8">
-    <mat-form-field class="flex-1" appearance="outline">
-      <mat-label>Credential Issuer URL</mat-label>
-      <input
-        matInput
-        [formControl]="urlControl"
-        placeholder="https://issuer.example.com/tenant-id"
-        (keyup.enter)="fetchMetadata()"
-      />
-      <mat-hint>Enter the issuer URL (base URL or full .well-known URL)</mat-hint>
-      @if (urlControl.hasError('required')) {
-        <mat-error>URL is required</mat-error>
-      }
-      @if (urlControl.hasError('pattern')) {
-        <mat-error>Enter a valid URL</mat-error>
-      }
-    </mat-form-field>
-
-    <button
-      mat-flat-button
-      color="primary"
-      (click)="fetchMetadata()"
-      [disabled]="loading || urlControl.invalid"
-    >
-      @if (loading) {
+  @if (fromTenant) {
+    <!-- Step 1: The tenant's own credential configs -->
+    <div class="fx-row align-center justify-space-between gap-8">
+      <p class="tenant-hint">
+        Pick claims from the credential configs this tenant issues. The vct or doctype and the claim
+        paths come from the published issuer metadata.
+      </p>
+      <button
+        mat-stroked-button
+        type="button"
+        (click)="loadTenantCredentials()"
+        [disabled]="loading"
+        disabledInteractive
+        [matTooltip]="loading ? 'Loading credential configs' : ''"
+      >
+        <mat-icon>refresh</mat-icon>
+        Reload
+      </button>
+    </div>
+    @if (loading) {
+      <output class="fx-row align-center gap-8">
         <mat-spinner diameter="20"></mat-spinner>
-      } @else {
-        <ng-container>
-          <mat-icon>search</mat-icon>
-          Fetch Credentials
-        </ng-container>
-      }
-    </button>
-  </div>
+        <span>Loading credential configs…</span>
+      </output>
+    }
+    @if (noTenantCredentials) {
+      <mat-card class="empty-card">
+        <mat-card-content class="fx-col gap-8">
+          <strong>This tenant has no credential configs yet.</strong>
+          @if (canCreateCredentialConfig) {
+            <span>
+              <a
+                routerLink="/credential-config/create"
+                [queryParams]="createLinkQueryParams"
+                target="_blank"
+                rel="noopener"
+                >Create a credential config</a
+              >
+              in a new tab, then select Reload. What you entered here stays.
+            </span>
+          } @else {
+            <span>Use Import from Issuer or Import from Schema, or define the query below.</span>
+          }
+        </mat-card-content>
+      </mat-card>
+    }
+  } @else {
+    <!-- Step 1: Enter URL -->
+    <div class="fx-col gap-8">
+      <mat-form-field class="flex-1" appearance="outline">
+        <mat-label>Credential Issuer URL</mat-label>
+        <input
+          matInput
+          [formControl]="urlControl"
+          placeholder="https://issuer.example.com/tenant-id"
+          (keyup.enter)="fetchMetadata()"
+        />
+        <mat-hint>Enter the issuer URL (base URL or full .well-known URL)</mat-hint>
+        @if (urlControl.hasError('required')) {
+          <mat-error>URL is required</mat-error>
+        }
+        @if (urlControl.hasError('pattern')) {
+          <mat-error>Enter a valid URL</mat-error>
+        }
+      </mat-form-field>
+
+      <button
+        mat-flat-button
+        color="primary"
+        (click)="fetchMetadata()"
+        [disabled]="loading || urlControl.invalid"
+      >
+        @if (loading) {
+          <mat-spinner diameter="20"></mat-spinner>
+        } @else {
+          <ng-container>
+            <mat-icon>search</mat-icon>
+            Fetch Credentials
+          </ng-container>
+        }
+      </button>
+    </div>
+  }
 
   <!-- Error message -->
   @if (error) {
@@ -56,7 +104,7 @@
   @if (credentials.length > 0) {
     <div class="fx-col gap-16">
       <!-- Issuer info -->
-      @if (metadata) {
+      @if (metadata && !fromTenant) {
         <mat-card class="issuer-info-card">
           <mat-card-content class="fx-row align-center gap-12">
             @if (metadata.display?.[0]?.logo?.uri; as logoUri) {
@@ -79,6 +127,7 @@
               <mat-panel-title class="fx-row align-center gap-8">
                 <mat-checkbox
                   [checked]="isCredentialSelected(credential)"
+                  [aria-label]="'Use ' + credential.displayName + ' (' + credential.id + ')'"
                   (change)="toggleCredential(credential, $event.checked)"
                   (click)="$event.stopPropagation()"
                 ></mat-checkbox>
@@ -86,6 +135,9 @@
                   <img [src]="credLogoUri" alt="" class="credential-logo" />
                 }
                 <span>{{ credential.displayName }}</span>
+                @if (fromTenant && credential.displayName !== credential.id) {
+                  <code class="config-id">{{ credential.id }}</code>
+                }
               </mat-panel-title>
               <mat-panel-description>
                 <mat-chip>{{ credential.format }}</mat-chip>
@@ -139,6 +191,9 @@
                       <div class="fx-row align-center gap-8 claim-item">
                         <mat-checkbox
                           [checked]="isClaimSelected(credential, claim)"
+                          [aria-label]="
+                            'Request ' + claim.displayName + ' (' + claim.path.join('.') + ')'
+                          "
                           (change)="toggleClaim(credential, claim, $event.checked)"
                           [disabled]="!isCredentialSelected(credential)"
                         ></mat-checkbox>

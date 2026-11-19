@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, Input, OnDestroy, OnInit } from '@angular/core';
 import { FormControl, FormsModule, ReactiveFormsModule, ValidatorFn } from '@angular/forms';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatButtonModule } from '@angular/material/button';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -25,6 +26,17 @@ import {
   trustSummary,
 } from './simple-dcql';
 import { asSentence, getApiErrorMessage } from '../../../utils/error-message';
+import type { NormalizedCredential } from '../issuer-metadata-browser/issuer-metadata.service';
+import {
+  configNames,
+  isUnpublishedClaim,
+  matchingConfigs,
+  mdocClaimOptions,
+  mdocNamespaceOptions,
+  sdJwtClaimOptions,
+  type TypeOption,
+  typeOptions,
+} from './credential-config-hints';
 import { FederationTrustAnchorSelectComponent } from '../../../federation-trust-anchor/federation-trust-anchor-select/federation-trust-anchor-select.component';
 
 @Component({
@@ -32,6 +44,7 @@ import { FederationTrustAnchorSelectComponent } from '../../../federation-trust-
   imports: [
     FormsModule,
     ReactiveFormsModule,
+    MatAutocompleteModule,
     MatButtonModule,
     MatExpansionModule,
     MatFormFieldModule,
@@ -47,6 +60,13 @@ import { FederationTrustAnchorSelectComponent } from '../../../federation-trust-
 })
 export class DcqlQueryEditorComponent implements OnInit, OnDestroy {
   @Input({ required: true }) control!: FormControl;
+  /**
+   * The credential configs this tenant issues. They suggest types and claims
+   * and mark claims a matching config does not publish; nothing is refused.
+   */
+  @Input() knownCredentials: readonly NormalizedCredential[] = [];
+  /** The claim whose name field has focus: a half-typed name there is not marked yet. */
+  focusedClaim: ClaimQuery | null = null;
   readonly schema = DCQLSchema;
   readonly claimError = claimError;
   readonly trustError = trustError;
@@ -180,6 +200,54 @@ export class DcqlQueryEditorComponent implements OnInit, OnDestroy {
         ? claim.path.some((part) => typeof part !== 'string' || !/^[A-Za-z0-9_-]*$/.test(part))
         : claim.path.length !== 2 || claim.path.some((part) => typeof part !== 'string'))
     );
+  }
+
+  /** Suggestions for the type field: the types this tenant issues in the credential's format. */
+  typeSuggestions(credential: SimpleCredentialQuery): TypeOption[] {
+    const typed = credential.type.trim().toLowerCase();
+    return typeOptions(credential.format, this.knownCredentials).filter(
+      (option) =>
+        !typed ||
+        option.value.toLowerCase().includes(typed) ||
+        option.label.toLowerCase().includes(typed)
+    );
+  }
+
+  /** The hint under the type field when credential configs of this tenant issue the type. */
+  issuedHint(credential: SimpleCredentialQuery): string {
+    const configs = matchingConfigs(credential, this.knownCredentials);
+    return configs.length ? `Issued by this tenant's ${configNames(configs)}.` : '';
+  }
+
+  /** Claim paths a matching credential config publishes, filtered by what was typed. */
+  claimPathSuggestions(credential: SimpleCredentialQuery, claim: ClaimQuery): string[] {
+    const typed = claim.path.join('.');
+    return sdJwtClaimOptions(matchingConfigs(credential, this.knownCredentials)).filter(
+      (path) => path.startsWith(typed) && path !== typed
+    );
+  }
+
+  namespaceSuggestions(credential: SimpleCredentialQuery, claim: ClaimQuery): string[] {
+    const typed = String(claim.path[0] ?? '');
+    return mdocNamespaceOptions(matchingConfigs(credential, this.knownCredentials)).filter(
+      (namespace) => namespace.startsWith(typed) && namespace !== typed
+    );
+  }
+
+  claimNameSuggestions(credential: SimpleCredentialQuery, claim: ClaimQuery): string[] {
+    const typed = String(claim.path[1] ?? '');
+    return mdocClaimOptions(
+      matchingConfigs(credential, this.knownCredentials),
+      String(claim.path[0] ?? '')
+    ).filter((name) => name.startsWith(typed) && name !== typed);
+  }
+
+  /** The warning under a claim that the matching credential configs of this tenant do not publish. */
+  unpublishedHint(credential: SimpleCredentialQuery, claim: ClaimQuery): string {
+    const configs = matchingConfigs(credential, this.knownCredentials);
+    if (!isUnpublishedClaim(claim, configs, { typing: claim === this.focusedClaim })) return '';
+    const verb = configs.length === 1 ? 'does' : 'do';
+    return `This tenant's ${configNames(configs)} ${verb} not publish this claim.`;
   }
 
   setClaimPath(claim: ClaimQuery, text: string): void {
