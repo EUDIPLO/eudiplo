@@ -8,6 +8,19 @@ import { JwtService } from '../../services/jwt.service';
 import { UserListComponent } from './user-list.component';
 
 describe('UserListComponent', () => {
+  /** The list without rendering it, so nothing loads before the test calls loadItems. */
+  async function createList(): Promise<UserListComponent> {
+    await TestBed.configureTestingModule({
+      imports: [UserListComponent],
+      providers: [
+        provideRouter([]),
+        { provide: MatSnackBar, useValue: { open: vi.fn() } },
+        { provide: JwtService, useValue: { getRoles: () => ['users:manage'] } },
+      ],
+    }).compileComponents();
+    return TestBed.createComponent(UserListComponent).componentInstance;
+  }
+
   afterEach(() => {
     vi.restoreAllMocks();
     client.setConfig({ fetch: () => new Promise<Response>(() => undefined) });
@@ -23,17 +36,12 @@ describe('UserListComponent', () => {
           })
       ),
     });
-    const component = new UserListComponent(
-      { open: vi.fn() } as never,
-      {
-        getRoles: () => ['users:manage'],
-      } as never,
-      {} as never
-    );
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const component = await createList();
 
-    await component.loadUsers();
+    await component.loadItems();
 
-    expect(component.isUnavailable).toBe(false);
+    expect(component.unavailableMessage).toBe('');
     expect(component.loadError).toBe('Failed to load users: Internal server error');
   });
 
@@ -50,15 +58,11 @@ describe('UserListComponent', () => {
           )
       ),
     });
-    const component = new UserListComponent(
-      { open: vi.fn() } as never,
-      { getRoles: () => ['users:manage'] } as never,
-      {} as never
-    );
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const component = await createList();
 
-    await component.loadUsers();
+    await component.loadItems();
 
-    expect(component.isUnavailable).toBe(true);
     expect(component.unavailableMessage).toContain('managed in the identity provider');
     expect(component.loadError).toBe('');
   });
@@ -136,7 +140,7 @@ describe('UserListComponent', () => {
       const page = fixture.nativeElement as HTMLElement;
       await vi.waitFor(() => {
         fixture.detectChanges();
-        expect(page.querySelectorAll('a.user-link')).toHaveLength(2);
+        expect(page.querySelectorAll('a.item-link')).toHaveLength(2);
       });
       return { fixture, page };
     }
@@ -145,11 +149,11 @@ describe('UserListComponent', () => {
       const { page } = await render();
       const rows = [...page.querySelectorAll('tr.mat-mdc-row')];
 
-      expect(rows.map((row) => row.querySelector('a.user-link')?.textContent?.trim())).toEqual([
+      expect(rows.map((row) => row.querySelector('a.item-link')?.textContent?.trim())).toEqual([
         'alice',
         'bob',
       ]);
-      expect(rows[0].querySelector('a.user-link')?.getAttribute('href')).toBe('/u-1');
+      expect(rows[0].querySelector('a.item-link')?.getAttribute('href')).toBe('/u-1');
       expect(rows[1].querySelector('small')?.textContent).toBe('bob@example.com');
       expect(rows.map((row) => row.querySelector('.badge')?.textContent?.trim())).toEqual([
         'Enabled',
@@ -170,7 +174,7 @@ describe('UserListComponent', () => {
         fixture.detectChanges();
       };
       const shown = () =>
-        [...page.querySelectorAll('a.user-link')].map((link) => link.textContent?.trim());
+        [...page.querySelectorAll('a.item-link')].map((link) => link.textContent?.trim());
 
       type('BOB@');
       expect(shown()).toEqual(['bob']);
@@ -290,7 +294,7 @@ describe('UserListComponent', () => {
     const page = fixture.nativeElement as HTMLElement;
     await vi.waitFor(() => {
       fixture.detectChanges();
-      expect(page.querySelector('a.user-link')).not.toBeNull();
+      expect(page.querySelector('a.item-link')).not.toBeNull();
     });
     const component = fixture.componentInstance;
     const alice = component.users[0];
@@ -343,7 +347,7 @@ describe('UserListComponent', () => {
     );
     await vi.waitFor(() => {
       fixture.detectChanges();
-      expect(page.querySelector('a.user-link')).not.toBeNull();
+      expect(page.querySelector('a.item-link')).not.toBeNull();
     });
     const component = fixture.componentInstance;
 
@@ -359,6 +363,38 @@ describe('UserListComponent', () => {
     expect(
       page.querySelector('button[aria-label="Delete User"]')?.getAttribute('aria-disabled')
     ).not.toBe('true');
+  });
+
+  it('takes a deleted user out of the list without loading it again and focuses the next row', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const bob = { id: 'u-2', username: 'bob', enabled: true, roles: ['audit:read'] };
+    const requests: string[] = [];
+    const { fixture, page } = await renderWith(async (request) => {
+      requests.push(request.method);
+      return request.method === 'DELETE' ? new Response(null, { status: 204 }) : json([alice, bob]);
+    });
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(page.querySelectorAll('a.item-link')).toHaveLength(2);
+    });
+    const remove = page.querySelector<HTMLButtonElement>('button[aria-label="Delete User"]')!;
+    remove.focus();
+
+    remove.click();
+
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(document.activeElement).toBe(page.querySelector('a.item-link'));
+    });
+    expect(
+      [...page.querySelectorAll('a.item-link')].map((link) => link.textContent?.trim())
+    ).toEqual(['bob']);
+    expect(requests).toEqual(['GET', 'DELETE']);
+    expect(TestBed.inject(MatSnackBar).open).toHaveBeenCalledWith(
+      'User deleted successfully',
+      'Close',
+      { duration: 3000 }
+    );
   });
 
   it('moves focus to the heading once a retry after a failed load succeeds', async () => {
@@ -380,6 +416,6 @@ describe('UserListComponent', () => {
       fixture.detectChanges();
       expect(document.activeElement).toBe(page.querySelector('h1'));
     });
-    expect(page.querySelector('a.user-link')?.textContent?.trim()).toBe('alice');
+    expect(page.querySelector('a.item-link')?.textContent?.trim()).toBe('alice');
   });
 });

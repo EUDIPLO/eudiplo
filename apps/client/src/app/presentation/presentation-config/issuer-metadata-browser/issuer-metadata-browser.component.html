@@ -1,14 +1,14 @@
-<h2 mat-dialog-title fxLayout="row" fxLayoutAlign="space-between center">
+<h2 class="fx-row justify-space-between align-center" mat-dialog-title>
   <span>Import from Issuer</span>
   <button mat-icon-button (click)="close()" matTooltip="Close" aria-label="Close">
     <mat-icon>close</mat-icon>
   </button>
 </h2>
 
-<mat-dialog-content fxLayout="column" fxLayoutGap="16px">
+<mat-dialog-content class="fx-col gap-16">
   <!-- Step 1: Enter URL -->
-  <div fxLayout="column" fxLayoutGap="8px">
-    <mat-form-field appearance="outline" fxFlex>
+  <div class="fx-col gap-8">
+    <mat-form-field class="flex-1" appearance="outline">
       <mat-label>Credential Issuer URL</mat-label>
       <input
         matInput
@@ -45,7 +45,7 @@
   <!-- Error message -->
   @if (error) {
     <mat-card class="error-card">
-      <mat-card-content fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px">
+      <mat-card-content class="fx-row align-center gap-8">
         <mat-icon color="warn">error</mat-icon>
         <span>{{ error }}</span>
       </mat-card-content>
@@ -54,15 +54,15 @@
 
   <!-- Step 2: Display credentials and claims -->
   @if (credentials.length > 0) {
-    <div fxLayout="column" fxLayoutGap="16px">
+    <div class="fx-col gap-16">
       <!-- Issuer info -->
       @if (metadata) {
         <mat-card class="issuer-info-card">
-          <mat-card-content fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="12px">
+          <mat-card-content class="fx-row align-center gap-12">
             @if (metadata.display?.[0]?.logo?.uri; as logoUri) {
               <img [src]="logoUri" alt="Issuer logo" class="issuer-logo" />
             }
-            <div fxLayout="column">
+            <div class="fx-col">
               <strong>{{ metadata.display?.[0]?.name || 'Issuer' }}</strong>
               <small class="issuer-url">{{ metadata.credential_issuer }}</small>
             </div>
@@ -76,7 +76,7 @@
         @for (credential of credentials; track credential.id) {
           <mat-expansion-panel [expanded]="isCredentialSelected(credential)">
             <mat-expansion-panel-header>
-              <mat-panel-title fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px">
+              <mat-panel-title class="fx-row align-center gap-8">
                 <mat-checkbox
                   [checked]="isCredentialSelected(credential)"
                   (change)="toggleCredential(credential, $event.checked)"
@@ -92,12 +92,12 @@
               </mat-panel-description>
             </mat-expansion-panel-header>
 
-            <div fxLayout="column" fxLayoutGap="12px" class="credential-content">
+            <div class="fx-col gap-12 credential-content">
               @if (credential.description) {
                 <p class="description">{{ credential.description }}</p>
               }
 
-              <div fxLayout="row" fxLayoutGap="16px" class="credential-meta">
+              <div class="fx-row gap-16 credential-meta">
                 @if (credential.vct) {
                   <div>
                     <span class="label">VCT:</span>
@@ -113,10 +113,10 @@
               </div>
 
               @if (credential.claims.length > 0) {
-                <div fxLayout="column" fxLayoutGap="8px">
-                  <div fxLayout="row" fxLayoutAlign="space-between center">
+                <div class="fx-col gap-8">
+                  <div class="fx-row justify-space-between align-center">
                     <h4>Claims</h4>
-                    <div fxLayout="row" fxLayoutGap="8px">
+                    <div class="fx-row gap-8">
                       <button
                         mat-button
                         (click)="selectAllClaims(credential)"
@@ -136,18 +136,13 @@
 
                   <div class="claims-grid">
                     @for (claim of credential.claims; track claim.path.join('.')) {
-                      <div
-                        class="claim-item"
-                        fxLayout="row"
-                        fxLayoutAlign="start center"
-                        fxLayoutGap="8px"
-                      >
+                      <div class="fx-row align-center gap-8 claim-item">
                         <mat-checkbox
                           [checked]="isClaimSelected(credential, claim)"
                           (change)="toggleClaim(credential, claim, $event.checked)"
                           [disabled]="!isCredentialSelected(credential)"
                         ></mat-checkbox>
-                        <div fxLayout="column">
+                        <div class="fx-col">
                           <span class="claim-name">{{ claim.displayName }}</span>
                           <small class="claim-path">
                             @if (claim.namespace) {
@@ -176,7 +171,7 @@
   <!-- Step 3: Preview generated DCQL -->
   @if (hasSelections()) {
     <mat-divider></mat-divider>
-    <div fxLayout="column" fxLayoutGap="8px">
+    <div class="fx-col gap-8">
       <h3>Generated DCQL Query</h3>
       <pre class="dcql-preview">{{ getGeneratedDcql() | json }}</pre>
     </div>

@@ -1,4 +1,4 @@
-@use '../../../tenants/tenant-page' as page;
+@use 'page';
 
 // Back link, heading and action bar as on the other forms; the editor keeps its own steps
 @include page.base;

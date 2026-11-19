@@ -545,9 +545,6 @@ importers:
       monaco-editor:
         specifier: ^0.57.0
         version: 0.57.0
-      ngx-flexible-layout:
-        specifier: ^22.0.0
-        version: 22.0.0(a0c7934fd933b7b9dddd15048810ee58)
       ngx-monaco-editor-v2:
         specifier: ^22.0.5
         version: 22.0.5(@angular/common@22.2.6(@angular/core@22.2.6(@angular/compiler@22.2.6)(rxjs@7.8.2)(zone.js@0.16.3))(rxjs@7.8.2))(@angular/core@22.2.6(@angular/compiler@22.2.6)(rxjs@7.8.2)(zone.js@0.16.3))(monaco-editor@0.57.0)(rxjs@7.8.2)
@@ -10690,15 +10687,6 @@ packages:
     peerDependenciesMeta:
       '@nestjs/swagger':
         optional: true
-
-  ngx-flexible-layout@22.0.0:
-    resolution: {integrity: sha512-WQfnIJh6TKv0L2rNViBUOG2WjCg70ybXM3fziKTbrCSVUv1Rgh/K9/YFZZNUlOY/Zv+LiZi8p8R1dRT9kyvrBA==}
-    peerDependencies:
-      '@angular/cdk': ^22.0.0
-      '@angular/common': ^22.0.0
-      '@angular/core': ^22.0.0
-      '@angular/platform-browser': ^22.0.0
-      rxjs: ^6.5.3 || ^7.4.0
 
   ngx-monaco-editor-v2@22.0.5:
     resolution: {integrity: sha512-Krqg21wyI39IAxJgvJ7HJ5i8qYliQx5rwUEUDOd36yDeOy4vP/lAeVF4/a9s4WyEaeyBk1GJ+I9eM6spD4jYRQ==}
@@ -26387,15 +26375,6 @@ snapshots:
       zod: 4.6.7
     optionalDependencies:
       '@nestjs/swagger': 12.1.2(@nestjs/common@12.5.0(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@10.2.2))(@nestjs/core@12.5.0)(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(typescript@6.0.3)
-
-  ngx-flexible-layout@22.0.0(a0c7934fd933b7b9dddd15048810ee58):
-    dependencies:
-      '@angular/cdk': 22.2.7(@angular/common@22.2.6(@angular/core@22.2.6(@angular/compiler@22.2.6)(rxjs@7.8.2)(zone.js@0.16.3))(rxjs@7.8.2))(@angular/core@22.2.6(@angular/compiler@22.2.6)(rxjs@7.8.2)(zone.js@0.16.3))(@angular/forms@22.2.6(@angular/common@22.2.6(@angular/core@22.2.6(@angular/compiler@22.2.6)(rxjs@7.8.2)(zone.js@0.16.3))(rxjs@7.8.2))(@angular/core@22.2.6(@angular/compiler@22.2.6)(rxjs@7.8.2)(zone.js@0.16.3))(@angular/platform-browser@22.2.6(@angular/common@22.2.6(@angular/core@22.2.6(@angular/compiler@22.2.6)(rxjs@7.8.2)(zone.js@0.16.3))(rxjs@7.8.2))(@angular/core@22.2.6(@angular/compiler@22.2.6)(rxjs@7.8.2)(zone.js@0.16.3)))(rxjs@7.8.2))(@angular/platform-browser@22.2.6(@angular/common@22.2.6(@angular/core@22.2.6(@angular/compiler@22.2.6)(rxjs@7.8.2)(zone.js@0.16.3))(rxjs@7.8.2))(@angular/core@22.2.6(@angular/compiler@22.2.6)(rxjs@7.8.2)(zone.js@0.16.3)))(rxjs@7.8.2)
-      '@angular/common': 22.2.6(@angular/core@22.2.6(@angular/compiler@22.2.6)(rxjs@7.8.2)(zone.js@0.16.3))(rxjs@7.8.2)
-      '@angular/core': 22.2.6(@angular/compiler@22.2.6)(rxjs@7.8.2)(zone.js@0.16.3)
-      '@angular/platform-browser': 22.2.6(@angular/common@22.2.6(@angular/core@22.2.6(@angular/compiler@22.2.6)(rxjs@7.8.2)(zone.js@0.16.3))(rxjs@7.8.2))(@angular/core@22.2.6(@angular/compiler@22.2.6)(rxjs@7.8.2)(zone.js@0.16.3))
-      rxjs: 7.8.2
-      tslib: 2.9.1
 
   ngx-monaco-editor-v2@22.0.5(@angular/common@22.2.6(@angular/core@22.2.6(@angular/compiler@22.2.6)(rxjs@7.8.2)(zone.js@0.16.3))(rxjs@7.8.2))(@angular/core@22.2.6(@angular/compiler@22.2.6)(rxjs@7.8.2)(zone.js@0.16.3))(monaco-editor@0.57.0)(rxjs@7.8.2):
     dependencies:

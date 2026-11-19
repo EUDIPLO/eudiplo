@@ -38,6 +38,7 @@ import { JwtService } from '../../services/jwt.service';
 import { showFieldsToFix } from '../../common/field-to-fix.util';
 import { LoadErrorComponent } from '../../common/load-error.component';
 import { focusAfterRenderIfLost } from '../../common/focus-if-lost.util';
+import { WEBHOOK_ENDPOINT_ROLES } from '../../webhook-endpoint/webhook-endpoint-roles';
 
 type ClientIdScheme = 'x509_hash' | 'x509_san_dns' | 'openid_federation';
 
@@ -103,7 +104,7 @@ export class PresentationRequestComponent implements OnInit {
 
   /** Webhook endpoints can be opened with `issuance:manage` or `presentation:manage`. */
   get canManageWebhookEndpoints(): boolean {
-    return this.jwtService.hasRole(['issuance:manage', 'presentation:manage']);
+    return this.jwtService.hasRole(WEBHOOK_ENDPOINT_ROLES);
   }
 
   constructor(

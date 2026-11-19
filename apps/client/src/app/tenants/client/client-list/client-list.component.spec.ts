@@ -11,12 +11,26 @@ import { FrontendConfigService } from '../../../services/frontend-config.service
 import { ClientListComponent } from './client-list.component';
 import { errorSnackBarDuration } from '../../../utils/error-snackbar';
 
+/** Skips the request on init: each test puts the clients on the list itself. */
+function stubLoad() {
+  return vi.spyOn(ClientListComponent.prototype, 'loadItems').mockImplementation(async function (
+    this: ClientListComponent
+  ) {
+    this.loading = false;
+  });
+}
+
+/** Puts clients on the list as if they had loaded. */
+function showClients(component: ClientListComponent, clients: ClientEntity[]): void {
+  Object.assign(component, { items: clients });
+}
+
 describe('ClientListComponent role limits', () => {
   let fixture: ComponentFixture<ClientListComponent>;
   let component: ClientListComponent;
 
   beforeEach(async () => {
-    vi.spyOn(ClientListComponent.prototype, 'loadClients').mockResolvedValue();
+    stubLoad();
     await TestBed.configureTestingModule({
       imports: [ClientListComponent],
       providers: [
@@ -29,34 +43,40 @@ describe('ClientListComponent role limits', () => {
 
     fixture = TestBed.createComponent(ClientListComponent);
     component = fixture.componentInstance;
-    component.clients = [
+    showClients(component, [
       { clientId: 'offer', roles: ['issuance:offer'] },
       { clientId: 'registrar', roles: ['registrar:manage'] },
-    ] as ClientEntity[];
+    ] as ClientEntity[]);
     fixture.detectChanges();
   });
+
+  afterEach(() => vi.restoreAllMocks());
 
   function actions(row: number): HTMLButtonElement[] {
     const rows = fixture.nativeElement.querySelectorAll('tr.mat-mdc-row');
     return [...rows[row].querySelectorAll('td:last-child button')] as HTMLButtonElement[];
   }
 
+  /** Disabled, or (Delete) disabled but focusable so its tooltip can say why. */
+  const disabled = (button: HTMLButtonElement) =>
+    button.disabled || button.getAttribute('aria-disabled') === 'true';
+
   it('enables edit, rotate and delete for a client whose roles the caller holds', () => {
     // Edit, rotate secret, delete; the client ID links to the client's page
-    expect(actions(0).map((button) => button.disabled)).toEqual([false, false, false]);
+    expect(actions(0).map(disabled)).toEqual([false, false, false]);
   });
 
   it('disables edit, rotate and delete for a client with a role the caller lacks', () => {
-    expect(actions(1).map((button) => button.disabled)).toEqual([true, true, true]);
+    expect(actions(1).map(disabled)).toEqual([true, true, true]);
   });
 
   it('sends nothing when a disabled action is clicked', () => {
     const rotate = vi.spyOn(component, 'rotateSecret');
-    const remove = vi.spyOn(component, 'deleteClient');
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
     actions(1)[1].click();
     actions(1)[2].click();
     expect(rotate).not.toHaveBeenCalled();
-    expect(remove).not.toHaveBeenCalled();
+    expect(confirm).not.toHaveBeenCalled();
   });
 });
 
@@ -77,7 +97,7 @@ describe('ClientListComponent delete', () => {
     snackBar = { open: vi.fn() };
     vi.stubGlobal('confirm', confirm);
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    vi.spyOn(ClientListComponent.prototype, 'loadClients').mockResolvedValue();
+    stubLoad();
     client.setConfig({
       fetch: vi.fn<typeof fetch>(async (input) => {
         const request = input as Request;
@@ -102,10 +122,10 @@ describe('ClientListComponent delete', () => {
     }).compileComponents();
 
     fixture = TestBed.createComponent(ClientListComponent);
-    fixture.componentInstance.clients = [
+    showClients(fixture.componentInstance, [
       { clientId: 'offer', roles: ['issuance:offer'] },
       { clientId: 'other', roles: ['issuance:offer'] },
-    ] as ClientEntity[];
+    ] as ClientEntity[]);
     fixture.detectChanges();
     // Let the ownership lookups settle, so the buttons no longer hold clicks back.
     await vi.waitFor(() => {
@@ -127,7 +147,7 @@ describe('ClientListComponent delete', () => {
 
   it('warns and signs out when the caller deletes the client they are signed in with', async () => {
     const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
-    const reload = vi.mocked(fixture.componentInstance.loadClients);
+    const reload = vi.mocked(fixture.componentInstance.loadItems);
     reload.mockClear();
 
     deleteButton(0).click();
@@ -137,13 +157,20 @@ describe('ClientListComponent delete', () => {
     expect(requests).toContain('DELETE /api/client/offer');
     // Signed out first, or the login page would send the still signed-in caller back into the app.
     expect(logout.mock.invocationCallOrder[0]).toBeLessThan(navigate.mock.invocationCallOrder[0]);
+    expect(snackBar.open).toHaveBeenCalledWith(
+      'Client deleted. You have been signed out.',
+      'Close',
+      {
+        duration: 3000,
+      }
+    );
     expect(reload).not.toHaveBeenCalled();
   });
 
   it('keeps the caller signed in and the list as it is when the delete fails', async () => {
     deleteFailure = { statusCode: 403, message: 'Cannot manage client offer' };
     const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
-    const reload = vi.mocked(fixture.componentInstance.loadClients);
+    const reload = vi.mocked(fixture.componentInstance.loadItems);
     reload.mockClear();
 
     deleteButton(0).click();
@@ -161,8 +188,8 @@ describe('ClientListComponent delete', () => {
     expect(snackBar.open).toHaveBeenCalledTimes(1);
   });
 
-  it('reloads the list after deleting another client', async () => {
-    const reload = vi.mocked(fixture.componentInstance.loadClients);
+  it('takes the row out of the list after deleting another client', async () => {
+    const reload = vi.mocked(fixture.componentInstance.loadItems);
     reload.mockClear();
 
     deleteButton(1).click();
@@ -172,15 +199,21 @@ describe('ClientListComponent delete', () => {
         duration: 3000,
       })
     );
+    fixture.detectChanges();
     expect(confirm.mock.lastCall?.[0]).not.toContain('You are signed in');
     expect(requests).toContain('DELETE /api/client/other');
-    expect(reload).toHaveBeenCalled();
+    expect(fixture.componentInstance.clients.map(({ clientId }) => clientId)).toEqual(['offer']);
+    // The focused Delete left with its row: focus continues on the row now in its place.
+    await vi.waitFor(() =>
+      expect(document.activeElement).toBe(fixture.nativeElement.querySelector('a.client-link'))
+    );
+    expect(reload).not.toHaveBeenCalled();
     expect(logout).not.toHaveBeenCalled();
   });
 });
 
 describe('ClientListComponent loading', () => {
-  // The suite above stubs loadClients on the prototype.
+  // The suite above stubs loadItems on the prototype.
   beforeEach(() => {
     vi.restoreAllMocks();
   });
@@ -199,21 +232,19 @@ describe('ClientListComponent loading', () => {
           })
       ),
     });
-    TestBed.configureTestingModule({
-      providers: [{ provide: FrontendConfigService, useValue: { authMode: null } }],
-    });
-    const component = TestBed.runInInjectionContext(
-      () =>
-        new ClientListComponent(
-          { open: vi.fn() } as never,
-          {} as never,
-          { navigate: vi.fn() } as never,
-          {} as never,
-          { getRoles: () => ['clients:manage'] } as never
-        )
-    );
+    await TestBed.configureTestingModule({
+      imports: [ClientListComponent],
+      providers: [
+        provideRouter([]),
+        { provide: JwtService, useValue: { getRoles: () => ['clients:manage'] } },
+        { provide: ConfigOwnershipService, useValue: { get: async () => undefined } },
+        { provide: FrontendConfigService, useValue: { authMode: null } },
+      ],
+    }).compileComponents();
+    const component = TestBed.createComponent(ClientListComponent).componentInstance;
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
-    await component.loadClients();
+    await component.loadItems();
 
     expect(component.loadError).toBe('Failed to load clients: Forbidden resource');
   });
@@ -230,7 +261,7 @@ describe('ClientListComponent rotate secret', () => {
     useRotatedSecret = vi.fn(async () => undefined);
     dialog = { open: vi.fn() };
     vi.stubGlobal('confirm', confirm);
-    vi.spyOn(ClientListComponent.prototype, 'loadClients').mockResolvedValue();
+    stubLoad();
     client.setConfig({
       fetch: vi.fn<typeof fetch>(
         async () =>
@@ -431,7 +462,7 @@ describe('ClientListComponent page', () => {
   const text = (element: Element | null) => element?.textContent?.replace(/\s+/g, ' ').trim();
 
   async function render(clients: object[]) {
-    vi.spyOn(ClientListComponent.prototype, 'loadClients').mockResolvedValue();
+    stubLoad();
     await TestBed.configureTestingModule({
       imports: [ClientListComponent],
       providers: [
@@ -442,7 +473,7 @@ describe('ClientListComponent page', () => {
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(ClientListComponent);
-    fixture.componentInstance.clients = clients as ClientEntity[];
+    showClients(fixture.componentInstance, clients as ClientEntity[]);
     fixture.detectChanges();
     const page = fixture.nativeElement as HTMLElement;
     const ids = () => Array.from(page.querySelectorAll('tr.mat-mdc-row .client-copy code'), text);
@@ -528,7 +559,7 @@ describe('ClientListComponent Config Portability lock', () => {
     clients: Partial<ClientEntity>[],
     tenantPage: boolean
   ): Promise<{ fixture: ComponentFixture<ClientListComponent>; rotate: HTMLButtonElement }> {
-    vi.spyOn(ClientListComponent.prototype, 'loadClients').mockResolvedValue();
+    stubLoad();
     get = vi.fn(async (_kind: string, id: string) =>
       id === 'acme-admin' ? { ownership: 'file-managed', source: 'folder:acme' } : undefined
     );
@@ -548,7 +579,7 @@ describe('ClientListComponent Config Portability lock', () => {
     if (tenantPage) {
       fixture.componentRef.setInput('loadedClients', clients);
     } else {
-      fixture.componentInstance.clients = clients as ClientEntity[];
+      showClients(fixture.componentInstance, clients as ClientEntity[]);
     }
     fixture.detectChanges();
     const page = fixture.nativeElement as HTMLElement;

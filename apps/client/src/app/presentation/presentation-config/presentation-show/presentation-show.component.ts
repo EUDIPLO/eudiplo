@@ -43,6 +43,7 @@ import {
   type EudiHubRegistrationDialogData,
 } from '../../../registrar/eudi-hub-dialog/eudi-hub-registration-dialog.component';
 import type { EudiHubRegistrationCertificate } from '../../../registrar/eudi-hub.service';
+import { formatLifetime } from '../../../utils/duration';
 
 @Component({
   selector: 'app-presentation-show',
@@ -237,11 +238,9 @@ export class PresentationShowComponent implements OnInit {
     }
   }
 
-  formatLifetime(seconds: number): string {
-    if (seconds < 60) return `${seconds} seconds`;
-    if (seconds < 3600) return `${Math.floor(seconds / 60)} minutes`;
-    if (seconds < 86400) return `${Math.floor(seconds / 3600)} hours`;
-    return `${Math.floor(seconds / 86400)} days`;
+  /** Formats a lifetime in seconds as on the credential configuration pages. */
+  formatLifetime(seconds?: number | null): string {
+    return formatLifetime(seconds);
   }
 
   formatJsonValue(value: any): string {
