@@ -418,10 +418,9 @@
                     needs a German (de) and an English (en) text.
                   </p>
 
-                  <div
+                  <fieldset
                     formArrayName="registrationCertPurpose"
-                    class="purpose-list"
-                    role="group"
+                    class="purpose-list row-group"
                     aria-labelledby="purposes-heading"
                   >
                     @for (
@@ -472,7 +471,7 @@
                         </button>
                       </div>
                     }
-                  </div>
+                  </fieldset>
                 </mat-card-content>
               </mat-card>
             </section>
@@ -511,7 +510,11 @@
                       Add Attachment
                     </button>
                   </div>
-                  <div formArrayName="attached" role="group" aria-labelledby="attachments-heading">
+                  <fieldset
+                    formArrayName="attached"
+                    class="row-group"
+                    aria-labelledby="attachments-heading"
+                  >
                     @for (
                       attachmentCtrl of getFormArray('attached').controls;
                       let i = $index;
@@ -524,7 +527,7 @@
                     } @empty {
                       <p class="subsection-hint">No attached credentials.</p>
                     }
-                  </div>
+                  </fieldset>
                 </mat-card-content>
               </mat-card>
             </section>

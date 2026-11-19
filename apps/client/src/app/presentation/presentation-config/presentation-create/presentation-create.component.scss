@@ -93,6 +93,14 @@ app-config-ownership-notice {
   }
 }
 
+// A list of rows grouped under the heading above it; a fieldset without its own frame
+.row-group {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
 .purpose-list {
   display: flex;
   flex-direction: column;
