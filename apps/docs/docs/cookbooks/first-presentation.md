@@ -30,7 +30,7 @@ Every credential query of a presentation configuration names the issuers it acce
 | **Trust List Signing**  | `Membership trust list signing`   | Signs the trust list                                              |
 | **Status List Signing** | `Membership status list signing`  | Listed as the issuer's status list certificate                    |
 
-For the status list key, keep **Create Key Chain (Recommended)**: its signing key rotates while the trust list keeps naming the same root CA. EUDIPLO does not create a trust list signing key on its own.
+For the status list key, keep **Key Chain with Root CA**: its signing key rotates while the trust list keeps naming the same root CA. EUDIPLO does not create a trust list signing key on its own.
 
 **Checkpoint:** both key chains appear under **Keys**.
 

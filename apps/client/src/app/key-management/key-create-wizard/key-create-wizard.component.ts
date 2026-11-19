@@ -19,7 +19,6 @@ import {
 } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
-import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
@@ -31,7 +30,6 @@ import { MatStepper, MatStepperModule } from '@angular/material/stepper';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { merge } from 'rxjs';
 import { readCertificateFiles } from '../certificate-files';
 import { KeyChainService } from '../key-chain.service';
@@ -41,9 +39,8 @@ import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { type CreatedForForm, openedFromForm } from '../../common/return-to-form';
 import { ReturnToFormComponent } from '../../common/return-to-form.component';
 import { showFieldsToFix } from '../../common/field-to-fix.util';
+import { keyUsages, type KeyUsageType } from '../key-usage';
 
-export type KeyUsageSelection =
-  'attestation' | 'statusList' | 'access' | 'authorizationServer' | 'trustList' | 'federation';
 export type KeyChainTypeSelection = 'internalChain' | 'externalCaChain' | 'standalone';
 export type AccessSourceSelection = 'selfSigned' | 'external';
 export type SigningAlgorithm = NonNullable<KeyChainCreateDto['alg']>;
@@ -70,7 +67,6 @@ function requiredText(control: AbstractControl): ValidationErrors | null {
     CommonModule,
     MatButtonModule,
     MatCardModule,
-    MatCheckboxModule,
     MatFormFieldModule,
     MatIconModule,
     MatInputModule,
@@ -81,7 +77,6 @@ function requiredText(control: AbstractControl): ValidationErrors | null {
     MatSnackBarModule,
     MatStepperModule,
     MatTooltipModule,
-    FlexLayoutModule,
     ReactiveFormsModule,
     ReturnToFormComponent,
     RouterModule,
@@ -118,45 +113,45 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
   // Usage options with descriptions
   usageOptions = [
     {
-      value: 'attestation' as KeyUsageSelection,
+      value: 'attestation' as KeyUsageType,
       label: 'Credential Signing (Attestation)',
-      icon: 'verified_user',
+      icon: keyUsages.attestation.icon,
       description: 'Create a key for signing verifiable credentials (SD-JWT VC, mDOC).',
       hint: 'Create one key per credential type (e.g., diplomas, membership cards)',
     },
     {
-      value: 'statusList' as KeyUsageSelection,
+      value: 'statusList' as KeyUsageType,
       label: 'Status List Signing',
-      icon: 'playlist_add_check',
+      icon: keyUsages.statusList.icon,
       description: 'Create a key for signing revocation/suspension status lists.',
       hint: 'Create one per credential type to manage its lifecycle separately',
     },
     {
-      value: 'access' as KeyUsageSelection,
+      value: 'access' as KeyUsageType,
       label: 'Access Certificate',
-      icon: 'badge',
+      icon: keyUsages.access.icon,
       description: 'Prove your identity as an issuer/verifier to EUDI wallets.',
       hint: 'Self-signed for development; with the registrar:manage role, request a trusted one from the EUDI Hub on the key page',
     },
     {
-      value: 'authorizationServer' as KeyUsageSelection,
+      value: 'authorizationServer' as KeyUsageType,
       label: 'Authorization Server',
-      icon: 'key',
+      icon: keyUsages.authorizationServer.icon,
       description:
         'Create a key that signs the OAuth access tokens of your authorization servers. EUDIPLO creates one when the tenant has none.',
       hint: 'Choose it as the signing key of an authorization server; no certificate is involved',
     },
     {
-      value: 'trustList' as KeyUsageSelection,
+      value: 'trustList' as KeyUsageType,
       label: 'Trust List Signing',
-      icon: 'shield',
+      icon: keyUsages.trustList.icon,
       description: 'Create a key for signing trust lists.',
       hint: 'For trust framework operators only',
     },
     {
-      value: 'federation' as KeyUsageSelection,
+      value: 'federation' as KeyUsageType,
       label: 'OpenID Federation Entity Key',
-      icon: 'hub',
+      icon: keyUsages.federation.icon,
       description:
         'Create a key that signs the entity configuration of your OpenID Federation entity.',
       hint: 'Only needed when this tenant takes part in an OpenID Federation',
@@ -167,10 +162,11 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
   keyChainTypeOptions = [
     {
       value: 'internalChain' as KeyChainTypeSelection,
-      label: 'Create Key Chain (Recommended)',
+      label: 'Key Chain with Root CA',
+      recommended: true,
       icon: 'account_tree',
       description: 'Create a key chain with embedded root CA and a signing key under it.',
-      hint: 'Recommended for production. Verifiers trust its root CA, which stays the same when the signing key rotates.',
+      hint: 'Suited for production. Verifiers trust its root CA, which stays the same when the signing key rotates.',
       features: [
         'Optional rotation (on by default)',
         'Embedded root CA',
@@ -200,6 +196,27 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
   ];
 
   // Access source options (shown for access keys)
+  /** Where the key of a certificate from an external CA comes from. */
+  readonly certificateSources: {
+    value: ExternalCertificateSource;
+    label: string;
+    icon: string;
+    description: string;
+  }[] = [
+    {
+      value: 'import',
+      label: 'Import key and certificate',
+      icon: 'upload_file',
+      description: 'Import a key and the certificate chain issued for it.',
+    },
+    {
+      value: 'csr',
+      label: 'Request with a CSR',
+      icon: 'outgoing_mail',
+      description: 'Create the key in EUDIPLO and request its certificate with a CSR.',
+    },
+  ];
+
   accessSourceOptions = [
     {
       value: 'selfSigned' as AccessSourceSelection,
@@ -359,7 +376,7 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
     }
   }
 
-  get selectedUsage(): KeyUsageSelection | null {
+  get selectedUsage(): KeyUsageType | null {
     return this.usageForm.get('usage')?.value || null;
   }
 
@@ -507,11 +524,10 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
         injector: this.injector,
         container: () => this.configFormElement?.nativeElement,
         sections: [
+          { name: 'Basic Settings', controls: ['kmsProvider', 'alg'].map(control) },
           {
-            name: 'Basic Settings',
-            controls: ['kmsProvider', 'alg', 'externalPrivateKey', 'externalCertificate'].map(
-              control
-            ),
+            name: 'Certificate',
+            controls: ['externalPrivateKey', 'externalCertificate'].map(control),
           },
           {
             name: 'Rotation Policy',
@@ -567,7 +583,7 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
   }
 
   /** The request that creates the key chain the wizard describes, without key material. */
-  private createRequest(usage: KeyUsageSelection, description?: string): KeyChainCreateDto {
+  private createRequest(usage: KeyUsageType, description?: string): KeyChainCreateDto {
     return {
       usageType: usage,
       type: usage === 'access' || !this.isInternalChain ? 'standalone' : 'internalChain',
@@ -579,7 +595,7 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
   }
 
   /** Imports the pasted key and certificate chain and opens the imported key chain. */
-  private async importExternalKey(usage: KeyUsageSelection, description?: string): Promise<void> {
+  private async importExternalKey(usage: KeyUsageType, description?: string): Promise<void> {
     const importDto: KeyChainImportDto = {
       ...this.parseExternalPrivateKey(),
       usageType: usage,
@@ -629,7 +645,7 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
     this.createdForForm = { id, heading };
   }
 
-  private showSuccessMessage(usage: KeyUsageSelection): void {
+  private showSuccessMessage(usage: KeyUsageType): void {
     if (usage === 'attestation') {
       if (this.isInternalChain) {
         this.snackBar

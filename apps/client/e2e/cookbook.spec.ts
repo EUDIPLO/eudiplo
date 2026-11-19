@@ -101,7 +101,7 @@ test('issue and verify cookbook', async ({ page }) => {
   await test.step('chapter 2, step 2: create the signing and access keys', async () => {
     await createKeyChain(
       page,
-      ['Credential Signing (Attestation)', 'Create Key Chain (Recommended)'],
+      ['Credential Signing (Attestation)', 'Key Chain with Root CA'],
       'Membership credential signing'
     );
     await createKeyChain(
@@ -223,7 +223,7 @@ test('issue and verify cookbook', async ({ page }) => {
     await createKeyChain(page, ['Trust List Signing'], 'Membership trust list signing');
     await createKeyChain(
       page,
-      ['Status List Signing', 'Create Key Chain (Recommended)'],
+      ['Status List Signing', 'Key Chain with Root CA'],
       'Membership status list signing'
     );
     await openNav(page, 'Keys');

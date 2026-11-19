@@ -21,7 +21,7 @@ app-config-ownership-notice {
   display: contents;
 }
 
-// One colour per usage, as on the key list
+// One tint for every usage, as on the key list
 .hero-avatar {
   --tone: var(--mat-sys-primary);
 
@@ -32,26 +32,6 @@ app-config-ownership-notice {
     width: 32px;
     height: 32px;
     font-size: 32px;
-  }
-
-  &.usage-access {
-    --tone: var(--mat-sys-tertiary);
-  }
-
-  &.usage-authorizationServer {
-    --tone: var(--eudiplo-accent);
-  }
-
-  &.usage-statusList {
-    --tone: var(--eudiplo-success);
-  }
-
-  &.usage-trustList {
-    --tone: var(--eudiplo-warning);
-  }
-
-  &.usage-federation {
-    --tone: var(--mat-sys-secondary);
   }
 }
 

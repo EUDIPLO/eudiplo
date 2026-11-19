@@ -33,7 +33,7 @@ ADMIN_TOKEN=$(curl -s -X POST "$EUDIPLO/api/oauth2/token" \
 
 Create a second issuer key in the same tenant and a credential type of the same VCT that uses it:
 
-1. Under **Keys**, create **Credential Signing (Attestation)** → **Create Key Chain (Recommended)** with description `Untrusted signing`.
+1. Under **Keys**, create **Credential Signing (Attestation)** → **Key Chain with Root CA** with description `Untrusted signing`.
 2. Under **Credential Types**, create `membership-untrusted` exactly like `membership` in [chapter 2, step 4](first-credential.md#step-4-define-the-membership-credential), with two differences: **Display Name** `Untrusted membership`, and the signing key chain `Untrusted signing`.
 3. Send a pre-authorized offer for `membership-untrusted` with the default values, and accept it in the wallet.
 
