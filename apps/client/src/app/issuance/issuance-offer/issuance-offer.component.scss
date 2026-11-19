@@ -70,50 +70,79 @@
   border-top: 1px solid var(--mat-sys-outline-variant);
 }
 
-// Flow selection styles
+// Flow choices as selectable tiles; each tile is the label of its radio
 .flow-selection {
-  .flow-option {
-    margin-bottom: 8px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+  gap: 12px;
+}
 
-    ::ng-deep .mdc-form-field {
-      align-items: flex-start;
-    }
+.flow-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: var(--mat-sys-corner-large);
+  background: var(--mat-sys-surface);
+  cursor: pointer;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease;
 
-    ::ng-deep .mdc-radio {
-      margin-top: 4px;
-    }
+  &:hover {
+    border-color: var(--mat-sys-outline);
+    background: var(--mat-sys-surface-container-low);
   }
 
-  .flow-option-content {
-    padding: 12px 0;
+  &:has(input:focus-visible) {
+    outline: 2px solid var(--mat-sys-primary);
+    outline-offset: 2px;
+  }
 
-    .flow-option-header {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 4px;
+  &.selected {
+    border-color: var(--mat-sys-primary);
+    background: color-mix(in srgb, var(--mat-sys-primary) 8%, var(--mat-sys-surface));
+    box-shadow: inset 0 0 0 1px var(--mat-sys-primary);
 
-      mat-icon {
-        color: var(--eudiplo-info);
-        font-size: 20px;
-        width: 20px;
-        height: 20px;
-      }
-
-      strong {
-        font-size: 1rem;
-      }
-    }
-
-    .flow-option-description {
-      color: var(--mat-sys-on-surface-variant);
-      font-size: 0.875rem;
-      margin: 0;
-      padding-left: 28px;
-      line-height: 1.5;
+    .flow-icon {
+      background: var(--mat-sys-primary);
+      color: var(--mat-sys-on-primary);
     }
   }
 }
+
+.flow-tile-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 8px;
+
+  mat-radio-button {
+    margin: -8px -8px 0 0;
+  }
+}
+
+.flow-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--mat-sys-corner-medium);
+  background: color-mix(in srgb, var(--mat-sys-primary) 12%, var(--mat-sys-surface));
+  color: var(--mat-sys-primary);
+}
+
+.flow-title {
+  font: var(--mat-sys-title-medium);
+  color: var(--mat-sys-on-surface);
+}
+
+.flow-description {
+  font: var(--mat-sys-body-medium);
+  color: var(--mat-sys-on-surface-variant);
+}
+
 
 // IAE Status Summary styles
 .iae-status-summary {
