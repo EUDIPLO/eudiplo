@@ -342,7 +342,7 @@ Inspect the affected resources, fix the cause, and plan again.
 with `1`:
 
 ```text
-Import stopped at resource TrustList/eu: 14 completed, 1 failed, 3 not started.
+Import stopped at resource TrustList/eu: 2 completed, 1 failed, 2 not started.
   completed images/logo.jpg
   completed KeyChain/signing
   failed    TrustList/eu
@@ -353,9 +353,9 @@ Inspect the report with: eudiplo config operations 708f0de1-…
 Then run plan again before retrying.
 ```
 
-The full report goes to standard output as JSON, including any
-[client secrets generated](#clients-with-generated-secrets) before the failure,
-which are not shown again. Progress is also stored in the database:
+The full report goes to standard output as JSON. It includes any client secrets
+generated before the failure (`generatedSecrets`); they are not shown again, so
+store them immediately. Progress is also stored in the database:
 
 ```bash
 eudiplo config operations --instance staging                 # latest 50 operations

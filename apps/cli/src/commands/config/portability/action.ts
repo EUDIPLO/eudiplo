@@ -438,7 +438,11 @@ function reportApplyFailure(
     return 1;
 }
 
-/** A resource with any failed step failed; one with every step done completed. */
+/**
+ * A resource with a failed step failed; one with every step done completed.
+ * The server marks the failed step before it answers; should a step still be
+ * marked running, it did not finish, so it counts as failed, not as not started.
+ */
 function resourceState(
     statuses: ApplyOperation["status"][],
 ): "completed" | "failed" | "pending" {

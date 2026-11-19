@@ -322,4 +322,74 @@ describe("config plan / import outcomes", () => {
             "secret ${PORTAL_SECRET} was rejected by the store",
         );
     });
+
+    it("names the stage alone when an asset step fails", async () => {
+        respond(
+            {
+                ...applyFailure,
+                failedOperation: { stage: "asset" },
+                operations: [
+                    {
+                        stage: "asset",
+                        path: "images/logo.png",
+                        status: "failed",
+                    },
+                    {
+                        stage: "resource",
+                        kind: "Client",
+                        id: "portal",
+                        status: "pending",
+                    },
+                ],
+                generatedSecrets: undefined,
+            },
+            500,
+        );
+
+        expect(await run("import", { "plan-fingerprint": fingerprint })).toBe(
+            1,
+        );
+        expect(output.stderr).toMatch(
+            /^Import stopped at asset: 0 completed, 1 failed, 1 not started\.\n {2}failed {4}images\/logo\.png\n {2}pending {3}Client\/portal\n/,
+        );
+        expect(output.stderr).not.toContain("client secret(s)");
+    });
+
+    it("counts a step still marked running as failed", async () => {
+        respond(
+            {
+                ...applyFailure,
+                operations: [
+                    {
+                        stage: "resource",
+                        kind: "KeyChain",
+                        id: "signing",
+                        status: "running",
+                    },
+                ],
+            },
+            500,
+        );
+
+        expect(await run("import", { "plan-fingerprint": fingerprint })).toBe(
+            1,
+        );
+        expect(output.stderr).toContain(
+            ": 0 completed, 1 failed, 0 not started.\n  failed    KeyChain/signing\n",
+        );
+    });
+
+    it("falls back to the generic error when the failure report has no operations", async () => {
+        respond(
+            { statusCode: 500, code: "CONFIG_APPLY_FAILED", message: "x" },
+            500,
+        );
+
+        await expect(
+            run("import", { "plan-fingerprint": fingerprint }),
+        ).rejects.toThrow(
+            'EUDIPLO API returned 500: {"statusCode":500,"code":"CONFIG_APPLY_FAILED","message":"x"}',
+        );
+        expect(output.stdout).toBe("");
+    });
 });
