@@ -125,7 +125,7 @@ export class PresentationRequestComponent implements OnInit {
     this.form.get('requestId')?.valueChanges.subscribe((value) => {
       void this.evaluateReadiness(value || undefined);
     });
-    this.loadConfigurations();
+    void this.loadConfigurations();
   }
 
   async loadConfigurations(): Promise<void> {
@@ -143,7 +143,7 @@ export class PresentationRequestComponent implements OnInit {
         this.form.patchValue({ requestId: this.route.snapshot.params['id'] });
         await this.evaluateReadiness(this.route.snapshot.params['id']);
         //since we do not have any other values for now, we can submit the form
-        this.onSubmit();
+        void this.onSubmit();
       } else {
         // Auto-select if only one configuration is available
         if (this.configs.length === 1) {

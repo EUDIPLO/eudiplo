@@ -92,7 +92,7 @@ export class KeyManagementProvidersComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.loadProviders();
+    void this.loadProviders();
   }
 
   async refresh(): Promise<void> {

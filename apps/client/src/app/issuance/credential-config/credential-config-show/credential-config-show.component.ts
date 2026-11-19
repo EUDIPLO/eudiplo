@@ -248,7 +248,7 @@ export class CredentialConfigShowComponent implements OnInit {
         (config) => {
           this.config = config;
           if (config.statusManagement) {
-            this.loadStatusListId(config.id);
+            void this.loadStatusListId(config.id);
           }
         },
         (error) => {
