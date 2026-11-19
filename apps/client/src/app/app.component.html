@@ -228,7 +228,7 @@
                 ariaCurrentWhenActive="page"
                 (click)="closeSidenavOnMobile()"
               >
-                <mat-icon matListItemIcon>checklist</mat-icon>
+                <mat-icon matListItemIcon>shield</mat-icon>
                 <span matListItemTitle>Trust Lists</span>
               </a>
 
@@ -239,7 +239,7 @@
                 ariaCurrentWhenActive="page"
                 (click)="closeSidenavOnMobile()"
               >
-                <mat-icon matListItemIcon>account_tree</mat-icon>
+                <mat-icon matListItemIcon>hub</mat-icon>
                 <span matListItemTitle>Federation Trust Anchors</span>
               </a>
             }
@@ -259,7 +259,11 @@
 
         <!-- Integrations Section: webhook endpoints serve issuance and verification -->
         @if (hasRole(['issuance:manage', 'presentation:manage'])) {
-          <app-nav-section section="integrations" icon="hub" label="Integrations">
+          <app-nav-section
+            section="integrations"
+            icon="integration_instructions"
+            label="Integrations"
+          >
             <a
               mat-list-item
               [routerLink]="['/webhook-endpoints']"

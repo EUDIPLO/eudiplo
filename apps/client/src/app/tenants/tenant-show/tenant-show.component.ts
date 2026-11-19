@@ -157,7 +157,7 @@ export function buildSettingGroups(tenant: TenantResponseDto): SettingGroup[] {
     },
     {
       title: 'Status lists',
-      icon: 'checklist',
+      icon: 'format_list_bulleted',
       settings: [
         { label: 'Capacity', value: statusLists.capacity?.toLocaleString() },
         {
