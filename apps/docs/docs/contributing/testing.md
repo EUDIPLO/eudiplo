@@ -50,7 +50,7 @@ The script builds the workspace packages the backend depends on (`@eudiplo/confi
 - **Port 3000 must be free.** The suites start the backend there and abort with a clear error when the port is taken. Stop `pnpm dev:backend` or a Compose stack first, and do not run two E2E runs in parallel.
 - **Docker is optional.** The PostgreSQL, HashiCorp Vault and S3 (RustFS) suites start containers with [Testcontainers](https://testcontainers.com/). Without a container runtime they are skipped with a warning. Set `E2E_SKIP_CONTAINERS=true` to skip them on purpose. In CI (`CI` set) a missing runtime fails the run.
 
-You need no `.env` file, no hosts entry and no running `test-rp` webhook:
+You need no `.env` file, no hosts entry and no running webhook receiver:
 
 - The suites ignore `apps/backend/.env`, so development settings cannot leak into a run. Test defaults (secrets, `DB_SYNCHRONIZE=true`, both `OUTBOUND_URL_ALLOW_*` flags) come from the `env` block of `apps/backend/test/vitest.config.ts`.
 - Outgoing webhook and trust-list calls to `localhost:8787` are mocked with `nock`.
@@ -66,7 +66,7 @@ pnpm --filter @eudiplo/backend test:e2e         # with coverage, as in CI
 
 `test:e2e` does not build `@eudiplo/config-format` (CI builds it in a separate step); run `pnpm --filter @eudiplo/config-format build` first.
 
-CI splits the suites across four runners (**E2E Tests (non-OIDF, shard n/4)**), because they share port 3000 and cannot run in parallel on one machine. The **E2E Tests (non-OIDF)** job passes only when every shard passed. Each shard also writes a Vitest blob report, which the **Backend E2E Coverage** job merges with its coverage. The shard jobs also add the `host.testcontainers.internal` hosts entry and start `test-rp`; locally neither is required.
+CI splits the suites across four runners (**E2E Tests (non-OIDF, shard n/4)**), because they share port 3000 and cannot run in parallel on one machine. The **E2E Tests (non-OIDF)** job passes only when every shard passed. Each shard also writes a Vitest blob report, which the **Backend E2E Coverage** job merges with its coverage. The shard jobs also add the `host.testcontainers.internal` hosts entry; locally it is not required.
 
 ## OIDF conformance testing
 
