@@ -54,7 +54,7 @@ describe('WebhookEndpointCreateComponent save', () => {
     component.onSubmit();
     expect(create).toHaveBeenCalledOnce();
     expect(snackBar.open.mock.lastCall?.[0]).toBe(
-      'Check the highlighted fields in Endpoint Details, Authentication.'
+      'Check the highlighted fields in Endpoint, Authentication.'
     );
   });
 
@@ -182,7 +182,7 @@ describe('WebhookEndpointCreateComponent save', () => {
         [...page.querySelectorAll('mat-error')].map((error) => error.textContent?.trim())
       ).toEqual(['Name is required', 'URL is required']);
       expect(snackBar.open).toHaveBeenLastCalledWith(
-        'Check the highlighted fields in Endpoint Details.',
+        'Check the highlighted fields in Endpoint.',
         'Close',
         expect.anything()
       );
@@ -282,7 +282,49 @@ describe('WebhookEndpointCreateComponent JSON View', () => {
     await expectHeadingFocusOnlyAfterRetry(
       fixture,
       () => component.retryLoad(),
-      () => !component.loading
+      () => !component.loading,
+      'h1'
     );
+  });
+});
+
+describe('WebhookEndpointCreateComponent back link', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  function render(id: string | null, getById = vi.fn()) {
+    TestBed.configureTestingModule({
+      imports: [WebhookEndpointCreateComponent],
+      providers: [
+        provideRouter([]),
+        { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => id } } } },
+        { provide: WebhookEndpointService, useValue: { getById } },
+        { provide: ConfigOwnershipService, useValue: { get: async () => undefined } },
+      ],
+    });
+    const fixture = TestBed.createComponent(WebhookEndpointCreateComponent);
+    fixture.detectChanges();
+    const label = () => {
+      fixture.detectChanges();
+      return (fixture.nativeElement as HTMLElement)
+        .querySelector('a.back-link')
+        ?.getAttribute('aria-label');
+    };
+    return { fixture, label };
+  }
+
+  it('leads back to the list when creating', () => {
+    expect(render(null).label()).toBe('Back to Webhook Endpoints');
+  });
+
+  it('names the endpoint being edited once it has loaded, as its page does', async () => {
+    let resolve!: (value: unknown) => void;
+    const { label } = render(
+      'order-events',
+      vi.fn(() => new Promise((r) => (resolve = r)))
+    );
+    expect(label()).toBe('Back to Webhook endpoint');
+
+    resolve({ id: 'order-events', name: 'Order events', url: 'https://a' });
+    await vi.waitFor(() => expect(label()).toBe('Back to Order events'));
   });
 });

@@ -63,6 +63,8 @@ export abstract class ApiKeyEndpointFormComponent implements OnInit {
   loading = false;
   /** Set when the endpoint to edit could not be loaded; the form stays hidden. */
   loadError = '';
+  /** The loaded endpoint's name, or its ID without one; the page it was opened from shows it. */
+  loadedTitle = '';
 
   /** The endpoint in messages, such as "webhook endpoint". */
   protected abstract readonly noun: string;
@@ -109,6 +111,7 @@ export abstract class ApiKeyEndpointFormComponent implements OnInit {
       .getById(id)
       .then(
         (endpoint) => {
+          this.loadedTitle = endpoint.name || endpoint.id;
           this.form.patchValue({
             id: endpoint.id,
             name: endpoint.name,

@@ -6,7 +6,8 @@ import { createTenant, type TestTenant } from './support/tenants';
 // A form's Save stays usable while fields are invalid (contributing/client.md). A click
 // says in the snackbar which sections hold errors and focuses the first invalid field,
 // which jsdom cannot show for a real browser. The webhook endpoint form stands for the
-// other forms that follow the rule.
+// other forms that follow the rule. The second test runs the list's search, the row link
+// to the endpoint and the row's Delete in a browser.
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
@@ -25,7 +26,7 @@ test('says which fields keep a webhook endpoint from saving and focuses the firs
 }) => {
   await loginWithClientCredentials(page, tenant.clientId, tenant.clientSecret);
   await page.locator('mat-sidenav').getByText('Webhook Endpoints', { exact: true }).click();
-  await page.getByRole('button', { name: 'Create New Webhook Endpoint' }).click();
+  await page.locator('.page-header').getByRole('link', { name: 'Create webhook endpoint' }).click();
   await page.getByRole('textbox', { name: 'ID', exact: true }).fill('order-events');
 
   const saves: string[] = [];
@@ -44,7 +45,7 @@ test('says which fields keep a webhook endpoint from saving and focuses the firs
   await expect(name).toBeFocused();
   await expect(page.getByText('Name is required')).toBeVisible();
   await expect(page.getByText('URL is required')).toBeVisible();
-  await expect(page.getByText('Check the highlighted fields in Endpoint Details.')).toBeVisible();
+  await expect(page.getByText('Check the highlighted fields in Endpoint.')).toBeVisible();
   expect(saves).toEqual([]);
 
   await name.fill('Order events');
@@ -53,4 +54,31 @@ test('says which fields keep a webhook endpoint from saving and focuses the firs
 
   await expect(page.getByText('Webhook endpoint created successfully')).toBeVisible();
   expect(saves).toHaveLength(1);
+});
+
+test('finds a webhook endpoint by its URL, opens it and deletes it from the list', async ({
+  page,
+}) => {
+  await loginWithClientCredentials(page, tenant.clientId, tenant.clientSecret);
+  await page.goto('/webhook-endpoints/create');
+  await page.getByRole('textbox', { name: 'ID', exact: true }).fill('audit-events');
+  await page.getByRole('textbox', { name: 'Name' }).fill('Audit events');
+  await page.getByRole('textbox', { name: 'URL' }).fill('https://audit.example.com/in');
+  const create = page.getByRole('button', { name: 'Create', exact: true });
+  await expect(create).not.toHaveAttribute('aria-busy', 'true');
+  await create.click();
+  await expect(page).toHaveURL(/\/webhook-endpoints$/);
+
+  await page.getByRole('searchbox', { name: /Search webhook endpoints/ }).fill('audit.example');
+  await expect(page.locator('a.endpoint-link')).toHaveText(['Audit events']);
+  await page.getByRole('link', { name: 'Audit events', exact: true }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Audit events' })).toBeVisible();
+  await page.getByRole('link', { name: 'Back to Webhook Endpoints' }).click();
+
+  page.once('dialog', (dialog) => dialog.accept());
+  const remove = page.getByRole('button', { name: 'Delete webhook endpoint Audit events' });
+  await expect(remove).not.toHaveAttribute('aria-busy', 'true');
+  await remove.click();
+  await expect(page.getByText('Webhook endpoint deleted successfully')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Audit events', exact: true })).toHaveCount(0);
 });

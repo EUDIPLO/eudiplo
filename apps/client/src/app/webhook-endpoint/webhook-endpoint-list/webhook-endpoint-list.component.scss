@@ -1,0 +1,122 @@
+@use '../../tenants/tenant-page' as page;
+
+// Heading, table card with search, badges and states, as on the user and API client lists
+@include page.base;
+@include page.list-page;
+
+.page-header p {
+  max-width: 72ch;
+}
+
+table {
+  @include page.data-table;
+
+  // The endpoint link covers its row; the actions sit above it
+  &.linked tr.mat-mdc-row:not(.no-match) {
+    position: relative;
+    cursor: pointer;
+
+    .row-actions {
+      position: relative;
+      z-index: 1;
+    }
+
+    &:hover .endpoint-link {
+      color: var(--mat-sys-primary);
+    }
+  }
+}
+
+.endpoint-link {
+  font: var(--mat-sys-title-small);
+  color: var(--mat-sys-on-surface);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+  transition: color 120ms ease;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--mat-sys-primary);
+    outline-offset: 2px;
+    border-radius: var(--mat-sys-corner-extra-small);
+  }
+}
+
+.endpoint-cell {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 0;
+}
+
+.endpoint-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--mat-sys-corner-full);
+  background: color-mix(in srgb, var(--mat-sys-primary) 14%, var(--mat-sys-surface));
+  color: var(--mat-sys-primary);
+
+  mat-icon {
+    width: 20px;
+    height: 20px;
+    font-size: 20px;
+  }
+}
+
+.endpoint-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+
+  small {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    color: var(--mat-sys-on-surface-variant);
+    overflow-wrap: anywhere;
+  }
+}
+
+.url {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  color: var(--mat-sys-on-surface-variant);
+  // Wraps at the dots, slashes and hyphens of a URL, not after any letter
+  overflow-wrap: break-word;
+}
+
+// An endpoint called with an API key
+.badge.auth-key {
+  --tone: var(--mat-sys-primary);
+}
+
+.mat-column-auth {
+  width: 1%;
+  white-space: nowrap;
+}
+
+// Narrow pages: the webhook icon gives its room to the name
+@container (max-width: 600px) {
+  .endpoint-icon {
+    display: none;
+  }
+
+  .search-bar {
+    flex: 1 1 100%;
+  }
+}
+
+// Phones: the list leaves the URL to each endpoint's page
+@container (max-width: 560px) {
+  .mat-column-url {
+    display: none;
+  }
+}
