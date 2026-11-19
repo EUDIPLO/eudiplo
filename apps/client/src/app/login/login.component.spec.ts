@@ -1342,10 +1342,6 @@ describe('LoginComponent with a kept session', () => {
       expect(main?.querySelector('app-diplo-logo')).not.toBeNull();
     });
 
-    it('lays out the form without the flex layout directives', () => {
-      expect(page().querySelector('[fxLayout], [fxLayoutAlign], [fxLayoutGap]')).toBeNull();
-    });
-
     it('shows a neutral status line while it checks the instance for SSO', () => {
       const notice = ssoNotice('loading');
 

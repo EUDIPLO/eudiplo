@@ -73,7 +73,7 @@ export class PresentationListComponent extends BaseAsyncListComponent<Presentati
     return this.presentationService.loadConfigurations();
   }
 
-  deleteConfiguration(config: PresentationConfig): Promise<void> {
+  deleteConfiguration(config: PresentationConfig): Promise<boolean> {
     return this.deleteItem({
       item: config,
       id: config.id,

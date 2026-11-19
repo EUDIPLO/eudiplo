@@ -1,4 +1,4 @@
-@use '../../tenants/tenant-page' as page;
+@use 'page';
 
 // Page heading, outlined cards and the Material 3 search bar, as on the tenant and client pages
 @include page.base;

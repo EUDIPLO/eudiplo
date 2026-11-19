@@ -62,7 +62,7 @@ export class AttributeProviderListComponent extends BaseAsyncListComponent<Attri
     return getApiKeyAuthType(provider.auth as { type?: string });
   }
 
-  deleteProvider(provider: AttributeProviderEntity): Promise<void> {
+  deleteProvider(provider: AttributeProviderEntity): Promise<boolean> {
     return this.deleteItem({
       item: provider,
       id: provider.id,

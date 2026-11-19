@@ -42,7 +42,6 @@
     "keycloak-js": "^26.2.5",
     "material-icons": "^1.13.14",
     "monaco-editor": "^0.57.0",
-    "ngx-flexible-layout": "^22.0.0",
     "ngx-monaco-editor-v2": "^22.0.5",
     "qrcode": "^1.5.4",
     "rxjs": "~7.8.2",

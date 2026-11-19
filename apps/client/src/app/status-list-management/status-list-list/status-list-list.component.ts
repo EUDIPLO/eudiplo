@@ -95,12 +95,12 @@ export class StatusListListComponent extends BaseAsyncListComponent<StatusListRe
   }
 
   /** A list with entries in use cannot be deleted; its button only looks disabled. */
-  deleteList(list: StatusListResponseDto): Promise<void> {
+  deleteList(list: StatusListResponseDto): Promise<boolean> {
     if (list.usedEntries > 0) {
       this.snackBar.open('Cannot delete a status list that has entries in use', 'Close', {
         duration: 5000,
       });
-      return Promise.resolve();
+      return Promise.resolve(false);
     }
     return this.deleteItem({
       item: list,

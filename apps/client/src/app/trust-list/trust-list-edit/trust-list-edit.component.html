@@ -2,6 +2,7 @@
   <a
     class="back-link"
     matButton
+    [title]="isEditMode ? 'Trust list ' + trustListId : 'Trust Lists'"
     [routerLink]="isEditMode ? ['/trust-list', trustListId] : ['/trust-list']"
   >
     <mat-icon>arrow_back</mat-icon>

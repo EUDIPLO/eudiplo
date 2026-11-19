@@ -72,6 +72,11 @@
   margin-left: 4px;
 }
 
+// Pushes the toolbar actions to the end
+.toolbar-spacer {
+  flex: 1 1 0%;
+}
+
 .toolbar-brand {
   font: var(--mat-sys-title-large);
   font-weight: 600;
@@ -217,6 +222,10 @@
     color: var(--eudiplo-warning);
     flex-shrink: 0;
   }
+}
+
+.version-warning-text {
+  flex: 1 1 0%;
 }
 
 :host-context(html.dark-theme) {

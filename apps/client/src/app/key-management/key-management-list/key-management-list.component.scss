@@ -1,4 +1,4 @@
-@use '../../tenants/tenant-page' as page;
+@use 'page';
 
 // Page heading and outlined cards, as on the tenant and dashboard pages
 @include page.base;

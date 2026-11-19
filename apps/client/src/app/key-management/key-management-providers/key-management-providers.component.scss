@@ -1,4 +1,4 @@
-@use '../../tenants/tenant-page' as page;
+@use 'page';
 
 // Page heading, outlined cards and badges, as on the key and tenant pages
 @include page.base;

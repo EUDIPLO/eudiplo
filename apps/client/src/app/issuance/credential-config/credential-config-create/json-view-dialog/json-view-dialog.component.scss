@@ -1,3 +1,16 @@
+.dialog-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dialog-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+}
+
 mat-dialog-content {
   box-sizing: border-box;
   width: min(1200px, 90vw);

@@ -1,3 +1,20 @@
+// The URL field and the preview share the row equally
+.image-field {
+  display: flex;
+  gap: 16px;
+}
+
+.image-url,
+.image-preview-box {
+  flex: 1 1 0%;
+}
+
+.image-preview-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .hidden-file-input {
   display: none;
 }

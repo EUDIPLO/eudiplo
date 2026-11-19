@@ -1,5 +1,11 @@
 <div class="page form-page presentation-editor">
-  <a class="back-link" matButton [routerLink]="backLink" [attr.aria-label]="'Back to ' + backLabel">
+  <a
+    class="back-link"
+    matButton
+    [title]="backLabel"
+    [routerLink]="backLink"
+    [attr.aria-label]="'Back to ' + backLabel"
+  >
     <mat-icon>arrow_back</mat-icon>
     {{ backLabel }}
   </a>
