@@ -96,7 +96,7 @@ export class PresentationRequestComponent implements OnInit {
   /** Where focus goes after a successful Retry removed the error card with its Retry button. */
   private readonly pageHeading = viewChild<ElementRef<HTMLElement>>('pageHeading');
 
-  /** Presentation configurations can be created with `presentation:manage`. */
+  /** Verification configs can be created with `presentation:manage`. */
   get canManagePresentationConfigs(): boolean {
     return this.jwtService.hasRole('presentation:manage');
   }
@@ -152,10 +152,7 @@ export class PresentationRequestComponent implements OnInit {
     } catch (error) {
       this.configsLoadFailed = true;
       console.error('Error loading configurations:', error);
-      this.loadErrorMessage = getApiErrorMessage(
-        error,
-        'Failed to load presentation configurations'
-      );
+      this.loadErrorMessage = getApiErrorMessage(error, 'Failed to load verification configs');
     } finally {
       this.loading = false;
     }
@@ -177,7 +174,7 @@ export class PresentationRequestComponent implements OnInit {
     const config = this.selectedConfig;
     if (!this.form.get('dcapi')?.value || !config?.allowedOrigins?.length) return null;
     if (config.allowedOrigins.includes(this.pageOrigin)) return null;
-    return `Presentation configuration "${config.id}" does not list this page's origin, ${this.pageOrigin}, under Allowed origins (Digital Credentials API).`;
+    return `Verification config "${config.id}" does not list this page's origin, ${this.pageOrigin}, under Allowed origins (Digital Credentials API).`;
   }
 
   get selectedConfig(): PresentationConfig | undefined {
@@ -214,7 +211,7 @@ export class PresentationRequestComponent implements OnInit {
   }
 
   /** Why Generate Request cannot be used on a page that lists no configuration. */
-  private readonly noConfigurationReason = 'There is no presentation configuration to request.';
+  private readonly noConfigurationReason = 'There is no verification config to request.';
 
   /** Why the selected configuration cannot be requested from this page, if it cannot. */
   private get generateProblem(): string | null {

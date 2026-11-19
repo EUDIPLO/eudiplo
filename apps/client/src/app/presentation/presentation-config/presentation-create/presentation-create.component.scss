@@ -1,6 +1,6 @@
 @use '../../../tenants/tenant-page' as page;
 
-// Back link, heading and action bar as on the other forms; the editor keeps its own steps
+// Back link, heading, sections and action bar as on the other forms; the guided steps are tabs
 @include page.base;
 @include page.form-page;
 
@@ -22,10 +22,57 @@ app-config-ownership-notice {
   gap: 8px;
 }
 
+.flow-hint {
+  margin: 0;
+  padding: 14px 20px;
+  border-radius: var(--mat-sys-corner-medium);
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+}
+
+// One step of the editor: its form sections below the tab bar
+.step {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 24px 4px;
+}
+
+// The query builder needs the full width: its explanation above, its card below
+.form-section.full-width {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+// A list inside a section card, such as the purposes, with its heading and Add button
+.subsection-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+
+  h3 {
+    margin: 0;
+    font: var(--mat-sys-title-small);
+    color: var(--mat-sys-on-surface);
+  }
+}
+
+.subsection-hint {
+  margin: -12px 0 0;
+  font: var(--mat-sys-body-small);
+  color: var(--mat-sys-on-surface-variant);
+}
+
 .option-copy {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+}
+
+.option-description,
+.menu-description {
+  font-size: 0.8rem;
 }
 
 .reg-cert-status {
@@ -34,10 +81,24 @@ app-config-ownership-notice {
   gap: 12px;
 }
 
-.purposes-header {
+.reg-cert-dcql-changed {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  color: var(--mat-sys-on-surface-variant);
+
+  mat-icon {
+    flex-shrink: 0;
+  }
+}
+
+// A list of rows grouped under the heading above it; a fieldset without its own frame
+.row-group {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 
 .purpose-list {
@@ -60,17 +121,6 @@ app-config-ownership-notice {
   }
 }
 
-@container (max-width: 760px) {
-  .purpose-row {
-    flex-direction: column;
-    align-items: stretch;
-
-    .purpose-lang {
-      flex-basis: auto;
-    }
-  }
-}
-
 .tone-success {
   color: var(--eudiplo-success);
 }
@@ -83,91 +133,73 @@ app-config-ownership-notice {
   color: var(--eudiplo-danger);
 }
 
-.flow-hint {
-  background: var(--mat-sys-secondary-container);
-  color: var(--mat-sys-on-secondary-container);
-  padding: 14px 20px;
-  border-radius: 12px;
-}
-// One step of the editor; the steps keep their own layout instead of the form sections
-.step-section {
-  padding: 24px 4px;
-
-  h3 {
-    margin: 0 0 8px;
-    font: var(--mat-sys-title-large);
-    color: var(--mat-sys-on-surface);
-  }
-
-  > p {
-    margin: 0;
-    font: var(--mat-sys-body-medium);
-    color: var(--mat-sys-on-surface-variant);
-  }
-}
-.field-stack {
-  padding-top: 16px;
-}
-.import-actions {
-  margin: 24px 0;
-}
 .settings-summary {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 20px;
-  background: var(--mat-sys-surface-container);
-  padding: 24px;
-  border-radius: 12px;
-}
-dt {
-  font-size: 0.875rem;
-  color: var(--mat-sys-on-surface-variant);
-  margin-bottom: 8px;
-}
-dd {
   margin: 0;
-  overflow-wrap: anywhere;
+
+  dt {
+    margin-bottom: 4px;
+    font: var(--mat-sys-label-large);
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
 }
+
+.requirement {
+  margin: 0;
+}
+
 .setup-notice {
-  border-left: 3px solid var(--mat-sys-primary);
+  margin: 0;
   padding: 12px 16px;
+  border-left: 3px solid var(--mat-sys-primary);
   background: var(--mat-sys-surface-container);
 }
+
 .credential-summary {
+  padding: 16px 20px;
   border: 1px solid var(--mat-sys-outline-variant);
-  border-radius: 12px;
-  padding: 20px;
-  margin-bottom: 16px;
+  border-radius: var(--mat-sys-corner-medium);
   overflow-wrap: anywhere;
+
+  p {
+    margin: 4px 0 0;
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  ul {
+    margin: 8px 0 0;
+  }
 }
+
+.next-hint {
+  margin: 0;
+  font: var(--mat-sys-body-medium);
+  color: var(--mat-sys-on-surface-variant);
+}
+
 .form-error {
+  margin: 0;
   color: var(--mat-sys-error);
 }
-.tab-content {
-  padding: 20px 0;
-}
-.option-description,
-.menu-description {
-  font-size: 0.8rem;
-}
-@media (max-width: 600px) {
+
+@container (max-width: 760px) {
   .settings-summary {
-    grid-template-columns: 1fr;
-    padding: 16px;
+    grid-template-columns: minmax(0, 1fr);
   }
-  mat-panel-description {
-    display: none;
-  }
-}
 
-.reg-cert-dcql-changed {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin: 0;
-  color: var(--mat-sys-on-surface-variant);
+  .purpose-row {
+    flex-direction: column;
+    align-items: stretch;
 
-  mat-icon {
-    flex-shrink: 0;
+    .purpose-lang {
+      flex-basis: auto;
+    }
   }
 }

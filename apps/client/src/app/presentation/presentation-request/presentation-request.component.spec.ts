@@ -79,9 +79,7 @@ describe('PresentationRequestComponent', () => {
         fixture.detectChanges();
         expect(document.activeElement?.getAttribute('formcontrolname')).toBe('requestId');
       });
-      expect(fixture.nativeElement.textContent).toContain(
-        'Please select a presentation configuration'
-      );
+      expect(fixture.nativeElement.textContent).toContain('Please select a verification config');
       expect(open).toHaveBeenLastCalledWith(
         'Check the highlighted fields.',
         'Close',
@@ -138,9 +136,9 @@ describe('PresentationRequestComponent', () => {
       // Nothing can be requested, so the form stays hidden behind the error card.
       expect(page.querySelector('form')).toBeNull();
       expect(page.querySelector('app-load-error')?.textContent).toContain(
-        'Failed to load presentation configurations: Unavailable'
+        'Failed to load verification configs: Unavailable'
       );
-      expect(page.textContent).not.toContain('No presentation configurations');
+      expect(page.textContent).not.toContain('No verification configs');
     });
 
     it('loads the configurations again on Retry and continues from the heading', async () => {
@@ -184,13 +182,13 @@ describe('PresentationRequestComponent', () => {
       await fixture.whenStable();
       fixture.detectChanges();
       const page = fixture.nativeElement as HTMLElement;
-      expect(page.textContent).toContain('No presentation configurations');
+      expect(page.textContent).toContain('No verification configs');
       expect(page.querySelector('form')).toBeNull();
 
       await component.onSubmit();
 
       expect(open).toHaveBeenLastCalledWith(
-        'There is no presentation configuration to request.',
+        'There is no verification config to request.',
         'Close',
         expect.anything()
       );

@@ -51,11 +51,11 @@ describe('PresentationListComponent', () => {
     service: PresentationManagementService,
     fetchMethod: 'loadConfigurations',
     item: { id: 'pid', description: 'PID check' },
-    loading: 'Loading presentation configurations',
+    loading: 'Loading verification configs',
     empty: 'No verification configs yet',
     create: 'Create config',
     heading: 'h1',
-    failure: 'Failed to load presentation configurations',
+    failure: 'Failed to load verification configs',
     providers: [
       { provide: JwtService, useValue: { hasRole: () => true } },
       { provide: ConfigOwnershipService, useValue: { get: async () => undefined } },
@@ -124,7 +124,7 @@ describe('PresentationListComponent', () => {
     await deleting;
     fixture.detectChanges();
     expect(deleteConfiguration).toHaveBeenCalledWith('pid');
-    expect(snackBar.open).toHaveBeenCalledWith('Presentation configuration deleted', 'Close', {
+    expect(snackBar.open).toHaveBeenCalledWith('Verification config deleted', 'Close', {
       duration: 3000,
     });
     expect([...page.querySelectorAll('a.item-link')].map((a) => a.textContent?.trim())).toEqual([
@@ -143,9 +143,7 @@ describe('PresentationListComponent', () => {
     await component.deleteConfiguration(configs[0]);
     fixture.detectChanges();
 
-    expect(snackBar.open.mock.calls.at(-1)?.[0]).toBe(
-      'Failed to delete presentation configuration: x'
-    );
+    expect(snackBar.open.mock.calls.at(-1)?.[0]).toBe('Failed to delete verification config: x');
     expect([...page.querySelectorAll('a.item-link')].map((a) => a.textContent?.trim())).toEqual([
       'age-over-18',
       'pid',

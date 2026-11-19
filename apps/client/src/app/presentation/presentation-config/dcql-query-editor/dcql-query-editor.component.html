@@ -61,7 +61,7 @@
           >
         </mat-form-field>
       </div>
-      <h4>Claims to request</h4>
+      <h3>Claims to request</h3>
       @for (claim of credential.claims; track claim; let j = $index) {
         <div class="claim-row">
           <div class="row-fields">
@@ -459,7 +459,7 @@
         @for (set of query.credentialSets; track set; let s = $index) {
           <div class="requirement">
             <div class="row-fields">
-              <h4>Requirement {{ s + 1 }}</h4>
+              <h3>Requirement {{ s + 1 }}</h3>
               <mat-form-field
                 ><mat-label>Requirement {{ s + 1 }} availability</mat-label>
                 <mat-select

@@ -9,7 +9,7 @@ import { hasAuthCredentials, resolvedE2EConfig } from './support/e2e-config';
 
 const screens = [
   {
-    noun: 'presentation configuration',
+    noun: 'verification config',
     path: '/presentation-config/age-over-18/edit',
     api: '/api/verifier/config/age-over-18',
   },
@@ -83,6 +83,6 @@ test('JSON View opens once a retry has loaded the presentation configuration', a
   await expect(jsonView).toHaveAccessibleDescription('View/Edit as JSON');
   await jsonView.click();
   await expect(
-    page.getByRole('dialog').filter({ hasText: 'Presentation Configuration JSON' })
+    page.getByRole('dialog').filter({ hasText: 'Verification Config JSON' })
   ).toBeVisible();
 });
