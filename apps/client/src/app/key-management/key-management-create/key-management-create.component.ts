@@ -70,7 +70,7 @@ export class KeyManagementCreateComponent implements OnInit {
 
   ngOnInit(): void {
     if (this.keyChainId) {
-      this.loadKeyChain();
+      void this.loadKeyChain();
     } else {
       // This component is now only for editing, redirect to wizard for create
       this.router.navigate(['/keys/create']);

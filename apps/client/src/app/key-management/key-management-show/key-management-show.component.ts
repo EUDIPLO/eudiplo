@@ -92,7 +92,7 @@ export class KeyManagementShowComponent implements OnInit, OnDestroy {
     this.routeSubscription = this.route.paramMap.subscribe((params) => {
       const keyId = params.get('id');
       if (keyId) {
-        this.loadKey(keyId);
+        void this.loadKey(keyId);
       }
     });
   }

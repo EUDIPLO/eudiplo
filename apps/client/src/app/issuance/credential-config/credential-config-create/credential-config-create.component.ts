@@ -482,7 +482,7 @@ export class CredentialConfigCreateComponent implements OnInit {
 
     // The hosted VCT URI starts with the backend's PUBLIC_URL, not the instance URL.
     this.tenantId = this.jwtService.getTenantId();
-    this.frontendConfigService
+    void this.frontendConfigService
       .getConfig()
       .then((config) => (this.publicUrl = config?.publicUrl ?? null));
 

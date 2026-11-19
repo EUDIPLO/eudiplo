@@ -196,7 +196,7 @@ export class SessionManagementShowComponent implements OnInit, OnDestroy {
           await this.sessionManagementService.cancelSession(session.id, result.reason);
           this.stopPolling();
           await this.loadSession(session.id);
-          this.loadSessionLogs(session.id);
+          void this.loadSessionLogs(session.id);
           this.snackBar.open(
             isPresentationSession(session) ? 'Request cancelled' : 'Offer cancelled',
             'Close',
@@ -224,7 +224,7 @@ export class SessionManagementShowComponent implements OnInit, OnDestroy {
 
   async ngOnInit(): Promise<void> {
     await this.open();
-    this.grafanaLinkService.getConfig().then(() => {
+    void this.grafanaLinkService.getConfig().then(() => {
       this.grafanaEnabled = this.grafanaLinkService.isEnabled();
     });
   }
@@ -243,7 +243,7 @@ export class SessionManagementShowComponent implements OnInit, OnDestroy {
     if (!this.session) return;
     // The retry removed the error card with its focused Retry button.
     if (retrying) focusAfterRenderIfLost(this.injector, () => this.pageHeading?.nativeElement);
-    this.loadSessionLogs(sessionId);
+    void this.loadSessionLogs(sessionId);
     // A finished session does not change any more.
     if (!isFinishedSession(this.getSessionStatusValue(this.session))) {
       this.startPolling(sessionId);
@@ -258,7 +258,7 @@ export class SessionManagementShowComponent implements OnInit, OnDestroy {
     this.loading = true;
     try {
       this.session = await this.sessionManagementService.getSession(sessionId);
-      this.generateQRCode(this.session.offerUrl || this.session.requestUrl!);
+      void this.generateQRCode(this.session.offerUrl || this.session.requestUrl!);
     } catch (error) {
       console.error('Error loading session:', error);
       const message = getApiErrorMessage(error, 'Failed to load session');
@@ -491,7 +491,7 @@ export class SessionManagementShowComponent implements OnInit, OnDestroy {
         return;
       }
 
-      this.fetchSessionStatus(sessionId);
+      void this.fetchSessionStatus(sessionId);
     }, this.POLLING_INTERVAL_MS);
   }
 
@@ -509,7 +509,7 @@ export class SessionManagementShowComponent implements OnInit, OnDestroy {
       const currentStatus = this.getSessionStatusValue(updatedSession);
 
       this.session = updatedSession;
-      this.loadSessionLogs(sessionId);
+      void this.loadSessionLogs(sessionId);
 
       // The result card says how the session ended; its live region announces it.
       if (isFinishedSession(currentStatus)) {

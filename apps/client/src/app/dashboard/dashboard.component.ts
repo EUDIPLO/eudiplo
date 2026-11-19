@@ -102,10 +102,10 @@ export class DashboardComponent implements OnInit {
 
   ngOnInit(): void {
     // Fetch dashboard stats
-    this.dashboardService.getCounters();
+    void this.dashboardService.getCounters();
 
     // Load Grafana config
-    this.grafanaLinkService.getConfig().then(() => {
+    void this.grafanaLinkService.getConfig().then(() => {
       this.grafanaEnabled = this.grafanaLinkService.isEnabled();
     });
   }
