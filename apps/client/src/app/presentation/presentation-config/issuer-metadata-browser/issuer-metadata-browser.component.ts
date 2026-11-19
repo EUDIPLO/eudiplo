@@ -52,13 +52,12 @@ function tenantCredentialsErrorMessage(err: unknown): string {
   if (isMissingIssuanceConfig(err)) {
     return 'This tenant has credential configs but no Issuer Settings, so its issuer metadata cannot be built. Save the Issuer Settings, then select Reload.';
   }
+  // An HTTP error carries the response body; anything else is passed as is.
+  const reason = typeof response?.status === 'number' ? response.error : err;
   const message =
     response?.status === 0
       ? getHttpErrorMessage(err, TENANT_CREDENTIALS_FAILURE)
-      : getApiErrorMessage(
-          typeof response?.status === 'number' ? response.error : err,
-          TENANT_CREDENTIALS_FAILURE
-        );
+      : getApiErrorMessage(reason, TENANT_CREDENTIALS_FAILURE);
   return response?.status
     ? `${asSentence(message)} Check the credential configs, then select Reload.`
     : message;

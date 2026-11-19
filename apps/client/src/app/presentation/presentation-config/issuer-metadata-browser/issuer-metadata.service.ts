@@ -131,7 +131,7 @@ export class IssuerMetadataService {
     const baseUrl = this.requireBaseUrl();
 
     const endpoint = `${baseUrl}/.well-known/openid-credential-issuer/issuers/${encodeURIComponent(tenantId)}`;
-    return firstValueFrom(
+    return await firstValueFrom(
       this.http.get<CredentialIssuerMetadata>(endpoint, {
         headers: { Accept: 'application/json' },
       })

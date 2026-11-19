@@ -26,10 +26,10 @@
       </button>
     </div>
     @if (loading) {
-      <div class="fx-row align-center gap-8" role="status">
+      <output class="fx-row align-center gap-8">
         <mat-spinner diameter="20"></mat-spinner>
         <span>Loading credential configs…</span>
-      </div>
+      </output>
     }
     @if (noTenantCredentials) {
       <mat-card class="empty-card">
