@@ -25,7 +25,8 @@ A service whose `ServiceStatus` does not approve it is ignored, and so is an ent
 | `LoTEType` | Service read when `ServiceStatus` is | Service ignored when `ServiceStatus` is |
 | --- | --- | --- |
 | `EUPubEAAProvidersList` (Annex H) | `http://uri.etsi.org/19602/PubEAAProvidersList/SvcStatus/notified`, or absent (with a warning, since Annex H requires it) | any other value, including `.../SvcStatus/withdrawn` |
-| `EUPIDProvidersList`, `EUWalletProvidersList`, `EUWRPACProvidersList`, `EUWRPRCProvidersList`, `EURegistrarsAndRegistersList` (Annexes D to G and I) | absent | any value: these profiles say "The ServiceStatus component shall not be used" |
+| `EUPIDProvidersList` (Annex D) | absent, or `http://uri.etsi.org/19602/PidProvidersList/SvcStatus/notified`, which PID lists in use set although Annex D says "The ServiceStatus component shall not be used" | any other value |
+| `EUWalletProvidersList`, `EUWRPACProvidersList`, `EUWRPRCProvidersList`, `EURegistrarsAndRegistersList` (Annexes E to G and I) | absent | any value: these profiles say "The ServiceStatus component shall not be used" |
 | any other, including `EUEAAProvidersList` and lists without `LoTEType` | absent, `.../PubEAAProvidersList/SvcStatus/notified` or `http://uri.etsi.org/19602/commons/schemeApprovalGranted` | any other value, including `.../commons/schemeApprovalWithdrawn` |
 
 A status URI a scheme defines itself (§6.6.4) is not known to EUDIPLO, so services carrying it are ignored. So are services with an ETSI TS 119 612 type, such as `http://uri.etsi.org/TrstSvc/Svctype/EAA/Q`: only a Trusted List can grant a qualified status ([Trusted Lists for QEAAs](#trusted-lists-for-qeaas)).
