@@ -83,7 +83,7 @@ A managed list is valid for 30 days. EUDIPLO re-signs it automatically during th
 
 ## Step 3: Define what to request
 
-Open **Credential Verification → Verification Configs** and choose **+** (**Create Configuration**).
+Open **Credential Verification → Verification Configs** and choose **Create config**.
 
 1. On **1. Name**, enter **ID** `membership-check` and **Description** `Verify a membership name and ID`. Choose **Continue**.
 2. On **2. Credentials**, choose **Add credential** and enter:

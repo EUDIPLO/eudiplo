@@ -1,35 +1,37 @@
-import { CommonModule } from '@angular/common';
-import { Component, type OnInit, ChangeDetectionStrategy } from '@angular/core';
+import { DatePipe } from '@angular/common';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
+import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
-import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTableModule } from '@angular/material/table';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { RouterModule } from '@angular/router';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { PresentationConfig } from '@eudiplo/sdk-core';
 import { PresentationManagementService } from '../presentation-management.service';
-import { MatTooltipModule } from '@angular/material/tooltip';
 import {
   formatRegistrationCertExpiresIn,
   getRegistrationCertStatus,
   getRegistrationCertTimes,
+  REGISTRATION_CERT_STATUS_LABELS,
   registrationCertStatusSentence,
   type RegistrationCertStatus,
 } from '../../../utils/registration-cert-status';
 import { ConfigOwnershipDirective } from '../../../config-portability/config-ownership.directive';
-import { getApiErrorMessage } from '../../../utils/error-message';
+import { BaseAsyncListComponent } from '../../../common/base-async-list.component';
 import { LoadErrorComponent } from '../../../common/load-error.component';
-import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 
 @Component({
   selector: 'app-presentation-list',
   imports: [
     MatTableModule,
-    CommonModule,
+    DatePipe,
+    FormsModule,
+    MatCardModule,
     MatIconModule,
     MatButtonModule,
     RouterModule,
-    FlexLayoutModule,
     MatTooltipModule,
     ConfigOwnershipDirective,
     LoadErrorComponent,
@@ -39,40 +41,47 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './presentation-list.component.scss',
 })
-export class PresentationListComponent implements OnInit {
-  configurations: PresentationConfig[] = [];
-  loading = false;
-  /** Set when the list could not be loaded, so it is not shown as empty. */
-  loadError = '';
+export class PresentationListComponent extends BaseAsyncListComponent<PresentationConfig> {
+  protected readonly loadFailedMessage = 'Failed to load presentation configurations';
 
   displayedColumns: (keyof PresentationConfig | 'actions' | 'registrationCert')[] = [
     'id',
     'description',
-    'createdAt',
     'registrationCert',
+    'createdAt',
     'actions',
   ];
 
-  constructor(
-    private presentationService: PresentationManagementService,
-    private snackBar: MatSnackBar
-  ) {}
+  /** Short label of each registration certificate status, for its badge. */
+  readonly registrationCertLabels = REGISTRATION_CERT_STATUS_LABELS;
 
-  ngOnInit(): void {
-    void this.loadConfigurations();
+  private readonly presentationService = inject(PresentationManagementService);
+
+  get configurations(): PresentationConfig[] {
+    return this.items;
   }
 
-  async loadConfigurations(): Promise<void> {
-    this.loading = true;
-    this.loadError = '';
-    try {
-      this.configurations = await this.presentationService.loadConfigurations();
-    } catch (error) {
-      console.error('Error loading configurations:', error);
-      this.loadError = getApiErrorMessage(error, 'Failed to load presentation configurations');
-    } finally {
-      this.loading = false;
-    }
+  protected override searchTexts(config: PresentationConfig): string[] {
+    return [config.id, config.description ?? ''];
+  }
+
+  protected override sortName(config: PresentationConfig): string {
+    return config.id;
+  }
+
+  protected fetchItems(): Promise<PresentationConfig[]> {
+    return this.presentationService.loadConfigurations();
+  }
+
+  deleteConfiguration(config: PresentationConfig): Promise<void> {
+    return this.deleteItem({
+      item: config,
+      id: config.id,
+      question: `Delete presentation configuration "${config.id}"? This cannot be undone.`,
+      request: () => this.presentationService.deleteConfiguration(config.id),
+      deleted: 'Presentation configuration deleted',
+      failed: 'Failed to delete presentation configuration',
+    });
   }
 
   registrationCertStatus(config: PresentationConfig): RegistrationCertStatus {
@@ -86,24 +95,5 @@ export class PresentationListComponent implements OnInit {
         formatRegistrationCertExpiresIn(getRegistrationCertTimes(config))
       ) ?? 'No registration certificate configured'
     );
-  }
-
-  registrationCertIcon(status: RegistrationCertStatus): string {
-    switch (status) {
-      case 'active':
-        return 'verified';
-      case 'expiring':
-        return 'schedule';
-      case 'expired':
-        return 'error_outline';
-      case 'missing':
-        return 'report';
-      case 'invalid':
-        return 'gpp_bad';
-      case 'notYetValid':
-        return 'pending';
-      default:
-        return 'remove';
-    }
   }
 }

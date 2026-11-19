@@ -75,6 +75,54 @@ describe('OidcClientCreateComponent', () => {
     vi.restoreAllMocks();
   });
 
+  it('leads back to the list from a new client and to the client from an edit', async () => {
+    const created = await render(null, {});
+    const page = created.fixture.nativeElement as HTMLElement;
+    expect(page.querySelector('a.back-link')?.getAttribute('aria-label')).toBe(
+      'Back to OIDC Clients'
+    );
+    expect(page.querySelector('h1')?.textContent?.trim()).toBe('Create OIDC Client');
+    TestBed.resetTestingModule();
+
+    const edited = await render('c7d1', { getById: vi.fn().mockResolvedValue(stored) });
+    edited.fixture.detectChanges();
+    const editPage = edited.fixture.nativeElement as HTMLElement;
+    expect(editPage.querySelector('a.back-link')?.getAttribute('aria-label')).toBe(
+      'Back to Portal'
+    );
+    expect(editPage.querySelector('h1')?.textContent?.trim()).toBe('Edit OIDC Client');
+    const cancel = [...editPage.querySelectorAll<HTMLButtonElement>('.action-bar button')].find(
+      (button) => button.textContent?.trim() === 'Cancel'
+    );
+    expect(cancel).toBeDefined();
+  });
+
+  it('keeps Cancel on the page while a save runs', async () => {
+    const { fixture, component } = await render(null, {});
+    component.saving = true;
+    fixture.detectChanges();
+    const navigateByUrl = vi.spyOn(TestBed.inject(Router), 'navigateByUrl');
+    const cancel = [
+      ...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>(
+        '.action-bar button'
+      ),
+    ].find((button) => button.textContent?.trim() === 'Cancel')!;
+
+    expect(cancel.getAttribute('aria-disabled')).toBe('true');
+    cancel.click();
+    expect(navigateByUrl).not.toHaveBeenCalled();
+  });
+
+  it('shows the back link while the client to edit loads', async () => {
+    const { fixture } = await render('c7d1', { getById: () => new Promise(() => undefined) });
+    const page = fixture.nativeElement as HTMLElement;
+
+    expect(page.querySelector('a.back-link')?.getAttribute('aria-label')).toBe(
+      'Back to OIDC client'
+    );
+    expect(page.textContent).toContain('Loading OIDC client…');
+  });
+
   it('creates a client, opens its page and shows the secret once', async () => {
     const create = vi.fn().mockResolvedValue({ ...stored, clientSecret: 's3cret' });
     const { component, open, navigate } = await render(null, { create });

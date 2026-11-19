@@ -18,7 +18,7 @@ For a complete setup with Keycloak as identity broker, see the cookbook [Sign in
 
 ## 1. Register the client
 
-In the Web Client, open **Credential Verification → OIDC Clients** and choose **+** (**Create New OIDC Client**). After **Create**, the page shows the client ID, issuer and secret once; copy them. The client's page also adds, expires and deletes secrets. Or use the API:
+In the Web Client, open **Credential Verification → OIDC Clients** and choose **Create OIDC client**. After **Create**, the page shows the client ID, issuer and secret once; copy them. The client's page also adds, expires and deletes secrets. Or use the API:
 
 ```bash
 curl -X POST "$EUDIPLO/api/verifier/oidc-clients" \

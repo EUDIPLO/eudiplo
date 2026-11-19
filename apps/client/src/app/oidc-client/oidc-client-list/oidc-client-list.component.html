@@ -1,79 +1,151 @@
-<div fxLayout="row" fxLayoutAlign="space-between center">
-  <h2 #listHeading tabindex="-1">OIDC Clients</h2>
-  <button
-    matIconButton
-    [routerLink]="['create']"
-    matTooltip="Create New OIDC Client"
-    aria-label="Create New OIDC Client"
-  >
-    <mat-icon>add</mat-icon>
-  </button>
-</div>
-<p>
-  Applications that sign users in with OpenID Connect and receive the claims of a credential from
-  the user's wallet.
-</p>
-
-@if (loading) {
-  <div class="list-state">
-    <mat-spinner diameter="40" aria-label="Loading OIDC clients"></mat-spinner>
-  </div>
-} @else if (loadError) {
-  <app-load-error [message]="loadError" (retry)="loadItems()" />
-} @else if (clients.length === 0) {
-  <div class="list-state">
-    <mat-icon class="empty-icon">login</mat-icon>
-    <p>No OIDC clients yet.</p>
-    <a mat-flat-button [routerLink]="['create']">
+<div class="page">
+  <header class="page-header">
+    <div>
+      <h1 #listHeading tabindex="-1">OIDC Clients</h1>
+      <p>
+        Applications that sign users in with OpenID Connect and receive the claims of a credential
+        from the user's wallet.
+      </p>
+    </div>
+    <a matButton="filled" [routerLink]="['create']">
       <mat-icon>add</mat-icon>
-      Create OIDC Client
+      Create OIDC client
     </a>
-  </div>
-} @else {
-  <table mat-table [dataSource]="clients" class="mat-elevation-z8">
-    <ng-container matColumnDef="id">
-      <th mat-header-cell *matHeaderCellDef>Client ID</th>
-      <td mat-cell *matCellDef="let client">{{ client.id }}</td>
-    </ng-container>
+  </header>
 
-    <ng-container matColumnDef="name">
-      <th mat-header-cell *matHeaderCellDef>Name</th>
-      <td mat-cell *matCellDef="let client">{{ client.name }}</td>
-    </ng-container>
+  @if (loading) {
+    <div class="loading-state">
+      <mat-spinner diameter="40" aria-label="Loading OIDC clients"></mat-spinner>
+    </div>
+  } @else if (loadError) {
+    <app-load-error [message]="loadError" (retry)="loadItems()" />
+  } @else if (clients.length === 0) {
+    <div class="empty-state">
+      <span class="empty-icon"><mat-icon>login</mat-icon></span>
+      <strong>No OIDC clients yet.</strong>
+      <p>Create a client for each application that signs users in with their wallet.</p>
+      <a matButton="filled" [routerLink]="['create']">
+        <mat-icon>add</mat-icon>
+        Create OIDC client
+      </a>
+    </div>
+  } @else {
+    <mat-card appearance="outlined" class="table-card">
+      <div class="table-header">
+        <div class="table-title">
+          <h2>All clients</h2>
+          <output>
+            @if (search.trim()) {
+              {{ shownItems.length }} of {{ clients.length }} clients
+            } @else {
+              {{ clients.length }} {{ clients.length === 1 ? 'client' : 'clients' }}
+            }
+          </output>
+        </div>
+        <div class="search-bar" role="search">
+          <mat-icon class="search-icon" aria-hidden="true">search</mat-icon>
+          <input
+            type="search"
+            [(ngModel)]="search"
+            placeholder="Search clients"
+            aria-label="Search clients by name, client ID or scope"
+          />
+          @if (search) {
+            <button
+              matIconButton
+              type="button"
+              class="clear-search"
+              aria-label="Clear search"
+              matTooltip="Clear search"
+              (click)="clearSearch()"
+            >
+              <mat-icon>close</mat-icon>
+            </button>
+          }
+        </div>
+      </div>
 
-    <ng-container matColumnDef="scopes">
-      <th mat-header-cell *matHeaderCellDef>Scopes</th>
-      <td mat-cell *matCellDef="let client">{{ scopeNames(client) }}</td>
-    </ng-container>
+      <div class="table-scroll">
+        <table mat-table [dataSource]="shownItems" class="linked">
+          <ng-container matColumnDef="name">
+            <th mat-header-cell *matHeaderCellDef>Client</th>
+            <td mat-cell *matCellDef="let client">
+              <!-- The name links to the client and its link covers the row -->
+              <a class="item-link" [routerLink]="[client.id]">{{ client.name }}</a>
+            </td>
+          </ng-container>
 
-    <ng-container matColumnDef="profile">
-      <th mat-header-cell *matHeaderCellDef>Profile</th>
-      <td mat-cell *matCellDef="let client">{{ profileLabel(client) }}</td>
-    </ng-container>
+          <ng-container matColumnDef="id">
+            <th mat-header-cell *matHeaderCellDef>Client ID</th>
+            <td mat-cell *matCellDef="let client" class="client-id">
+              <code>{{ client.id }}</code>
+            </td>
+          </ng-container>
 
-    <ng-container matColumnDef="actions">
-      <th mat-header-cell *matHeaderCellDef>Actions</th>
-      <td mat-cell *matCellDef="let client">
-        <button
-          matIconButton
-          [routerLink]="[client.id]"
-          matTooltip="View OIDC client"
-          [attr.aria-label]="'View OIDC client ' + client.name"
-        >
-          <mat-icon>visibility</mat-icon>
-        </button>
-        <button
-          matIconButton
-          [routerLink]="[client.id, 'edit']"
-          matTooltip="Edit OIDC client"
-          [attr.aria-label]="'Edit OIDC client ' + client.name"
-        >
-          <mat-icon>edit</mat-icon>
-        </button>
-      </td>
-    </ng-container>
+          <ng-container matColumnDef="profile">
+            <th mat-header-cell *matHeaderCellDef>Profile</th>
+            <td mat-cell *matCellDef="let client">
+              <span class="badge" [class.status-active]="client.profile === 'secure'">{{
+                profileLabel(client)
+              }}</span>
+            </td>
+          </ng-container>
 
-    <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-    <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
-  </table>
-}
+          <ng-container matColumnDef="scopes">
+            <th mat-header-cell *matHeaderCellDef>Scopes</th>
+            <td mat-cell *matCellDef="let client">
+              <span class="role-badges">
+                @for (scope of client.scopes; track scope.scope) {
+                  <span class="role-badge">{{ scope.scope }}</span>
+                } @empty {
+                  <span class="muted">None</span>
+                }
+              </span>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="actions">
+            <th mat-header-cell *matHeaderCellDef>
+              <span class="visually-hidden">Actions</span>
+            </th>
+            <td mat-cell *matCellDef="let client">
+              <span class="row-actions">
+                <button
+                  matIconButton
+                  [routerLink]="[client.id, 'edit']"
+                  matTooltip="Edit OIDC client"
+                  [attr.aria-label]="'Edit OIDC client ' + client.name"
+                >
+                  <mat-icon>edit</mat-icon>
+                </button>
+                <button
+                  matIconButton
+                  class="delete-action"
+                  (click)="deleteClient(client)"
+                  [disabled]="deletingId !== undefined"
+                  disabledInteractive
+                  [matTooltip]="
+                    deleteTooltip(client.id, 'Delete OIDC client', 'Deleting the OIDC client…')
+                  "
+                  [attr.aria-label]="'Delete OIDC client ' + client.name"
+                >
+                  <mat-icon>delete_outline</mat-icon>
+                </button>
+              </span>
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+          <tr class="mat-mdc-row no-match" *matNoDataRow>
+            <td class="mat-mdc-cell" [attr.colspan]="displayedColumns.length">
+              <mat-icon aria-hidden="true">search_off</mat-icon>
+              <span>No client matches "{{ search.trim() }}".</span>
+              <button matButton type="button" (click)="clearSearch()">Clear search</button>
+            </td>
+          </tr>
+        </table>
+      </div>
+    </mat-card>
+  }
+</div>

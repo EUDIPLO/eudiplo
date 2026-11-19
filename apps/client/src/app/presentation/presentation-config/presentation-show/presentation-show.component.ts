@@ -1,5 +1,12 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, ChangeDetectionStrategy } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  Injector,
+  OnInit,
+  ViewChild,
+} from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
@@ -7,10 +14,9 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatIconModule } from '@angular/material/icon';
-import { MatListModule } from '@angular/material/list';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { PresentationConfig } from '@eudiplo/sdk-core';
 import { PresentationManagementService } from '../presentation-management.service';
 import { MatTooltipModule } from '@angular/material/tooltip';
@@ -19,6 +25,7 @@ import {
   formatRegistrationCertExpiresIn,
   getRegistrationCertStatus,
   getRegistrationCertTimes,
+  REGISTRATION_CERT_STATUS_LABELS,
   type RegistrationCertStatus,
   type RegistrationCertTimes,
 } from '../../../utils/registration-cert-status';
@@ -26,6 +33,7 @@ import { ConfigDocumentService } from '../../../config-portability/config-docume
 import { ConfigOwnershipDirective } from '../../../config-portability/config-ownership.directive';
 import { ConfigOwnershipNoticeComponent } from '../../../config-portability/config-ownership-notice.component';
 import { getApiErrorMessage } from '../../../utils/error-message';
+import { focusAfterRenderIfLost } from '../../../common/focus-if-lost.util';
 import { openErrorSnackBar } from '../../../utils/error-snackbar';
 import { LoadErrorComponent } from '../../../common/load-error.component';
 import { MatDialog } from '@angular/material/dialog';
@@ -44,12 +52,11 @@ import type { EudiHubRegistrationCertificate } from '../../../registrar/eudi-hub
     MatCardModule,
     MatButtonModule,
     MatTooltipModule,
-    MatListModule,
+    MatProgressSpinnerModule,
     MatChipsModule,
     MatDividerModule,
     MatExpansionModule,
     MatTabsModule,
-    FlexLayoutModule,
     RouterModule,
     ConfigOwnershipDirective,
     ConfigOwnershipNoticeComponent,
@@ -70,6 +77,12 @@ export class PresentationShowComponent implements OnInit {
     disabled: 'Disabled',
   };
 
+  /** True while the configuration is being deleted, so Delete waits for it. */
+  deleting = false;
+
+  /** Where focus goes after a successful Retry removed the error card with its Retry button. */
+  @ViewChild('pageHeading') private readonly pageHeading?: ElementRef<HTMLElement>;
+
   /** Index of the Security tab, which `#security` opens. */
   static readonly SECURITY_TAB = 2;
   selectedTab = 0;
@@ -81,8 +94,14 @@ export class PresentationShowComponent implements OnInit {
     private readonly router: Router,
     private readonly configDocuments: ConfigDocumentService,
     private readonly dialog: MatDialog,
-    private readonly jwtService: JwtService
+    private readonly jwtService: JwtService,
+    private readonly injector: Injector
   ) {}
+
+  /** Create offer opens the request page, which needs `presentation:request`. */
+  get canRequestPresentation(): boolean {
+    return this.jwtService.hasRole('presentation:request');
+  }
 
   /** Requesting a registration certificate from the EUDI Hub needs both roles. */
   get canRequestFromEudiHub(): boolean {
@@ -146,6 +165,7 @@ export class PresentationShowComponent implements OnInit {
   }
 
   async loadPresentation(): Promise<void> {
+    const retrying = this.loadError !== '';
     this.loadError = '';
     try {
       const presentationId = this.route.snapshot.paramMap.get('id');
@@ -155,6 +175,9 @@ export class PresentationShowComponent implements OnInit {
     } catch (error) {
       console.error('Error loading presentation:', error);
       this.loadError = getApiErrorMessage(error, 'Failed to load presentation configuration');
+    }
+    if (retrying && !this.loadError) {
+      focusAfterRenderIfLost(this.injector, () => this.pageHeading?.nativeElement);
     }
   }
 
@@ -173,6 +196,10 @@ export class PresentationShowComponent implements OnInit {
 
   get registrationCertStatus(): RegistrationCertStatus {
     return getRegistrationCertStatus(this.config);
+  }
+
+  get registrationCertLabel(): string {
+    return REGISTRATION_CERT_STATUS_LABELS[this.registrationCertStatus];
   }
 
   get registrationCertExpiresIn(): string | null {
@@ -246,26 +273,29 @@ export class PresentationShowComponent implements OnInit {
     return JSON.stringify(value, null, 2);
   }
 
-  deletePresentation() {
+  async deletePresentation(): Promise<void> {
+    const config = this.config;
     if (
-      this.config &&
-      confirm(`Delete presentation configuration "${this.config.id}"? This cannot be undone.`)
+      !config ||
+      this.deleting ||
+      !this.jwtService.hasRole('presentation:manage') ||
+      !confirm(`Delete presentation configuration "${config.id}"? This cannot be undone.`)
     ) {
-      this.presentationService
-        .deleteConfiguration(this.config.id)
-        .then(() => {
-          this.snackBar.open('Presentation deleted successfully', 'Close', {
-            duration: 3000,
-          });
-          this.router.navigate(['../'], { relativeTo: this.route });
-        })
-        .catch((error) => {
-          openErrorSnackBar(
-            this.snackBar,
-            getApiErrorMessage(error, 'Failed to delete presentation')
-          );
-          console.error('Delete error:', error);
-        });
+      return;
+    }
+    this.deleting = true;
+    try {
+      await this.presentationService.deleteConfiguration(config.id);
+      this.snackBar.open('Presentation configuration deleted', 'Close', { duration: 3000 });
+      await this.router.navigate(['../'], { relativeTo: this.route });
+    } catch (error) {
+      openErrorSnackBar(
+        this.snackBar,
+        getApiErrorMessage(error, 'Failed to delete presentation configuration')
+      );
+      console.error('Delete error:', error);
+    } finally {
+      this.deleting = false;
     }
   }
 

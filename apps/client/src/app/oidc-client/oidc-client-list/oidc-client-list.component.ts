@@ -1,11 +1,12 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
+import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTableModule } from '@angular/material/table';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { RouterModule } from '@angular/router';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import type { OidcClientResponseDto } from '@eudiplo/sdk-core';
 import { BaseAsyncListComponent } from '../../common/base-async-list.component';
 import { LoadErrorComponent } from '../../common/load-error.component';
@@ -16,21 +17,23 @@ import { OidcClientService } from '../oidc-client.service';
   selector: 'app-oidc-client-list',
   imports: [
     MatTableModule,
+    MatCardModule,
     MatIconModule,
     MatButtonModule,
     MatTooltipModule,
     MatProgressSpinnerModule,
+    FormsModule,
     RouterModule,
-    FlexLayoutModule,
     LoadErrorComponent,
   ],
   templateUrl: './oidc-client-list.component.html',
+  styleUrl: './oidc-client-list.component.scss',
   changeDetection: ChangeDetectionStrategy.Eager,
 })
 export class OidcClientListComponent extends BaseAsyncListComponent<OidcClientResponseDto> {
   protected readonly loadFailedMessage = 'Failed to load OIDC clients';
 
-  readonly displayedColumns = ['id', 'name', 'scopes', 'profile', 'actions'];
+  readonly displayedColumns = ['name', 'id', 'profile', 'scopes', 'actions'];
 
   constructor(private readonly oidcClientService: OidcClientService) {
     super();
@@ -38,6 +41,14 @@ export class OidcClientListComponent extends BaseAsyncListComponent<OidcClientRe
 
   get clients(): OidcClientResponseDto[] {
     return this.items;
+  }
+
+  protected override searchTexts(client: OidcClientResponseDto): string[] {
+    return [client.name, client.id, ...client.scopes.map(({ scope }) => scope)];
+  }
+
+  protected override sortName(client: OidcClientResponseDto): string {
+    return client.name;
   }
 
   protected fetchItems(): Promise<OidcClientResponseDto[]> {
@@ -48,7 +59,14 @@ export class OidcClientListComponent extends BaseAsyncListComponent<OidcClientRe
     return PROFILE_LABELS[client.profile];
   }
 
-  scopeNames(client: OidcClientResponseDto): string {
-    return client.scopes.map(({ scope }) => scope).join(', ') || '—';
+  deleteClient(client: OidcClientResponseDto): Promise<void> {
+    return this.deleteItem({
+      item: client,
+      id: client.id,
+      question: `Delete OIDC client "${client.name}"? Applications using it can no longer sign users in. This cannot be undone.`,
+      request: () => this.oidcClientService.delete(client.id),
+      deleted: 'OIDC client deleted',
+      failed: 'Failed to delete OIDC client',
+    });
   }
 }

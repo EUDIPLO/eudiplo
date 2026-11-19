@@ -1,10 +1,25 @@
-<div fxLayout="column" fxFlex fxLayoutGap="24px">
-  <div fxLayout="row" fxLayoutAlign="space-between center">
-    <h2 #pageHeading tabindex="-1">{{ create ? 'Create' : 'Edit' }} OIDC Client</h2>
-    <button mat-icon-button [routerLink]="['../']" matTooltip="Back" aria-label="Back">
-      <mat-icon>arrow_back</mat-icon>
-    </button>
-  </div>
+<div class="page form-page">
+  <a class="back-link" matButton [routerLink]="['../']" [attr.aria-label]="'Back to ' + backLabel">
+    <mat-icon>arrow_back</mat-icon>
+    {{ backLabel }}
+  </a>
+
+  <header class="page-header">
+    <div class="heading">
+      <span class="form-avatar" aria-hidden="true"><mat-icon>login</mat-icon></span>
+      <div>
+        <h1 #pageHeading tabindex="-1">{{ create ? 'Create' : 'Edit' }} OIDC Client</h1>
+        <p>
+          @if (create) {
+            An application signs users in with OpenID Connect. Its secret is shown once, after the
+            client is created.
+          } @else {
+            Change where the application returns and what the user presents.
+          }
+        </p>
+      </div>
+    </div>
+  </header>
 
   @if (loadError) {
     <app-load-error
@@ -15,331 +30,325 @@
       <a mat-button [routerLink]="['../../']">Back to the list</a>
     </app-load-error>
   } @else if (loading) {
-    <p><output>Loading OIDC client…</output></p>
+    <p class="loading-state"><output>Loading OIDC client…</output></p>
   } @else {
-    <form
-      #formElement
-      [formGroup]="form"
-      (ngSubmit)="onSubmit()"
-      fxLayout="column"
-      fxLayoutGap="24px"
-    >
-      <mat-card>
-        <mat-card-header>
-          <mat-card-title>
-            <mat-icon>login</mat-icon>
-            Client
-          </mat-card-title>
-        </mat-card-header>
-        <mat-card-content fxLayout="column" fxLayoutGap="16px">
-          <mat-form-field>
-            <mat-label>Name</mat-label>
-            <input matInput formControlName="name" placeholder="Customer Portal" />
-            <mat-hint>Shown to the user on the sign-in page.</mat-hint>
-            <mat-error>{{
-              fieldError('name', 'Name is required, at most 200 characters')
-            }}</mat-error>
-          </mat-form-field>
+    <form #formElement [formGroup]="form" (ngSubmit)="onSubmit()">
+      <!-- Each section: what it is for on the left, its fields on the right -->
+      <section class="form-section" aria-labelledby="oidc-client-heading">
+        <div class="section-intro">
+          <h2 id="oidc-client-heading">Client</h2>
+          <p>The name users see on the sign-in page, and how strictly the application signs in.</p>
+        </div>
+        <mat-card appearance="outlined">
+          <mat-card-content class="field-stack">
+            <mat-form-field>
+              <mat-label>Name</mat-label>
+              <input matInput formControlName="name" placeholder="Customer Portal" />
+              <mat-hint>Shown to the user on the sign-in page.</mat-hint>
+              <mat-error>{{
+                fieldError('name', 'Name is required, at most 200 characters')
+              }}</mat-error>
+            </mat-form-field>
 
-          <mat-form-field>
-            <mat-label>Profile</mat-label>
-            <mat-select formControlName="profile">
-              <mat-option value="secure">{{ profileLabels.secure }}</mat-option>
-              <mat-option value="basic">{{ profileLabels.basic }}</mat-option>
-            </mat-select>
-            <mat-hint>
-              Secure requires a pushed authorization request (PAR). Use Basic only for libraries
-              that cannot push it, such as Auth.js.
-            </mat-hint>
-            <mat-error>{{ fieldError('profile') }}</mat-error>
-          </mat-form-field>
-        </mat-card-content>
-      </mat-card>
+            <mat-form-field>
+              <mat-label>Profile</mat-label>
+              <mat-select formControlName="profile">
+                <mat-option value="secure">{{ profileLabels.secure }}</mat-option>
+                <mat-option value="basic">{{ profileLabels.basic }}</mat-option>
+              </mat-select>
+              <mat-hint>
+                Secure requires a pushed authorization request (PAR). Use Basic only for libraries
+                that cannot push it, such as Auth.js.
+              </mat-hint>
+              <mat-error>{{ fieldError('profile') }}</mat-error>
+            </mat-form-field>
+          </mat-card-content>
+        </mat-card>
+      </section>
 
-      <mat-card>
-        <mat-card-header>
-          <mat-card-title>
-            <mat-icon>link</mat-icon>
-            Redirect URIs
-          </mat-card-title>
-          <mat-card-subtitle>
+      <section class="form-section" aria-labelledby="oidc-redirect-heading">
+        <div class="section-intro">
+          <h2 id="oidc-redirect-heading">Redirect URIs</h2>
+          <p>
             Where the user returns after the sign-in, matched exactly. HTTPS; HTTP only for
             localhost, 127.0.0.1 and [::1].
-          </mat-card-subtitle>
-        </mat-card-header>
-        <mat-card-content fxLayout="column" fxLayoutGap="8px" formArrayName="redirectUris">
-          @for (control of redirectUris.controls; track control; let i = $index) {
-            <div fxLayout="row" fxLayoutAlign="start start" fxLayoutGap="8px">
-              <mat-form-field fxFlex>
-                <mat-label>Redirect URI {{ i + 1 }}</mat-label>
-                <input
-                  #redirectUriInput
-                  matInput
-                  [formControlName]="i"
-                  placeholder="https://app.example.com/auth/callback"
-                />
-                <mat-error>{{
-                  fieldError(['redirectUris', i], 'A redirect URI is required')
-                }}</mat-error>
-              </mat-form-field>
+          </p>
+        </div>
+        <mat-card appearance="outlined">
+          <mat-card-content class="field-stack" formArrayName="redirectUris">
+            @for (control of redirectUris.controls; track control; let i = $index) {
+              <div class="array-row">
+                <mat-form-field class="grow">
+                  <mat-label>Redirect URI {{ i + 1 }}</mat-label>
+                  <input
+                    #redirectUriInput
+                    matInput
+                    [formControlName]="i"
+                    placeholder="https://app.example.com/auth/callback"
+                  />
+                  <mat-error>{{
+                    fieldError(['redirectUris', i], 'A redirect URI is required')
+                  }}</mat-error>
+                </mat-form-field>
+                <button
+                  matIconButton
+                  type="button"
+                  (click)="removeRedirectUri(i)"
+                  [disabled]="redirectUris.length <= 1"
+                  disabledInteractive
+                  [matTooltip]="
+                    redirectUris.length <= 1
+                      ? 'A client needs at least one redirect URI'
+                      : 'Remove redirect URI'
+                  "
+                  [attr.aria-label]="'Remove redirect URI ' + (i + 1)"
+                >
+                  <mat-icon>delete</mat-icon>
+                </button>
+              </div>
+            }
+            <div>
               <button
-                mat-icon-button
+                #addRedirectUriButton
+                matButton="outlined"
                 type="button"
-                (click)="removeRedirectUri(i)"
-                [disabled]="redirectUris.length <= 1"
+                (click)="addRedirectUri()"
+                [disabled]="redirectUris.length >= maxRedirectUris"
                 disabledInteractive
                 [matTooltip]="
-                  redirectUris.length <= 1
-                    ? 'A client needs at least one redirect URI'
-                    : 'Remove redirect URI'
+                  redirectUris.length >= maxRedirectUris
+                    ? 'A client has at most ' + maxRedirectUris + ' redirect URIs'
+                    : ''
                 "
-                [attr.aria-label]="'Remove redirect URI ' + (i + 1)"
               >
-                <mat-icon>delete</mat-icon>
+                <mat-icon>add</mat-icon>
+                Add redirect URI
               </button>
             </div>
-          }
-          <div>
-            <button
-              #addRedirectUriButton
-              mat-stroked-button
-              type="button"
-              (click)="addRedirectUri()"
-              [disabled]="redirectUris.length >= maxRedirectUris"
-              disabledInteractive
-              [matTooltip]="
-                redirectUris.length >= maxRedirectUris
-                  ? 'A client has at most ' + maxRedirectUris + ' redirect URIs'
-                  : ''
-              "
-            >
-              <mat-icon>add</mat-icon>
-              Add redirect URI
-            </button>
-          </div>
-        </mat-card-content>
-      </mat-card>
+          </mat-card-content>
+        </mat-card>
+      </section>
 
-      <mat-card>
-        <mat-card-header>
-          <mat-card-title #scopesTitle tabindex="-1">
-            <mat-icon>verified</mat-icon>
-            Scopes
-          </mat-card-title>
-          <mat-card-subtitle>
+      <section class="form-section" aria-labelledby="oidc-scopes-heading">
+        <div class="section-intro">
+          <h2 id="oidc-scopes-heading" #scopesTitle tabindex="-1">Scopes</h2>
+          <p>
             The application requests <code>openid</code> and one of these scopes; the scope's
             presentation config decides what the user presents.
-          </mat-card-subtitle>
-        </mat-card-header>
-        <mat-card-content fxLayout="column" fxLayoutGap="8px" formArrayName="scopes">
-          @if (configsError) {
-            <app-load-error
-              [message]="configsError"
-              hint="The scopes need the presentation configs."
-              (retry)="loadConfigs(true)"
-            />
-          } @else if (configsLoading) {
-            <p><output>Loading presentation configs…</output></p>
-          } @else if (configs.length === 0) {
-            <p class="hint" role="status">
-              This tenant has no presentation configs yet. A scope needs one that says what the user
-              presents.
-              <a [routerLink]="['/presentation-config', 'create']">Create a presentation config</a>
-            </p>
-          }
-          @for (group of scopes.controls; track group; let i = $index) {
-            <div
-              [formGroupName]="i"
-              fxLayout="row wrap"
-              fxLayout.lt-md="column"
-              fxLayoutAlign="start start"
-              fxLayoutGap="8px"
-            >
-              <mat-form-field fxFlex="30">
-                <mat-label>Scope</mat-label>
-                <input #scopeInput matInput formControlName="scope" placeholder="pid" />
-                <mat-error>{{
-                  fieldError(['scopes', i, 'scope'], 'A scope is required')
-                }}</mat-error>
-              </mat-form-field>
-              <mat-form-field fxFlex>
-                <mat-label>Presentation config</mat-label>
-                <mat-select formControlName="presentationConfigId">
-                  @for (config of configs; track config.id) {
-                    <mat-option [value]="config.id" [disabled]="!!configProblem(config)">
-                      {{ config.id }}
-                      @if (config.description) {
-                        — {{ config.description }}
-                      }
-                      @if (configProblem(config)) {
-                        ({{ configProblem(config) }})
-                      }
-                    </mat-option>
-                  }
-                  @let current = group.controls.presentationConfigId.value;
-                  @if (current && !hasConfig(current)) {
-                    <!-- Keeps a stored value visible while the configs load or failed to load. -->
-                    <mat-option [value]="current">
-                      {{ current }}
-                      @if (!configsLoading && !configsError) {
-                        (not found)
-                      }
-                    </mat-option>
-                  }
-                </mat-select>
-                <mat-error>
-                  {{
-                    fieldError(
-                      ['scopes', i, 'presentationConfigId'],
-                      'Choose a presentation config'
-                    )
-                  }}
-                </mat-error>
-              </mat-form-field>
+          </p>
+        </div>
+        <mat-card appearance="outlined">
+          <mat-card-content class="field-stack" formArrayName="scopes">
+            @if (configsError) {
+              <app-load-error
+                [message]="configsError"
+                hint="The scopes need the presentation configs."
+                (retry)="loadConfigs(true)"
+              />
+            } @else if (configsLoading) {
+              <p><output>Loading presentation configs…</output></p>
+            } @else if (configs.length === 0) {
+              <p class="hint" role="status">
+                This tenant has no presentation configs yet. A scope needs one that says what the
+                user presents.
+                <a [routerLink]="['/presentation-config', 'create']"
+                  >Create a presentation config</a
+                >
+              </p>
+            }
+            @for (group of scopes.controls; track group; let i = $index) {
+              <div [formGroupName]="i" class="array-row scope-row">
+                <mat-form-field class="scope-name">
+                  <mat-label>Scope</mat-label>
+                  <input #scopeInput matInput formControlName="scope" placeholder="pid" />
+                  <mat-error>{{
+                    fieldError(['scopes', i, 'scope'], 'A scope is required')
+                  }}</mat-error>
+                </mat-form-field>
+                <mat-form-field class="grow">
+                  <mat-label>Presentation config</mat-label>
+                  <mat-select formControlName="presentationConfigId">
+                    @for (config of configs; track config.id) {
+                      <mat-option [value]="config.id" [disabled]="!!configProblem(config)">
+                        {{ config.id }}
+                        @if (config.description) {
+                          — {{ config.description }}
+                        }
+                        @if (configProblem(config)) {
+                          ({{ configProblem(config) }})
+                        }
+                      </mat-option>
+                    }
+                    @let current = group.controls.presentationConfigId.value;
+                    @if (current && !hasConfig(current)) {
+                      <!-- Keeps a stored value visible while the configs load or failed to load. -->
+                      <mat-option [value]="current">
+                        {{ current }}
+                        @if (!configsLoading && !configsError) {
+                          (not found)
+                        }
+                      </mat-option>
+                    }
+                  </mat-select>
+                  <mat-error>
+                    {{
+                      fieldError(
+                        ['scopes', i, 'presentationConfigId'],
+                        'Choose a presentation config'
+                      )
+                    }}
+                  </mat-error>
+                </mat-form-field>
+                <button
+                  matIconButton
+                  type="button"
+                  (click)="removeScope(i)"
+                  matTooltip="Remove scope"
+                  [attr.aria-label]="'Remove scope ' + (i + 1)"
+                >
+                  <mat-icon>delete</mat-icon>
+                </button>
+              </div>
+            } @empty {
+              <p>No scopes: nobody can sign in with this client until you add one.</p>
+            }
+            <div>
               <button
-                mat-icon-button
+                #addScopeButton
+                matButton="outlined"
                 type="button"
-                (click)="removeScope(i)"
-                matTooltip="Remove scope"
-                [attr.aria-label]="'Remove scope ' + (i + 1)"
+                (click)="addScope()"
+                [disabled]="scopes.length >= maxScopes"
+                disabledInteractive
+                [matTooltip]="
+                  scopes.length >= maxScopes ? 'A client has at most ' + maxScopes + ' scopes' : ''
+                "
               >
-                <mat-icon>delete</mat-icon>
+                <mat-icon>add</mat-icon>
+                Add scope
               </button>
             </div>
-          } @empty {
-            <p>No scopes: nobody can sign in with this client until you add one.</p>
-          }
-          <div>
-            <button
-              #addScopeButton
-              mat-stroked-button
-              type="button"
-              (click)="addScope()"
-              [disabled]="scopes.length >= maxScopes"
-              disabledInteractive
-              [matTooltip]="
-                scopes.length >= maxScopes ? 'A client has at most ' + maxScopes + ' scopes' : ''
-              "
-            >
-              <mat-icon>add</mat-icon>
-              Add scope
-            </button>
-          </div>
-        </mat-card-content>
-      </mat-card>
+          </mat-card-content>
+        </mat-card>
+      </section>
 
-      <mat-card>
-        <mat-card-header>
-          <mat-card-title>
-            <mat-icon>badge</mat-icon>
-            ID Token
-          </mat-card-title>
-          <mat-card-subtitle>
+      <section class="form-section" aria-labelledby="oidc-token-heading">
+        <div class="section-intro">
+          <h2 id="oidc-token-heading">ID Token</h2>
+          <p>
             Optional, for identity brokers such as Keycloak that recognize a returning user by
             <code>sub</code> and map claims from the top level.
-          </mat-card-subtitle>
-        </mat-card-header>
-        <mat-card-content fxLayout="column" fxLayoutGap="16px">
-          <mat-slide-toggle formControlName="useSubject">
-            Stable subject: the same <code>sub</code> for every sign-in of a user
-          </mat-slide-toggle>
-          @if (form.controls.useSubject.value) {
-            <p class="hint">
-              <code>sub</code> becomes a hash of the claim. Choose a claim that does not change for
-              the person. The credential query needs a trusted authority in every scope's config,
-              and the instance needs <code>MASTER_SECRET</code>.
-            </p>
-            <div
-              formGroupName="subject"
-              fxLayout="row wrap"
-              fxLayout.lt-md="column"
-              fxLayoutGap="8px"
-            >
-              <mat-form-field fxFlex="40">
-                <mat-label>Credential query</mat-label>
-                <mat-select formControlName="credentialId">
-                  @for (id of subjectCredentialIds; track id) {
-                    <mat-option [value]="id" [disabled]="!!subjectQueryProblem(id)">
-                      {{ id }}
-                      @if (subjectQueryProblem(id)) {
-                        ({{ subjectQueryProblem(id) }})
-                      }
-                    </mat-option>
+          </p>
+        </div>
+        <mat-card appearance="outlined">
+          <mat-card-content class="field-stack">
+            <mat-slide-toggle formControlName="useSubject">
+              Stable subject: the same <code>sub</code> for every sign-in of a user
+            </mat-slide-toggle>
+            @if (form.controls.useSubject.value) {
+              <p class="hint">
+                <code>sub</code> becomes a hash of the claim. Choose a claim that does not change
+                for the person. The credential query needs a trusted authority in every scope's
+                config, and the instance needs <code>MASTER_SECRET</code>.
+              </p>
+              <div formGroupName="subject" class="array-row subject-row">
+                <mat-form-field class="subject-query">
+                  <mat-label>Credential query</mat-label>
+                  <mat-select formControlName="credentialId">
+                    @for (id of subjectCredentialIds; track id) {
+                      <mat-option [value]="id" [disabled]="!!subjectQueryProblem(id)">
+                        {{ id }}
+                        @if (subjectQueryProblem(id)) {
+                          ({{ subjectQueryProblem(id) }})
+                        }
+                      </mat-option>
+                    }
+                    @if (pendingSubjectCredentialId) {
+                      <mat-option [value]="pendingSubjectCredentialId">
+                        {{ pendingSubjectCredentialId }}
+                      </mat-option>
+                    } @else if (staleSubjectCredentialId) {
+                      <mat-option [value]="staleSubjectCredentialId">
+                        {{ staleSubjectCredentialId }} (not in every scope's config)
+                      </mat-option>
+                    }
+                  </mat-select>
+                  @if (staleSubjectCredentialId) {
+                    <mat-hint class="warning">
+                      Not every scope's config has this query; saving fails. Choose another.
+                    </mat-hint>
+                  } @else if (configsPending) {
+                    <mat-hint
+                      >The queries are offered once the presentation configs have loaded.</mat-hint
+                    >
+                  } @else if (subjectCredentialIds.length === 0) {
+                    <mat-hint>Choose scopes whose configs share a credential query first.</mat-hint>
                   }
-                  @if (pendingSubjectCredentialId) {
-                    <mat-option [value]="pendingSubjectCredentialId">
-                      {{ pendingSubjectCredentialId }}
-                    </mat-option>
-                  } @else if (staleSubjectCredentialId) {
-                    <mat-option [value]="staleSubjectCredentialId">
-                      {{ staleSubjectCredentialId }} (not in every scope's config)
-                    </mat-option>
-                  }
-                </mat-select>
-                @if (staleSubjectCredentialId) {
-                  <mat-hint class="warning">
-                    Not every scope's config has this query; saving fails. Choose another.
-                  </mat-hint>
-                } @else if (configsPending) {
-                  <mat-hint
-                    >The queries are offered once the presentation configs have loaded.</mat-hint
-                  >
-                } @else if (subjectCredentialIds.length === 0) {
-                  <mat-hint>Choose scopes whose configs share a credential query first.</mat-hint>
-                }
-                <mat-error>
-                  {{ fieldError(['subject', 'credentialId'], 'Choose the credential query') }}
-                </mat-error>
-              </mat-form-field>
-              <mat-form-field fxFlex>
-                <mat-label>Claim</mat-label>
-                <input
-                  matInput
-                  formControlName="claim"
-                  placeholder="personal_administrative_number"
-                />
-                <mat-hint>Dot-separated path to a string or number claim.</mat-hint>
-                <mat-error>{{ fieldError(['subject', 'claim'], 'A claim is required') }}</mat-error>
-              </mat-form-field>
-            </div>
-          }
-
-          <mat-form-field>
-            <mat-label>Top-level claims</mat-label>
-            <mat-select formControlName="claimsFrom">
-              <mat-option value="">None: claims only under credentials</mat-option>
-              @for (id of claimsFromIds; track id) {
-                <mat-option [value]="id">Claims of {{ id }}</mat-option>
-              }
-              @if (pendingClaimsFrom) {
-                <mat-option [value]="pendingClaimsFrom"
-                  >Claims of {{ pendingClaimsFrom }}</mat-option
-                >
-              } @else if (staleClaimsFrom) {
-                <mat-option [value]="staleClaimsFrom">
-                  Claims of {{ staleClaimsFrom }} (not in any scope's config)
-                </mat-option>
-              }
-            </mat-select>
-            @if (staleClaimsFrom) {
-              <mat-hint class="warning">
-                No scope's config has this query, so no claims reach the top level.
-              </mat-hint>
-            } @else {
-              <mat-hint>
-                Also copies the claims of this credential query to the top level of the ID token.
-              </mat-hint>
+                  <mat-error>
+                    {{ fieldError(['subject', 'credentialId'], 'Choose the credential query') }}
+                  </mat-error>
+                </mat-form-field>
+                <mat-form-field class="grow">
+                  <mat-label>Claim</mat-label>
+                  <input
+                    matInput
+                    formControlName="claim"
+                    placeholder="personal_administrative_number"
+                  />
+                  <mat-hint>Dot-separated path to a string or number claim.</mat-hint>
+                  <mat-error>{{
+                    fieldError(['subject', 'claim'], 'A claim is required')
+                  }}</mat-error>
+                </mat-form-field>
+              </div>
             }
-            <mat-error>{{ fieldError('claimsFrom') }}</mat-error>
-          </mat-form-field>
-        </mat-card-content>
-      </mat-card>
 
-      <div fxLayout="row" fxLayoutAlign="end center" fxLayoutGap="8px">
-        <button mat-stroked-button type="button" [routerLink]="['../']">Cancel</button>
+            <mat-form-field>
+              <mat-label>Top-level claims</mat-label>
+              <mat-select formControlName="claimsFrom">
+                <mat-option value="">None: claims only under credentials</mat-option>
+                @for (id of claimsFromIds; track id) {
+                  <mat-option [value]="id">Claims of {{ id }}</mat-option>
+                }
+                @if (pendingClaimsFrom) {
+                  <mat-option [value]="pendingClaimsFrom"
+                    >Claims of {{ pendingClaimsFrom }}</mat-option
+                  >
+                } @else if (staleClaimsFrom) {
+                  <mat-option [value]="staleClaimsFrom">
+                    Claims of {{ staleClaimsFrom }} (not in any scope's config)
+                  </mat-option>
+                }
+              </mat-select>
+              @if (staleClaimsFrom) {
+                <mat-hint class="warning">
+                  No scope's config has this query, so no claims reach the top level.
+                </mat-hint>
+              } @else {
+                <mat-hint>
+                  Also copies the claims of this credential query to the top level of the ID token.
+                </mat-hint>
+              }
+              <mat-error>{{ fieldError('claimsFrom') }}</mat-error>
+            </mat-form-field>
+          </mat-card-content>
+        </mat-card>
+      </section>
+
+      <!-- Stays in view at the bottom while the form scrolls -->
+      <div class="action-bar">
         <button
-          mat-flat-button
-          color="primary"
+          matButton
+          type="button"
+          [routerLink]="saving ? null : ['../']"
+          [disabled]="saving"
+          disabledInteractive
+          [matTooltip]="saving ? 'Saving the OIDC client…' : ''"
+        >
+          Cancel
+        </button>
+        <button
+          matButton="filled"
           type="submit"
           [disabled]="saving"
           disabledInteractive

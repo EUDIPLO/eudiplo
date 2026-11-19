@@ -1,0 +1,39 @@
+@use '../../tenants/tenant-page' as page;
+
+// Heading, table card with search, badges and states, as on the user and client lists
+@include page.base;
+@include page.list-page;
+@include page.linked-rows;
+
+table {
+  @include page.data-table;
+}
+
+.client-id code {
+  font-size: 13px;
+  color: var(--mat-sys-on-surface-variant);
+  overflow-wrap: anywhere;
+}
+
+// The rows have no icon, so the link gives the row its height
+.item-link {
+  display: inline-block;
+  padding: 16px 0;
+}
+
+@container (max-width: 600px) {
+  .search-bar {
+    flex: 1 1 100%;
+  }
+
+  .mat-column-id {
+    display: none;
+  }
+}
+
+// Phones: the list leaves the scopes to each client's page
+@container (max-width: 560px) {
+  .mat-column-scopes {
+    display: none;
+  }
+}

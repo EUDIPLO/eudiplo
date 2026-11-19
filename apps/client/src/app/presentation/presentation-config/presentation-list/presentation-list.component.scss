@@ -1,0 +1,55 @@
+@use '../../../tenants/tenant-page' as page;
+
+// Heading, table card with search, badges and states, as on the user and client lists
+@include page.base;
+@include page.list-page;
+@include page.linked-rows;
+
+table {
+  @include page.data-table;
+}
+
+// The rows have no icon, so the link gives the row its height
+.item-link {
+  display: inline-block;
+  padding: 16px 0;
+}
+
+.description {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+// The registration certificate's state, in the tone of its urgency
+.badge {
+  &[data-status='active'] {
+    --tone: var(--eudiplo-success);
+  }
+
+  &[data-status='expiring'],
+  &[data-status='missing'] {
+    --tone: var(--eudiplo-warning);
+  }
+
+  &[data-status='expired'],
+  &[data-status='invalid'],
+  &[data-status='notYetValid'] {
+    --tone: var(--eudiplo-danger);
+  }
+}
+
+@container (max-width: 600px) {
+  .search-bar {
+    flex: 1 1 100%;
+  }
+
+  .mat-column-createdAt {
+    display: none;
+  }
+}
+
+// Phones: the list leaves the description to each config's page
+@container (max-width: 560px) {
+  .mat-column-description {
+    display: none;
+  }
+}

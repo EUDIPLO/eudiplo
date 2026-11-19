@@ -38,13 +38,16 @@ test('registers, rotates the secret of, edits and deletes a client', async ({ pa
   await loginWithClientCredentials(page, tenant.clientId, tenant.clientSecret);
   await page.locator('mat-sidenav').getByText('OIDC Clients', { exact: true }).click();
   await expect(page.getByText('No OIDC clients yet.')).toBeVisible();
-  await page.getByRole('button', { name: 'Create New OIDC Client' }).click();
+  // The header and the empty state both offer it.
+  await page.getByRole('link', { name: 'Create OIDC client', exact: true }).first().click();
 
   // An HTTP redirect URI outside localhost is refused before anything is sent.
   await page.getByRole('textbox', { name: 'Name' }).fill('Customer Portal');
   await page.getByRole('textbox', { name: 'Redirect URI 1' }).fill('http://portal.example/cb');
   await page.getByRole('textbox', { name: 'Scope' }).fill('pid');
-  await page.getByRole('combobox', { name: 'Presentation config' }).click();
+  // The empty select's floating label covers its centre, where a click would land.
+  await page.getByRole('combobox', { name: 'Presentation config' }).focus();
+  await page.keyboard.press('Enter');
   await page.getByRole('option', { name: /pid-login/ }).click();
   const create = page.getByRole('button', { name: 'Create', exact: true });
   await create.click();
@@ -64,7 +67,9 @@ test('registers, rotates the secret of, edits and deletes a client', async ({ pa
   await dialog.getByRole('button', { name: 'I have copied the secret' }).click();
   await expect(dialog).toBeHidden();
 
-  await expect(page.getByRole('heading', { name: 'OIDC Client', exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'OIDC Client: Customer Portal', exact: true })
+  ).toBeVisible();
   await expect(page.getByText('https://portal.example/cb')).toBeVisible();
   await expect(page.getByText('Claims of pid also at the top level')).toBeVisible();
 
@@ -93,7 +98,7 @@ test('registers, rotates the secret of, edits and deletes a client', async ({ pa
   await page.getByRole('textbox', { name: 'Name' }).fill('Partner Portal');
   await page.getByRole('button', { name: 'Update', exact: true }).click();
   await expect(page).toHaveURL(/\/oidc-clients\/[^/]+$/);
-  await expect(page.getByText('Partner Portal')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'OIDC Client: Partner Portal' })).toBeVisible();
 
   // Delete asks first, then returns to the list.
   page.once('dialog', (confirm) => void confirm.accept());

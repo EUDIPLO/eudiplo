@@ -1,74 +1,91 @@
-@if (config) {
-  <div fxLayout="column" fxFlex fxLayoutGap="24px">
+<div class="page">
+  <a class="back-link" matButton [routerLink]="['../']" aria-label="Back to Verification Configs">
+    <mat-icon>arrow_back</mat-icon>
+    Verification Configs
+  </a>
+
+  @if (config) {
     <app-config-ownership-notice kind="PresentationConfig" [resourceId]="config.id" />
-    <!-- Header -->
-    <div fxLayout="row" fxLayoutAlign="space-between center">
-      <h2>Presentation Configuration</h2>
-      <div>
-        <button
-          mat-icon-button
-          [routerLink]="['../']"
-          matTooltip="Back to list"
-          aria-label="Back to list"
-        >
-          <mat-icon>arrow_back</mat-icon>
-        </button>
-        <button
-          mat-icon-button
-          [routerLink]="['/offer/presentation', config.id]"
-          matTooltip="Create offer"
-          aria-label="Create offer"
-        >
-          <mat-icon>add</mat-icon>
-        </button>
-        <button
-          mat-icon-button
-          [routerLink]="['edit']"
-          matTooltip="Edit configuration"
-          aria-label="Edit configuration"
-          appConfigManaged
-          managedKind="PresentationConfig"
-          [managedResourceId]="config.id"
-        >
-          <mat-icon>edit</mat-icon>
-        </button>
-        <button
-          mat-icon-button
-          [routerLink]="['copy']"
-          matTooltip="Copy configuration"
-          aria-label="Copy configuration"
-        >
-          <mat-icon>content_copy</mat-icon>
-        </button>
-        @if (canDownloadConfig) {
-          <button
-            mat-icon-button
-            aria-label="Download configuration"
-            [disabled]="downloadingConfig"
-            [attr.aria-busy]="downloadingConfig"
-            disabledInteractive
-            (click)="downloadConfig()"
-            matTooltip="Download configuration"
-          >
-            <mat-icon>download</mat-icon>
-          </button>
+
+    <!-- What the config requests, and what can be done with it -->
+    <mat-card appearance="outlined" class="hero">
+      <span class="hero-avatar" aria-hidden="true"><mat-icon>tune</mat-icon></span>
+      <div class="hero-copy">
+        <h1 #pageHeading tabindex="-1">{{ config.id }}</h1>
+        <div class="hero-meta">
+          <span class="badge">
+            {{ credentialQueries.length }}
+            {{ credentialQueries.length === 1 ? 'credential' : 'credentials' }}
+          </span>
+          @if (registrationCertStatus !== 'none') {
+            <span class="badge" [attr.data-status]="registrationCertStatus">
+              Registration certificate: {{ registrationCertLabel }}
+            </span>
+          }
+          <span class="badge">Status checks: {{ statusCheckModeLabels[statusCheckMode] }}</span>
+        </div>
+        @if (config.description) {
+          <p class="hero-description">{{ config.description }}</p>
+        }
+      </div>
+      <div class="hero-actions">
+        @if (canRequestPresentation) {
+          <a matButton="filled" [routerLink]="['/offer/presentation', config.id]">
+            <mat-icon>qr_code_2</mat-icon>
+            Create offer
+          </a>
         }
         <button
-          mat-icon-button
-          (click)="deletePresentation()"
-          matTooltip="Delete configuration"
-          aria-label="Delete configuration"
-          color="warn"
+          matButton="tonal"
+          [routerLink]="['edit']"
           appConfigManaged
           managedKind="PresentationConfig"
           [managedResourceId]="config.id"
+          aria-label="Edit configuration"
         >
-          <mat-icon>delete</mat-icon>
+          <mat-icon>edit</mat-icon>
+          Edit
         </button>
+        <span class="icon-actions">
+          <button
+            matIconButton
+            [routerLink]="['copy']"
+            matTooltip="Copy configuration"
+            aria-label="Copy configuration"
+          >
+            <mat-icon>content_copy</mat-icon>
+          </button>
+          @if (canDownloadConfig) {
+            <button
+              matIconButton
+              aria-label="Download configuration"
+              [disabled]="downloadingConfig"
+              [attr.aria-busy]="downloadingConfig"
+              disabledInteractive
+              (click)="downloadConfig()"
+              matTooltip="Download configuration"
+            >
+              <mat-icon>download</mat-icon>
+            </button>
+          }
+          <button
+            matIconButton
+            class="delete-action"
+            (click)="deletePresentation()"
+            [disabled]="deleting"
+            disabledInteractive
+            [matTooltip]="deleting ? 'Deleting the configuration…' : 'Delete configuration'"
+            aria-label="Delete configuration"
+            appConfigManaged
+            managedKind="PresentationConfig"
+            [managedResourceId]="config.id"
+          >
+            <mat-icon>delete_outline</mat-icon>
+          </button>
+        </span>
       </div>
-    </div>
+    </mat-card>
 
-    <!-- Configuration Details Card -->
     <mat-tab-group
       animationDuration="200ms"
       [selectedIndex]="selectedTab"
@@ -80,71 +97,68 @@
           <mat-icon class="tab-icon">info</mat-icon>
           Overview
         </ng-template>
-        <div fxLayout="column" fxLayoutGap="24px" class="tab-content">
-          <mat-card>
+        <div class="tab-content">
+          <mat-card appearance="outlined">
             <mat-card-header>
-              <mat-card-title>
-                <mat-icon>settings</mat-icon>
-                Configuration Details
-              </mat-card-title>
+              <mat-icon mat-card-avatar>settings</mat-icon>
+              <h2 mat-card-title>Configuration Details</h2>
+              <mat-card-subtitle>How a request with this config behaves</mat-card-subtitle>
             </mat-card-header>
             <mat-card-content>
-              <mat-list class="config-list">
-                <mat-list-item>
-                  <mat-icon matListItemIcon>fingerprint</mat-icon>
-                  <span matListItemTitle>Configuration ID</span>
-                  <span matListItemLine>{{ config.id }}</span>
-                </mat-list-item>
+              <dl class="details">
+                <div>
+                  <dt>Configuration ID</dt>
+                  <dd>
+                    <code>{{ config.id }}</code>
+                  </dd>
+                </div>
                 @if (config.description) {
-                  <mat-list-item>
-                    <mat-icon matListItemIcon>description</mat-icon>
-                    <span matListItemTitle>Description</span>
-                    <span matListItemLine>{{ config.description }}</span>
-                  </mat-list-item>
+                  <div>
+                    <dt>Description</dt>
+                    <dd>{{ config.description }}</dd>
+                  </div>
                 }
-                <mat-list-item>
-                  <mat-icon matListItemIcon>schedule</mat-icon>
-                  <span matListItemTitle>Created At</span>
-                  <span matListItemLine>{{ config.createdAt | date: 'medium' }}</span>
-                </mat-list-item>
-                <mat-list-item>
-                  <mat-icon matListItemIcon>timer</mat-icon>
-                  <span matListItemTitle>Request Lifetime</span>
-                  <span matListItemLine>{{
-                    config.lifeTime ? formatLifetime(config.lifeTime) : 'Not set'
-                  }}</span>
-                </mat-list-item>
-                <mat-list-item>
-                  <mat-icon matListItemIcon>rule</mat-icon>
-                  <span matListItemTitle>Status List Check Mode</span>
-                  <span matListItemLine>{{ statusCheckModeLabels[statusCheckMode] }}</span>
-                </mat-list-item>
+                <div>
+                  <dt>Created At</dt>
+                  <dd>{{ config.createdAt | date: 'medium' }}</dd>
+                </div>
+                <div>
+                  <dt>Request Lifetime</dt>
+                  <dd>{{ config.lifeTime ? formatLifetime(config.lifeTime) : 'Not set' }}</dd>
+                </div>
+                <div>
+                  <dt>Status List Check Mode</dt>
+                  <dd>{{ statusCheckModeLabels[statusCheckMode] }}</dd>
+                </div>
                 @if (config.redirectUri) {
-                  <mat-list-item>
-                    <mat-icon matListItemIcon>open_in_new</mat-icon>
-                    <span matListItemTitle>Redirect URI</span>
-                    <span matListItemLine>{{ config.redirectUri }}</span>
-                  </mat-list-item>
+                  <div>
+                    <dt>Redirect URI</dt>
+                    <dd>
+                      <code>{{ config.redirectUri }}</code>
+                    </dd>
+                  </div>
                 }
-                <mat-list-item>
-                  <mat-icon matListItemIcon>public</mat-icon>
-                  <span matListItemTitle>Allowed origins (Digital Credentials API)</span>
-                  <span matListItemLine>{{
-                    config.allowedOrigins?.length
-                      ? config.allowedOrigins.join(', ')
-                      : 'Not restricted'
-                  }}</span>
-                </mat-list-item>
-                <mat-list-item>
-                  <mat-icon matListItemIcon>badge</mat-icon>
-                  <span matListItemTitle>Access Certificate</span>
-                  @if (config.accessKeyChainId) {
-                    <span matListItemLine>{{ config.accessKeyChainId }}</span>
-                  } @else {
-                    <span matListItemLine>Default</span>
-                  }
-                </mat-list-item>
-              </mat-list>
+                <div>
+                  <dt>Allowed origins (Digital Credentials API)</dt>
+                  <dd>
+                    {{
+                      config.allowedOrigins?.length
+                        ? config.allowedOrigins.join(', ')
+                        : 'Not restricted'
+                    }}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Access Certificate</dt>
+                  <dd>
+                    @if (config.accessKeyChainId) {
+                      <code>{{ config.accessKeyChainId }}</code>
+                    } @else {
+                      Default
+                    }
+                  </dd>
+                </div>
+              </dl>
             </mat-card-content>
           </mat-card>
         </div>
@@ -156,13 +170,11 @@
           <mat-icon class="tab-icon">search</mat-icon>
           Query
         </ng-template>
-        <div fxLayout="column" fxLayoutGap="24px" class="tab-content">
-          <mat-card>
+        <div class="tab-content">
+          <mat-card appearance="outlined">
             <mat-card-header>
-              <mat-card-title>
-                <mat-icon>search</mat-icon>
-                Credential Query (DCQL)
-              </mat-card-title>
+              <mat-icon mat-card-avatar>search</mat-icon>
+              <h2 mat-card-title>Credential Query (DCQL)</h2>
               <mat-card-subtitle>Credentials requested from the wallet</mat-card-subtitle>
             </mat-card-header>
             <mat-card-content>
@@ -178,7 +190,7 @@
                   <p class="section-description">
                     The wallet must provide one of the following credential combinations:
                   </p>
-                  <div fxLayout="column" fxLayoutGap="12px">
+                  <div class="stack stack-tight">
                     @for (
                       credSet of config.dcql_query.credential_sets;
                       track $index;
@@ -220,11 +232,11 @@
                     <mat-icon>badge</mat-icon>
                     Credential Definitions
                   </h4>
-                  <div fxLayout="column" fxLayoutGap="16px">
+                  <div class="stack">
                     @for (cred of credentialQueries; track cred.id) {
-                      <mat-card class="credential-query-card">
+                      <mat-card appearance="outlined" class="credential-query-card">
                         <mat-card-header>
-                          <mat-card-title>{{ cred.id }}</mat-card-title>
+                          <h3 mat-card-title>{{ cred.id }}</h3>
                           <mat-card-subtitle>
                             <mat-chip-set>
                               @if (cred.format) {
@@ -329,11 +341,11 @@
           <mat-icon class="tab-icon">security</mat-icon>
           Security
         </ng-template>
-        <div fxLayout="column" fxLayoutGap="24px" class="tab-content">
+        <div class="tab-content">
           @if (canRequestFromEudiHub) {
-            <div fxLayout="row" fxLayoutAlign="end center">
+            <div class="tab-toolbar">
               <button
-                mat-stroked-button
+                matButton="outlined"
                 type="button"
                 (click)="requestFromEudiHub()"
                 matTooltip="Register this DCQL query at the German EUDI Hub and store the registration certificate it issues, with a token from its portal"
@@ -347,26 +359,19 @@
             </div>
           }
           @if (config.registration_cert) {
-            <mat-card>
+            <mat-card appearance="outlined">
               <mat-card-header>
-                <mat-card-title>
-                  <mat-icon>verified_user</mat-icon>
-                  Registration Certificate
-                </mat-card-title>
+                <mat-icon mat-card-avatar>verified_user</mat-icon>
+                <h2 mat-card-title>Registration Certificate</h2>
                 <mat-card-subtitle
                   >Attached to every request; EUDIPLO does not renew it</mat-card-subtitle
                 >
               </mat-card-header>
               <mat-card-content>
-                <div
-                  class="reg-cert-status"
-                  fxLayout="row"
-                  fxLayoutGap="12px"
-                  fxLayoutAlign="start center"
-                >
+                <div class="reg-cert-status">
                   @switch (registrationCertStatus) {
                     @case ('active') {
-                      <mat-icon color="primary">verified</mat-icon>
+                      <mat-icon class="tone-success" aria-hidden="true">verified</mat-icon>
                       <span
                         ><strong>Active</strong>
                         @if (registrationCertExpiresIn) {
@@ -375,33 +380,33 @@
                       </span>
                     }
                     @case ('expiring') {
-                      <mat-icon color="accent">schedule</mat-icon>
+                      <mat-icon class="tone-warning" aria-hidden="true">schedule</mat-icon>
                       <span
                         ><strong>Expiring soon</strong> —
                         {{ registrationCertExpiresIn }} remaining</span
                       >
                     }
                     @case ('expired') {
-                      <mat-icon color="warn">error_outline</mat-icon>
+                      <mat-icon class="tone-danger" aria-hidden="true">error_outline</mat-icon>
                       <span
                         ><strong>Expired</strong> — requests fail until you request a new one</span
                       >
                     }
                     @case ('notYetValid') {
-                      <mat-icon color="warn">schedule</mat-icon>
+                      <mat-icon class="tone-danger" aria-hidden="true">schedule</mat-icon>
                       <span
                         ><strong>Not yet valid</strong> — requests fail until its start time</span
                       >
                     }
                     @case ('invalid') {
-                      <mat-icon color="warn">gpp_bad</mat-icon>
+                      <mat-icon class="tone-danger" aria-hidden="true">gpp_bad</mat-icon>
                       <span
                         ><strong>Not a valid JWT</strong> — requests fail until you request a new
                         one</span
                       >
                     }
                     @case ('missing') {
-                      <mat-icon color="accent">report</mat-icon>
+                      <mat-icon class="tone-warning" aria-hidden="true">report</mat-icon>
                       <span
                         ><strong>No certificate</strong> — the purpose and privacy policy are kept
                         for the next request</span
@@ -414,53 +419,44 @@
                   config.registration_cert.purpose?.length ||
                   config.registration_cert.privacy_policy
                 ) {
-                  <mat-list class="config-list">
+                  <dl class="details">
                     @for (entry of config.registration_cert.purpose ?? []; track entry) {
-                      <mat-list-item>
-                        <mat-icon matListItemIcon>description</mat-icon>
-                        <span matListItemTitle>Purpose ({{ entry.lang }})</span>
-                        <span matListItemLine>{{ entry.content }}</span>
-                      </mat-list-item>
+                      <div>
+                        <dt>Purpose ({{ entry.lang }})</dt>
+                        <dd>{{ entry.content }}</dd>
+                      </div>
                     }
                     @if (config.registration_cert.privacy_policy) {
-                      <mat-list-item>
-                        <mat-icon matListItemIcon>policy</mat-icon>
-                        <span matListItemTitle>Privacy policy</span>
-                        <span matListItemLine>{{ config.registration_cert.privacy_policy }}</span>
-                      </mat-list-item>
+                      <div>
+                        <dt>Privacy policy</dt>
+                        <dd>{{ config.registration_cert.privacy_policy }}</dd>
+                      </div>
                     }
-                  </mat-list>
+                  </dl>
                 }
 
                 @if (registrationCertJwt) {
                   <mat-divider></mat-divider>
-                  <mat-list class="config-list">
-                    <mat-list-item>
-                      <mat-icon matListItemIcon>key</mat-icon>
-                      <span matListItemTitle>JWT</span>
-                      <span matListItemLine class="jwt-preview"
-                        >{{ registrationCertJwt | slice: 0 : 50 }}...</span
-                      >
-                    </mat-list-item>
+                  <dl class="details">
+                    <div>
+                      <dt>JWT</dt>
+                      <dd>
+                        <code>{{ registrationCertJwt | slice: 0 : 50 }}…</code>
+                      </dd>
+                    </div>
                     @if (registrationCertTimes?.issuedAt) {
-                      <mat-list-item>
-                        <mat-icon matListItemIcon>event</mat-icon>
-                        <span matListItemTitle>Issued at</span>
-                        <span matListItemLine>{{
-                          registrationCertTimes!.issuedAt! * 1000 | date: 'medium'
-                        }}</span>
-                      </mat-list-item>
+                      <div>
+                        <dt>Issued at</dt>
+                        <dd>{{ registrationCertTimes!.issuedAt! * 1000 | date: 'medium' }}</dd>
+                      </div>
                     }
                     @if (registrationCertTimes?.expiresAt) {
-                      <mat-list-item>
-                        <mat-icon matListItemIcon>event_busy</mat-icon>
-                        <span matListItemTitle>Expires at</span>
-                        <span matListItemLine>{{
-                          registrationCertTimes!.expiresAt! * 1000 | date: 'medium'
-                        }}</span>
-                      </mat-list-item>
+                      <div>
+                        <dt>Expires at</dt>
+                        <dd>{{ registrationCertTimes!.expiresAt! * 1000 | date: 'medium' }}</dd>
+                      </div>
                     }
-                  </mat-list>
+                  </dl>
                   <mat-expansion-panel>
                     <mat-expansion-panel-header>
                       <mat-panel-title>
@@ -492,7 +488,7 @@
               </mat-card-content>
             </mat-card>
           } @else {
-            <mat-card>
+            <mat-card appearance="outlined">
               <mat-card-content>
                 <p>No registration certificate configured.</p>
               </mat-card-content>
@@ -507,52 +503,48 @@
           <mat-icon class="tab-icon">integration_instructions</mat-icon>
           Integration
         </ng-template>
-        <div fxLayout="column" fxLayoutGap="24px" class="tab-content">
+        <div class="tab-content">
           <!-- Webhook Endpoint -->
-          <mat-card>
+          <mat-card appearance="outlined">
             <mat-card-header>
-              <mat-card-title>
-                <mat-icon>webhook</mat-icon>
-                Webhook Endpoint
-              </mat-card-title>
+              <mat-icon mat-card-avatar>webhook</mat-icon>
+              <h2 mat-card-title>Webhook Endpoint</h2>
               <mat-card-subtitle>
                 Endpoint that receives presentation lifecycle notifications
               </mat-card-subtitle>
             </mat-card-header>
             <mat-card-content>
               @if ($any(config).webhookEndpointId) {
-                <mat-list class="config-list">
+                <dl class="details">
                   @if ($any(config).webhookEndpoint?.name) {
-                    <mat-list-item>
-                      <mat-icon matListItemIcon>label</mat-icon>
-                      <span matListItemTitle>Name</span>
-                      <span matListItemLine>{{ $any(config).webhookEndpoint.name }}</span>
-                    </mat-list-item>
+                    <div>
+                      <dt>Name</dt>
+                      <dd>{{ $any(config).webhookEndpoint.name }}</dd>
+                    </div>
                   }
-                  <mat-list-item>
-                    <mat-icon matListItemIcon>fingerprint</mat-icon>
-                    <span matListItemTitle>Endpoint ID</span>
-                    <span matListItemLine>{{ $any(config).webhookEndpointId }}</span>
-                  </mat-list-item>
-                </mat-list>
+                  <div>
+                    <dt>Endpoint ID</dt>
+                    <dd>{{ $any(config).webhookEndpointId }}</dd>
+                  </div>
+                </dl>
 
-                <div fxLayout="row" fxLayoutGap="12px" fxLayoutWrap>
+                <div class="card-actions">
                   <button
-                    mat-stroked-button
+                    matButton="outlined"
                     type="button"
                     [routerLink]="['/webhook-endpoints', $any(config).webhookEndpointId]"
                   >
                     <mat-icon>open_in_new</mat-icon>
                     Open endpoint
                   </button>
-                  <button mat-button type="button" [routerLink]="['/webhook-endpoints']">
+                  <button matButton type="button" [routerLink]="['/webhook-endpoints']">
                     <mat-icon>list</mat-icon>
                     View all endpoints
                   </button>
                 </div>
               } @else {
                 <p>No webhook endpoint configured.</p>
-                <button mat-button type="button" [routerLink]="['/webhook-endpoints']">
+                <button matButton type="button" [routerLink]="['/webhook-endpoints']">
                   <mat-icon>settings</mat-icon>
                   Configure webhook endpoints
                 </button>
@@ -562,12 +554,10 @@
 
           <!-- Attached Data -->
           @if (config.attached) {
-            <mat-card>
+            <mat-card appearance="outlined">
               <mat-card-header>
-                <mat-card-title>
-                  <mat-icon>attach_file</mat-icon>
-                  Attached Data
-                </mat-card-title>
+                <mat-icon mat-card-avatar>attach_file</mat-icon>
+                <h2 mat-card-title>Attached Data</h2>
                 <mat-card-subtitle
                   >Additional data attached to the presentation request</mat-card-subtitle
                 >
@@ -588,11 +578,13 @@
         </div>
       </mat-tab>
     </mat-tab-group>
-  </div>
-} @else if (loadError) {
-  <app-load-error [message]="loadError" (retry)="loadPresentation()">
-    <a mat-button [routerLink]="['../']">Back to the list</a>
-  </app-load-error>
-} @else {
-  <p><output>Loading presentation configuration…</output></p>
-}
+  } @else if (loadError) {
+    <app-load-error [message]="loadError" (retry)="loadPresentation()">
+      <a mat-button [routerLink]="['../']">Back to the list</a>
+    </app-load-error>
+  } @else {
+    <div class="loading-state">
+      <mat-spinner diameter="40" aria-label="Loading presentation configuration"></mat-spinner>
+    </div>
+  }
+</div>

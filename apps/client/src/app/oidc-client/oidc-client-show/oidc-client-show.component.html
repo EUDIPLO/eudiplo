@@ -1,74 +1,64 @@
-@if (client) {
-  <div fxLayout="column" fxFlex fxLayoutGap="24px">
-    <div fxLayout="row" fxLayoutAlign="space-between center">
-      <h2 #pageHeading tabindex="-1">OIDC Client</h2>
-      <div>
+<div class="page">
+  <a class="back-link" matButton [routerLink]="['../']" aria-label="Back to OIDC Clients">
+    <mat-icon>arrow_back</mat-icon>
+    OIDC Clients
+  </a>
+
+  @if (client) {
+    <!-- Who the client is, and what can be done with it -->
+    <mat-card appearance="outlined" class="hero">
+      <span class="hero-avatar" aria-hidden="true"><mat-icon>login</mat-icon></span>
+      <div class="hero-copy">
+        <h1 #pageHeading tabindex="-1">
+          <span class="visually-hidden">OIDC Client: </span>{{ client.name }}
+        </h1>
+        <div class="hero-meta">
+          <span class="badge" [class.status-active]="client.profile === 'secure'">{{
+            profileLabels[client.profile]
+          }}</span>
+          <span class="badge"
+            >{{ client.scopes.length }} {{ client.scopes.length === 1 ? 'scope' : 'scopes' }}</span
+          >
+          <span class="badge"
+            >{{ client.secrets.length }}
+            {{ client.secrets.length === 1 ? 'secret' : 'secrets' }}</span
+          >
+          @if (client.createdAt) {
+            <span class="muted">Created {{ client.createdAt | date: 'medium' }}</span>
+          }
+        </div>
+      </div>
+      <div class="hero-actions">
         <button
-          mat-icon-button
-          [routerLink]="['../']"
-          matTooltip="Back to list"
-          aria-label="Back to list"
-        >
-          <mat-icon>arrow_back</mat-icon>
-        </button>
-        <button
-          mat-icon-button
-          [routerLink]="['edit']"
-          matTooltip="Edit OIDC client"
+          matButton="tonal"
+          [routerLink]="deleting ? null : ['edit']"
+          [disabled]="deleting"
+          disabledInteractive
+          [matTooltip]="deleting ? 'Deleting the OIDC client…' : ''"
           aria-label="Edit OIDC client"
         >
           <mat-icon>edit</mat-icon>
+          Edit
         </button>
         <button
-          mat-icon-button
+          matButton="outlined"
+          class="danger"
           (click)="deleteClient()"
-          matTooltip="Delete OIDC client"
+          [disabled]="deleting"
+          disabledInteractive
+          [matTooltip]="deleting ? 'Deleting the OIDC client…' : ''"
           aria-label="Delete OIDC client"
-          color="warn"
         >
-          <mat-icon>delete</mat-icon>
+          <mat-icon>delete_outline</mat-icon>
+          Delete
         </button>
       </div>
-    </div>
-
-    <mat-card>
-      <mat-card-header>
-        <mat-card-title>
-          <mat-icon>login</mat-icon>
-          Client Details
-        </mat-card-title>
-      </mat-card-header>
-      <mat-card-content>
-        <mat-list class="config-list">
-          <mat-list-item>
-            <mat-icon matListItemIcon>label</mat-icon>
-            <span matListItemTitle>Name</span>
-            <span matListItemLine>{{ client.name }}</span>
-          </mat-list-item>
-          <mat-list-item>
-            <mat-icon matListItemIcon>category</mat-icon>
-            <span matListItemTitle>Profile</span>
-            <span matListItemLine>
-              {{ profileLabels[client.profile] }}
-            </span>
-          </mat-list-item>
-          @if (client.createdAt) {
-            <mat-list-item>
-              <mat-icon matListItemIcon>schedule</mat-icon>
-              <span matListItemTitle>Created</span>
-              <span matListItemLine>{{ client.createdAt | date: 'medium' }}</span>
-            </mat-list-item>
-          }
-        </mat-list>
-      </mat-card-content>
     </mat-card>
 
-    <mat-card>
+    <mat-card appearance="outlined">
       <mat-card-header>
-        <mat-card-title>
-          <mat-icon>settings_ethernet</mat-icon>
-          Application Settings
-        </mat-card-title>
+        <mat-icon mat-card-avatar>settings_ethernet</mat-icon>
+        <h2 mat-card-title>Application Settings</h2>
         <mat-card-subtitle
           >Enter these in the OpenID Connect settings of your application.</mat-card-subtitle
         >
@@ -80,7 +70,7 @@
             <dd>
               <code>{{ client.id }}</code>
               <button
-                mat-icon-button
+                matIconButton
                 type="button"
                 (click)="copy(client.id, 'Client ID')"
                 matTooltip="Copy client ID"
@@ -95,7 +85,7 @@
             <dd>
               <code>{{ client.issuer }}</code>
               <button
-                mat-icon-button
+                matIconButton
                 type="button"
                 (click)="copy(client.issuer, 'Issuer')"
                 matTooltip="Copy issuer"
@@ -110,7 +100,7 @@
             <dd>
               <code>{{ discoveryUrl }}</code>
               <button
-                mat-icon-button
+                matIconButton
                 type="button"
                 (click)="copy(discoveryUrl, 'Discovery URL')"
                 matTooltip="Copy discovery URL"
@@ -132,12 +122,10 @@
       </mat-card-content>
     </mat-card>
 
-    <mat-card>
+    <mat-card appearance="outlined">
       <mat-card-header>
-        <mat-card-title>
-          <mat-icon>verified</mat-icon>
-          Scopes
-        </mat-card-title>
+        <mat-icon mat-card-avatar>verified</mat-icon>
+        <h2 mat-card-title>Scopes</h2>
         <mat-card-subtitle>
           A sign-in requests <code>openid</code> and one of these scopes.
         </mat-card-subtitle>
@@ -146,39 +134,35 @@
         @if (client.scopes.length === 0) {
           <p>No scopes yet: nobody can sign in with this client until you add one.</p>
         } @else {
-          <mat-list class="config-list">
+          <dl class="details">
             @for (scope of client.scopes; track scope.scope) {
-              <mat-list-item>
-                <mat-icon matListItemIcon>tune</mat-icon>
-                <span matListItemTitle
-                  ><code>{{ scope.scope }}</code></span
-                >
-                <span matListItemLine>
+              <div>
+                <dt>
+                  <code>{{ scope.scope }}</code>
+                </dt>
+                <dd>
                   Verified by
                   <a [routerLink]="['/presentation-config', scope.presentationConfigId]">{{
                     scope.presentationConfigId
                   }}</a>
-                </span>
-              </mat-list-item>
+                </dd>
+              </div>
             }
-          </mat-list>
+          </dl>
         }
       </mat-card-content>
     </mat-card>
 
-    <mat-card>
+    <mat-card appearance="outlined">
       <mat-card-header>
-        <mat-card-title>
-          <mat-icon>badge</mat-icon>
-          ID Token
-        </mat-card-title>
+        <mat-icon mat-card-avatar>badge</mat-icon>
+        <h2 mat-card-title>ID Token</h2>
       </mat-card-header>
       <mat-card-content>
-        <mat-list class="config-list">
-          <mat-list-item>
-            <mat-icon matListItemIcon>person</mat-icon>
-            <span matListItemTitle>Subject (<code>sub</code>)</span>
-            <span matListItemLine>
+        <dl class="details">
+          <div>
+            <dt>Subject (<code>sub</code>)</dt>
+            <dd>
               @if (client.subject) {
                 Stable per user: a hash of
                 <code>{{ client.subject.claim }}</code> from
@@ -186,35 +170,32 @@
               } @else {
                 New for every sign-in
               }
-            </span>
-          </mat-list-item>
-          <mat-list-item>
-            <mat-icon matListItemIcon>vertical_align_top</mat-icon>
-            <span matListItemTitle>Top-level claims</span>
-            <span matListItemLine>
+            </dd>
+          </div>
+          <div>
+            <dt>Top-level claims</dt>
+            <dd>
               @if (client.claimsFrom) {
                 Claims of <code>{{ client.claimsFrom }}</code> also at the top level
               } @else {
                 Claims only under <code>credentials</code>
               }
-            </span>
-          </mat-list-item>
-        </mat-list>
+            </dd>
+          </div>
+        </dl>
       </mat-card-content>
     </mat-card>
 
-    <mat-card>
+    <mat-card appearance="outlined">
       <mat-card-header>
-        <mat-card-title>
-          <mat-icon>key</mat-icon>
-          Client Secrets
-        </mat-card-title>
+        <mat-icon mat-card-avatar>key</mat-icon>
+        <h2 mat-card-title>Client Secrets</h2>
         <mat-card-subtitle>
           The client accepts any of its secrets. To rotate, add a secret, switch the application to
           it, then delete the old one.
         </mat-card-subtitle>
       </mat-card-header>
-      <mat-card-content fxLayout="column" fxLayoutGap="16px">
+      <mat-card-content class="secret-list">
         @for (secret of client.secrets; track secret.id; let i = $index) {
           <section class="secret" [attr.aria-labelledby]="'secret-' + secret.id">
             <h3 #secretHeading tabindex="-1" [id]="'secret-' + secret.id">
@@ -231,14 +212,14 @@
                 never used
               }
             </p>
-            <div fxLayout="row wrap" fxLayoutAlign="start center" fxLayoutGap="8px">
+            <div class="secret-actions">
               <mat-form-field subscriptSizing="dynamic">
                 <mat-label>Expires</mat-label>
                 <input matInput type="datetime-local" [formControl]="expiry.get(secret.id)!" />
                 <mat-hint>Empty: valid until deleted</mat-hint>
               </mat-form-field>
               <button
-                mat-stroked-button
+                matButton="outlined"
                 type="button"
                 (click)="saveExpiry(secret)"
                 [disabled]="busySecrets.has(secret.id)"
@@ -249,7 +230,7 @@
               </button>
               @if (secret.expiresAt) {
                 <button
-                  mat-button
+                  matButton
                   type="button"
                   (click)="clearExpiry(secret)"
                   [disabled]="busySecrets.has(secret.id)"
@@ -260,16 +241,16 @@
                 </button>
               }
               <button
-                mat-icon-button
+                matIconButton
                 type="button"
-                color="warn"
+                class="delete-action"
                 (click)="deleteSecret(secret, i)"
                 [disabled]="client.secrets.length <= 1 || busySecrets.has(secret.id)"
                 disabledInteractive
                 [matTooltip]="deleteSecretTooltip()"
                 [attr.aria-label]="'Delete secret ' + (i + 1)"
               >
-                <mat-icon>delete</mat-icon>
+                <mat-icon>delete_outline</mat-icon>
               </button>
             </div>
           </section>
@@ -277,7 +258,7 @@
         <div>
           <button
             #addSecretButton
-            mat-stroked-button
+            matButton="outlined"
             type="button"
             (click)="addSecret()"
             [disabled]="!canAddSecret || addingSecret"
@@ -290,11 +271,13 @@
         </div>
       </mat-card-content>
     </mat-card>
-  </div>
-} @else if (loadError) {
-  <app-load-error [message]="loadError" (retry)="load()">
-    <a mat-button [routerLink]="['../']">Back to the list</a>
-  </app-load-error>
-} @else {
-  <p><output>Loading OIDC client…</output></p>
-}
+  } @else if (loadError) {
+    <app-load-error [message]="loadError" (retry)="load()">
+      <a mat-button [routerLink]="['../']">Back to the list</a>
+    </app-load-error>
+  } @else {
+    <div class="loading-state">
+      <mat-spinner diameter="40" aria-label="Loading OIDC client"></mat-spinner>
+    </div>
+  }
+</div>

@@ -1,77 +1,41 @@
-.loading-container {
-  padding: 40px;
-  gap: 16px;
+@use '../../tenants/tenant-page' as page;
 
-  mat-spinner {
-    margin-right: 16px;
-  }
+// Heading, sections and action bar, as on the other forms
+@include page.base;
+// Before the form page, whose card padding wins over the one details-list sets
+@include page.details-list;
+@include page.form-page;
+@include page.list-page;
+
+.form-avatar mat-icon {
+  width: 28px;
+  height: 28px;
+  font-size: 28px;
 }
 
-.form-card {
-  margin-bottom: 24px;
+// The page has nothing to leave unsaved; its actions sit at the end
+.action-bar {
+  justify-content: flex-end;
 }
 
-.full-width {
-  width: 100%;
-}
-
-.form-label {
-  display: block;
-  font-weight: 500;
-  margin-bottom: 12px;
-  color: var(--mat-sys-on-surface-variant);
-}
-
-.preview-card {
-  height: fit-content;
-}
-
-.config-preview {
+.loading-state {
   display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.preview-item {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-
-  strong {
-    font-weight: 500;
-    color: var(--mat-sys-on-surface-variant);
-  }
-
-  span {
-    color: var(--mat-sys-on-surface-variant);
-  }
-}
-
-.dcql-query {
-  box-sizing: border-box;
-  max-width: 100%;
-  background-color: var(--mat-sys-surface-container);
-  border: 1px solid var(--mat-sys-outline-variant);
-  border-radius: 4px;
-  padding: 12px;
-  font-size: 12px;
-  overflow-x: hidden;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-  color: var(--mat-sys-on-surface-variant);
-  margin-top: 8px;
+  justify-content: center;
+  padding: 48px;
 }
 
 .readiness-hint {
   display: flex;
   align-items: center;
   gap: 8px;
+  font: var(--mat-sys-body-medium);
   color: var(--mat-sys-on-surface-variant);
 
   mat-icon {
-    font-size: 18px;
+    flex: none;
     width: 18px;
     height: 18px;
+    font-size: 18px;
   }
 
   &.readiness-error {
@@ -79,244 +43,26 @@
   }
 }
 
-.result-card {
-  background: linear-gradient(135deg, var(--mat-sys-secondary-container) 0%, #f0f9ff 100%);
-  border: 1px solid var(--eudiplo-success);
-  margin-top: 24px;
-
-  mat-card-header {
-    background: var(--eudiplo-success-soft);
-    padding: 16px;
-
-    mat-card-title {
-      color: var(--eudiplo-success);
-
-      mat-icon {
-        color: var(--eudiplo-success);
-        margin-right: 8px;
-      }
-    }
-  }
-}
-
-.result-item {
-  margin-bottom: 24px;
-
-  &:last-child {
-    margin-bottom: 0;
-  }
-
-  label {
-    display: block;
-    font-weight: 500;
-    margin-bottom: 8px;
-    color: var(--mat-sys-on-surface-variant);
-  }
-}
-
-.value-with-copy {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px;
-  background-color: var(--mat-sys-surface-container);
-  border: 1px solid #e9ecef;
-  border-radius: 4px;
-
-  .value {
-    flex: 1;
-    font-family: 'Courier New', monospace;
-    font-size: 14px;
-    color: var(--mat-sys-on-surface-variant);
-    word-break: break-all;
-
-    &.uri-value {
-      max-height: 60px;
-      overflow-y: auto;
-    }
-  }
-
-  button {
-    flex-shrink: 0;
-  }
-}
-
-.qr-section {
-  margin-top: 24px;
-
-  label {
-    display: block;
-    font-weight: 500;
-    margin-bottom: 12px;
-    color: var(--mat-sys-on-surface-variant);
-  }
-}
-
-.qr-container {
-  display: flex;
-  justify-content: center;
-  padding: 20px;
-  background-color: var(--mat-sys-on-error);
+.query-panel {
+  box-shadow: none;
   border: 1px solid var(--mat-sys-outline-variant);
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-
-  .qr-image {
-    max-width: 256px;
-    max-height: 256px;
-    width: auto;
-    height: auto;
-  }
 }
 
-.qr-placeholder {
+.dcql-query {
+  box-sizing: border-box;
+  max-width: 100%;
+  margin: 0;
+  padding: 12px 16px;
+  border-radius: var(--mat-sys-corner-medium);
+  background: var(--mat-sys-surface-container-high);
+  font-size: 12px;
+  color: var(--mat-sys-on-surface);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.transaction-data-section {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 40px;
-  border: 2px dashed var(--mat-sys-outline-variant);
-  border-radius: 8px;
-  background-color: var(--mat-sys-surface-container);
-  text-align: center;
-
-  mat-icon {
-    font-size: 48px;
-    width: 48px;
-    height: 48px;
-    color: var(--mat-sys-outline-variant);
-    margin-bottom: 16px;
-  }
-
-  p {
-    margin: 0;
-    color: var(--mat-sys-on-surface-variant);
-  }
-}
-
-.spacer {
-  flex: 1;
-}
-
-.empty-state {
-  margin-top: 40px;
-
-  .empty-content {
-    padding: 60px 20px;
-    text-align: center;
-
-    mat-icon {
-      font-size: 64px;
-      width: 64px;
-      height: 64px;
-      color: var(--eudiplo-warning);
-      margin-bottom: 16px;
-    }
-
-    h3 {
-      margin: 16px 0 8px 0;
-      color: var(--mat-sys-on-surface-variant);
-    }
-
-    p {
-      margin: 0 0 24px 0;
-      color: var(--mat-sys-on-surface-variant);
-    }
-  }
-}
-
-// Form field improvements
-::ng-deep {
-  .mat-mdc-form-field {
-    &.full-width {
-      width: 100%;
-    }
-  }
-
-  .mat-mdc-radio-group {
-    .mat-mdc-radio-button {
-      margin-bottom: 16px;
-
-      &:last-child {
-        margin-bottom: 0;
-      }
-    }
-  }
-
-  // Success snackbar styling
-  .success-snackbar {
-    --mdc-snackbar-container-color: var(--eudiplo-success);
-    --mdc-snackbar-supporting-text-color: white;
-  }
-
-  // Error snackbar styling
-  .error-snackbar {
-    --mdc-snackbar-container-color: var(--eudiplo-danger);
-    --mdc-snackbar-supporting-text-color: white;
-  }
-}
-
-// Status indicators
-.status-with-indicator {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.status-badge {
-  padding: 4px 12px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 500;
-  text-align: center;
-  display: inline-block;
-  min-width: 70px;
-
-  &.status-active {
-    background-color: var(--mat-sys-secondary-container);
-    color: var(--eudiplo-success);
-  }
-
-  &.status-completed {
-    background-color: var(--mat-sys-primary-container);
-    color: var(--eudiplo-info);
-  }
-
-  &.status-expired {
-    background-color: var(--mat-sys-tertiary-container);
-    color: var(--eudiplo-warning);
-  }
-
-  &.status-failed {
-    background-color: var(--mat-sys-error-container);
-    color: var(--eudiplo-danger);
-  }
-}
-
-.polling-indicator {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  color: var(--mat-sys-on-surface-variant);
-
-  .spinning {
-    font-size: 16px;
-    width: 16px;
-    height: 16px;
-    animation: spin 2s linear infinite;
-  }
-
-  .polling-text {
-    font-size: 11px;
-  }
-}
-
-@keyframes spin {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
+  gap: 8px;
 }

@@ -5,6 +5,7 @@ import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angul
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { OidcClientSecretDialogComponent } from '../oidc-client-secret-dialog/oidc-client-secret-dialog.component';
+import { JwtService } from '../../services/jwt.service';
 import { OidcClientService } from '../oidc-client.service';
 import { OidcClientShowComponent, toLocalDateTime } from './oidc-client-show.component';
 
@@ -27,7 +28,10 @@ const client = (secrets = [secret('s1')]) => ({
   issuer: 'https://eudiplo.example/verifiers/root/oidc',
 });
 
-async function render(service: Partial<OidcClientService>) {
+async function render(
+  service: Partial<OidcClientService>,
+  roles: string[] = ['presentation:manage']
+) {
   const open = vi.fn();
   const snackBar = { open: vi.fn() };
   const navigate = vi.fn();
@@ -42,6 +46,7 @@ async function render(service: Partial<OidcClientService>) {
       },
       { provide: MatDialog, useValue: { open } },
       { provide: MatSnackBar, useValue: snackBar },
+      { provide: JwtService, useValue: { hasRole: (role: string) => roles.includes(role) } },
     ],
   }).compileComponents();
   TestBed.inject(Router).navigate = navigate;
@@ -70,6 +75,39 @@ describe('OidcClientShowComponent', () => {
     );
     expect(text).toContain('https://portal.example/cb');
     expect(text).toContain('New for every sign-in');
+  });
+
+  it('names the client in the header with its profile, scopes and secrets', async () => {
+    const { fixture } = await render({ getById: vi.fn().mockResolvedValue(client()) });
+    const page = fixture.nativeElement as HTMLElement;
+
+    expect(page.querySelector('.hero h1')?.textContent).toContain('Portal');
+    expect(
+      [...page.querySelectorAll('.hero-meta .badge')].map((b) => b.textContent?.trim())
+    ).toEqual(['Secure (PAR required)', '1 scope', '1 secret']);
+    expect(page.querySelector('a.back-link')?.getAttribute('aria-label')).toBe(
+      'Back to OIDC Clients'
+    );
+  });
+
+  it('shows the back link while the client loads', async () => {
+    TestBed.configureTestingModule({
+      imports: [OidcClientShowComponent],
+      providers: [
+        provideRouter([]),
+        { provide: OidcClientService, useValue: { getById: () => new Promise(() => undefined) } },
+        {
+          provide: ActivatedRoute,
+          useValue: { snapshot: { paramMap: convertToParamMap({ id: 'c7d1' }) } },
+        },
+      ],
+    });
+    const fixture = TestBed.createComponent(OidcClientShowComponent);
+    fixture.detectChanges();
+    const page = fixture.nativeElement as HTMLElement;
+
+    expect(page.querySelector('a.back-link')).not.toBeNull();
+    expect(page.querySelector('[aria-label="Loading OIDC client"]')).not.toBeNull();
   });
 
   it('says why the client could not be loaded, and retries', async () => {
@@ -184,6 +222,43 @@ describe('OidcClientShowComponent failures and confirmations', () => {
     component.deleteClient();
     await vi.waitFor(() => expect(navigate).toHaveBeenCalledWith(['../'], expect.anything()));
     expect(deleteClient).toHaveBeenCalledWith('c7d1');
+  });
+
+  it('deletes the client once while the delete runs, and not without presentation:manage', async () => {
+    let finish!: () => void;
+    const deleteClient = vi.fn(() => new Promise<void>((resolve) => (finish = resolve)));
+    const { component, fixture, navigate } = await render({
+      getById: vi.fn().mockResolvedValue(client()),
+      delete: deleteClient as never,
+    });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    component.deleteClient();
+    fixture.detectChanges();
+    const page = fixture.nativeElement as HTMLElement;
+    expect(
+      page.querySelector('button[aria-label="Delete OIDC client"]')?.getAttribute('aria-disabled')
+    ).toBe('true');
+    component.deleteClient();
+    expect(deleteClient).toHaveBeenCalledTimes(1);
+    // Edit says why it waits and does not open while the delete runs.
+    const navigateByUrl = vi.spyOn(TestBed.inject(Router), 'navigateByUrl');
+    const edit = page.querySelector<HTMLButtonElement>('button[aria-label="Edit OIDC client"]')!;
+    expect(edit.getAttribute('aria-disabled')).toBe('true');
+    edit.click();
+    expect(navigateByUrl).not.toHaveBeenCalled();
+    finish();
+    await vi.waitFor(() => expect(navigate).toHaveBeenCalled());
+    await vi.waitFor(() => expect(component.deleting).toBe(false));
+
+    TestBed.resetTestingModule();
+    const denied = vi.fn();
+    const other = await render(
+      { getById: vi.fn().mockResolvedValue(client()), delete: denied },
+      []
+    );
+    other.component.deleteClient();
+    expect(denied).not.toHaveBeenCalled();
   });
 
   it('says why the client could not be deleted', async () => {

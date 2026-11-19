@@ -21,7 +21,6 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import type {
   CreateOidcClientDto,
   OidcClientResponseDto,
@@ -70,7 +69,6 @@ type ScopeGroup = FormGroup<{
     MatSlideToggleModule,
     MatTooltipModule,
     RouterModule,
-    FlexLayoutModule,
     LoadErrorComponent,
   ],
   templateUrl: './oidc-client-create.component.html',
@@ -111,6 +109,8 @@ export class OidcClientCreateComponent implements OnInit {
   });
 
   create = true;
+  /** Name of the client being edited, once it has loaded. */
+  loadedName = '';
   /** While a save runs, so a second click does not send it again. */
   saving = false;
   /** While the client to edit loads; saving before would overwrite it with a blank form. */
@@ -274,7 +274,14 @@ export class OidcClientCreateComponent implements OnInit {
       .finally(() => (this.loading = false));
   }
 
+  /** Name of the page the back link and Cancel lead to: the client being edited, or the list. */
+  get backLabel(): string {
+    if (this.create) return 'OIDC Clients';
+    return this.loadedName || 'OIDC client';
+  }
+
   private fill(client: OidcClientResponseDto): void {
+    this.loadedName = client.name;
     this.redirectUris.clear();
     for (const uri of client.redirectUris) this.redirectUris.push(this.redirectUriControl(uri));
     this.scopes.clear();

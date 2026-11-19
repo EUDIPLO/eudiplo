@@ -265,7 +265,8 @@ test('issue and verify cookbook', async ({ page }) => {
 
   await test.step('chapter 3, steps 3 and 4: define the verification request', async () => {
     await openNav(page, 'Verification Configs');
-    await iconButton(page, 'Create Configuration').click();
+    // The header and the empty state both offer it.
+    await page.getByRole('link', { name: 'Create config', exact: true }).first().click();
 
     // 1. Name
     await page.getByRole('textbox', { name: 'ID', exact: true }).fill('membership-check');

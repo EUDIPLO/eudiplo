@@ -1,88 +1,159 @@
-// Config list styling
-.config-list {
-  padding: 0;
+@use '../../../tenants/tenant-page' as page;
 
-  mat-list-item {
-    height: auto !important;
-    padding: 12px 0;
-    border-bottom: 1px solid var(--mat-sys-outline-variant);
+// Back link, header card and the cards below it, as on the key and user pages
+@include page.base;
+@include page.detail-page;
+@include page.details-list;
 
-    // Long values (ids, URLs, free text) wrap instead of widening the page
-    // or ending in an ellipsis. Nested so it outranks Material's nowrap rule.
-    [matListItemLine] {
-      white-space: normal;
-      overflow-wrap: anywhere;
-    }
+// The ownership notice shows only when it applies; without content it takes no gap
+app-config-ownership-notice {
+  display: contents;
+}
 
-    &:last-child {
-      border-bottom: none;
-    }
+.hero-avatar mat-icon {
+  width: 32px;
+  height: 32px;
+  font-size: 32px;
+}
+
+.icon-actions {
+  display: inline-flex;
+  gap: 2px;
+
+  .delete-action:not([disabled], .mat-mdc-button-disabled) mat-icon {
+    color: var(--mat-sys-error);
   }
 }
 
-.icon-enabled {
+// The registration certificate's state, in the tone of its urgency
+.badge {
+  &[data-status='active'] {
+    --tone: var(--eudiplo-success);
+  }
+
+  &[data-status='expiring'],
+  &[data-status='missing'] {
+    --tone: var(--eudiplo-warning);
+  }
+
+  &[data-status='expired'],
+  &[data-status='invalid'],
+  &[data-status='notYetValid'] {
+    --tone: var(--eudiplo-danger);
+  }
+}
+
+.tone-success {
   color: var(--eudiplo-success);
 }
 
-.icon-disabled {
-  color: var(--mat-sys-on-surface-variant);
+.tone-warning {
+  color: var(--eudiplo-warning);
 }
 
-// Config value (JSON) styling
+.tone-danger {
+  color: var(--eudiplo-danger);
+}
+
+.tab-icon {
+  margin-right: 8px;
+}
+
+.tab-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 16px;
+}
+
+.tab-toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+
+  &.stack-tight {
+    gap: 12px;
+  }
+}
+
+.card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+// More specific than Material's own :last-child padding rule of the card content
+mat-card mat-card-content {
+  padding: 0 20px 20px;
+}
+
+.reg-cert-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: var(--mat-sys-corner-medium);
+  background: var(--mat-sys-surface-container-low);
+  font: var(--mat-sys-body-medium);
+}
+
+// JSON and JWT values
 .config-value {
-  background-color: var(--mat-sys-surface-container);
-  border: 1px solid var(--mat-sys-outline-variant);
-  border-radius: 4px;
-  padding: 12px;
   margin: 0;
-  font-family: 'Roboto Mono', monospace;
+  padding: 12px 16px;
+  overflow-x: auto;
+  border-radius: var(--mat-sys-corner-medium);
+  background: var(--mat-sys-surface-container-high);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
   line-height: 1.4;
-  overflow-x: auto;
+  color: var(--mat-sys-on-surface);
   white-space: pre-wrap;
   word-break: break-word;
 }
 
-// Credential query card styling
+// One requested credential
 .credential-query-card {
-  border-left: 4px solid var(--eudiplo-info);
+  border-left: 4px solid var(--mat-sys-primary);
 
-  mat-card-header {
-    padding-bottom: 8px;
+  h3[mat-card-title] {
+    margin: 0;
+    overflow-wrap: anywhere;
   }
 }
 
 .query-meta {
   margin-bottom: 16px;
-  padding: 12px;
-  background-color: var(--mat-sys-surface-container);
-  border-radius: 4px;
+  padding: 12px 16px;
+  border-radius: var(--mat-sys-corner-medium);
+  background: var(--mat-sys-surface-container-low);
+  font: var(--mat-sys-body-medium);
+  overflow-wrap: anywhere;
 
-  div {
-    margin-bottom: 4px;
-
-    &:last-child {
-      margin-bottom: 0;
-    }
+  div + div {
+    margin-top: 4px;
   }
 }
 
-.claims-panel {
-  margin-top: 8px;
-}
-
-// Format chip styling
-.format-sdjwt {
-  background-color: var(--mat-sys-primary-container) !important;
-  color: var(--eudiplo-info) !important;
+.format-sdjwt,
+.format-mdoc,
+.authority-type,
+.credential-id-chip {
+  --mat-chip-elevated-container-color: var(--mat-sys-secondary-container);
+  --mat-chip-label-text-color: var(--mat-sys-on-secondary-container);
 }
 
 .format-mdoc {
-  background-color: var(--mat-sys-secondary-container) !important;
-  color: var(--eudiplo-success) !important;
+  --mat-chip-elevated-container-color: var(--mat-sys-tertiary-container);
+  --mat-chip-label-text-color: var(--mat-sys-on-tertiary-container);
 }
 
-// Credential Sets section styling
 .credential-sets-section,
 .credentials-section {
   margin-bottom: 24px;
@@ -91,159 +162,106 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    margin: 0 0 8px 0;
-    font-size: 16px;
-    font-weight: 500;
+    margin: 0 0 8px;
+    font: var(--mat-sys-title-small);
     color: var(--mat-sys-on-surface);
 
     mat-icon {
-      font-size: 20px;
       width: 20px;
       height: 20px;
-      color: var(--mat-sys-on-surface-variant);
+      font-size: 20px;
+      color: var(--mat-sys-primary);
     }
   }
 
   .section-description {
-    margin: 0 0 16px 0;
+    margin: 0 0 16px;
+    font: var(--mat-sys-body-medium);
     color: var(--mat-sys-on-surface-variant);
-    font-size: 14px;
   }
 }
 
 .credential-set-card {
-  background-color: var(--mat-sys-surface-container);
-  border: 1px solid var(--mat-sys-outline-variant);
-  border-radius: 8px;
   padding: 16px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: var(--mat-sys-corner-medium);
+  background: var(--mat-sys-surface-container-low);
 
   .set-header {
     display: flex;
     align-items: center;
     gap: 12px;
     margin-bottom: 12px;
+  }
 
-    .set-label {
-      font-weight: 500;
-      color: var(--eudiplo-info);
-    }
+  .set-label {
+    font: var(--mat-sys-title-small);
+    color: var(--mat-sys-primary);
   }
 
   .required-chip {
-    background-color: var(--mat-sys-tertiary-container) !important;
-    color: var(--eudiplo-warning) !important;
-    font-size: 11px;
+    --mat-chip-elevated-container-color: var(--mat-sys-tertiary-container);
+    --mat-chip-label-text-color: var(--mat-sys-on-tertiary-container);
   }
 
   .set-options {
     display: flex;
-    align-items: center;
     flex-wrap: wrap;
+    align-items: center;
     gap: 8px;
+  }
 
-    .or-separator {
-      font-weight: 500;
-      color: var(--mat-sys-on-surface-variant);
-      padding: 0 4px;
-    }
+  .or-separator,
+  .and-separator {
+    font: var(--mat-sys-label-large);
+    color: var(--mat-sys-on-surface-variant);
+  }
 
-    .and-separator {
-      font-weight: 500;
-      color: var(--mat-sys-on-surface-variant);
-    }
-
-    .option-group {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      background-color: var(--mat-sys-on-error);
-      border: 1px solid var(--mat-sys-outline-variant);
-      border-radius: 16px;
-      padding: 4px 8px;
-    }
-
-    .credential-id-chip {
-      background-color: var(--mat-sys-primary-container) !important;
-      color: var(--eudiplo-info) !important;
-      font-size: 12px;
-    }
+  .option-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border: 1px solid var(--mat-sys-outline-variant);
+    border-radius: var(--mat-sys-corner-large);
+    background: var(--mat-sys-surface);
   }
 }
 
 mat-divider {
-  margin: 24px 0 !important;
+  margin: 16px 0;
 }
 
-// Card header styling
-mat-card-header {
-  margin-bottom: 16px;
+mat-expansion-panel {
+  margin-top: 16px;
+  box-shadow: none;
+  border: 1px solid var(--mat-sys-outline-variant);
 
-  mat-card-title {
+  mat-panel-title {
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 20px;
-    font-weight: 500;
-
-    mat-icon {
-      color: var(--mat-sys-on-surface-variant);
-    }
   }
 }
 
-// Expansion panel styling
-mat-expansion-panel {
-  margin-top: 16px;
-
-  mat-expansion-panel-header {
-    mat-panel-title {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-  }
-}
-
-// Empty state styling
-.empty-state {
-  color: var(--mat-sys-on-surface-variant);
-  text-align: center;
-  padding: 48px;
-
-  mat-icon {
-    font-size: 64px;
-    width: 64px;
-    height: 64px;
-    color: var(--mat-sys-outline-variant);
-    margin-bottom: 16px;
-  }
-
-  p {
-    font-size: 16px;
-    margin: 0;
-  }
-}
-
-// Trusted authorities styling
 .trusted-authorities {
   margin-top: 16px;
-  padding: 12px;
-  background-color: var(--mat-sys-surface-container);
-  border-radius: 4px;
+  padding: 12px 16px;
+  border-radius: var(--mat-sys-corner-medium);
+  background: var(--mat-sys-surface-container-low);
 
   h5 {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin: 0 0 12px 0;
-    font-size: 14px;
-    font-weight: 500;
+    margin: 0 0 12px;
+    font: var(--mat-sys-title-small);
     color: var(--mat-sys-on-surface);
 
     mat-icon {
-      font-size: 18px;
       width: 18px;
       height: 18px;
+      font-size: 18px;
       color: var(--eudiplo-success);
     }
   }
@@ -252,34 +270,27 @@ mat-expansion-panel {
     display: flex;
     align-items: flex-start;
     gap: 12px;
-    margin-bottom: 8px;
 
-    &:last-child {
-      margin-bottom: 0;
+    & + .authority-item {
+      margin-top: 8px;
     }
+  }
 
-    .authority-type {
-      background-color: var(--mat-sys-secondary-container) !important;
-      color: var(--eudiplo-success) !important;
-      font-size: 11px;
-      text-transform: uppercase;
-    }
+  .authority-values {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+  }
 
-    .authority-values {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      flex: 1;
-    }
-
-    .authority-value {
-      font-family: 'Roboto Mono', monospace;
-      font-size: 12px;
-      background-color: var(--mat-sys-on-error);
-      padding: 4px 8px;
-      border-radius: 4px;
-      border: 1px solid var(--mat-sys-outline-variant);
-      word-break: break-all;
-    }
+  .authority-value {
+    padding: 4px 8px;
+    border: 1px solid var(--mat-sys-outline-variant);
+    border-radius: var(--mat-sys-corner-small);
+    background: var(--mat-sys-surface);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    word-break: break-all;
   }
 }

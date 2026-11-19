@@ -1,41 +1,111 @@
-.presentation-editor {
-  max-width: 1100px;
-  margin: 0 auto;
+@use '../../../tenants/tenant-page' as page;
+
+// Back link, heading and action bar as on the other forms; the editor keeps its own steps
+@include page.base;
+@include page.form-page;
+
+// The ownership notice shows only when it applies; without content it takes no gap
+app-config-ownership-notice {
+  display: contents;
 }
-.editor-header {
+
+.form-avatar mat-icon {
+  width: 28px;
+  height: 28px;
+  font-size: 28px;
+}
+
+.editor-actions {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 24px;
   flex-wrap: wrap;
-  margin-bottom: 24px;
+  align-items: center;
+  gap: 8px;
 }
-h2 {
-  margin: 0 0 8px;
+
+.option-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
 }
-p {
-  line-height: 1.6;
-}
-.editor-actions,
-.form-actions {
+
+.reg-cert-status {
   display: flex;
   align-items: center;
   gap: 12px;
-  flex-wrap: wrap;
 }
+
+.purposes-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.purpose-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.purpose-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+
+  .purpose-lang {
+    flex: 0 0 30%;
+  }
+
+  .purpose-content {
+    flex: 1;
+  }
+}
+
+@container (max-width: 760px) {
+  .purpose-row {
+    flex-direction: column;
+    align-items: stretch;
+
+    .purpose-lang {
+      flex-basis: auto;
+    }
+  }
+}
+
+.tone-success {
+  color: var(--eudiplo-success);
+}
+
+.tone-warning {
+  color: var(--eudiplo-warning);
+}
+
+.tone-danger {
+  color: var(--eudiplo-danger);
+}
+
 .flow-hint {
   background: var(--mat-sys-secondary-container);
   color: var(--mat-sys-on-secondary-container);
   padding: 14px 20px;
   border-radius: 12px;
 }
-.form-section {
+// One step of the editor; the steps keep their own layout instead of the form sections
+.step-section {
   padding: 24px 4px;
+
+  h3 {
+    margin: 0 0 8px;
+    font: var(--mat-sys-title-large);
+    color: var(--mat-sys-on-surface);
+  }
+
+  > p {
+    margin: 0;
+    font: var(--mat-sys-body-medium);
+    color: var(--mat-sys-on-surface-variant);
+  }
 }
 .field-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
   padding-top: 16px;
 }
 .import-actions {
@@ -69,13 +139,6 @@ dd {
   padding: 20px;
   margin-bottom: 16px;
   overflow-wrap: anywhere;
-}
-.form-actions {
-  border-top: 1px solid var(--mat-sys-outline-variant);
-  padding: 20px 0;
-}
-.action-spacer {
-  flex: 1;
 }
 .form-error {
   color: var(--mat-sys-error);
