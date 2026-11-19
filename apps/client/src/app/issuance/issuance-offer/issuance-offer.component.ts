@@ -148,6 +148,31 @@ export class IssuanceOfferComponent implements OnInit {
   // Webhook FormGroups for external AS flow (keyed by credential config id)
   externalAsWebhooks = new Map<string, FormGroup>();
 
+  /** The flows offered as tiles in the first step, in display order. */
+  readonly flowOptions = [
+    {
+      value: 'pre_authorized_code',
+      label: 'Pre-Authorized Code',
+      icon: 'flash_on',
+      description:
+        'Claims are provided upfront. The wallet receives the credential immediately after scanning the QR code. Best for scenarios where user identity is already verified.',
+    },
+    {
+      value: 'authorization_code_external',
+      label: 'Authorization Code (External AS)',
+      icon: 'dns',
+      description:
+        'User authentication is handled by an external Authorization Server. The AS provides user claims after authentication.',
+    },
+    {
+      value: 'authorization_code_iae',
+      label: 'Authorization Code (IAE)',
+      icon: 'verified_user',
+      description:
+        'User authentication is handled by the built-in Interactive Authorization Endpoint. Claims are collected through configured IAE actions.',
+    },
+  ] as const;
+
   /**
    * Returns the selected flow type
    */
