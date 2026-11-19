@@ -11,8 +11,10 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import {
+    ApiConflictResponse,
     ApiCreatedResponse,
     ApiNoContentResponse,
+    ApiNotFoundResponse,
     ApiOkResponse,
     ApiOperation,
     ApiParam,
@@ -186,6 +188,11 @@ export class StatusListManagementController {
     })
     @ApiNoContentResponse({
         description: "Status list deleted successfully",
+    })
+    @ApiNotFoundResponse({ description: "Status list not found" })
+    @ApiConflictResponse({
+        description:
+            "Credentials issued with the status list still use it; the message gives their number",
     })
     async deleteList(
         @Token() token: TokenPayload,

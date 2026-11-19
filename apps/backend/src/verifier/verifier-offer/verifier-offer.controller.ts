@@ -56,6 +56,11 @@ export class VerifierOfferController {
             "image/png": { schema: { type: "string", format: "binary" } },
         },
     })
+    @ApiResponse({
+        status: 404,
+        description:
+            "The tenant has no presentation config with this `requestId`",
+    })
     @ApiProduces("application/json", "image/png")
     @ApiBody({
         type: PresentationRequest,

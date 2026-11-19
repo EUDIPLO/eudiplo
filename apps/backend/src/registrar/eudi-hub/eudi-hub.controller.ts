@@ -155,7 +155,7 @@ export class EudiHubController {
             "The caller lacks the registrar:manage or presentation:manage role",
     })
     @ApiResponse({
-        status: 409,
+        status: 404,
         description: "Presentation configuration not found",
     })
     @ApiResponse({

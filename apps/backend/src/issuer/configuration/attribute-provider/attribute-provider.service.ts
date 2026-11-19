@@ -17,7 +17,9 @@ import {
     redactWebhookAuth,
 } from "../../../webhook/domain/webhook-configuration.js";
 import { OutboundUrlPolicyService } from "../../../webhook/outbound-url-policy.service.js";
+import { AttributeProviderReferences } from "./application/attribute-provider-references.js";
 import type { AttributeProviderData } from "./domain/attribute-provider-data.js";
+import { AttributeProviderInUseError } from "./domain/attribute-provider-reference.js";
 import { CreateAttributeProviderDto } from "./dto/create-attribute-provider.dto.js";
 import {
     ATTRIBUTE_PROVIDER_REPOSITORY,
@@ -37,6 +39,7 @@ export class AttributeProviderService {
         private readonly configImportOrchestrator: ConfigImportOrchestratorService,
         private readonly tenantActionLogService: AuditLogService,
         private readonly outboundUrlPolicyService: OutboundUrlPolicyService,
+        private readonly references: AttributeProviderReferences,
     ) {
         this.configImportOrchestrator.register(
             "attribute-providers",
@@ -147,13 +150,29 @@ export class AttributeProviderService {
         return saved;
     }
 
+    /**
+     * @param options.checkReferences Refuse while credential configs name the
+     *   provider (default). A configuration import turns it off: it deletes
+     *   left-out credential configs before their providers.
+     * @throws AttributeProviderInUseError naming those credential configs
+     */
     async delete(
         tenantId: string,
         id: string,
         actorToken?: TokenPayload,
         requestMeta?: AuditLogRequestMeta,
+        { checkReferences = true }: { checkReferences?: boolean } = {},
     ) {
         const existing = await this.getById(tenantId, id);
+        if (checkReferences) {
+            // Not atomic: a credential config saved between this lookup and
+            // the delete can still name the provider. Accepted for
+            // administrative CRUD; issuance then fails to fetch attributes.
+            const references = await this.references.find(tenantId, id);
+            if (references.length > 0) {
+                throw new AttributeProviderInUseError(id, references);
+            }
+        }
         const result = await this.repo.deleteForTenant(tenantId, id);
 
         if (actorToken) {

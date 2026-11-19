@@ -1,5 +1,6 @@
 import {
     Body,
+    ConflictException,
     Controller,
     Delete,
     Get,
@@ -19,6 +20,8 @@ import {
     restoreApiKey,
 } from "../../../shared/utils/write-only-secrets.util.js";
 import { AttributeProviderService } from "./attribute-provider.service.js";
+import { AttributeProviderInUseError } from "./domain/attribute-provider-reference.js";
+import { AttributeProviderInUseDto } from "./dto/attribute-provider-in-use.dto.js";
 import { CreateAttributeProviderDto } from "./dto/create-attribute-provider.dto.js";
 import { UpdateAttributeProviderDto } from "./dto/update-attribute-provider.dto.js";
 import { AttributeProviderEntity } from "./entities/attribute-provider.entity.js";
@@ -107,12 +110,29 @@ export class AttributeProviderController {
     @ApiOperation({ summary: "Delete an attribute provider" })
     @ApiResponse({ status: 204, description: "Attribute provider deleted" })
     @ApiResponse({ status: 404, description: "Attribute provider not found" })
+    @ApiResponse({
+        status: 409,
+        type: AttributeProviderInUseDto,
+        description:
+            "Credential configs of the tenant still name the attribute provider; the response names them",
+    })
     @HttpCode(204)
-    delete(
+    async delete(
         @Param("id") id: string,
         @Token() user: TokenPayload,
         @AuditMeta() requestMeta: AuditLogRequestMeta,
-    ) {
-        return this.service.delete(user.entity!.id, id, user, requestMeta);
+    ): Promise<void> {
+        try {
+            await this.service.delete(user.entity!.id, id, user, requestMeta);
+        } catch (error) {
+            if (error instanceof AttributeProviderInUseError) {
+                throw new ConflictException({
+                    code: "ATTRIBUTE_PROVIDER_IN_USE",
+                    message: error.message,
+                    references: error.references,
+                });
+            }
+            throw error;
+        }
     }
 }

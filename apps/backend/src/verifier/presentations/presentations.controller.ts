@@ -164,6 +164,10 @@ export class PresentationManagementController {
     @Secured([Role.Presentations, Role.PresentationRequest])
     @Get(":id")
     @ApiResponse({ status: 200, type: PresentationConfig })
+    @ApiResponse({
+        status: 404,
+        description: "The tenant has no presentation config with this ID",
+    })
     getConfiguration(@Param("id") id: string, @Token() user: TokenPayload) {
         return this.presentationConfigService.getPresentationConfig(
             id,
@@ -182,6 +186,10 @@ export class PresentationManagementController {
     @Patch(":id")
     @ApiResponse({ status: 200, type: PresentationConfig })
     @ApiResponse({ status: 400, description: INVALID_CONFIGURATION })
+    @ApiResponse({
+        status: 404,
+        description: "The tenant has no presentation config with this ID",
+    })
     updateConfiguration(
         @Param("id") id: string,
         @Body() config: PresentationConfigUpdateDto,
@@ -207,6 +215,10 @@ export class PresentationManagementController {
     @ApiResponse({
         status: 204,
         description: "Presentation configuration deleted",
+    })
+    @ApiResponse({
+        status: 404,
+        description: "The tenant has no presentation config with this ID",
     })
     @HttpCode(204)
     deleteConfiguration(

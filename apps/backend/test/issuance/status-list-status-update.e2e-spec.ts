@@ -207,4 +207,43 @@ describe("Status List - status updates", () => {
         expect(narrowEntry).toMatchObject({ status: 0 });
         expect(narrowEntry).not.toHaveProperty("statusUpdatedAt");
     });
+
+    test("refuses to delete a status list that credentials use, naming how many", async () => {
+        const server = app.getHttpServer();
+        const config = "status-delete-e2e";
+        const listId = await createList(config, 1);
+        const deleteList = () =>
+            request(server)
+                .delete(`/status-lists/${listId}`)
+                .set("Authorization", `Bearer ${authToken}`);
+
+        await allocate("status-delete-e2e-1", config, listId);
+        const one = await deleteList().expect(409);
+        expect(one.body.message).toBe(
+            `Cannot delete status list ${listId}: 1 credential is using it`,
+        );
+
+        await allocate("status-delete-e2e-2", config, listId);
+        const two = await deleteList().expect(409);
+        expect(two.body.message).toBe(
+            `Cannot delete status list ${listId}: 2 credentials are using it`,
+        );
+
+        await request(server)
+            .get(`/status-lists/${listId}`)
+            .set("Authorization", `Bearer ${authToken}`)
+            .expect(200);
+    });
+
+    test("deletes a status list no credential uses", async () => {
+        const unused = await createList("status-delete-e2e-unused", 1);
+        await request(app.getHttpServer())
+            .delete(`/status-lists/${unused}`)
+            .set("Authorization", `Bearer ${authToken}`)
+            .expect(204);
+        await request(app.getHttpServer())
+            .get(`/status-lists/${unused}`)
+            .set("Authorization", `Bearer ${authToken}`)
+            .expect(404);
+    });
 });
