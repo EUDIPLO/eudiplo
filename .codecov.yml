@@ -28,7 +28,6 @@ ignore:
   - "dist/"
   - "apps/client/**"
   - "apps/dcapi/**"
-  - "apps/webhook/**"  
   - "apps/tmp/**"
   - "monitor/**"
   - "packages/**"

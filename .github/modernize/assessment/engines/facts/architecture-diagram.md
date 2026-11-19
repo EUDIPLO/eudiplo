@@ -62,7 +62,6 @@ flowchart TD
 | Key management | Pluggable KMS adapters | repository-defined | Signs and verifies without requiring private key material to leave the backend boundary |
 | Webhook transport | Axios via Nest HTTP module | 1.20 | Calls configured attribute and application webhook endpoints |
 | Observability | OpenTelemetry and Pino | 0.222 / 10 | Traces, metrics, logs, and request correlation |
-| Webhook simulator | Cloudflare Worker | current workspace package | Provides a deployable callback target for demos and tests |
 
 ### Data Storage and External Services
 

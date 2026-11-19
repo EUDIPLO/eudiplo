@@ -63,11 +63,11 @@ Settings you often need locally:
 | --- | --- | --- |
 | `pnpm dev:backend` | Backend (builds `@eudiplo/config-format`, then `nest start --watch`) | `http://localhost:3000`, Swagger UI at `/api/docs` |
 | `pnpm dev:client` | Web client (`ng serve`; runs `gen:api` first) | `http://localhost:4200` |
-| `pnpm --filter test-rp dev` | Example webhooks and attribute provider (Cloudflare Worker) | `http://localhost:8787` |
-| `pnpm --filter kms-reference dev` | Reference service for the HTTP KMS adapter | `http://localhost:8788` |
 | `pnpm --filter @eudiplo/docs start` | Documentation with live reload ([run `prebuild` once first](./documentation.md#run-it-locally)) | `http://127.0.0.1:3003` |
 
-`pnpm dev` starts every package that has a `dev` script in parallel (backend, client, both workers and the SDK in watch mode), except the CLI, whose `dev` script runs a single command. Other backend scripts: `start` (no watch), `start:debug` (watch with the Node inspector), `start:prod` (runs `dist/main.js`).
+`pnpm dev` starts every package that has a `dev` script in parallel (backend, client and the SDK in watch mode), except the CLI, whose `dev` script runs a single command. Other backend scripts: `start` (no watch), `start:debug` (watch with the Node inspector), `start:prod` (runs `dist/main.js`).
+
+An example webhook receiver and attribute provider and a reference service for the `http` KMS provider live in [EUDIPLO/examples](https://github.com/EUDIPLO/examples). Run them there when you want a real receiver instead of `nock`.
 
 To run the published images instead of your source, use the root `docker-compose.yml` (`docker compose up -d`); it reads the root `.env` and mounts `./assets` as configuration.
 
@@ -131,9 +131,7 @@ The repository ships a VS Code dev container (`.devcontainer/`) with Node.js, pn
 │   ├── backend/        # @eudiplo/backend: NestJS API and protocol implementation
 │   ├── client/         # @eudiplo/client: Angular web client
 │   ├── cli/            # @eudiplo/cli: the eudiplo command-line tool and its installer (eudiplo.dev/install.sh)
-│   ├── docs/           # @eudiplo/docs: this documentation site (Docusaurus)
-│   ├── webhook/        # test-rp: example webhooks and attribute provider (Cloudflare Worker)
-│   └── kms-reference/  # kms-reference: reference service for the HTTP KMS adapter
+│   └── docs/           # @eudiplo/docs: this documentation site (Docusaurus)
 ├── packages/
 │   ├── eudiplo-config-format/  # @eudiplo/config-format: config envelope, format versions, migrations
 │   └── eudiplo-sdk-core/       # @eudiplo/sdk-core: generated API client and helpers (published to npm)

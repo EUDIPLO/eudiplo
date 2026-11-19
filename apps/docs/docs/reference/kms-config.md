@@ -55,7 +55,8 @@ Each entry of `providers` has one of the shapes below, selected by `type`.
 
 A service used as `http` provider implements these endpoints relative to
 `baseUrl`. Bodies are JSON; requests carry the authentication configured in
-`auth`.
+`auth`. A reference service that keeps keys in memory and supports only `ES256`, for
+development only, is in [EUDIPLO/examples](https://github.com/EUDIPLO/examples/tree/main/kms-reference).
 
 | Request                         | Body                                         | Response                                                    |
 | ------------------------------- | -------------------------------------------- | ----------------------------------------------------------- |

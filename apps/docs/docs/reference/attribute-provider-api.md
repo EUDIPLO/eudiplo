@@ -6,7 +6,7 @@ description: Contract between EUDIPLO and attribute providers or offer webhooks 
 
 import SchemaReference from "@site/src/components/SchemaReference";
 
-The HTTP contract EUDIPLO uses to fetch claims from your backend during issuance. It applies to attribute providers and to `webhook` claim sources of an offer. For setup, see [Attribute providers](../issuance/attribute-provider.md); for when a provider is called, see [Claims](../issuance/claims.md).
+The HTTP contract EUDIPLO uses to fetch claims from your backend during issuance. It applies to attribute providers and to `webhook` claim sources of an offer. For setup, see [Attribute providers](../issuance/attribute-provider.md); for when a provider is called, see [Claims](../issuance/claims.md). An example provider is in [EUDIPLO/examples](https://github.com/EUDIPLO/examples/tree/main/webhook).
 
 ## Resource
 
