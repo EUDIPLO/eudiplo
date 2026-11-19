@@ -10,6 +10,27 @@ import { JwtService } from '../../../services/jwt.service';
 import { FrontendConfigService } from '../../../services/frontend-config.service';
 import { ClientListComponent } from './client-list.component';
 import { errorSnackBarDuration } from '../../../utils/error-snackbar';
+import { describeListStates } from '../../../common/base-async-list.testing';
+import { expectAvailable, expectUnavailable } from '../../../common/unavailable-action.testing';
+import { ApiClientService } from '../api-client.service';
+
+describeListStates({
+  component: ClientListComponent,
+  service: ApiClientService,
+  fetchMethod: 'getAll',
+  item: { id: 'shop', clientId: 'shop', roles: [] },
+  loading: 'Loading clients',
+  empty: 'No clients yet',
+  create: 'Create client',
+  failure: 'Failed to load clients',
+  heading: 'h1',
+  firstCell: 'shop',
+  providers: [
+    { provide: JwtService, useValue: { getRoles: () => ['clients:manage'] } },
+    { provide: ConfigOwnershipService, useValue: { get: async () => undefined } },
+    { provide: FrontendConfigService, useValue: { authMode: null } },
+  ],
+});
 
 /** Skips the request on init: each test puts the clients on the list itself. */
 function stubLoad() {
@@ -70,13 +91,30 @@ describe('ClientListComponent role limits', () => {
     expect(actions(1).map(disabled)).toEqual([true, true, true]);
   });
 
-  it('sends nothing when a disabled action is clicked', () => {
-    const rotate = vi.spyOn(component, 'rotateSecret');
+  it('keeps the locked actions focusable and says why on each', () => {
+    const hint = 'This client has roles you neither hold nor may grant';
+    const [edit, rotate, remove] = actions(1);
+
+    // disabledInteractive: reachable with Tab, so the tooltip can give the reason
+    expectUnavailable(fixture, edit, hint);
+    expectUnavailable(fixture, rotate, hint);
+    expectUnavailable(fixture, remove, hint);
+    expect(edit.getAttribute('aria-label')).toBe(`Edit Client: ${hint}`);
+    expect(rotate.getAttribute('aria-label')).toBe(`Rotate Secret: ${hint}`);
+    expectAvailable(fixture, actions(0)[0], 'Edit Client');
+  });
+
+  it('sends nothing and goes nowhere when a locked action is clicked', () => {
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+    const service = TestBed.inject(ApiClientService);
+    const rotate = vi.spyOn(service, 'rotateSecret');
+    const remove = vi.spyOn(service, 'delete');
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
-    actions(1)[1].click();
-    actions(1)[2].click();
-    expect(rotate).not.toHaveBeenCalled();
+    for (const action of actions(1)) action.click();
+    expect(navigate).not.toHaveBeenCalled();
     expect(confirm).not.toHaveBeenCalled();
+    expect(rotate).not.toHaveBeenCalled();
+    expect(remove).not.toHaveBeenCalled();
   });
 });
 
@@ -209,6 +247,97 @@ describe('ClientListComponent delete', () => {
     );
     expect(reload).not.toHaveBeenCalled();
     expect(logout).not.toHaveBeenCalled();
+  });
+});
+
+describe('ClientListComponent row delete', () => {
+  /** Renders `clients` for a caller who may manage them all; `remove` answers each delete. */
+  async function render(clients: Partial<ClientEntity>[], remove: () => Promise<void>) {
+    TestBed.configureTestingModule({
+      imports: [ClientListComponent],
+      providers: [
+        provideRouter([]),
+        { provide: JwtService, useValue: { getRoles: () => ['clients:manage', 'issuance:offer'] } },
+        { provide: ConfigOwnershipService, useValue: { get: async () => undefined } },
+        { provide: FrontendConfigService, useValue: { authMode: null } },
+        { provide: ApiService, useValue: { getClientId: () => 'caller', logout: vi.fn() } },
+        { provide: MatSnackBar, useValue: { open: vi.fn() } },
+        {
+          provide: ApiClientService,
+          useValue: { getAll: async () => clients, delete: vi.fn(remove) },
+        },
+      ],
+    });
+    const fixture = TestBed.createComponent(ClientListComponent);
+    fixture.detectChanges();
+    const page = fixture.nativeElement as HTMLElement;
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(page.querySelectorAll('a.client-link')).toHaveLength(clients.length);
+      expect(page.querySelector('[aria-busy="true"]')).toBeNull();
+    });
+    return { fixture, page };
+  }
+
+  function deleteButton(page: HTMLElement, clientId: string): HTMLButtonElement {
+    const row = [...page.querySelectorAll('tr.mat-mdc-row')].find(
+      (candidate) => candidate.querySelector('a.client-link')?.textContent?.trim() === clientId
+    );
+    return row!.querySelector<HTMLButtonElement>('button[aria-label^="Delete Client"]')!;
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("holds back the other rows' Delete while one delete runs", async () => {
+    const confirm = vi.fn(() => true);
+    vi.stubGlobal('confirm', confirm);
+    let finish: () => void = () => undefined;
+    const { fixture, page } = await render(
+      [
+        { clientId: 'audit', roles: ['issuance:offer'] },
+        { clientId: 'shop', roles: ['issuance:offer'] },
+      ],
+      () => new Promise<void>((resolve) => (finish = resolve))
+    );
+    const service = TestBed.inject(ApiClientService);
+
+    deleteButton(page, 'audit').click();
+    fixture.detectChanges();
+
+    expectUnavailable(fixture, deleteButton(page, 'audit'), 'Deleting the client…');
+    const other = deleteButton(page, 'shop');
+    expectUnavailable(fixture, other, 'Wait until the other delete has finished');
+    other.click();
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(service.delete).toHaveBeenCalledTimes(1);
+
+    finish();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(page.querySelectorAll('a.client-link')).toHaveLength(1);
+    });
+    expectAvailable(fixture, deleteButton(page, 'shop'), 'Delete Client');
+  });
+
+  it('focuses the heading after deleting the last client', async () => {
+    vi.stubGlobal('confirm', () => true);
+    const { fixture, page } = await render(
+      [{ clientId: 'shop', roles: ['issuance:offer'] }],
+      async () => undefined
+    );
+    const remove = deleteButton(page, 'shop');
+    remove.focus();
+
+    remove.click();
+
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(page.querySelector('.empty-state')).not.toBeNull();
+      expect(document.activeElement).toBe(page.querySelector('h1'));
+    });
   });
 });
 
@@ -433,6 +562,20 @@ describe('ClientListComponent embedded in a tenant page', () => {
     fixture.detectChanges();
     return fixture.nativeElement as HTMLElement;
   }
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('shows the clients the tenant page gives without fetching any', async () => {
+    const getAll = vi.spyOn(ApiClientService.prototype, 'getAll');
+    const page = await render(true);
+
+    expect(getAll).not.toHaveBeenCalled();
+    expect(page.querySelector('mat-spinner')).toBeNull();
+    expect(page.querySelector('.client-copy code')?.textContent).toBe('acme-admin');
+    // The tenant page offers no Edit or Delete for its clients.
+    expect(page.querySelector('[aria-label^="Edit Client"]')).toBeNull();
+    expect(page.querySelector('[aria-label^="Delete Client"]')).toBeNull();
+  });
 
   it('leaves the heading to the page and shows the description under the client ID', async () => {
     const page = await render(true);

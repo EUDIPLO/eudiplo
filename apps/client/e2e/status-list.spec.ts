@@ -159,17 +159,23 @@ test('keeps a status list in use: Delete is locked and a refusal shows its reaso
       });
     }
   );
-  // The other one was used after the page loaded it; the backend refuses with its reason.
+  // The other one was used after the page loaded it; the backend refuses with its reason, and
+  // the list loaded again holds the entry.
   const reason = `Cannot delete status list ${raced}: 1 credentials are using it`;
   await page.route(
     (url) => url.pathname.endsWith(`/api/status-lists/${raced}`),
-    (route) =>
-      route.request().method() === 'DELETE'
-        ? route.fulfill({
-            status: 409,
-            json: { statusCode: 409, message: reason, error: 'Conflict' },
-          })
-        : route.fallback()
+    async (route) => {
+      if (route.request().method() === 'DELETE') {
+        await route.fulfill({
+          status: 409,
+          json: { statusCode: 409, message: reason, error: 'Conflict' },
+        });
+        return;
+      }
+      const response = await route.fetch();
+      const list = (await response.json()) as StatusList;
+      await route.fulfill({ response, json: { ...list, usedEntries: 1 } });
+    }
   );
 
   await loginWithClientCredentials(page, tenant.clientId, tenant.clientSecret);
@@ -195,7 +201,9 @@ test('keeps a status list in use: Delete is locked and a refusal shows its reaso
   await expect(refused).not.toHaveAttribute('aria-busy', 'true');
   await refused.click();
   await expect(page.getByText(reason)).toBeVisible();
-  await expect(refused).toBeVisible();
-  await expect(refused).not.toHaveAttribute('aria-disabled', 'true');
+  // The row loads again and now shows the list as in use, with the focus still on its Delete.
+  await expect(refused).toHaveAttribute('aria-disabled', 'true');
+  await expect(refused).toHaveAccessibleDescription('Cannot delete: entries in use');
+  await expect(refused).toBeFocused();
   expect((await statusLists()).map(({ id }) => id).sort()).toEqual([used, raced].sort());
 });

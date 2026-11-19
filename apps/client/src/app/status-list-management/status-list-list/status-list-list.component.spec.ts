@@ -188,6 +188,117 @@ describe('StatusListListComponent table', () => {
     );
   });
 
+  it('shows the list as in use when the backend refuses the delete with 409', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const refusal = {
+      statusCode: 409,
+      message: 'Cannot delete status list with 2 used entries.',
+    };
+    const getList = vi.fn(async (id: string) => statusList(id, { usedEntries: 2 }));
+    const fixture = await render({
+      getLists: async () => lists,
+      getList,
+      deleteList: vi.fn().mockRejectedValue(refusal),
+    });
+    const open = vi.spyOn(TestBed.inject(MatSnackBar), 'open');
+    const element = fixture.nativeElement as HTMLElement;
+    const remove = deleteButton(element, 'shared-b');
+    remove.focus();
+
+    remove.click();
+
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expectUnavailable(
+        fixture,
+        deleteButton(element, 'shared-b'),
+        'Cannot delete: entries in use'
+      );
+    });
+    expect(getList).toHaveBeenCalledWith('shared-b');
+    expect(open.mock.calls[0][0]).toBe(
+      'Failed to delete status list: Cannot delete status list with 2 used entries.'
+    );
+    const row = deleteButton(element, 'shared-b').closest('tr')!;
+    expect(row.querySelector('.mat-column-usage')?.textContent).toContain('2');
+    // The row stays, so the focus stays on its Delete.
+    expect(document.activeElement).toBe(remove);
+    expect(ids(element)).toEqual(['pid-a', 'shared-b']);
+  });
+
+  it('keeps Delete busy until the refused list has loaded again', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    let reloaded: (list: StatusListResponseDto) => void = () => undefined;
+    const getList = vi.fn(
+      () => new Promise<StatusListResponseDto>((resolve) => (reloaded = resolve))
+    );
+    const fixture = await render({
+      getLists: async () => lists,
+      getList,
+      deleteList: vi.fn().mockRejectedValue({ statusCode: 409, message: 'In use' }),
+    });
+    const element = fixture.nativeElement as HTMLElement;
+
+    deleteButton(element, 'shared-b').click();
+    await vi.waitFor(() => expect(getList).toHaveBeenCalled());
+    fixture.detectChanges();
+
+    expectUnavailable(fixture, deleteButton(element, 'shared-b'), 'Deleting the status list…');
+    reloaded(statusList('shared-b', { usedEntries: 1 }));
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expectUnavailable(
+        fixture,
+        deleteButton(element, 'shared-b'),
+        'Cannot delete: entries in use'
+      );
+    });
+  });
+
+  it('keeps the row and its Delete when the refused list cannot load again', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const fixture = await render({
+      getLists: async () => lists,
+      getList: vi.fn().mockRejectedValue({ statusCode: 500, message: 'down' }),
+      deleteList: vi.fn().mockRejectedValue({ statusCode: 409, message: 'In use' }),
+    });
+    const element = fixture.nativeElement as HTMLElement;
+
+    deleteButton(element, 'shared-b').click();
+
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(fixture.componentInstance.deletingId).toBeUndefined();
+    });
+    expect(consoleError).toHaveBeenCalledWith('Failed to reload status list:', expect.anything());
+    expect(ids(element)).toEqual(['pid-a', 'shared-b']);
+    expectAvailable(fixture, deleteButton(element, 'shared-b'), 'Delete status list');
+  });
+
+  it('leaves the row as it was after a delete fails for another reason', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const getList = vi.fn();
+    const fixture = await render({
+      getLists: async () => lists,
+      getList,
+      deleteList: vi.fn().mockRejectedValue({ statusCode: 500, message: 'Database unavailable' }),
+    });
+    const element = fixture.nativeElement as HTMLElement;
+
+    deleteButton(element, 'shared-b').click();
+
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(fixture.componentInstance.deletingId).toBeUndefined();
+    });
+    expect(getList).not.toHaveBeenCalled();
+    expectAvailable(fixture, deleteButton(element, 'shared-b'), 'Delete status list');
+  });
+
   it('says why each Delete waits or refuses, else what it does', async () => {
     const fixture = await render({ getLists: async () => lists });
     const component = fixture.componentInstance;

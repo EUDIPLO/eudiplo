@@ -8,12 +8,7 @@ import { NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import {
-  clientControllerGetClients,
-  ClientEntity,
-  clientControllerDeleteClient,
-  clientControllerRotateClientSecret,
-} from '@eudiplo/sdk-core';
+import type { ClientEntity } from '@eudiplo/sdk-core';
 import { ApiService } from '../../../core';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { SecretDialogComponent } from '../secret-dialog/secret-dialog.component';
@@ -30,6 +25,7 @@ import { FrontendConfigService } from '../../../services/frontend-config.service
 import { BaseAsyncListComponent } from '../../../common/base-async-list.component';
 import { uniqueRoles } from '../../../services/role-groups';
 import { ItemRoutePipe } from '../../../common/item-route.pipe';
+import { ApiClientService } from '../api-client.service';
 
 /** Columns of the client table. */
 type ClientColumn = 'clientId' | 'roles' | 'actions';
@@ -111,7 +107,8 @@ export class ClientListComponent extends BaseAsyncListComponent<ClientEntity> {
     private readonly apiService: ApiService,
     private readonly router: Router,
     private readonly dialog: MatDialog,
-    private readonly jwtService: JwtService
+    private readonly jwtService: JwtService,
+    private readonly clientService: ApiClientService
   ) {
     super();
     this.callerRoles = jwtService.getRoles();
@@ -142,7 +139,7 @@ export class ClientListComponent extends BaseAsyncListComponent<ClientEntity> {
   }
 
   protected fetchItems(): Promise<ClientEntity[]> {
-    return clientControllerGetClients<true>().then((res) => res.data);
+    return this.clientService.getAll();
   }
 
   protected override unavailableReason(error: unknown): string | undefined {
@@ -160,7 +157,7 @@ export class ClientListComponent extends BaseAsyncListComponent<ClientEntity> {
       item: client,
       id: client.clientId,
       question: clientDeleteConfirmation(client.clientId, this.apiService.getClientId()),
-      request: () => clientControllerDeleteClient({ path: { id: client.clientId } }),
+      request: () => this.clientService.delete(client.clientId),
       deleted: ownClient
         ? 'Client deleted. You have been signed out.'
         : 'Client deleted successfully',
@@ -178,27 +175,29 @@ export class ClientListComponent extends BaseAsyncListComponent<ClientEntity> {
    * Shows the new secret in a dialog for one-time viewing.
    */
   async rotateSecret(client: ClientEntity): Promise<void> {
+    // Rotate stays focusable on a locked row (disabledInteractive), so it checks again here.
+    if (!this.canManage(client)) {
+      return;
+    }
     if (!confirm(clientRotateConfirmation(client.clientId, this.apiService.getClientId()))) {
       return;
     }
 
     try {
-      const result = await clientControllerRotateClientSecret({
-        path: { id: client.clientId },
-      });
+      const secret = await this.clientService.rotateSecret(client.clientId);
 
-      if (result.data?.secret) {
+      if (secret) {
         this.dialog.open(SecretDialogComponent, {
           data: {
             clientId: client.clientId,
-            secret: result.data.secret,
+            secret,
             apiUrl: this.apiService.getBaseUrl(),
           },
           width: '500px',
           disableClose: true,
         });
         if (client.clientId === this.apiService.getClientId()) {
-          await this.continueWithSecret(result.data.secret);
+          await this.continueWithSecret(secret);
         }
       }
     } catch (error) {

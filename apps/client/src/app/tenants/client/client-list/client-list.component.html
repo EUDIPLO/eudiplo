@@ -145,41 +145,42 @@
         <td mat-cell *matCellDef="let client">
           @let manageable = canManage(client);
           <span class="row-actions">
+            <!-- Locked actions stay focusable so their tooltips can say why; they do nothing. -->
             @if (!loadedClients) {
-              <span [matTooltip]="manageDeniedHint" [matTooltipDisabled]="manageable">
-                <button
-                  matIconButton
-                  [routerLink]="client.clientId | itemRoute: 'edit'"
-                  [disabled]="!manageable"
-                  matTooltip="Edit Client"
-                  [attr.aria-label]="
-                    manageable ? 'Edit Client' : 'Edit Client: ' + manageDeniedHint
-                  "
-                  appConfigManaged
-                  managedKind="Client"
-                  [managedResourceId]="client.clientId"
-                >
-                  <mat-icon>edit</mat-icon>
-                </button>
-              </span>
+              <button
+                matIconButton
+                [routerLink]="manageable ? (client.clientId | itemRoute: 'edit') : null"
+                [disabled]="!manageable"
+                disabledInteractive
+                [matTooltip]="manageable ? 'Edit Client' : manageDeniedHint"
+                [attr.aria-label]="manageable ? 'Edit Client' : 'Edit Client: ' + manageDeniedHint"
+                appConfigManaged
+                managedKind="Client"
+                [managedResourceId]="client.clientId"
+              >
+                <mat-icon>edit</mat-icon>
+              </button>
             }
             @if (rotatesSecrets) {
-              <span [matTooltip]="manageDeniedHint" [matTooltipDisabled]="manageable">
-                <button
-                  matIconButton
-                  [disabled]="!manageable"
-                  matTooltip="Rotate Secret - Generate a new secret (invalidates current)"
-                  [attr.aria-label]="
-                    manageable ? 'Rotate Secret' : 'Rotate Secret: ' + manageDeniedHint
-                  "
-                  (click)="rotateSecret(client)"
-                  appConfigManaged
-                  managedKind="Client"
-                  [managedResourceId]="ownershipId(client)"
-                >
-                  <mat-icon>autorenew</mat-icon>
-                </button>
-              </span>
+              <button
+                matIconButton
+                [disabled]="!manageable"
+                disabledInteractive
+                [matTooltip]="
+                  manageable
+                    ? 'Rotate Secret - Generate a new secret (invalidates current)'
+                    : manageDeniedHint
+                "
+                [attr.aria-label]="
+                  manageable ? 'Rotate Secret' : 'Rotate Secret: ' + manageDeniedHint
+                "
+                (click)="rotateSecret(client)"
+                appConfigManaged
+                managedKind="Client"
+                [managedResourceId]="ownershipId(client)"
+              >
+                <mat-icon>autorenew</mat-icon>
+              </button>
             }
             @if (!loadedClients) {
               <span>

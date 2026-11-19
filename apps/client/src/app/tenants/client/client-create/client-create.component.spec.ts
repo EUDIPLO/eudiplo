@@ -1,10 +1,12 @@
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
+import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltip } from '@angular/material/tooltip';
 import { By } from '@angular/platform-browser';
 import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { client } from '@eudiplo/sdk-core';
+import { of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ConfigOwnershipService } from '../../../config-portability/config-ownership.service';
@@ -12,6 +14,8 @@ import { ApiService } from '../../../core';
 import { PresentationManagementService } from '../../../presentation/presentation-config/presentation-management.service';
 import { JwtService } from '../../../services/jwt.service';
 import { grantHint } from '../../../services/role-grants';
+import { ApiClientService } from '../api-client.service';
+import { SecretDialogComponent } from '../secret-dialog/secret-dialog.component';
 import { ClientCreateComponent, type ConfigSource } from './client-create.component';
 
 const PRESENTATION = 'Allowed Verification Configs';
@@ -702,5 +706,72 @@ describe('ClientCreateComponent Save', () => {
     });
     expect(page.querySelector('[role="alert"]')).toBeNull();
     await vi.waitFor(() => expect(document.activeElement).toBe(page.querySelector('h1')));
+  });
+});
+
+describe('ClientCreateComponent create', () => {
+  let create: ReturnType<typeof vi.fn>;
+  let dialog: MatDialog;
+  let snackBar: { open: ReturnType<typeof vi.fn> };
+
+  async function submitNewClient(answer: object): Promise<void> {
+    create = vi.fn(async () => answer);
+    snackBar = { open: vi.fn() };
+    await TestBed.configureTestingModule({
+      providers: [
+        provideRouter([{ path: 'clients/create', component: ClientCreateComponent }]),
+        { provide: MatSnackBar, useValue: snackBar },
+        { provide: ApiService, useValue: { getBaseUrl: () => 'http://backend.test' } },
+        { provide: ApiClientService, useValue: { create } },
+        { provide: ConfigOwnershipService, useValue: { get: async () => undefined } },
+        {
+          provide: PresentationManagementService,
+          useValue: { loadConfigurations: async () => [] },
+        },
+        {
+          provide: JwtService,
+          useValue: {
+            getRoles: () => ['clients:manage', 'issuance:offer'],
+            hasRole: () => false,
+            grantHint: () => '',
+            canUseConfigPortability: () => false,
+          },
+        },
+      ],
+    }).compileComponents();
+    const harness = await RouterTestingHarness.create();
+    const component = await harness.navigateByUrl('/clients/create', ClientCreateComponent);
+    dialog = harness.routeDebugElement!.injector.get(MatDialog);
+    vi.spyOn(dialog, 'open').mockReturnValue({
+      afterClosed: () => of(undefined),
+    } as ReturnType<MatDialog['open']>);
+    vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    component.clientForm.patchValue({ clientId: 'shop', roles: ['issuance:offer'] });
+
+    await component.onSubmit();
+  }
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('shows the generated secret once after creating a client', async () => {
+    await submitNewClient({ clientId: 'shop', clientSecret: 's3cret', roles: ['issuance:offer'] });
+
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ clientId: 'shop' }));
+    expect(dialog.open).toHaveBeenCalledWith(
+      SecretDialogComponent,
+      expect.objectContaining({
+        data: { clientId: 'shop', secret: 's3cret', apiUrl: 'http://backend.test' },
+      })
+    );
+    expect(TestBed.inject(Router).navigate).toHaveBeenCalled();
+  });
+
+  it('says the client was created when the backend returns no secret', async () => {
+    await submitNewClient({ clientId: 'shop', roles: ['issuance:offer'] });
+
+    expect(dialog.open).not.toHaveBeenCalled();
+    expect(snackBar.open).toHaveBeenCalledWith('Client created successfully', 'Close', {
+      duration: 3000,
+    });
   });
 });
