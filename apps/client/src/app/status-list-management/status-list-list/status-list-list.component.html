@@ -147,35 +147,14 @@
           <ng-container matColumnDef="expiresAt">
             <th mat-header-cell *matHeaderCellDef>JWT Status</th>
             <td mat-cell *matCellDef="let list">
-              <!-- Focusable and above the row link, so that the tooltip opens by keyboard and mouse -->
-              @switch (getExpirationStatus(list)) {
-                @case ('valid') {
-                  <span
-                    class="badge status-active above-link"
-                    tabindex="0"
-                    [matTooltip]="getExpirationTooltip(list)"
-                    >Valid</span
-                  >
-                }
-                @case ('expiring') {
-                  <span
-                    class="badge status-warning above-link"
-                    tabindex="0"
-                    [matTooltip]="getExpirationTooltip(list)"
-                    >Expiring</span
-                  >
-                }
-                @case ('expired') {
-                  <span
-                    class="badge status-danger above-link"
-                    tabindex="0"
-                    [matTooltip]="getExpirationTooltip(list)"
-                    >Expired</span
-                  >
-                }
-                @default {
-                  <span class="muted">Not generated</span>
-                }
+              <!-- The tooltip gives the expiry to the mouse; the hidden text gives it to screen readers -->
+              @if (list.expiresAt) {
+                <span [class]="expirationBadgeClass(list)" [matTooltip]="getExpirationTooltip(list)"
+                  >{{ getExpirationLabel(list)
+                  }}<span class="visually-hidden">: {{ getExpirationTooltip(list) }}</span></span
+                >
+              } @else {
+                <span class="muted">Not generated</span>
               }
             </td>
           </ng-container>

@@ -121,16 +121,17 @@ describe('StatusListListComponent table', () => {
     expect(rows[0].querySelector('.mat-column-credentialConfigurationId .badge')?.textContent).toBe(
       'pid'
     );
-    expect(rows[0].querySelector('.mat-column-expiresAt .badge.status-warning')?.textContent).toBe(
-      'Expiring'
-    );
+    // The badge names the status and, for screen readers, the expiry its tooltip shows.
+    const expiring = rows[0].querySelector('.mat-column-expiresAt .badge.status-warning');
+    expect(expiring?.firstChild?.textContent).toBe('Expiring');
+    expect(expiring?.querySelector('.visually-hidden')?.textContent).toContain(': Expires soon:');
     expect(rows[1].querySelector('.mat-column-credentialConfigurationId')?.textContent).toContain(
       'Shared'
     );
     expect(rows[1].querySelector('.mat-column-keyChainId')?.textContent).toContain('Default');
-    expect(rows[1].querySelector('.mat-column-expiresAt .badge.status-danger')?.textContent).toBe(
-      'Expired'
-    );
+    expect(
+      rows[1].querySelector('.mat-column-expiresAt .badge.status-danger')?.firstChild?.textContent
+    ).toBe('Expired');
   });
 
   it('deletes an unused list from its row after confirming and takes its row out', async () => {

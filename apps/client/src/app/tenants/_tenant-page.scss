@@ -258,11 +258,11 @@
 }
 
 // Rows of a list table whose name links to the item and whose link covers the row, with an icon
-// before the name and the ID below it. Include inside the table rule. Markup: table.linked;
+// before the name and the ID below it. Include at the top of the page's styles. Markup: table.linked;
 // .item-cell > .item-icon + .item-copy (a.item-link + small); the actions in .row-actions sit
 // above the link.
 @mixin linked-rows {
-  &.linked tr.mat-mdc-row:not(.no-match) {
+  table.linked tr.mat-mdc-row:not(.no-match) {
     position: relative;
     cursor: pointer;
 

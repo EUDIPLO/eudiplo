@@ -132,6 +132,13 @@ export class StatusListListComponent extends BaseAsyncListComponent<StatusListRe
     return 'valid';
   }
 
+  /** Tone of the JWT status badge. */
+  expirationBadgeClass(list: StatusListResponseDto): string {
+    const tone = { valid: 'status-active', expiring: 'status-warning', expired: 'status-danger' };
+    const status = this.getExpirationStatus(list);
+    return `badge above-link ${status === 'none' ? '' : tone[status]}`.trim();
+  }
+
   /** The JWT status as the badge names it. */
   getExpirationLabel(list: StatusListResponseDto): string {
     return { valid: 'Valid', expiring: 'Expiring', expired: 'Expired', none: 'Not generated' }[
