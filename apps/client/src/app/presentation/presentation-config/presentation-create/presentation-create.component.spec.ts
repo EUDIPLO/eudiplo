@@ -10,6 +10,7 @@ import { PresentationManagementService } from '../presentation-management.servic
 import { EditorComponent } from '../../../utils/editor/editor.component';
 import { ThemeService } from '../../../services/theme.service';
 import { ConfigOwnershipService } from '../../../config-portability/config-ownership.service';
+import { expectHeadingFocusOnlyAfterRetry } from '../../../common/retry-focus.testing';
 import { expectAvailable, expectUnavailable } from '../../../common/unavailable-action.testing';
 
 const query = {
@@ -658,5 +659,21 @@ describe('Presentation configuration flow', () => {
       await vi.waitFor(() => expect(component.saving).toBe(false));
       expect(component.jsonViewUnavailableReason).toBe('');
     });
+  });
+
+  it('moves focus to the heading only after a retry loads the configuration', async () => {
+    const stored = { id: 'age-check', description: 'Age check', dcql_query: query };
+    route.snapshot.params = { id: 'age-check' };
+    route.snapshot.url = [{ path: 'age-check' }, { path: 'edit' }];
+    service.getPresentationById
+      .mockResolvedValueOnce(stored)
+      .mockRejectedValueOnce({ statusCode: 500, message: 'Unavailable' })
+      .mockResolvedValue(stored);
+
+    await expectHeadingFocusOnlyAfterRetry(
+      fixture,
+      () => component.loadConfigForEdit(),
+      () => !component.loadingConfig
+    );
   });
 });

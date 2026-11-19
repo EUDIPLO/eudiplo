@@ -1,9 +1,10 @@
 import { TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { provideRouter } from '@angular/router';
+import { ActivatedRoute, provideRouter } from '@angular/router';
 import { EMPTY } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { expectHeadingFocusOnlyAfterRetry } from '../../../common/retry-focus.testing';
 import { ConfigOwnershipService } from '../../../config-portability/config-ownership.service';
 import { AttributeProviderService } from '../attribute-provider.service';
 import { AttributeProviderCreateComponent } from './attribute-provider-create.component';
@@ -260,5 +261,30 @@ describe('AttributeProviderCreateComponent JSON View', () => {
     rejectSave({ statusCode: 500, message: 'Unavailable' });
     await vi.waitFor(() => expect(component.saving).toBe(false));
     expect(component.jsonViewUnavailableReason).toBe('');
+  });
+
+  it('moves focus to the heading only after a retry loads the attribute provider', async () => {
+    const getById = vi
+      .fn()
+      .mockResolvedValueOnce({ id: 'example', name: 'Example', url: 'https://a' })
+      .mockRejectedValueOnce({ statusCode: 500, message: 'Unavailable' })
+      .mockResolvedValue({ id: 'example', name: 'Example', url: 'https://a' });
+    await TestBed.configureTestingModule({
+      imports: [AttributeProviderCreateComponent],
+      providers: [
+        provideRouter([]),
+        { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => 'example' } } } },
+        { provide: AttributeProviderService, useValue: { getById } },
+        { provide: ConfigOwnershipService, useValue: { get: async () => undefined } },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(AttributeProviderCreateComponent);
+    const component = fixture.componentInstance;
+
+    await expectHeadingFocusOnlyAfterRetry(
+      fixture,
+      () => component.retryLoad(),
+      () => !component.loading
+    );
   });
 });

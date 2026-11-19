@@ -9,6 +9,7 @@ import { ClaimFieldDefinitionDto, client } from '@eudiplo/sdk-core';
 import { CredentialConfigCreateComponent } from './credential-config-create.component';
 import { configs } from './pre-config';
 import { claimSchemaError } from '../../../utils/claim-schema-check';
+import { expectHeadingFocusOnlyAfterRetry } from '../../../common/retry-focus.testing';
 import { expectAvailable, expectUnavailable } from '../../../common/unavailable-action.testing';
 import { ConfigOwnershipService } from '../../../config-portability/config-ownership.service';
 import { PresentationManagementService } from '../../../presentation/presentation-config/presentation-management.service';
@@ -862,6 +863,56 @@ describe('CredentialConfigCreateComponent editing', () => {
     expect(component.loadError).toBe('Failed to load credential configuration: Forbidden resource');
     component.onSubmit();
     expect(update).not.toHaveBeenCalled();
+  });
+});
+
+describe('CredentialConfigCreateComponent retry', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('moves focus to the heading only after a retry loads the configuration', async () => {
+    const stored = { id: 'pid', description: 'PID', vct: 'urn:pid' };
+    const getConfig = vi
+      .fn()
+      .mockResolvedValueOnce(stored)
+      .mockRejectedValueOnce({ statusCode: 500, message: 'Unavailable' })
+      .mockResolvedValue(stored);
+    vi.spyOn(client, 'get').mockResolvedValue({ data: [] } as any);
+    await TestBed.configureTestingModule({
+      imports: [CredentialConfigCreateComponent],
+      providers: [
+        provideRouter([]),
+        { provide: ActivatedRoute, useValue: { snapshot: { params: { id: 'pid' } } } },
+        { provide: CredentialConfigService, useValue: { getConfig } },
+        { provide: MatSnackBar, useValue: { open: vi.fn() } },
+        { provide: MatDialog, useValue: { open: vi.fn() } },
+        {
+          provide: PresentationManagementService,
+          useValue: { loadConfigurations: vi.fn().mockResolvedValue([]) },
+        },
+        {
+          provide: FrontendConfigService,
+          useValue: { getConfig: vi.fn().mockResolvedValue(null) },
+        },
+        {
+          provide: JwtService,
+          useValue: { getTenantId: () => 'tenant', canUseConfigPortability: () => false },
+        },
+        {
+          provide: ConfigOwnershipService,
+          useValue: { get: vi.fn().mockResolvedValue(undefined) },
+        },
+      ],
+    })
+      .overrideComponent(EditorComponent, { set: { template: '' } })
+      .compileComponents();
+    const fixture = TestBed.createComponent(CredentialConfigCreateComponent);
+    const component = fixture.componentInstance;
+
+    await expectHeadingFocusOnlyAfterRetry(
+      fixture,
+      () => component.loadConfigForEdit(),
+      () => !component.loadingConfig
+    );
   });
 });
 

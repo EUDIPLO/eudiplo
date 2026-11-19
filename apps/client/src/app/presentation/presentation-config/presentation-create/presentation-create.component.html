@@ -7,7 +7,9 @@
   }
   <header class="editor-header">
     <div>
-      <h2>{{ create ? 'Create Presentation' : 'Update Presentation' }}</h2>
+      <h2 #pageHeading tabindex="-1">
+        {{ create ? 'Create Presentation' : 'Update Presentation' }}
+      </h2>
       <p>Choose what to request from a wallet, then review how it will be verified.</p>
     </div>
     <div class="editor-actions">

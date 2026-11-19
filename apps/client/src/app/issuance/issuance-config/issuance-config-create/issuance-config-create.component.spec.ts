@@ -199,6 +199,22 @@ describe('issuer settings guided setup', () => {
     expect(open).toHaveBeenCalledOnce();
   });
 
+  it('opens no JSON View while a save runs, which would leave the dialog over the next screen', async () => {
+    const open = vi.fn(() => ({ afterClosed: () => EMPTY }));
+    Object.assign(component, { dialog: { open } });
+    await component.loadConfigForEdit();
+    service.saveConfiguration.mockReturnValue(new Promise(() => undefined));
+
+    component.onSubmit();
+
+    expect(service.saveConfiguration).toHaveBeenCalledOnce();
+    expect(component.jsonViewUnavailableReason).toBe(
+      'Wait until the issuer settings have been saved'
+    );
+    component.viewAsJson();
+    expect(open).not.toHaveBeenCalled();
+  });
+
   it("shows the backend's reason when saving is rejected", async () => {
     service.saveConfiguration.mockRejectedValue({
       statusCode: 409,
