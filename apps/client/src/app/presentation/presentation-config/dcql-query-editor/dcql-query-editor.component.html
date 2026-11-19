@@ -46,7 +46,7 @@
             ><mat-option value="mso_mdoc">mDOC</mat-option>
           </mat-select>
         </mat-form-field>
-        <mat-form-field class="full-width">
+        <mat-form-field class="full-width" subscriptSizing="dynamic">
           <mat-label>{{
             credential.format === 'dc+sd-jwt' ? 'Credential type (VCT)' : 'Document type'
           }}</mat-label>
@@ -55,10 +55,22 @@
             [ngModel]="credential.type"
             (ngModelChange)="credential.type = $event; updateQuery()"
             [ngModelOptions]="{ standalone: true }"
+            [matAutocomplete]="typeAutocomplete"
           />
-          <mat-hint
-            >Must match the type issued to the wallet. Import from an issuer if unsure.</mat-hint
-          >
+          <mat-autocomplete #typeAutocomplete="matAutocomplete">
+            @for (option of typeSuggestions(credential); track option.value) {
+              <mat-option [value]="option.value">
+                {{ option.label }} <small class="option-detail">{{ option.value }}</small>
+              </mat-option>
+            }
+          </mat-autocomplete>
+          @if (issuedHint(credential); as hint) {
+            <mat-hint>{{ hint }}</mat-hint>
+          } @else {
+            <mat-hint
+              >Must match the type issued to the wallet. Import from an issuer if unsure.</mat-hint
+            >
+          }
         </mat-form-field>
       </div>
       <h3>Claims to request</h3>
@@ -75,9 +87,15 @@
                     (ngModelChange)="claim.path[0] = $event; updateQuery()"
                     [ngModelOptions]="{ standalone: true }"
                     placeholder="org.iso.18013.5.1"
+                    [matAutocomplete]="namespaceAutocomplete"
                   />
+                  <mat-autocomplete #namespaceAutocomplete="matAutocomplete">
+                    @for (namespace of namespaceSuggestions(credential, claim); track namespace) {
+                      <mat-option [value]="namespace">{{ namespace }}</mat-option>
+                    }
+                  </mat-autocomplete>
                 </mat-form-field>
-                <mat-form-field
+                <mat-form-field subscriptSizing="dynamic"
                   ><mat-label>Claim name</mat-label>
                   <input
                     matInput
@@ -85,10 +103,21 @@
                     (ngModelChange)="claim.path[1] = $event; updateQuery()"
                     [ngModelOptions]="{ standalone: true }"
                     placeholder="family_name"
+                    [matAutocomplete]="claimNameAutocomplete"
+                    (focus)="focusedClaim = claim"
+                    (blur)="focusedClaim = null"
                   />
+                  <mat-autocomplete #claimNameAutocomplete="matAutocomplete">
+                    @for (name of claimNameSuggestions(credential, claim); track name) {
+                      <mat-option [value]="name">{{ name }}</mat-option>
+                    }
+                  </mat-autocomplete>
+                  @if (unpublishedHint(credential, claim); as warning) {
+                    <mat-hint class="unpublished-claim">{{ warning }}</mat-hint>
+                  }
                 </mat-form-field>
               } @else {
-                <mat-form-field
+                <mat-form-field subscriptSizing="dynamic"
                   ><mat-label>Claim path</mat-label>
                   <input
                     matInput
@@ -96,8 +125,20 @@
                     (ngModelChange)="setClaimPath(claim, $event)"
                     [ngModelOptions]="{ standalone: true }"
                     placeholder="given_name"
+                    [matAutocomplete]="claimPathAutocomplete"
+                    (focus)="focusedClaim = claim"
+                    (blur)="focusedClaim = null"
                   />
-                  <mat-hint>Use dots for nesting, e.g. address.locality.</mat-hint>
+                  <mat-autocomplete #claimPathAutocomplete="matAutocomplete">
+                    @for (path of claimPathSuggestions(credential, claim); track path) {
+                      <mat-option [value]="path">{{ path }}</mat-option>
+                    }
+                  </mat-autocomplete>
+                  @if (unpublishedHint(credential, claim); as warning) {
+                    <mat-hint class="unpublished-claim">{{ warning }}</mat-hint>
+                  } @else {
+                    <mat-hint>Use dots for nesting, e.g. address.locality.</mat-hint>
+                  }
                 </mat-form-field>
               }
             } @else {
@@ -153,6 +194,9 @@
                 <button mat-button type="button" (click)="claim.path.push(''); updateQuery()">
                   Add path segment
                 </button>
+                @if (unpublishedHint(credential, claim); as warning) {
+                  <p class="unpublished-claim field-hint">{{ warning }}</p>
+                }
               </div>
             }
             <button

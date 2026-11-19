@@ -4,6 +4,7 @@ import {
   languageOptionsWith,
 } from '../../../utils/language-options';
 import {
+  HostListener,
   ChangeDetectionStrategy,
   Component,
   ElementRef,
@@ -48,6 +49,8 @@ import {
 import { PresentationManagementService } from '../presentation-management.service';
 import { MatDialog } from '@angular/material/dialog';
 import { JsonViewDialogComponent } from '../../../issuance/credential-config/credential-config-create/json-view-dialog/json-view-dialog.component';
+import { TenantCredentialCatalogService } from '../issuer-metadata-browser/tenant-credential-catalog.service';
+import type { NormalizedCredential } from '../issuer-metadata-browser/issuer-metadata.service';
 import {
   IssuerMetadataBrowserComponent,
   type IssuerMetadataBrowserDialogData,
@@ -183,6 +186,9 @@ export class PresentationCreateComponent implements OnInit {
   readonly languageOptionsWith = languageOptionsWith;
 
   private readonly injector = inject(Injector);
+  private readonly credentialCatalog = inject(TenantCredentialCatalogService);
+  /** The credential configs this tenant issues, for hints in the query builder. */
+  knownCredentials: NormalizedCredential[] = [];
   /** Takes the focus after a successful Retry, which removed the focused Retry button. */
   @ViewChild('pageHeading', { read: ElementRef })
   private readonly pageHeading?: ElementRef<HTMLElement>;
@@ -239,6 +245,7 @@ export class PresentationCreateComponent implements OnInit {
 
   ngOnInit(): void {
     this.guided = !this.route.snapshot.params['id'];
+    this.loadKnownCredentials();
 
     // Load key chains for the select dropdown (filter by access usage type)
     keyChainControllerGetAll({}).then(
@@ -852,6 +859,18 @@ export class PresentationCreateComponent implements OnInit {
     ) {
       formValue.statusCheckMode = 'strict';
     }
+  }
+
+  /**
+   * Loads the credential configs of this tenant for the query builder hints,
+   * again when the user returns to this tab, where a credential config may
+   * have been created in the meantime.
+   */
+  @HostListener('window:focus')
+  loadKnownCredentials(): void {
+    void this.credentialCatalog.load().then((credentials) => {
+      this.knownCredentials = credentials;
+    });
   }
 
   /**

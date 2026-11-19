@@ -23,23 +23,12 @@ import {
   NormalizedCredential,
   NormalizedClaim,
 } from './issuer-metadata.service';
+import {
+  isMissingIssuanceConfig,
+  TenantCredentialCatalogService,
+} from './tenant-credential-catalog.service';
 
 const TENANT_CREDENTIALS_FAILURE = 'Failed to load credential configs';
-
-/**
- * Whether the issuer metadata could not be built because the tenant has no
- * Issuer Settings. The endpoint reports that as a 500 whose
- * `error_description` carries the backend's `IssuanceConfigurationNotFound`
- * text, so the text is the only signal; a tenant that only verifies gets it.
- */
-function isMissingIssuanceConfig(err: unknown): boolean {
-  const body = (err as { error?: { error_description?: unknown } } | null)?.error;
-  const description = body?.error_description;
-  return (
-    typeof description === 'string' &&
-    /Issuance configuration for tenant .* not found/.test(description)
-  );
-}
 
 /**
  * Why the tenant's credential configs could not be loaded. The issuer metadata
@@ -93,7 +82,6 @@ export interface IssuerMetadataBrowserDialogData {
     JsonPipe,
     RouterLink,
   ],
-  providers: [IssuerMetadataService],
   templateUrl: './issuer-metadata-browser.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './issuer-metadata-browser.component.scss',
@@ -123,7 +111,8 @@ export class IssuerMetadataBrowserComponent implements OnInit {
     @Inject(MAT_DIALOG_DATA) public data: IssuerMetadataBrowserDialogData | null,
     private metadataService: IssuerMetadataService,
     private jwtService: JwtService,
-    private credentialConfigService: CredentialConfigService
+    private credentialConfigService: CredentialConfigService,
+    private catalog: TenantCredentialCatalogService
   ) {
     this.fromTenant = data?.source === 'tenant';
     this.canCreateCredentialConfig = jwtService.hasRole('issuance:manage');
@@ -178,11 +167,7 @@ export class IssuerMetadataBrowserComponent implements OnInit {
 
     const tenantId = this.jwtService.getTenantId();
     try {
-      if (!tenantId) {
-        throw new Error('Your session has no tenant, so there are no credential configs to list.');
-      }
-      this.metadata = await this.metadataService.fetchTenantMetadata(tenantId);
-      this.credentials = this.metadataService.normalizeCredentials(this.metadata);
+      this.credentials = await this.catalog.fetch();
       this.noTenantCredentials = this.credentials.length === 0;
     } catch (err: unknown) {
       if (tenantId && (await this.hasNoCredentialConfigs(err))) {
