@@ -1,45 +1,35 @@
-import {
-  Component,
-  OnInit,
-  ViewChild,
-  AfterViewInit,
-  ChangeDetectionStrategy,
-} from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { Router, RouterModule } from '@angular/router';
+import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { DecimalPipe } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { RouterModule } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
+import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
-import { MatTableDataSource, MatTableModule } from '@angular/material/table';
-import { MatSort, MatSortModule } from '@angular/material/sort';
+import { MatTableModule } from '@angular/material/table';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { MatChipsModule } from '@angular/material/chips';
-import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { StatusListResponseDto } from '@eudiplo/sdk-core';
 import { StatusListManagementService } from '../status-list-management.service';
+import { formatCapacity, getUsageColor, getUsagePercentage } from '../status-list-usage';
+import { BaseAsyncListComponent } from '../../common/base-async-list.component';
 import { ConfigOwnershipDirective } from '../../config-portability/config-ownership.directive';
 import { LoadErrorComponent } from '../../common/load-error.component';
-import { getApiErrorMessage } from '../../utils/error-message';
-import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { copyToClipboard } from '../../utils/copy-to-clipboard';
 
 @Component({
   selector: 'app-status-list-list',
   imports: [
-    CommonModule,
+    DecimalPipe,
+    FormsModule,
     RouterModule,
     MatTableModule,
-    MatSortModule,
     MatButtonModule,
+    MatCardModule,
     MatIconModule,
     MatTooltipModule,
     MatProgressBarModule,
     MatProgressSpinnerModule,
-    MatChipsModule,
-    MatSnackBarModule,
-    FlexLayoutModule,
     ConfigOwnershipDirective,
     LoadErrorComponent,
   ],
@@ -47,13 +37,12 @@ import { copyToClipboard } from '../../utils/copy-to-clipboard';
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './status-list-list.component.scss',
 })
-export class StatusListListComponent implements OnInit, AfterViewInit {
-  @ViewChild(MatSort) sort!: MatSort;
+export class StatusListListComponent extends BaseAsyncListComponent<StatusListResponseDto> {
+  protected readonly loadFailedMessage = 'Failed to load status lists';
 
-  dataSource = new MatTableDataSource<StatusListResponseDto>([]);
-  isLoading = true;
-  /** Set when the lists could not be loaded, so the page does not claim there are none. */
-  loadError = '';
+  get lists(): StatusListResponseDto[] {
+    return this.items;
+  }
 
   displayedColumns = [
     'id',
@@ -65,81 +54,62 @@ export class StatusListListComponent implements OnInit, AfterViewInit {
     'actions',
   ];
 
-  constructor(
-    private readonly statusListService: StatusListManagementService,
-    private readonly snackBar: MatSnackBar,
-    private readonly router: Router
-  ) {}
-
-  ngOnInit(): void {
-    void this.loadData();
+  constructor(private readonly statusListService: StatusListManagementService) {
+    super();
   }
 
-  ngAfterViewInit(): void {
-    this.dataSource.sort = this.sort;
+  protected fetchItems(): Promise<StatusListResponseDto[]> {
+    return this.statusListService.getLists();
   }
 
-  private async loadData(): Promise<void> {
-    this.isLoading = true;
-    this.loadError = '';
-    try {
-      const lists = await this.statusListService.getLists();
-      this.dataSource.data = lists;
-    } catch (error) {
-      console.error('Error loading status lists:', error);
-      this.loadError = getApiErrorMessage(error, 'Failed to load status lists');
-    } finally {
-      this.isLoading = false;
-    }
+  /** Also finds lists by their JWT status, such as "expired". */
+  protected override searchTexts(list: StatusListResponseDto): string[] {
+    return [
+      list.id,
+      list.credentialConfigurationId ?? '',
+      list.keyChainId ?? '',
+      this.getExpirationLabel(list),
+    ];
   }
 
-  async refresh(): Promise<void> {
-    await this.loadData();
+  protected override sortName(list: StatusListResponseDto): string {
+    return list.id;
   }
 
   getUsagePercentage(list: StatusListResponseDto): number {
-    return this.statusListService.getUsagePercentage(list);
+    return getUsagePercentage(list);
   }
 
   getUsageColor(list: StatusListResponseDto): string {
-    const percentage = this.getUsagePercentage(list);
-    if (percentage >= 90) return 'warn';
-    if (percentage >= 70) return 'accent';
-    return 'primary';
+    return getUsageColor(list);
   }
 
   formatCapacity(capacity: number): string {
-    return this.statusListService.formatCapacity(capacity);
+    return formatCapacity(capacity);
   }
 
-  navigateToCreate(): void {
-    this.router.navigate(['/status-lists', 'create']);
+  /** Why Delete waits or refuses, else what it does. */
+  listDeleteTooltip(list: StatusListResponseDto): string {
+    if (list.usedEntries > 0) return 'Cannot delete: entries in use';
+    return this.deleteTooltip(list.id, 'Delete status list', 'Deleting the status list…');
   }
 
-  navigateToEdit(list: StatusListResponseDto): void {
-    this.router.navigate(['/status-lists', list.id]);
-  }
-
-  async deleteList(list: StatusListResponseDto): Promise<void> {
+  /** A list with entries in use cannot be deleted; its button only looks disabled. */
+  deleteList(list: StatusListResponseDto): Promise<void> {
     if (list.usedEntries > 0) {
       this.snackBar.open('Cannot delete a status list that has entries in use', 'Close', {
         duration: 5000,
       });
-      return;
+      return Promise.resolve();
     }
-
-    if (!confirm(`Delete status list "${list.id}"? This cannot be undone.`)) {
-      return;
-    }
-
-    try {
-      await this.statusListService.deleteList(list.id);
-      this.snackBar.open('Status list deleted successfully', 'Close', { duration: 3000 });
-      this.refresh();
-    } catch (error) {
-      console.error('Error deleting status list:', error);
-      openErrorSnackBar(this.snackBar, getApiErrorMessage(error, 'Failed to delete status list'));
-    }
+    return this.deleteItem({
+      item: list,
+      id: list.id,
+      question: `Delete status list "${list.id}"? This cannot be undone.`,
+      request: () => this.statusListService.deleteList(list.id),
+      deleted: 'Status list deleted successfully',
+      failed: 'Failed to delete status list',
+    });
   }
 
   async copyUri(uri: string): Promise<void> {
@@ -160,6 +130,20 @@ export class StatusListListComponent implements OnInit, AfterViewInit {
     // Expiring if less than 1 hour remaining
     if (diffMs < 60 * 60 * 1000) return 'expiring';
     return 'valid';
+  }
+
+  /** Tone of the JWT status badge. */
+  expirationBadgeClass(list: StatusListResponseDto): string {
+    const tone = { valid: 'status-active', expiring: 'status-warning', expired: 'status-danger' };
+    const status = this.getExpirationStatus(list);
+    return `badge above-link ${status === 'none' ? '' : tone[status]}`.trim();
+  }
+
+  /** The JWT status as the badge names it. */
+  getExpirationLabel(list: StatusListResponseDto): string {
+    return { valid: 'Valid', expiring: 'Expiring', expired: 'Expired', none: 'Not generated' }[
+      this.getExpirationStatus(list)
+    ];
   }
 
   getExpirationTooltip(list: StatusListResponseDto): string {

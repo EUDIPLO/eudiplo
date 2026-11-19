@@ -38,7 +38,6 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import {
   IssuanceConfig,
   TrustList,
@@ -109,7 +108,6 @@ type WalletProviderTrustListEntry = Omit<WalletProviderTrustListRefDto, 'verifie
     MatChipsModule,
     MatExpansionModule,
     MatTooltipModule,
-    FlexLayoutModule,
     ReactiveFormsModule,
     NgTemplateOutlet,
     RouterModule,
@@ -1667,6 +1665,8 @@ export class IssuanceConfigCreateComponent implements OnInit {
         this.loadingConfig = true;
         try {
           await this.applyConfiguration(result);
+          // A document from JSON View is a change, although patching does not mark it as one
+          this.form.markAsDirty();
         } finally {
           this.loadingConfig = false;
         }

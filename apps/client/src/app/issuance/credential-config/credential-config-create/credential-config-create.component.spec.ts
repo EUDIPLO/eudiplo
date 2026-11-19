@@ -911,7 +911,8 @@ describe('CredentialConfigCreateComponent retry', () => {
     await expectHeadingFocusOnlyAfterRetry(
       fixture,
       () => component.loadConfigForEdit(),
-      () => !component.loadingConfig
+      () => !component.loadingConfig,
+      'h1'
     );
   });
 });

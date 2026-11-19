@@ -2,6 +2,7 @@ import { TestbedHarnessEnvironment } from '@angular/cdk/testing/testbed';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatSelectHarness } from '@angular/material/select/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { provideRouter } from '@angular/router';
 import { client } from '@eudiplo/sdk-core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -41,8 +42,9 @@ describe('StatusListConfigComponent', () => {
     return fixture.nativeElement as HTMLElement;
   }
 
+  /** The page heading, where focus goes after a retry or a reset that left it nowhere. */
   function settingsTitle(element: HTMLElement): HTMLElement | null {
-    return element.querySelector('mat-card-title');
+    return element.querySelector('h1');
   }
 
   function select(name: string): Promise<MatSelectHarness> {
@@ -92,6 +94,7 @@ describe('StatusListConfigComponent', () => {
     await TestBed.configureTestingModule({
       imports: [StatusListConfigComponent],
       providers: [
+        provideRouter([]),
         {
           provide: ConfigOwnershipService,
           useValue: { get: async () => undefined },
@@ -172,7 +175,7 @@ describe('StatusListConfigComponent', () => {
       fixture.detectChanges();
       expect(document.activeElement).toBe(settingsTitle(element));
     });
-    expect(settingsTitle(element)?.textContent).toContain('Status List Settings');
+    expect(settingsTitle(element)?.textContent).toContain('Status List Default Settings');
     expect(fixture.componentInstance.configForm.value).toEqual({
       capacity: 50000,
       bits: 2,
@@ -321,7 +324,7 @@ describe('StatusListConfigComponent', () => {
     expect(requests).not.toContain('DELETE /api/status-list-config');
   });
 
-  it('moves focus to the settings title when a reset ends with focus lost', async () => {
+  it('moves focus to the page heading when a reset ends with focus lost', async () => {
     vi.stubGlobal('confirm', () => true);
     responses['DELETE /api/status-list-config'] = { status: 204 };
     const element = await render();
@@ -455,6 +458,53 @@ describe('StatusListConfigComponent', () => {
 
     expect(fixture.componentInstance.configForm.value).toMatchObject({ capacity: 1000, ttl: 900 });
     expect(fixture.componentInstance.currentConfig).toEqual({ capacity: 10000 });
+  });
+
+  it('links back to the status lists and marks a preset as unsaved until it is saved', async () => {
+    responses['PUT /api/status-list-config'] = { status: 200, body: { capacity: 10000, ttl: 900 } };
+    const element = await render();
+
+    const back = element.querySelector('a.back-link');
+    expect(back?.getAttribute('href')).toBe('/status-lists');
+    expect(back?.getAttribute('aria-label')).toBe('Back to Status Lists');
+    // The sections that showFieldsToFix names.
+    expect([...element.querySelectorAll('.section-intro h2')].map((h) => h.textContent)).toEqual([
+      'Status List Capacity',
+      'Bits per Status',
+      'JWT Time-to-Live (TTL)',
+      'JWT Regeneration Mode',
+      'Status List Aggregation',
+    ]);
+    expect(button(element, '10,000').getAttribute('aria-pressed')).toBe('true');
+    expect(element.querySelector('.change-state')?.textContent?.trim()).toBe('');
+
+    button(element, '15 min').click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.configForm.value.ttl).toBe(900);
+    expect(button(element, '15 min').getAttribute('aria-pressed')).toBe('true');
+    expect(element.querySelector('.change-state')?.textContent?.trim()).toBe('Unsaved changes');
+
+    await click(element, 'Save Configuration');
+    fixture.detectChanges();
+    expect(bodies['PUT /api/status-list-config']).toStrictEqual({ capacity: 10000, ttl: 900 });
+    expect(element.querySelector('.change-state')?.textContent?.trim()).toBe('');
+  });
+
+  it('clears the capacity with the "Use default" preset and marks the form as changed', async () => {
+    const element = await render();
+    const section = element.querySelector<HTMLElement>(
+      'section[aria-labelledby="capacity-heading"]'
+    )!;
+    expect(fixture.componentInstance.configForm.value.capacity).toBe(10000);
+    expect(fixture.componentInstance.configForm.dirty).toBe(false);
+
+    button(section, 'Use default').click();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.configForm.value.capacity).toBeNull();
+    expect(fixture.componentInstance.configForm.dirty).toBe(true);
+    expect(button(section, 'Use default').getAttribute('aria-pressed')).toBe('true');
+    expect(element.querySelector('.change-state')?.textContent?.trim()).toBe('Unsaved changes');
   });
 
   it('warns about immediate regeneration only when it is chosen', async () => {

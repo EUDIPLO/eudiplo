@@ -1,12 +1,24 @@
-<div fxLayout="column" fxFlex fxLayoutGap="24px">
+<div class="page form-page">
+  <a class="back-link" matButton routerLink="/status-lists" aria-label="Back to Status Lists">
+    <mat-icon>arrow_back</mat-icon>
+    Status Lists
+  </a>
+
   <app-config-ownership-notice kind="Tenant" resourceId="tenant" />
-  <div fxLayout="row" fxLayoutAlign="space-between center">
-    <div>
-      <h2>Status List Configuration</h2>
-      <p class="subtitle">Configure how this tenant's status lists are created and signed</p>
+
+  <header class="page-header">
+    <div class="heading">
+      <span class="form-avatar" aria-hidden="true"><mat-icon>tune</mat-icon></span>
+      <div>
+        <h1 #pageHeading tabindex="-1">Status List Default Settings</h1>
+        <p>
+          How this tenant's status lists are created and signed. Capacity and bits only affect newly
+          created status lists.
+        </p>
+      </div>
     </div>
     <a
-      mat-stroked-button
+      matButton="outlined"
       href="https://docs.eudiplo.dev/issuance/revocation"
       target="_blank"
       rel="noopener"
@@ -14,12 +26,10 @@
       <mat-icon>open_in_new</mat-icon>
       Documentation
     </a>
-  </div>
+  </header>
 
   @if (isLoading) {
-    <div fxLayout="row" fxLayoutAlign="center center" class="loading-container">
-      <mat-spinner diameter="48"></mat-spinner>
-    </div>
+    <p class="loading-state"><output>Loading status list settings…</output></p>
   } @else if (loadError) {
     <app-load-error
       [message]="loadError"
@@ -27,31 +37,20 @@
       (retry)="loadConfig()"
     />
   } @else {
-    <mat-card>
-      <mat-card-header>
-        <mat-icon mat-card-avatar>format_list_bulleted</mat-icon>
-        <mat-card-title #settingsTitle tabindex="-1">Status List Settings</mat-card-title>
-        <mat-card-subtitle>
-          Configure how credential status is tracked. Capacity and bits only affect newly created
-          status lists.
-        </mat-card-subtitle>
-      </mat-card-header>
-
-      <mat-card-content>
-        <form #formElement [formGroup]="configForm" fxLayout="column" fxLayoutGap="24px">
-          <!-- Capacity Configuration -->
-          <div class="config-section">
-            <h3>
-              <mat-icon>straighten</mat-icon>
-              Status List Capacity
-            </h3>
-            <p class="section-description">
-              Number of entries in new status lists. Larger lists can track more credentials but use
-              more storage. Leave empty to use the global default that the operator of this instance
-              sets with STATUS_CAPACITY.
-            </p>
-
-            <mat-form-field appearance="outline" class="full-width">
+    <form #formElement [formGroup]="configForm" (ngSubmit)="onSave()">
+      <!-- Each section: what it is for on the left, its field on the right -->
+      <section class="form-section" aria-labelledby="capacity-heading">
+        <div class="section-intro">
+          <h2 id="capacity-heading">Status List Capacity</h2>
+          <p>
+            Number of entries in new status lists. Larger lists can track more credentials but use
+            more storage. Leave empty to use the global default that the operator of this instance
+            sets with STATUS_CAPACITY.
+          </p>
+        </div>
+        <mat-card appearance="outlined">
+          <mat-card-content class="field-stack">
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
               <mat-label>List capacity</mat-label>
               <input
                 matInput
@@ -70,88 +69,59 @@
               }
             </mat-form-field>
 
-            <div class="capacity-presets" fxLayout="row wrap" fxLayoutGap="8px">
-              <button
-                mat-stroked-button
-                type="button"
-                (click)="configForm.patchValue({ capacity: 1000 })"
-                [color]="configForm.get('capacity')?.value === 1000 ? 'primary' : undefined"
-              >
-                1,000
-              </button>
-              <button
-                mat-stroked-button
-                type="button"
-                (click)="configForm.patchValue({ capacity: 10000 })"
-                [color]="configForm.get('capacity')?.value === 10000 ? 'primary' : undefined"
-              >
-                10,000
-              </button>
-              <button
-                mat-stroked-button
-                type="button"
-                (click)="configForm.patchValue({ capacity: 50000 })"
-                [color]="configForm.get('capacity')?.value === 50000 ? 'primary' : undefined"
-              >
-                50,000
-              </button>
-              <button
-                mat-stroked-button
-                type="button"
-                (click)="configForm.patchValue({ capacity: 100000 })"
-                [color]="configForm.get('capacity')?.value === 100000 ? 'primary' : undefined"
-              >
-                100,000
-              </button>
-              <button
-                mat-stroked-button
-                type="button"
-                (click)="configForm.patchValue({ capacity: null })"
-                [color]="!configForm.get('capacity')?.value ? 'accent' : undefined"
-              >
-                Use default
-              </button>
+            <div class="presets">
+              @for (preset of capacityPresets; track preset.label) {
+                <button
+                  [matButton]="
+                    configForm.get('capacity')?.value === preset.value ? 'tonal' : 'outlined'
+                  "
+                  type="button"
+                  [attr.aria-pressed]="configForm.get('capacity')?.value === preset.value"
+                  (click)="choosePreset('capacity', preset.value)"
+                >
+                  {{ preset.label }}
+                </button>
+              }
             </div>
-          </div>
+          </mat-card-content>
+        </mat-card>
+      </section>
 
-          <mat-divider></mat-divider>
-
-          <!-- Bits Configuration -->
-          <div class="config-section">
-            <h3>
-              <mat-icon>memory</mat-icon>
-              Bits per Status
-            </h3>
-            <p class="section-description">
-              Number of bits per credential status entry in new status lists. More bits allow more
-              status states (e.g., suspended) but use more storage. Without a choice, the global
-              default that the operator of this instance sets with STATUS_BITS applies.
-            </p>
-
-            <mat-form-field appearance="outline" floatLabel="always" class="full-width">
+      <section class="form-section" aria-labelledby="bits-heading">
+        <div class="section-intro">
+          <h2 id="bits-heading">Bits per Status</h2>
+          <p>
+            Number of bits per credential status entry in new status lists. More bits allow more
+            status states (e.g., suspended) but use more storage. Without a choice, the global
+            default that the operator of this instance sets with STATUS_BITS applies.
+          </p>
+        </div>
+        <mat-card appearance="outlined">
+          <mat-card-content class="field-stack">
+            <mat-form-field appearance="outline" floatLabel="always" subscriptSizing="dynamic">
               <mat-label>Bits per status</mat-label>
               <mat-select formControlName="bits" [placeholder]="globalDefaultLabel('bits')">
                 <mat-select-trigger>
                   {{ getSelectedBitsLabel() }}
                 </mat-select-trigger>
                 <mat-option [value]="null">
-                  <div fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px">
+                  <span class="option">
                     <mat-icon>settings_backup_restore</mat-icon>
-                    <div>
+                    <span>
                       <strong>Use global default</strong>
-                      <div class="option-description">Follow STATUS_BITS of this instance</div>
-                    </div>
-                  </div>
+                      <span class="option-description">Follow STATUS_BITS of this instance</span>
+                    </span>
+                  </span>
                 </mat-option>
                 @for (option of bitsOptions; track option.value) {
                   <mat-option [value]="option.value">
-                    <div fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px">
+                    <span class="option">
                       <mat-icon>memory</mat-icon>
-                      <div>
+                      <span>
                         <strong>{{ option.label }}</strong>
-                        <div class="option-description">{{ option.description }}</div>
-                      </div>
-                    </div>
+                        <span class="option-description">{{ option.description }}</span>
+                      </span>
+                    </span>
                   </mat-option>
                 }
               </mat-select>
@@ -159,7 +129,7 @@
 
             @if (configForm.get('bits')?.value >= 2) {
               <div class="info-box">
-                <mat-icon>info</mat-icon>
+                <mat-icon aria-hidden="true">info</mat-icon>
                 <span>
                   <strong>{{ configForm.get('bits')?.value }} bits</strong> allows
                   {{ Math.pow(2, $safeNavigationMigration(configForm.get('bits')?.value)) }}
@@ -168,23 +138,22 @@
                 </span>
               </div>
             }
-          </div>
+          </mat-card-content>
+        </mat-card>
+      </section>
 
-          <mat-divider></mat-divider>
-
-          <!-- TTL Configuration -->
-          <div class="config-section">
-            <h3>
-              <mat-icon>schedule</mat-icon>
-              JWT Time-to-Live (TTL)
-            </h3>
-            <p class="section-description">
-              How long verifiers can cache the status list JWT before fetching a fresh copy. The JWT
-              will include <code>exp</code> and <code>ttl</code> claims per RFC 9528. Leave empty to
-              use the global default that the operator of this instance sets with STATUS_TTL.
-            </p>
-
-            <mat-form-field appearance="outline" class="full-width">
+      <section class="form-section" aria-labelledby="ttl-heading">
+        <div class="section-intro">
+          <h2 id="ttl-heading">JWT Time-to-Live (TTL)</h2>
+          <p>
+            How long verifiers can cache the status list JWT before fetching a fresh copy. The JWT
+            will include <code>exp</code> and <code>ttl</code> claims per RFC 9528. Leave empty to
+            use the global default that the operator of this instance sets with STATUS_TTL.
+          </p>
+        </div>
+        <mat-card appearance="outlined">
+          <mat-card-content class="field-stack">
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
               <mat-label>TTL (seconds)</mat-label>
               <input
                 matInput
@@ -202,65 +171,34 @@
               }
             </mat-form-field>
 
-            <div class="length-presets" fxLayout="row wrap" fxLayoutGap="8px">
-              <button
-                mat-stroked-button
-                type="button"
-                (click)="configForm.patchValue({ ttl: 300 })"
-                [color]="configForm.get('ttl')?.value === 300 ? 'primary' : undefined"
-              >
-                5 min
-              </button>
-              <button
-                mat-stroked-button
-                type="button"
-                (click)="configForm.patchValue({ ttl: 900 })"
-                [color]="configForm.get('ttl')?.value === 900 ? 'primary' : undefined"
-              >
-                15 min
-              </button>
-              <button
-                mat-stroked-button
-                type="button"
-                (click)="configForm.patchValue({ ttl: 3600 })"
-                [color]="configForm.get('ttl')?.value === 3600 ? 'primary' : undefined"
-              >
-                1 hour
-              </button>
-              <button
-                mat-stroked-button
-                type="button"
-                (click)="configForm.patchValue({ ttl: 86400 })"
-                [color]="configForm.get('ttl')?.value === 86400 ? 'primary' : undefined"
-              >
-                24 hours
-              </button>
-              <button
-                mat-stroked-button
-                type="button"
-                (click)="configForm.patchValue({ ttl: null })"
-                [color]="!configForm.get('ttl')?.value ? 'accent' : undefined"
-              >
-                Use default
-              </button>
+            <div class="presets">
+              @for (preset of ttlPresets; track preset.label) {
+                <button
+                  [matButton]="configForm.get('ttl')?.value === preset.value ? 'tonal' : 'outlined'"
+                  type="button"
+                  [attr.aria-pressed]="configForm.get('ttl')?.value === preset.value"
+                  (click)="choosePreset('ttl', preset.value)"
+                >
+                  {{ preset.label }}
+                </button>
+              }
             </div>
-          </div>
+          </mat-card-content>
+        </mat-card>
+      </section>
 
-          <mat-divider></mat-divider>
-
-          <!-- Immediate Update Configuration -->
-          <div class="config-section">
-            <h3>
-              <mat-icon>bolt</mat-icon>
-              JWT Regeneration Mode
-            </h3>
-            <p class="section-description">
-              Controls when the status list JWT is regenerated after a credential status change
-              (e.g., revocation). Without a choice, the global default that the operator of this
-              instance sets with STATUS_IMMEDIATE_UPDATE applies.
-            </p>
-
-            <mat-form-field appearance="outline" floatLabel="always" class="full-width">
+      <section class="form-section" aria-labelledby="regeneration-heading">
+        <div class="section-intro">
+          <h2 id="regeneration-heading">JWT Regeneration Mode</h2>
+          <p>
+            Controls when the status list JWT is regenerated after a credential status change (e.g.,
+            revocation). Without a choice, the global default that the operator of this instance
+            sets with STATUS_IMMEDIATE_UPDATE applies.
+          </p>
+        </div>
+        <mat-card appearance="outlined">
+          <mat-card-content class="field-stack">
+            <mat-form-field appearance="outline" floatLabel="always" subscriptSizing="dynamic">
               <mat-label>Regeneration mode</mat-label>
               <mat-select
                 formControlName="immediateUpdate"
@@ -270,46 +208,46 @@
                   {{ immediateUpdateLabel(configForm.get('immediateUpdate')?.value) }}
                 </mat-select-trigger>
                 <mat-option [value]="null">
-                  <div fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px">
+                  <span class="option">
                     <mat-icon>settings_backup_restore</mat-icon>
-                    <div>
+                    <span>
                       <strong>Use global default</strong>
-                      <div class="option-description">
+                      <span class="option-description">
                         Follow STATUS_IMMEDIATE_UPDATE of this instance
-                      </div>
-                    </div>
-                  </div>
+                      </span>
+                    </span>
+                  </span>
                 </mat-option>
                 <mat-option [value]="false">
-                  <div fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px">
+                  <span class="option">
                     <mat-icon>schedule</mat-icon>
-                    <div>
+                    <span>
                       <strong>{{ immediateUpdateLabel(false) }}</strong>
-                      <div class="option-description">
+                      <span class="option-description">
                         Regenerated when requested after the TTL has expired. More efficient, but
                         verifiers may see a stale status until then.
-                      </div>
-                    </div>
-                  </div>
+                      </span>
+                    </span>
+                  </span>
                 </mat-option>
                 <mat-option [value]="true">
-                  <div fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px">
+                  <span class="option">
                     <mat-icon>bolt</mat-icon>
-                    <div>
+                    <span>
                       <strong>{{ immediateUpdateLabel(true) }}</strong>
-                      <div class="option-description">
+                      <span class="option-description">
                         Regenerated on every status change. Verifiers always see the latest status,
                         but it uses more server resources.
-                      </div>
-                    </div>
-                  </div>
+                      </span>
+                    </span>
+                  </span>
                 </mat-option>
               </mat-select>
             </mat-form-field>
 
             @if (configForm.get('immediateUpdate')?.value === true) {
               <div class="info-box warning">
-                <mat-icon>warning</mat-icon>
+                <mat-icon aria-hidden="true">warning</mat-icon>
                 <span>
                   <strong>Performance note:</strong> Immediate mode regenerates the JWT on every
                   status change. For high-volume scenarios, consider using lazy mode with a shorter
@@ -317,25 +255,24 @@
                 </span>
               </div>
             }
-          </div>
+          </mat-card-content>
+        </mat-card>
+      </section>
 
-          <mat-divider></mat-divider>
-
-          <!-- Aggregation Configuration -->
-          <div class="config-section">
-            <h3>
-              <mat-icon>library_books</mat-icon>
-              Status List Aggregation
-            </h3>
-            <p class="section-description">
-              Per RFC 9528 Section 9, status list aggregation enables verifiers to pre-fetch all
-              status lists for offline validation. When enabled, each status list JWT includes an
-              <code>aggregation_uri</code> pointing to an endpoint that returns all status list
-              URIs. Without a choice, the global default that the operator of this instance sets
-              with STATUS_ENABLE_AGGREGATION applies.
-            </p>
-
-            <mat-form-field appearance="outline" floatLabel="always" class="full-width">
+      <section class="form-section" aria-labelledby="aggregation-heading">
+        <div class="section-intro">
+          <h2 id="aggregation-heading">Status List Aggregation</h2>
+          <p>
+            Per RFC 9528 Section 9, status list aggregation enables verifiers to pre-fetch all
+            status lists for offline validation. When enabled, each status list JWT includes an
+            <code>aggregation_uri</code> pointing to an endpoint that returns all status list URIs.
+            Without a choice, the global default that the operator of this instance sets with
+            STATUS_ENABLE_AGGREGATION applies.
+          </p>
+        </div>
+        <mat-card appearance="outlined">
+          <mat-card-content class="field-stack">
+            <mat-form-field appearance="outline" floatLabel="always" subscriptSizing="dynamic">
               <mat-label>Aggregation</mat-label>
               <mat-select
                 formControlName="enableAggregation"
@@ -345,49 +282,60 @@
                   {{ aggregationLabel(configForm.get('enableAggregation')?.value) }}
                 </mat-select-trigger>
                 <mat-option [value]="null">
-                  <div fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px">
+                  <span class="option">
                     <mat-icon>settings_backup_restore</mat-icon>
-                    <div>
+                    <span>
                       <strong>Use global default</strong>
-                      <div class="option-description">
+                      <span class="option-description">
                         Follow STATUS_ENABLE_AGGREGATION of this instance
-                      </div>
-                    </div>
-                  </div>
+                      </span>
+                    </span>
+                  </span>
                 </mat-option>
                 <mat-option [value]="true">
-                  <div fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px">
+                  <span class="option">
                     <mat-icon>library_books</mat-icon>
-                    <div>
+                    <span>
                       <strong>{{ aggregationLabel(true) }}</strong>
-                      <div class="option-description">
+                      <span class="option-description">
                         Status list JWTs include an aggregation_uri claim for offline validation
-                      </div>
-                    </div>
-                  </div>
+                      </span>
+                    </span>
+                  </span>
                 </mat-option>
                 <mat-option [value]="false">
-                  <div fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px">
+                  <span class="option">
                     <mat-icon>link_off</mat-icon>
-                    <div>
+                    <span>
                       <strong>{{ aggregationLabel(false) }}</strong>
-                      <div class="option-description">
+                      <span class="option-description">
                         Verifiers must fetch each status list individually
-                      </div>
-                    </div>
-                  </div>
+                      </span>
+                    </span>
+                  </span>
                 </mat-option>
               </mat-select>
             </mat-form-field>
-          </div>
-        </form>
-      </mat-card-content>
+          </mat-card-content>
+        </mat-card>
+      </section>
 
-      <mat-card-actions fxLayout="row" fxLayoutAlign="space-between center">
-        <div class="reset-action">
+      <div class="info-box">
+        <mat-icon aria-hidden="true">info</mat-icon>
+        <span>
+          <strong>Note:</strong> Capacity and bits only affect newly created status lists; existing
+          lists keep theirs. TTL, regeneration mode and aggregation apply to all status lists,
+          including existing ones, the next time they are signed or updated.
+        </span>
+      </div>
+
+      <!-- Stays in view at the bottom while the form scrolls -->
+      <div class="action-bar">
+        <span class="reset-action">
           <button
-            mat-button
-            color="warn"
+            matButton
+            type="button"
+            class="reset-button"
             (click)="onReset()"
             [disabled]="isSaving || !hasStoredOverride"
             disabledInteractive
@@ -402,12 +350,16 @@
           @if (!hasStoredOverride) {
             <span class="reset-hint">This tenant already follows the global defaults.</span>
           }
-        </div>
+        </span>
+        <output class="change-state" [class.dirty]="configForm.dirty">
+          @if (configForm.dirty) {
+            Unsaved changes
+          }
+        </output>
         <button
           #saveButton
-          mat-raised-button
-          color="primary"
-          (click)="onSave()"
+          matButton="filled"
+          type="submit"
           [disabled]="isSaving"
           disabledInteractive
           [matTooltip]="saveTooltip"
@@ -422,16 +374,7 @@
           }
           Save Configuration
         </button>
-      </mat-card-actions>
-    </mat-card>
-
-    <div class="info-banner">
-      <mat-icon>warning</mat-icon>
-      <span>
-        <strong>Note:</strong> Capacity and bits only affect newly created status lists; existing
-        lists keep theirs. TTL, regeneration mode and aggregation apply to all status lists,
-        including existing ones, the next time they are signed or updated.
-      </span>
-    </div>
+      </div>
+    </form>
   }
 </div>

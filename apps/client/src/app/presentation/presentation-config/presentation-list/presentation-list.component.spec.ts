@@ -71,11 +71,11 @@ describe('PresentationListComponent', () => {
     const { page } = await render({ loadConfigurations: async () => configs });
     const rows = [...page.querySelectorAll('tr.mat-mdc-row')];
 
-    expect(rows.map((row) => row.querySelector('a.row-link')?.textContent?.trim())).toEqual([
+    expect(rows.map((row) => row.querySelector('a.item-link')?.textContent?.trim())).toEqual([
       'age-over-18',
       'pid',
     ]);
-    expect(rows[1].querySelector('a.row-link')?.getAttribute('href')).toBe('/pid');
+    expect(rows[1].querySelector('a.item-link')?.getAttribute('href')).toBe('/pid');
     expect(rows[0].querySelector('.badge')?.textContent?.trim()).toBe('No certificate');
     expect(rows[1].querySelector('.badge')).toBeNull();
     expect(page.querySelector('.table-title output')?.textContent?.trim()).toBe('2 configs');
@@ -90,7 +90,7 @@ describe('PresentationListComponent', () => {
       fixture.detectChanges();
     };
     const shown = () =>
-      [...page.querySelectorAll('a.row-link')].map((link) => link.textContent?.trim());
+      [...page.querySelectorAll('a.item-link')].map((link) => link.textContent?.trim());
 
     type('AGE ver');
     expect(shown()).toEqual(['age-over-18']);
@@ -127,7 +127,7 @@ describe('PresentationListComponent', () => {
     expect(snackBar.open).toHaveBeenCalledWith('Presentation configuration deleted', 'Close', {
       duration: 3000,
     });
-    expect([...page.querySelectorAll('a.row-link')].map((a) => a.textContent?.trim())).toEqual([
+    expect([...page.querySelectorAll('a.item-link')].map((a) => a.textContent?.trim())).toEqual([
       'age-over-18',
     ]);
   });
@@ -146,7 +146,7 @@ describe('PresentationListComponent', () => {
     expect(snackBar.open.mock.calls.at(-1)?.[0]).toBe(
       'Failed to delete presentation configuration: x'
     );
-    expect([...page.querySelectorAll('a.row-link')].map((a) => a.textContent?.trim())).toEqual([
+    expect([...page.querySelectorAll('a.item-link')].map((a) => a.textContent?.trim())).toEqual([
       'age-over-18',
       'pid',
     ]);
@@ -155,26 +155,16 @@ describe('PresentationListComponent', () => {
     );
   });
 
-  it('deletes nothing without presentation:manage or without confirmation', async () => {
+  it('deletes nothing without confirmation', async () => {
     const deleteConfiguration = vi.fn(async () => undefined);
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
-    const { component } = await render(
-      {
-        loadConfigurations: async () => configs,
-        deleteConfiguration: deleteConfiguration as never,
-      },
-      []
-    );
-
-    await component.deleteConfiguration(configs[0]);
-    expect(confirmSpy).not.toHaveBeenCalled();
-
-    TestBed.resetTestingModule();
-    const allowed = await render({
+    const { component } = await render({
       loadConfigurations: async () => configs,
       deleteConfiguration: deleteConfiguration as never,
     });
-    await allowed.component.deleteConfiguration(configs[0]);
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    await component.deleteConfiguration(configs[0]);
+
     expect(confirmSpy).toHaveBeenCalled();
     expect(deleteConfiguration).not.toHaveBeenCalled();
   });

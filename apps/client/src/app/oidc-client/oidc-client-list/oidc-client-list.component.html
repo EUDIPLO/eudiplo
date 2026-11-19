@@ -36,7 +36,7 @@
           <h2>All clients</h2>
           <output>
             @if (search.trim()) {
-              {{ shownClients.length }} of {{ clients.length }} clients
+              {{ shownItems.length }} of {{ clients.length }} clients
             } @else {
               {{ clients.length }} {{ clients.length === 1 ? 'client' : 'clients' }}
             }
@@ -66,12 +66,12 @@
       </div>
 
       <div class="table-scroll">
-        <table mat-table [dataSource]="shownClients" class="linked">
+        <table mat-table [dataSource]="shownItems" class="linked">
           <ng-container matColumnDef="name">
             <th mat-header-cell *matHeaderCellDef>Client</th>
             <td mat-cell *matCellDef="let client">
               <!-- The name links to the client and its link covers the row -->
-              <a class="row-link" [routerLink]="[client.id]">{{ client.name }}</a>
+              <a class="item-link" [routerLink]="[client.id]">{{ client.name }}</a>
             </td>
           </ng-container>
 
@@ -122,10 +122,10 @@
                   matIconButton
                   class="delete-action"
                   (click)="deleteClient(client)"
-                  [disabled]="deletingId === client.id"
+                  [disabled]="deletingId !== undefined"
                   disabledInteractive
                   [matTooltip]="
-                    deletingId === client.id ? 'Deleting the OIDC client…' : 'Delete OIDC client'
+                    deleteTooltip(client.id, 'Delete OIDC client', 'Deleting the OIDC client…')
                   "
                   [attr.aria-label]="'Delete OIDC client ' + client.name"
                 >

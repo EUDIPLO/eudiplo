@@ -3,11 +3,10 @@ import { CommonModule } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
-import { MatListModule } from '@angular/material/list';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { AttributeProviderEntity } from '@eudiplo/sdk-core';
 import { getApiKeyAuthType, getApiKeyHeaderName } from '../../../common/auth-display.util';
 import { ConfigDocumentService } from '../../../config-portability/config-document.service';
@@ -15,8 +14,8 @@ import { AttributeProviderService } from '../attribute-provider.service';
 import { ConfigOwnershipDirective } from '../../../config-portability/config-ownership.directive';
 import { ConfigOwnershipNoticeComponent } from '../../../config-portability/config-ownership-notice.component';
 import { getApiErrorMessage } from '../../../utils/error-message';
-import { openErrorSnackBar } from '../../../utils/error-snackbar';
 import { LoadErrorComponent } from '../../../common/load-error.component';
+import { confirmAndDelete } from '../../../common/confirm-delete';
 
 @Component({
   selector: 'app-attribute-provider-show',
@@ -26,8 +25,7 @@ import { LoadErrorComponent } from '../../../common/load-error.component';
     MatCardModule,
     MatButtonModule,
     MatTooltipModule,
-    MatListModule,
-    FlexLayoutModule,
+    MatProgressSpinnerModule,
     RouterModule,
     ConfigOwnershipDirective,
     ConfigOwnershipNoticeComponent,
@@ -41,6 +39,8 @@ export class AttributeProviderShowComponent implements OnInit {
   provider: AttributeProviderEntity | undefined;
   /** Set when the page's data could not be loaded, so the page is not left blank. */
   loadError = '';
+  /** True while the provider is deleted; Delete waits for it. */
+  deleting = false;
 
   constructor(
     private readonly attributeProviderService: AttributeProviderService,
@@ -78,28 +78,24 @@ export class AttributeProviderShowComponent implements OnInit {
     );
   }
 
-  deleteProvider(): void {
-    if (
-      this.provider &&
-      confirm(
-        `Delete attribute provider "${this.provider.name || this.provider.id}"? This cannot be undone.`
-      )
-    ) {
-      this.attributeProviderService
-        .delete(this.provider.id)
-        .then(() => {
-          this.snackBar.open('Attribute provider deleted successfully', 'Close', {
-            duration: 3000,
-          });
-          this.router.navigate(['../'], { relativeTo: this.route });
-        })
-        .catch((error) => {
-          openErrorSnackBar(
-            this.snackBar,
-            getApiErrorMessage(error, 'Failed to delete attribute provider')
-          );
-          console.error('Delete error:', error);
-        });
+  /**
+   * Deletes the provider after the caller confirmed it, then returns to the list. A second click
+   * while the delete runs does nothing.
+   */
+  async deleteProvider(): Promise<void> {
+    const provider = this.provider;
+    if (!provider || this.deleting) {
+      return;
+    }
+    const deleted = await confirmAndDelete(this.snackBar, {
+      question: `Delete attribute provider "${provider.name || provider.id}"? This cannot be undone.`,
+      request: () => this.attributeProviderService.delete(provider.id),
+      deleted: 'Attribute provider deleted successfully',
+      failed: 'Failed to delete attribute provider',
+      busy: (busy) => (this.deleting = busy),
+    });
+    if (deleted) {
+      void this.router.navigate(['../'], { relativeTo: this.route });
     }
   }
 

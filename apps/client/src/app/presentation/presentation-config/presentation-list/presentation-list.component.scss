@@ -3,46 +3,16 @@
 // Heading, table card with search, badges and states, as on the user and client lists
 @include page.base;
 @include page.list-page;
+@include page.linked-rows;
 
 table {
   @include page.data-table;
-
-  // The ID link covers its row; the actions sit above it
-  &.linked tr.mat-mdc-row:not(.no-match) {
-    position: relative;
-    cursor: pointer;
-
-    .row-actions {
-      position: relative;
-      z-index: 1;
-    }
-
-    &:hover .row-link {
-      color: var(--mat-sys-primary);
-    }
-  }
 }
 
-.row-link {
+// The rows have no icon, so the link gives the row its height
+.item-link {
   display: inline-block;
   padding: 16px 0;
-  font: var(--mat-sys-title-small);
-  color: var(--mat-sys-on-surface);
-  text-decoration: none;
-  overflow-wrap: anywhere;
-  transition: color 120ms ease;
-
-  &::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-  }
-
-  &:focus-visible {
-    outline: 2px solid var(--mat-sys-primary);
-    outline-offset: 2px;
-    border-radius: var(--mat-sys-corner-extra-small);
-  }
 }
 
 .description {

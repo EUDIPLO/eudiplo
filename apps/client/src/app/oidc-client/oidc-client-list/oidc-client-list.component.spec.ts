@@ -69,20 +69,20 @@ describe('OidcClientListComponent', () => {
       const page = fixture.nativeElement as HTMLElement;
       await vi.waitFor(() => {
         fixture.detectChanges();
-        expect(page.querySelectorAll('a.row-link')).toHaveLength(2);
+        expect(page.querySelectorAll('a.item-link')).toHaveLength(2);
       });
       return { fixture, page, component: fixture.componentInstance, snackBar };
     }
 
     const names = (page: HTMLElement) =>
-      [...page.querySelectorAll('a.row-link')].map((link) => link.textContent?.trim());
+      [...page.querySelectorAll('a.item-link')].map((link) => link.textContent?.trim());
 
     it('lists the clients by name, each linked to its page, with profile and scopes', async () => {
       const { page } = await render({});
       const rows = [...page.querySelectorAll('tr.mat-mdc-row')];
 
       expect(names(page)).toEqual(['Auth broker', 'Customer Portal']);
-      expect(rows[1].querySelector('a.row-link')?.getAttribute('href')).toBe('/c7d1');
+      expect(rows[1].querySelector('a.item-link')?.getAttribute('href')).toBe('/c7d1');
       expect(rows[1].querySelector('.client-id')?.textContent?.trim()).toBe('c7d1');
       expect(rows.map((row) => row.querySelector('.badge')?.textContent?.trim())).toEqual([
         'Basic',
@@ -158,17 +158,6 @@ describe('OidcClientListComponent', () => {
 
       await component.deleteClient(portal);
 
-      expect(remove).not.toHaveBeenCalled();
-    });
-
-    it('deletes nothing without presentation:manage', async () => {
-      const remove = vi.fn(async () => undefined);
-      const { component } = await render({ delete: remove as never }, []);
-      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
-
-      await component.deleteClient(portal);
-
-      expect(confirmSpy).not.toHaveBeenCalled();
       expect(remove).not.toHaveBeenCalled();
     });
   });

@@ -1,3 +1,9 @@
+@use '../../tenants/tenant-page' as page;
+
+// Page heading and outlined cards of the restyled pages; the stepper inside stays as it is
+@include page.base;
+@include page.layout-utilities;
+
 .loading-container {
   padding: 40px;
   gap: 16px;
@@ -46,7 +52,7 @@
 .step-content {
   padding: 16px 0;
 
-  h3 {
+  h2 {
     margin: 0 0 8px 0;
     font-size: 1.25rem;
     font-weight: 500;
@@ -421,9 +427,6 @@
 }
 
 // Full width form field
-.full-width {
-  width: 100%;
-}
 
 // Claims container
 .claims-container {
@@ -503,10 +506,6 @@
 
 .form-card {
   margin-bottom: 24px;
-}
-
-.full-width {
-  width: 100%;
 }
 
 .form-label {

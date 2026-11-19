@@ -1,12 +1,16 @@
-<div fxLayout="column" fxFlex fxLayoutGap="24px">
-  <!-- Header -->
-  <div fxLayout="row" fxLayoutAlign="space-between center">
-    <h2>Generate Issuance Offer</h2>
-  </div>
+<div class="page">
+  <header class="page-header">
+    <div>
+      <h1>Generate Issuance Offer</h1>
+      <p>
+        Choose how and what to issue, fill in the claims, and get a credential offer for a wallet.
+      </p>
+    </div>
+  </header>
 
   <!-- Loading State -->
   @if (loading) {
-    <div fxLayout="row" fxLayoutAlign="center center" class="loading-container">
+    <div class="loading-container fx-row justify-center align-center">
       <mat-spinner diameter="40"></mat-spinner>
       <span>Loading configurations...</span>
     </div>
@@ -14,20 +18,15 @@
 
   <!-- Main Content - Stepper -->
   @if (!loading) {
-    <mat-stepper #stepper linear fxLayout="column" class="offer-stepper">
+    <mat-stepper #stepper linear class="offer-stepper fx-col">
       <!-- Step 1: Flow Selection -->
       <mat-step [stepControl]="flowStepForm" label="Select Flow">
-        <form [formGroup]="flowStepForm" fxLayout="column" fxLayoutGap="24px">
+        <form class="fx-col gap-24" [formGroup]="flowStepForm">
           <div class="step-content">
-            <h3>Choose Issuance Flow Type</h3>
+            <h2>Choose Issuance Flow Type</h2>
             <p class="step-description">Select how the credential will be issued to the wallet.</p>
 
-            <mat-radio-group
-              formControlName="flow"
-              fxLayout="column"
-              fxLayoutGap="16px"
-              class="flow-selection"
-            >
+            <mat-radio-group formControlName="flow" class="flow-selection fx-col gap-16">
               <mat-radio-button value="pre_authorized_code" class="flow-option">
                 <div class="flow-option-content">
                   <div class="flow-option-header">
@@ -70,7 +69,7 @@
             </mat-radio-group>
           </div>
 
-          <div class="step-actions" fxLayout="row" fxLayoutAlign="end center" fxLayoutGap="8px">
+          <div class="step-actions fx-row justify-end align-center gap-8">
             <button mat-flat-button color="primary" matStepperNext type="button">
               Next
               <mat-icon>arrow_forward</mat-icon>
@@ -81,14 +80,9 @@
 
       <!-- Step 2: Credential Configuration Selection -->
       <mat-step [stepControl]="credentialStepForm" label="Select Credentials">
-        <form
-          #credentialStepElement
-          [formGroup]="credentialStepForm"
-          fxLayout="column"
-          fxLayoutGap="24px"
-        >
+        <form class="fx-col gap-24" #credentialStepElement [formGroup]="credentialStepForm">
           <div class="step-content">
-            <h3>Select Credential Configurations</h3>
+            <h2>Select Credential Configurations</h2>
             <p class="step-description">Choose which credential types to include in this offer.</p>
 
             @if (availableCredentialConfigs.length === 0) {
@@ -184,7 +178,7 @@
             }
           </div>
 
-          <div class="step-actions" fxLayout="row" fxLayoutAlign="space-between center">
+          <div class="step-actions fx-row justify-space-between align-center">
             <button mat-button matStepperPrevious type="button">
               <mat-icon>arrow_back</mat-icon>
               Back
@@ -216,11 +210,11 @@
               : 'Review & Create'
         "
       >
-        <form #configStepElement [formGroup]="configStepForm" fxLayout="column" fxLayoutGap="24px">
+        <form class="fx-col gap-24" #configStepElement [formGroup]="configStepForm">
           <div class="step-content">
             <!-- Pre-Authorized Code Flow: Claims Configuration -->
             @if (isPreAuthFlow) {
-              <h3>Configure Credential Claims</h3>
+              <h2>Configure Credential Claims</h2>
               <p class="step-description">
                 Provide the claims data for each selected credential configuration.
               </p>
@@ -265,28 +259,27 @@
 
               <!-- Claims for each credential config -->
               @if (elements.length > 0) {
-                <div class="claims-container" fxLayout="column" fxLayoutGap="24px">
+                <div class="claims-container fx-col gap-24">
                   @for (element of elements; track element.id; let i = $index) {
-                    <mat-card class="credential-claims-card">
+                    <mat-card appearance="outlined" class="credential-claims-card">
                       <mat-card-header>
                         <mat-card-title>
                           <mat-icon>badge</mat-icon>
                           {{ element.id }}
                         </mat-card-title>
                       </mat-card-header>
-                      <mat-card-content fxLayout="column" fxLayoutGap="16px">
+                      <mat-card-content class="fx-col gap-16">
                         <!-- Claim Source Selection -->
                         <div class="claim-source-selection">
                           <b class="source-label">Claims data source:</b>
                           <mat-radio-group
+                            class="fx-row gap-16"
                             [(ngModel)]="element.claimSource"
                             (change)="onClaimSourceChange(element.id, element.claimSource)"
                             [ngModelOptions]="{ standalone: true }"
-                            fxLayout="row"
-                            fxLayoutGap="16px"
                           >
                             <mat-radio-button value="form">
-                              <div fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px">
+                              <div class="fx-row justify-start align-center gap-8">
                                 <mat-icon>edit_note</mat-icon>
                                 <span>Form Input</span>
                               </div>
@@ -295,7 +288,7 @@
                               value="attributeProvider"
                               [disabled]="!element.attributeProviderId"
                             >
-                              <div fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px">
+                              <div class="fx-row justify-start align-center gap-8">
                                 <mat-icon>cloud_download</mat-icon>
                                 <span>Attribute Provider</span>
                               </div>
@@ -350,7 +343,7 @@
                   }
                 </div>
 
-                <div fxLayout="row" fxLayoutAlign="end center">
+                <div class="fx-row justify-end align-center">
                   <button mat-button type="button" (click)="importClaims()">
                     <mat-icon>upload_file</mat-icon>
                     Import Claims JSON
@@ -361,7 +354,7 @@
 
             <!-- Authorization Code External Flow: Select AS Type -->
             @if (isAuthCodeExternalFlow) {
-              <h3>Select Authorization Server</h3>
+              <h2>Select Authorization Server</h2>
               <p class="step-description">
                 Choose which authorization server will handle user authentication.
               </p>
@@ -387,10 +380,10 @@
                 </mat-form-field>
 
                 <!-- Attribute Provider configuration for each credential -->
-                <h4 class="webhook-section-title">
+                <h3 class="webhook-section-title">
                   <mat-icon>cloud_download</mat-icon>
                   Claims Attribute Providers
-                </h4>
+                </h3>
                 <p class="step-description">
                   Select an attribute provider for each credential to fetch claims based on AS
                   authentication.
@@ -401,7 +394,7 @@
                     configId of credentialStepForm.get('credentialConfigurationIds')?.value;
                     track configId
                   ) {
-                    <mat-card class="webhook-config-card">
+                    <mat-card appearance="outlined" class="webhook-config-card">
                       <mat-card-header>
                         <mat-card-title>
                           <mat-icon>badge</mat-icon>
@@ -468,7 +461,7 @@
 
             <!-- IAE Flow: Built-in AS Confirmation -->
             @if (isIaeFlow) {
-              <h3>Built-in Authorization Server</h3>
+              <h2>Built-in Authorization Server</h2>
               <p class="step-description">
                 The credential will be issued using the built-in authorization server with IAE
                 (Issuer Authenticated Endpoint).
@@ -486,10 +479,10 @@
               </div>
 
               <!-- Attribute Provider configuration for each credential -->
-              <h4 class="webhook-section-title">
+              <h3 class="webhook-section-title">
                 <mat-icon>cloud_download</mat-icon>
                 Claims Attribute Providers (Optional)
-              </h4>
+              </h3>
               <p class="step-description">
                 Optionally select an attribute provider to fetch claims after IAE completes. If not
                 configured, claims will be taken from the credential configuration or IAE results.
@@ -500,7 +493,7 @@
                   configId of credentialStepForm.get('credentialConfigurationIds')?.value;
                   track configId
                 ) {
-                  <mat-card class="webhook-config-card">
+                  <mat-card appearance="outlined" class="webhook-config-card">
                     <mat-card-header>
                       <mat-card-title>
                         <mat-icon>badge</mat-icon>
@@ -532,12 +525,12 @@
             }
           </div>
 
-          <div class="step-actions" fxLayout="row" fxLayoutAlign="space-between center">
+          <div class="step-actions fx-row justify-space-between align-center">
             <button mat-button matStepperPrevious type="button">
               <mat-icon>arrow_back</mat-icon>
               Back
             </button>
-            <div fxLayout="row" fxLayoutGap="8px">
+            <div class="fx-row gap-8">
               <button mat-button type="button" (click)="resetForm()">Reset</button>
               <button
                 mat-flat-button

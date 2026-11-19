@@ -33,7 +33,7 @@
           <h2>All configs</h2>
           <output>
             @if (search.trim()) {
-              {{ shownConfigurations.length }} of {{ configurations.length }} configs
+              {{ shownItems.length }} of {{ configurations.length }} configs
             } @else {
               {{ configurations.length }} {{ configurations.length === 1 ? 'config' : 'configs' }}
             }
@@ -63,12 +63,12 @@
       </div>
 
       <div class="table-scroll">
-        <table mat-table [dataSource]="shownConfigurations" class="linked">
+        <table mat-table [dataSource]="shownItems" class="linked">
           <ng-container matColumnDef="id">
             <th mat-header-cell *matHeaderCellDef>ID</th>
             <td mat-cell *matCellDef="let config">
               <!-- The ID links to the config and its link covers the row -->
-              <a class="row-link" [routerLink]="[config.id]">{{ config.id }}</a>
+              <a class="item-link" [routerLink]="[config.id]">{{ config.id }}</a>
             </td>
           </ng-container>
 
@@ -125,12 +125,10 @@
                   matIconButton
                   class="delete-action"
                   (click)="deleteConfiguration(config)"
-                  [disabled]="deletingId === config.id"
+                  [disabled]="deletingId !== undefined"
                   disabledInteractive
                   [matTooltip]="
-                    deletingId === config.id
-                      ? 'Deleting the configuration…'
-                      : 'Delete Configuration'
+                    deleteTooltip(config.id, 'Delete Configuration', 'Deleting the configuration…')
                   "
                   appConfigManaged
                   managedKind="PresentationConfig"

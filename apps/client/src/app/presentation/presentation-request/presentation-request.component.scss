@@ -2,9 +2,10 @@
 
 // Heading, sections and action bar, as on the other forms
 @include page.base;
+// Before the form page, whose card padding wins over the one details-list sets
+@include page.details-list;
 @include page.form-page;
 @include page.list-page;
-@include page.details-list;
 
 .form-avatar mat-icon {
   width: 28px;

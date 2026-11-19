@@ -3,7 +3,7 @@ import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { MATERIAL_ANIMATIONS } from '@angular/material/core';
 import { MatTabGroupHarness } from '@angular/material/tabs/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CredentialConfig } from '@eudiplo/sdk-core';
 import { JwtService } from '../../../services/jwt.service';
 
@@ -362,7 +362,7 @@ describe('CredentialConfigShowComponent claim fields', () => {
 
   it('names array items with * in the card heading, as the matrix does', () => {
     const component = new CredentialConfigShowComponent(
-      ...(Array.from({ length: 6 }, () => ({})) as never as ConstructorParameters<
+      ...(Array.from({ length: 7 }, () => ({})) as never as ConstructorParameters<
         typeof CredentialConfigShowComponent
       >)
     );
@@ -373,7 +373,7 @@ describe('CredentialConfigShowComponent claim fields', () => {
 
   it('shows the JSON Schema when a nested child leaves a matrix cell empty', () => {
     const component = new CredentialConfigShowComponent(
-      ...(Array.from({ length: 6 }, () => ({})) as never as ConstructorParameters<
+      ...(Array.from({ length: 7 }, () => ({})) as never as ConstructorParameters<
         typeof CredentialConfigShowComponent
       >)
     );
@@ -390,5 +390,68 @@ describe('CredentialConfigShowComponent claim fields', () => {
 
     component.config = configWith({ ...parent, children: [{ path: [null], type: 'string' }] });
     expect(component.showJsonSchemaSection).toBe(true);
+  });
+});
+
+describe('CredentialConfigShowComponent delete', () => {
+  function create(
+    deleteConfiguration: ReturnType<typeof vi.fn>,
+    navigate = vi.fn(),
+    snackBar = { open: vi.fn() }
+  ) {
+    const component = new CredentialConfigShowComponent(
+      { deleteConfiguration } as never,
+      {} as never,
+      {} as never,
+      snackBar as never,
+      { navigate } as never,
+      {} as never
+    );
+    component.config = { id: 'pid' } as never;
+    return component;
+  }
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('deletes once after confirming and returns to the list, ignoring a second click', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    let finish!: () => void;
+    const deleteConfiguration = vi.fn(
+      () => new Promise<void>((resolve) => (finish = () => resolve()))
+    );
+    const navigate = vi.fn();
+    const component = create(deleteConfiguration, navigate);
+
+    const first = component.deleteConfig();
+    expect(component.deleting).toBe(true);
+    await component.deleteConfig();
+    finish();
+    await first;
+
+    expect(window.confirm).toHaveBeenCalledTimes(1);
+    expect(window.confirm).toHaveBeenCalledWith(
+      'Delete credential configuration "pid"? This cannot be undone.'
+    );
+    expect(deleteConfiguration).toHaveBeenCalledTimes(1);
+    expect(navigate).toHaveBeenCalledWith(['../'], expect.anything());
+    expect(component.deleting).toBe(false);
+  });
+
+  it('reports a failed delete with the reason and stays on the page', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const navigate = vi.fn();
+    const snackBar = { open: vi.fn() };
+    const component = create(
+      vi.fn().mockRejectedValue({ statusCode: 409, message: 'In use' }),
+      navigate,
+      snackBar
+    );
+
+    await component.deleteConfig();
+
+    expect(snackBar.open.mock.lastCall?.[0]).toBe('Failed to delete configuration: In use');
+    expect(navigate).not.toHaveBeenCalled();
+    expect(component.deleting).toBe(false);
   });
 });

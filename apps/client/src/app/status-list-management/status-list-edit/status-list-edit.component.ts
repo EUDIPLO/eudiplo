@@ -1,4 +1,4 @@
-import { CommonModule } from '@angular/common';
+import { DatePipe, DecimalPipe } from '@angular/common';
 import {
   Component,
   type ElementRef,
@@ -19,11 +19,10 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { MatChipsModule } from '@angular/material/chips';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { StatusListResponseDto, CredentialConfig, KeyChainResponseDto } from '@eudiplo/sdk-core';
 import { StatusListManagementService } from '../status-list-management.service';
+import { formatCapacity, getUsageColor, getUsagePercentage } from '../status-list-usage';
 import { CredentialConfigService } from '../../issuance/credential-config/credential-config.service';
 import { KeyChainService } from '../../key-management/key-chain.service';
 import { ConfigOwnershipDirective } from '../../config-portability/config-ownership.directive';
@@ -41,7 +40,8 @@ type StatusListEditSource = 'credentialConfigs' | 'keyChains';
 @Component({
   selector: 'app-status-list-edit',
   imports: [
-    CommonModule,
+    DatePipe,
+    DecimalPipe,
     ReactiveFormsModule,
     MatCardModule,
     MatButtonModule,
@@ -53,8 +53,6 @@ type StatusListEditSource = 'credentialConfigs' | 'keyChains';
     MatTooltipModule,
     MatProgressBarModule,
     MatProgressSpinnerModule,
-    MatChipsModule,
-    FlexLayoutModule,
     RouterModule,
     ConfigOwnershipDirective,
     ConfigOwnershipNoticeComponent,
@@ -191,19 +189,15 @@ export class StatusListEditComponent implements OnInit {
   }
 
   getUsagePercentage(): number {
-    if (!this.statusList) return 0;
-    return this.statusListService.getUsagePercentage(this.statusList);
+    return this.statusList ? getUsagePercentage(this.statusList) : 0;
   }
 
   getUsageColor(): string {
-    const percentage = this.getUsagePercentage();
-    if (percentage >= 90) return 'warn';
-    if (percentage >= 70) return 'accent';
-    return 'primary';
+    return this.statusList ? getUsageColor(this.statusList) : 'primary';
   }
 
   formatCapacity(capacity: number): string {
-    return this.statusListService.formatCapacity(capacity);
+    return formatCapacity(capacity);
   }
 
   getExpirationStatus(): 'valid' | 'expiring' | 'expired' | 'none' {
@@ -228,6 +222,13 @@ export class StatusListEditComponent implements OnInit {
       default:
         return 'Not Generated';
     }
+  }
+
+  /** Puts a preset into Capacity, as typing it would. */
+  setCapacity(capacity: number): void {
+    const control = this.form.get('capacity');
+    control?.setValue(capacity);
+    control?.markAsDirty();
   }
 
   async copyUri(): Promise<void> {

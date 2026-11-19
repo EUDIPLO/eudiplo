@@ -1,171 +1,210 @@
-<div fxLayout="row" fxLayoutAlign="space-between center">
-  <h2>Status Lists</h2>
-  <div fxLayout="row" fxLayoutGap="8px">
-    <button
-      matIconButton
-      routerLink="config"
-      matTooltip="Configure default settings"
-      aria-label="Configure default settings"
-    >
-      <mat-icon>settings</mat-icon>
-    </button>
-    <button
-      matIconButton
-      (click)="navigateToCreate()"
-      matTooltip="Create Status List"
-      aria-label="Create Status List"
-    >
-      <mat-icon>add</mat-icon>
-    </button>
-  </div>
+<div class="page">
+  <header class="page-header">
+    <div>
+      <h1 #listHeading tabindex="-1">Status Lists</h1>
+      <p>
+        Token status lists in which EUDIPLO tracks whether issued credentials are valid, revoked or
+        suspended.
+      </p>
+    </div>
+    <div class="header-actions">
+      <a matButton="tonal" routerLink="config">
+        <mat-icon>settings</mat-icon>
+        Default settings
+      </a>
+      <a matButton="filled" [routerLink]="['create']">
+        <mat-icon>add</mat-icon>
+        Create status list
+      </a>
+    </div>
+  </header>
+
+  @if (loading) {
+    <div class="loading-state">
+      <mat-spinner diameter="40" aria-label="Loading status lists"></mat-spinner>
+    </div>
+  } @else if (loadError) {
+    <app-load-error [message]="loadError" (retry)="loadItems()" />
+  } @else if (lists.length === 0) {
+    <div class="empty-state">
+      <span class="empty-icon"><mat-icon>format_list_bulleted</mat-icon></span>
+      <strong>No status lists yet.</strong>
+      <p>
+        Status lists are created automatically when issuing credentials with revocation support.
+      </p>
+      <a matButton="filled" [routerLink]="['create']">
+        <mat-icon>add</mat-icon>
+        Create status list
+      </a>
+    </div>
+  } @else {
+    <mat-card appearance="outlined" class="table-card">
+      <div class="table-header">
+        <div class="table-title">
+          <h2>All status lists</h2>
+          <output>
+            @if (search.trim()) {
+              {{ shownItems.length }} of {{ lists.length }} status lists
+            } @else {
+              {{ lists.length }} {{ lists.length === 1 ? 'status list' : 'status lists' }}
+            }
+          </output>
+        </div>
+        <div class="search-bar" role="search">
+          <mat-icon class="search-icon" aria-hidden="true">search</mat-icon>
+          <input
+            type="search"
+            [(ngModel)]="search"
+            placeholder="Search status lists"
+            aria-label="Search status lists by ID, credential configuration or key chain"
+          />
+          @if (search) {
+            <button
+              matIconButton
+              type="button"
+              class="clear-search"
+              aria-label="Clear search"
+              matTooltip="Clear search"
+              (click)="clearSearch()"
+            >
+              <mat-icon>close</mat-icon>
+            </button>
+          }
+        </div>
+      </div>
+
+      <div class="table-scroll">
+        <table mat-table [dataSource]="shownItems" class="linked">
+          <ng-container matColumnDef="id">
+            <th mat-header-cell *matHeaderCellDef>Status list</th>
+            <td mat-cell *matCellDef="let list">
+              <span class="item-cell">
+                <span class="item-icon" aria-hidden="true"
+                  ><mat-icon>format_list_bulleted</mat-icon></span
+                >
+                <span class="item-copy">
+                  <!-- The ID links to the list and its link covers the row -->
+                  <a class="item-link" [routerLink]="list.id">{{ list.id }}</a>
+                </span>
+                <button
+                  matIconButton
+                  type="button"
+                  class="above-link"
+                  (click)="copyUri(list.uri)"
+                  matTooltip="Copy URI"
+                  [attr.aria-label]="'Copy URI of status list ' + list.id"
+                >
+                  <mat-icon>content_copy</mat-icon>
+                </button>
+              </span>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="credentialConfigurationId">
+            <th mat-header-cell *matHeaderCellDef>Bound To</th>
+            <td mat-cell *matCellDef="let list">
+              @if (list.credentialConfigurationId) {
+                <span class="badge">{{ list.credentialConfigurationId }}</span>
+              } @else {
+                <span class="muted">Shared</span>
+              }
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="keyChainId">
+            <th mat-header-cell *matHeaderCellDef>Key Chain</th>
+            <td mat-cell *matCellDef="let list">
+              @if (list.keyChainId) {
+                <span class="badge">{{ list.keyChainId }}</span>
+              } @else {
+                <span class="muted">Default</span>
+              }
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="bits">
+            <th mat-header-cell *matHeaderCellDef>Bits</th>
+            <td mat-cell *matCellDef="let list">{{ list.bits }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="usage">
+            <th mat-header-cell *matHeaderCellDef>Usage</th>
+            <td mat-cell *matCellDef="let list">
+              <div class="usage-cell">
+                <div class="usage-numbers">
+                  <span>{{ list.usedEntries | number }} / {{ formatCapacity(list.capacity) }}</span>
+                  <span class="muted">{{ getUsagePercentage(list) | number: '1.0-1' }}%</span>
+                </div>
+                <mat-progress-bar
+                  [value]="getUsagePercentage(list)"
+                  [color]="getUsageColor(list)"
+                  [attr.aria-label]="'Usage of status list ' + list.id"
+                ></mat-progress-bar>
+              </div>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="expiresAt">
+            <th mat-header-cell *matHeaderCellDef>JWT Status</th>
+            <td mat-cell *matCellDef="let list">
+              <!-- The tooltip gives the expiry to the mouse; the hidden text gives it to screen readers -->
+              @if (list.expiresAt) {
+                <span [class]="expirationBadgeClass(list)" [matTooltip]="getExpirationTooltip(list)"
+                  >{{ getExpirationLabel(list)
+                  }}<span class="visually-hidden">: {{ getExpirationTooltip(list) }}</span></span
+                >
+              } @else {
+                <span class="muted">Not generated</span>
+              }
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="actions">
+            <th mat-header-cell *matHeaderCellDef>
+              <span class="visually-hidden">Actions</span>
+            </th>
+            <td mat-cell *matCellDef="let list">
+              <span class="row-actions">
+                <button
+                  matIconButton
+                  [routerLink]="list.id"
+                  appConfigManaged
+                  managedKind="StatusList"
+                  [managedResourceId]="list.id"
+                  matTooltip="Edit status list"
+                  [attr.aria-label]="'Edit status list ' + list.id"
+                >
+                  <mat-icon>edit</mat-icon>
+                </button>
+                <button
+                  matIconButton
+                  class="delete-action"
+                  (click)="deleteList(list)"
+                  [disabled]="deletingId !== undefined || list.usedEntries > 0"
+                  disabledInteractive
+                  appConfigManaged
+                  managedKind="StatusList"
+                  [managedResourceId]="list.id"
+                  [matTooltip]="listDeleteTooltip(list)"
+                  [attr.aria-label]="'Delete status list ' + list.id"
+                >
+                  <mat-icon>delete_outline</mat-icon>
+                </button>
+              </span>
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+          <tr class="mat-mdc-row no-match" *matNoDataRow>
+            <td class="mat-mdc-cell" [attr.colspan]="displayedColumns.length">
+              <mat-icon aria-hidden="true">search_off</mat-icon>
+              <span>No status list matches "{{ search.trim() }}".</span>
+              <button matButton type="button" (click)="clearSearch()">Clear search</button>
+            </td>
+          </tr>
+        </table>
+      </div>
+    </mat-card>
+  }
 </div>
-
-@if (isLoading) {
-  <div class="loading-container" fxLayout="row" fxLayoutAlign="center center">
-    <mat-spinner></mat-spinner>
-  </div>
-} @else if (loadError) {
-  <app-load-error [message]="loadError" (retry)="refresh()" />
-} @else if (dataSource.data.length === 0) {
-  <div class="empty-state" fxLayout="column" fxLayoutAlign="center center" fxLayoutGap="16px">
-    <mat-icon class="empty-icon">format_list_bulleted</mat-icon>
-    <p>No status lists found</p>
-    <p class="hint">
-      Status lists are created automatically when issuing credentials with revocation support
-    </p>
-    <button mat-raised-button color="primary" (click)="navigateToCreate()">
-      <mat-icon>add</mat-icon>
-      Create Status List
-    </button>
-  </div>
-} @else {
-  <table mat-table [dataSource]="dataSource" matSort class="mat-elevation-z8">
-    <!-- ID Column -->
-    <ng-container matColumnDef="id">
-      <th mat-header-cell *matHeaderCellDef mat-sort-header>ID</th>
-      <td mat-cell *matCellDef="let list">
-        <div fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="4px">
-          <span>{{ list.id }}</span>
-          <button
-            matIconButton
-            (click)="copyUri(list.uri)"
-            matTooltip="Copy URI"
-            [attr.aria-label]="'Copy URI of status list ' + list.id"
-          >
-            <mat-icon>content_copy</mat-icon>
-          </button>
-        </div>
-      </td>
-    </ng-container>
-
-    <!-- Credential Config Column -->
-    <ng-container matColumnDef="credentialConfigurationId">
-      <th mat-header-cell *matHeaderCellDef mat-sort-header>Bound To</th>
-      <td mat-cell *matCellDef="let list">
-        @if (list.credentialConfigurationId) {
-          <mat-chip>{{ list.credentialConfigurationId }}</mat-chip>
-        } @else {
-          <span class="muted">Shared</span>
-        }
-      </td>
-    </ng-container>
-
-    <!-- Certificate Column -->
-    <ng-container matColumnDef="keyChainId">
-      <th mat-header-cell *matHeaderCellDef mat-sort-header>Key Chain</th>
-      <td mat-cell *matCellDef="let list">
-        @if (list.keyChainId) {
-          <mat-chip>{{ list.keyChainId }}</mat-chip>
-        } @else {
-          <span class="muted">Default</span>
-        }
-      </td>
-    </ng-container>
-
-    <!-- Bits Column -->
-    <ng-container matColumnDef="bits">
-      <th mat-header-cell *matHeaderCellDef mat-sort-header>Bits</th>
-      <td mat-cell *matCellDef="let list">{{ list.bits }}</td>
-    </ng-container>
-
-    <!-- Usage Column -->
-    <ng-container matColumnDef="usage">
-      <th mat-header-cell *matHeaderCellDef>Usage</th>
-      <td mat-cell *matCellDef="let list">
-        <div fxLayout="column" fxLayoutGap="4px" class="usage-cell">
-          <div fxLayout="row" fxLayoutAlign="space-between center">
-            <span>{{ list.usedEntries | number }} / {{ formatCapacity(list.capacity) }}</span>
-            <span class="muted">{{ getUsagePercentage(list) | number: '1.0-1' }}%</span>
-          </div>
-          <mat-progress-bar
-            [value]="getUsagePercentage(list)"
-            [color]="getUsageColor(list)"
-          ></mat-progress-bar>
-        </div>
-      </td>
-    </ng-container>
-
-    <!-- Expires At Column -->
-    <ng-container matColumnDef="expiresAt">
-      <th mat-header-cell *matHeaderCellDef mat-sort-header>JWT Status</th>
-      <td mat-cell *matCellDef="let list">
-        @switch (getExpirationStatus(list)) {
-          @case ('valid') {
-            <mat-chip class="status-valid" [matTooltip]="getExpirationTooltip(list)">
-              <mat-icon>check_circle</mat-icon>
-              Valid
-            </mat-chip>
-          }
-          @case ('expiring') {
-            <mat-chip class="status-expiring" [matTooltip]="getExpirationTooltip(list)">
-              <mat-icon>schedule</mat-icon>
-              Expiring
-            </mat-chip>
-          }
-          @case ('expired') {
-            <mat-chip class="status-expired" [matTooltip]="getExpirationTooltip(list)">
-              <mat-icon>refresh</mat-icon>
-              Expired
-            </mat-chip>
-          }
-          @default {
-            <span class="muted" [matTooltip]="getExpirationTooltip(list)">Not generated</span>
-          }
-        }
-      </td>
-    </ng-container>
-
-    <!-- Actions Column -->
-    <ng-container matColumnDef="actions">
-      <th mat-header-cell *matHeaderCellDef>Actions</th>
-      <td mat-cell *matCellDef="let list">
-        <button
-          matIconButton
-          (click)="navigateToEdit(list)"
-          matTooltip="Edit"
-          aria-label="Edit"
-          appConfigManaged
-          managedKind="StatusList"
-          [managedResourceId]="list.id"
-        >
-          <mat-icon>edit</mat-icon>
-        </button>
-        <button
-          matIconButton
-          (click)="deleteList(list)"
-          [disabled]="list.usedEntries > 0"
-          [matTooltip]="list.usedEntries > 0 ? 'Cannot delete: entries in use' : 'Delete'"
-          aria-label="Delete"
-          appConfigManaged
-          managedKind="StatusList"
-          [managedResourceId]="list.id"
-        >
-          <mat-icon>delete</mat-icon>
-        </button>
-      </td>
-    </ng-container>
-
-    <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-    <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
-  </table>
-}

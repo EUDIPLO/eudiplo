@@ -32,7 +32,6 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { Router, RouterModule } from '@angular/router';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import {
   AttributeProviderEntity,
   CredentialConfig,
@@ -89,7 +88,6 @@ function arrayNotEmpty(control: AbstractControl): ValidationErrors | null {
     MatProgressSpinnerModule,
     MatSnackBarModule,
     MatTooltipModule,
-    FlexLayoutModule,
     RouterModule,
     FormlyModule,
     MatDividerModule,

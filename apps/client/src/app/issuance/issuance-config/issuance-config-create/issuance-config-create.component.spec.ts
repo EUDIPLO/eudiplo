@@ -147,7 +147,7 @@ describe('issuer settings guided setup', () => {
   });
 
   it('moves focus to the heading only after a retry loads the settings', async () => {
-    const heading = document.body.appendChild(document.createElement('h2'));
+    const heading = document.body.appendChild(document.createElement('h1'));
     heading.tabIndex = -1;
     Object.assign(component, {
       injector: TestBed.inject(Injector),
@@ -824,6 +824,26 @@ describe('issuer settings Save', () => {
     });
     return { fixture, component, save, button };
   }
+
+  it('returns to Issuer Settings from the back link and from Cancel, and says whether there are changes', async () => {
+    const { fixture, component } = await render();
+    const page = fixture.nativeElement as HTMLElement;
+    const backLink = page.querySelector<HTMLAnchorElement>('a.back-link')!;
+    const cancel = [...page.querySelectorAll<HTMLAnchorElement>('.action-bar a')].find(
+      (link) => link.textContent?.trim() === 'Cancel'
+    )!;
+
+    expect(page.querySelector('h1')?.textContent?.trim()).toBe('Issuer Settings');
+    expect(backLink.getAttribute('aria-label')).toBe('Back to Issuer Settings');
+    expect(backLink.getAttribute('href')).toBe('/');
+    expect(cancel.getAttribute('href')).toBe(backLink.getAttribute('href'));
+    // Row buttons do not mark the form dirty, so the bar never claims there are no changes.
+    expect(page.querySelector('.change-state')?.textContent?.trim()).toBe('');
+
+    component.form.markAsDirty();
+    fixture.detectChanges();
+    expect(page.querySelector('.change-state')?.textContent?.trim()).toBe('Unsaved changes');
+  });
 
   it('waits while the settings are saved: a second click sends nothing', async () => {
     const { fixture, save, button } = await render();

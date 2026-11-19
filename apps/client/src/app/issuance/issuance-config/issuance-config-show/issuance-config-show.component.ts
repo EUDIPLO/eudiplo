@@ -10,10 +10,8 @@ import { DatePipe } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
-import { MatDividerModule } from '@angular/material/divider';
-import { MatExpansionModule } from '@angular/material/expansion';
 import { MatIconModule } from '@angular/material/icon';
-import { MatListModule } from '@angular/material/list';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatTableModule } from '@angular/material/table';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -26,7 +24,6 @@ import {
   registrationCertStatusSentence,
   type RegistrationCertStatus,
 } from '../../../utils/registration-cert-status';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { IssuanceConfig } from '@eudiplo/sdk-core';
 import { ConfigDocumentService } from '../../../config-portability/config-document.service';
 import {
@@ -76,13 +73,10 @@ interface AuthorizationServerRow {
     MatButtonModule,
     MatTooltipModule,
     DatePipe,
-    MatExpansionModule,
     MatChipsModule,
-    MatDividerModule,
-    MatListModule,
+    MatProgressSpinnerModule,
     MatTabsModule,
     MatTableModule,
-    FlexLayoutModule,
     RouterModule,
     ConfigOwnershipDirective,
     ConfigOwnershipNoticeComponent,
@@ -252,6 +246,23 @@ export class IssuanceConfigShowComponent implements OnInit {
   /** Status of the issuer registration certificate; `none` while it is turned off. */
   get registrationCertificateStatus(): RegistrationCertStatus {
     return getIssuerRegistrationCertStatus(this.registrationCertificateConfig);
+  }
+
+  /** Badge tone of the certificate status: green while valid, amber before or near its end, red when unusable. */
+  get registrationCertificateBadgeClass(): string {
+    switch (this.registrationCertificateStatus) {
+      case 'active':
+        return 'status-active';
+      case 'expiring':
+      case 'notYetValid':
+        return 'status-warning';
+      case 'expired':
+      case 'missing':
+      case 'invalid':
+        return 'status-danger';
+      default:
+        return '';
+    }
   }
 
   /** What the status means and what to do next. */
