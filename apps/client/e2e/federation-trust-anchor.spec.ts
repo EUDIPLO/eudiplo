@@ -140,8 +140,8 @@ test('picks the registered trust anchor as a federation authority of a presentat
   await page.getByRole('button', { name: 'Continue' }).click();
 
   await page.getByRole('button', { name: 'Add credential' }).click();
-  await page.getByRole('textbox', { name: 'Credential type (VCT)' }).fill('urn:eudi:pid:1');
-  await page.getByRole('textbox', { name: 'Claim path' }).fill('given_name');
+  await page.getByRole('combobox', { name: 'Credential type (VCT)' }).fill('urn:eudi:pid:1');
+  await page.getByRole('combobox', { name: 'Claim path' }).fill('given_name');
   await page.getByRole('button', { name: 'Issuer trust' }).click();
   await page.getByRole('button', { name: 'Add federation trust anchor' }).click();
   await selectOption(
