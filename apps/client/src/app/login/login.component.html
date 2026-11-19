@@ -103,7 +103,14 @@
                   </p>
                 }
 
-                @if (!isSsoAvailable && detectedMode !== 'loading') {
+                @if (detectedMode === null) {
+                  <p class="notice mode-hint">
+                    <mat-icon aria-hidden="true">info</mat-icon>
+                    <span>Enter the instance URL to check whether it offers SSO login.</span>
+                  </p>
+                }
+
+                @if (detectedMode === 'local') {
                   <p class="notice mode-hint warning">
                     <mat-icon aria-hidden="true">warning</mat-icon>
                     <span
