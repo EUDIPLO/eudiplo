@@ -11,6 +11,17 @@ export interface RegistrationCertTimes {
   expiresAt?: number;
 }
 
+/** Short label of each registration certificate status, for badges. */
+export const REGISTRATION_CERT_STATUS_LABELS: Record<RegistrationCertStatus, string> = {
+  none: 'None',
+  active: 'Active',
+  expiring: 'Expiring soon',
+  expired: 'Expired',
+  missing: 'No certificate',
+  invalid: 'Invalid',
+  notYetValid: 'Not yet valid',
+};
+
 const EXPIRING_WINDOW_SECONDS = 7 * 24 * 60 * 60;
 
 /**

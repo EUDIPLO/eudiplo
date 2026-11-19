@@ -34,7 +34,6 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import {
   presentationManagementControllerUpdateConfiguration,
   keyChainControllerGetAll,
@@ -97,7 +96,6 @@ import { jsonViewUnavailableReason } from '../../../common/json-view';
     MatSelectModule,
     MatProgressSpinnerModule,
     MatSnackBarModule,
-    FlexLayoutModule,
     ReactiveFormsModule,
     RouterModule,
     MatMenuModule,
@@ -143,6 +141,17 @@ export class PresentationCreateComponent implements OnInit {
   public form: FormGroup;
   public create = true;
   public copyMode = false;
+
+  /** Where the back link and Cancel lead: the config being edited, or the list. */
+  get backLink(): string[] {
+    return this.copyMode ? ['../../'] : ['../'];
+  }
+
+  /** Name of the page the back link leads to. */
+  get backLabel(): string {
+    const id: string | undefined = this.route.snapshot.params['id'];
+    return id && !this.copyMode ? id : 'Verification Configs';
+  }
   public guided = true;
   public activeStep = 0;
   public furthestStep = 0;

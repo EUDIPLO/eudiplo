@@ -56,7 +56,8 @@ test('a locked action on the list says why and lets no click or key through', as
   const row = page
     .getByRole('row')
     .filter({ has: page.getByRole('cell', { name: 'pid', exact: true }) });
-  const view = row.locator('button').first();
+  // The ID links to the configuration; Edit is the next stop in the row.
+  const view = row.getByRole('link', { name: 'pid', exact: true });
   // The list names each action after its configuration.
   const edit = row.getByRole('button', { name: 'Edit presentation configuration pid' });
   const tooltip = page.locator('.mat-mdc-tooltip');

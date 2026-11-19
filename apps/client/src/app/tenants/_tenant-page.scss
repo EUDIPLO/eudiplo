@@ -187,7 +187,8 @@
     align-items: center;
     gap: 2px;
 
-    .delete-action:not([disabled]) mat-icon {
+    // Not while disabled, busy or locked as file-managed
+    .delete-action:not([disabled], .mat-mdc-button-disabled) mat-icon {
       color: var(--mat-sys-error);
     }
   }
@@ -750,5 +751,51 @@
     margin: 12px 0 0;
     font: var(--mat-sys-body-small);
     color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+// Details of a resource as label and value pairs in a card, the label left and the value right.
+// Markup: dl.details > div > dt + dd (code for IDs and URLs).
+@mixin details-list {
+  .details {
+    margin: 0;
+
+    > div {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 4px 16px;
+      padding: 10px 0;
+
+      & + div {
+        border-top: 1px solid var(--mat-sys-outline-variant);
+      }
+    }
+
+    dt {
+      font: var(--mat-sys-body-medium);
+      color: var(--mat-sys-on-surface-variant);
+    }
+
+    dd {
+      display: inline-flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      min-width: 0;
+      margin: 0;
+      font: var(--mat-sys-body-medium);
+      font-weight: 500;
+      color: var(--mat-sys-on-surface);
+      text-align: right;
+      overflow-wrap: anywhere;
+
+      code {
+        font-size: 13px;
+        font-weight: 400;
+        overflow-wrap: anywhere;
+      }
+    }
   }
 }

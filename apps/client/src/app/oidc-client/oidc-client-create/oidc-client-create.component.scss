@@ -1,21 +1,59 @@
-mat-card-header {
-  mat-card-title {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+@use '../../tenants/tenant-page' as page;
 
-    mat-icon {
-      color: var(--mat-sys-on-surface-variant);
+// Back link, heading, sections and action bar, as on the user and client forms
+@include page.base;
+@include page.form-page;
+
+.form-avatar mat-icon {
+  width: 28px;
+  height: 28px;
+  font-size: 28px;
+}
+
+// Focus lands on the Scopes heading after the configs load again
+.section-intro h2:focus-visible {
+  outline: 2px solid var(--mat-sys-primary);
+  outline-offset: 2px;
+}
+
+// One entry of a list of fields with its remove button
+.array-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+
+  .grow {
+    flex: 1 1 240px;
+  }
+
+  .scope-name {
+    flex: 0 1 30%;
+    min-width: 140px;
+  }
+
+  .subject-query {
+    flex: 0 1 40%;
+    min-width: 180px;
+  }
+}
+
+@container (max-width: 760px) {
+  .scope-row,
+  .subject-row {
+    flex-direction: column;
+    align-items: stretch;
+
+    .scope-name,
+    .subject-query {
+      flex-basis: auto;
     }
   }
 }
 
-mat-card-content {
-  padding-top: 16px;
-}
-
 .hint {
   margin: 0;
+  font: var(--mat-sys-body-medium);
   color: var(--mat-sys-on-surface-variant);
 }
 

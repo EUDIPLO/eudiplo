@@ -1,102 +1,159 @@
-<div fxLayout="row" fxLayoutAlign="space-between center">
-  <h2>Presentation Configurations</h2>
-  <div>
-    <button
-      mat-icon-button
-      [routerLink]="['create']"
-      matTooltip="Create Configuration"
-      aria-label="Create presentation configuration"
-    >
+<div class="page">
+  <header class="page-header">
+    <div>
+      <h1 #listHeading tabindex="-1">Verification Configs</h1>
+      <p>Reusable requests that say which credentials and claims a wallet presents.</p>
+    </div>
+    <a matButton="filled" [routerLink]="['create']">
       <mat-icon>add</mat-icon>
-    </button>
-  </div>
-</div>
-@if (loading) {
-  <div class="list-state">
-    <mat-spinner diameter="40" aria-label="Loading presentation configurations"></mat-spinner>
-  </div>
-} @else if (loadError) {
-  <app-load-error [message]="loadError" (retry)="loadConfigurations()" />
-} @else if (configurations.length === 0) {
-  <div class="list-state">
-    <mat-icon class="empty-icon">verified_user</mat-icon>
-    <p>No presentation configurations yet.</p>
-    <a mat-flat-button [routerLink]="['create']">
-      <mat-icon>add</mat-icon>
-      Create Configuration
+      Create config
     </a>
-  </div>
-} @else {
-  <table mat-table [dataSource]="configurations" class="mat-elevation-z8">
-    <ng-container matColumnDef="id">
-      <th mat-header-cell *matHeaderCellDef>ID</th>
-      <td mat-cell *matCellDef="let config">{{ config.id }}</td>
-    </ng-container>
+  </header>
 
-    <ng-container matColumnDef="description">
-      <th mat-header-cell *matHeaderCellDef>Description</th>
-      <td mat-cell *matCellDef="let config">{{ config.description }}</td>
-    </ng-container>
+  @if (loadError) {
+    <app-load-error [message]="loadError" (retry)="loadItems()" />
+  } @else if (loading) {
+    <div class="loading-state">
+      <mat-spinner diameter="40" aria-label="Loading presentation configurations"></mat-spinner>
+    </div>
+  } @else if (configurations.length === 0) {
+    <div class="empty-state">
+      <span class="empty-icon"><mat-icon>tune</mat-icon></span>
+      <strong>No verification configs yet</strong>
+      <p>Create a config for each set of credentials and claims you request from a wallet.</p>
+      <a matButton="filled" [routerLink]="['create']">
+        <mat-icon>add</mat-icon>
+        Create config
+      </a>
+    </div>
+  } @else {
+    <mat-card appearance="outlined" class="table-card">
+      <div class="table-header">
+        <div class="table-title">
+          <h2>All configs</h2>
+          <output>
+            @if (search.trim()) {
+              {{ shownConfigurations.length }} of {{ configurations.length }} configs
+            } @else {
+              {{ configurations.length }} {{ configurations.length === 1 ? 'config' : 'configs' }}
+            }
+          </output>
+        </div>
+        <div class="search-bar" role="search">
+          <mat-icon class="search-icon" aria-hidden="true">search</mat-icon>
+          <input
+            type="search"
+            [(ngModel)]="search"
+            placeholder="Search configs"
+            aria-label="Search configs by ID or description"
+          />
+          @if (search) {
+            <button
+              matIconButton
+              type="button"
+              class="clear-search"
+              aria-label="Clear search"
+              matTooltip="Clear search"
+              (click)="clearSearch()"
+            >
+              <mat-icon>close</mat-icon>
+            </button>
+          }
+        </div>
+      </div>
 
-    <ng-container matColumnDef="createdAt">
-      <th mat-header-cell *matHeaderCellDef>Created At</th>
-      <td mat-cell *matCellDef="let config">{{ config.createdAt | date }}</td>
-    </ng-container>
+      <div class="table-scroll">
+        <table mat-table [dataSource]="shownConfigurations" class="linked">
+          <ng-container matColumnDef="id">
+            <th mat-header-cell *matHeaderCellDef>ID</th>
+            <td mat-cell *matCellDef="let config">
+              <!-- The ID links to the config and its link covers the row -->
+              <a class="row-link" [routerLink]="[config.id]">{{ config.id }}</a>
+            </td>
+          </ng-container>
 
-    <ng-container matColumnDef="registrationCert">
-      <th mat-header-cell *matHeaderCellDef>Reg. Cert</th>
-      <td mat-cell *matCellDef="let config">
-        @let status = registrationCertStatus(config);
-        <mat-icon
-          aria-hidden="true"
-          [matTooltip]="registrationCertTooltip(config)"
-          [color]="
-            status === 'active'
-              ? 'primary'
-              : status === 'expired' || status === 'invalid' || status === 'notYetValid'
-                ? 'warn'
-                : status === 'expiring' || status === 'missing'
-                  ? 'accent'
-                  : ''
-          "
-          >{{ registrationCertIcon(status) }}</mat-icon
-        >
-        <span class="visually-hidden">{{ registrationCertTooltip(config) }}</span>
-      </td>
-    </ng-container>
+          <ng-container matColumnDef="description">
+            <th mat-header-cell *matHeaderCellDef>Description</th>
+            <td mat-cell *matCellDef="let config" class="description">
+              {{ config.description }}
+            </td>
+          </ng-container>
 
-    <ng-container matColumnDef="hasWebhook">
-      <th mat-header-cell *matHeaderCellDef>Has Webhook</th>
-      <td mat-cell *matCellDef="let config">{{ config.hasWebhook ? 'Yes' : 'No' }}</td>
-    </ng-container>
+          <ng-container matColumnDef="registrationCert">
+            <th mat-header-cell *matHeaderCellDef>Registration certificate</th>
+            <td mat-cell *matCellDef="let config">
+              @let status = registrationCertStatus(config);
+              @if (status === 'none') {
+                <span class="muted">None</span>
+              } @else {
+                <span
+                  class="badge"
+                  [attr.data-status]="status"
+                  [matTooltip]="registrationCertTooltip(config)"
+                  >{{ registrationCertLabels[status] }}</span
+                >
+                <span class="visually-hidden">: {{ registrationCertTooltip(config) }}</span>
+              }
+            </td>
+          </ng-container>
 
-    <ng-container matColumnDef="actions">
-      <th mat-header-cell *matHeaderCellDef>Actions</th>
-      <td mat-cell *matCellDef="let config">
-        <button
-          matIconButton
-          [routerLink]="[config.id]"
-          routerLinkActive="router-link-active"
-          matTooltip="View Configuration"
-          [attr.aria-label]="'View presentation configuration ' + config.id"
-        >
-          <mat-icon>visibility</mat-icon>
-        </button>
-        <button
-          matIconButton
-          [routerLink]="[config.id, 'edit']"
-          matTooltip="Edit Configuration"
-          appConfigManaged
-          managedKind="PresentationConfig"
-          [managedResourceId]="config.id"
-          [attr.aria-label]="'Edit presentation configuration ' + config.id"
-        >
-          <mat-icon>edit</mat-icon>
-        </button>
-      </td>
-    </ng-container>
+          <ng-container matColumnDef="createdAt">
+            <th mat-header-cell *matHeaderCellDef>Created</th>
+            <td mat-cell *matCellDef="let config" class="muted">
+              {{ config.createdAt | date }}
+            </td>
+          </ng-container>
 
-    <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-    <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
-  </table>
-}
+          <ng-container matColumnDef="actions">
+            <th mat-header-cell *matHeaderCellDef>
+              <span class="visually-hidden">Actions</span>
+            </th>
+            <td mat-cell *matCellDef="let config">
+              <span class="row-actions">
+                <button
+                  matIconButton
+                  [routerLink]="[config.id, 'edit']"
+                  matTooltip="Edit Configuration"
+                  appConfigManaged
+                  managedKind="PresentationConfig"
+                  [managedResourceId]="config.id"
+                  [attr.aria-label]="'Edit presentation configuration ' + config.id"
+                >
+                  <mat-icon>edit</mat-icon>
+                </button>
+                <button
+                  matIconButton
+                  class="delete-action"
+                  (click)="deleteConfiguration(config)"
+                  [disabled]="deletingId === config.id"
+                  disabledInteractive
+                  [matTooltip]="
+                    deletingId === config.id
+                      ? 'Deleting the configuration…'
+                      : 'Delete Configuration'
+                  "
+                  appConfigManaged
+                  managedKind="PresentationConfig"
+                  [managedResourceId]="config.id"
+                  [attr.aria-label]="'Delete presentation configuration ' + config.id"
+                >
+                  <mat-icon>delete_outline</mat-icon>
+                </button>
+              </span>
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+          <tr class="mat-mdc-row no-match" *matNoDataRow>
+            <td class="mat-mdc-cell" [attr.colspan]="displayedColumns.length">
+              <mat-icon aria-hidden="true">search_off</mat-icon>
+              <span>No config matches "{{ search.trim() }}".</span>
+              <button matButton type="button" (click)="clearSearch()">Clear search</button>
+            </td>
+          </tr>
+        </table>
+      </div>
+    </mat-card>
+  }
+</div>

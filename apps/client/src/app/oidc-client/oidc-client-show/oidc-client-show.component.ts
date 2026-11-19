@@ -17,14 +17,14 @@ import { MatDialog } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
-import { MatListModule } from '@angular/material/list';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import type { OidcClientResponseDto, OidcClientSecretDto } from '@eudiplo/sdk-core';
 import { focusAfterRenderIfLost, focusRowAfterRemoval } from '../../common/focus-if-lost.util';
 import { LoadErrorComponent } from '../../common/load-error.component';
+import { JwtService } from '../../services/jwt.service';
 import { copyToClipboard } from '../../utils/copy-to-clipboard';
 import { getApiErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
@@ -55,8 +55,7 @@ export function toLocalDateTime(iso: string | null | undefined): string {
     MatFormFieldModule,
     MatInputModule,
     MatTooltipModule,
-    MatListModule,
-    FlexLayoutModule,
+    MatProgressSpinnerModule,
     RouterModule,
     LoadErrorComponent,
   ],
@@ -69,6 +68,8 @@ export class OidcClientShowComponent implements OnInit {
   client: OidcClientResponseDto | undefined;
   /** Set when the client could not be loaded, so the page is not left blank. */
   loadError = '';
+  /** While the client is deleted, so a second click does not delete it again. */
+  deleting = false;
   /** While a secret is added, so a second click does not add another. */
   addingSecret = false;
   /** IDs of the secrets with a request in flight. */
@@ -90,6 +91,7 @@ export class OidcClientShowComponent implements OnInit {
   private readonly snackBar = inject(MatSnackBar);
   private readonly dialog = inject(MatDialog);
   private readonly injector = inject(Injector);
+  private readonly jwtService = inject(JwtService);
 
   ngOnInit(): void {
     this.load();
@@ -153,22 +155,26 @@ export class OidcClientShowComponent implements OnInit {
     const client = this.client;
     if (
       !client ||
+      this.deleting ||
+      !this.jwtService.hasRole('presentation:manage') ||
       !confirm(
         `Delete OIDC client "${client.name}"? Applications using it can no longer sign users in. This cannot be undone.`
       )
     ) {
       return;
     }
+    this.deleting = true;
     this.service
       .delete(client.id)
       .then(() => {
         this.snackBar.open('OIDC client deleted', 'Close', { duration: 3000 });
-        this.router.navigate(['../'], { relativeTo: this.route });
+        return this.router.navigate(['../'], { relativeTo: this.route });
       })
       .catch((error) => {
         openErrorSnackBar(this.snackBar, getApiErrorMessage(error, 'Failed to delete OIDC client'));
         console.error('Delete error:', error);
-      });
+      })
+      .finally(() => (this.deleting = false));
   }
 
   addSecret(): void {

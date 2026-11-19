@@ -3,6 +3,7 @@ import { MAT_DIALOG_DATA, MatDialogModule } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { copyToClipboard } from '../../utils/copy-to-clipboard';
 
 export interface OidcClientSecretDialogData {
@@ -14,7 +15,7 @@ export interface OidcClientSecretDialogData {
 /** Shows a new client secret once; EUDIPLO keeps only its hash. */
 @Component({
   selector: 'app-oidc-client-secret-dialog',
-  imports: [MatDialogModule, MatButtonModule, MatIconModule],
+  imports: [MatDialogModule, MatButtonModule, MatIconModule, MatTooltipModule],
   templateUrl: './oidc-client-secret-dialog.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './oidc-client-secret-dialog.component.scss',

@@ -1,0 +1,69 @@
+@use '../../tenants/tenant-page' as page;
+
+// Heading, table card with search, badges and states, as on the user and client lists
+@include page.base;
+@include page.list-page;
+
+table {
+  @include page.data-table;
+
+  // The name link covers its row; the actions sit above it
+  &.linked tr.mat-mdc-row:not(.no-match) {
+    position: relative;
+    cursor: pointer;
+
+    .row-actions {
+      position: relative;
+      z-index: 1;
+    }
+
+    &:hover .row-link {
+      color: var(--mat-sys-primary);
+    }
+  }
+}
+
+.client-id code {
+  font-size: 13px;
+  color: var(--mat-sys-on-surface-variant);
+  overflow-wrap: anywhere;
+}
+
+.row-link {
+  display: inline-block;
+  padding: 16px 0;
+  font: var(--mat-sys-title-small);
+  color: var(--mat-sys-on-surface);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+  transition: color 120ms ease;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--mat-sys-primary);
+    outline-offset: 2px;
+    border-radius: var(--mat-sys-corner-extra-small);
+  }
+}
+
+@container (max-width: 600px) {
+  .search-bar {
+    flex: 1 1 100%;
+  }
+
+  .mat-column-id {
+    display: none;
+  }
+}
+
+// Phones: the list leaves the scopes to each client's page
+@container (max-width: 560px) {
+  .mat-column-scopes {
+    display: none;
+  }
+}

@@ -1,24 +1,32 @@
-<div class="presentation-editor">
+<div class="page form-page presentation-editor">
+  <a class="back-link" matButton [routerLink]="backLink" [attr.aria-label]="'Back to ' + backLabel">
+    <mat-icon>arrow_back</mat-icon>
+    {{ backLabel }}
+  </a>
+
   @if (!create) {
     <app-config-ownership-notice
       kind="PresentationConfig"
       [resourceId]="form.get('id')?.value || ''"
     />
   }
-  <header class="editor-header">
-    <div>
-      <h2 #pageHeading tabindex="-1">
-        {{ create ? 'Create Presentation' : 'Update Presentation' }}
-      </h2>
-      <p>Choose what to request from a wallet, then review how it will be verified.</p>
+  <header class="page-header">
+    <div class="heading">
+      <span class="form-avatar" aria-hidden="true"><mat-icon>tune</mat-icon></span>
+      <div>
+        <h1 #pageHeading tabindex="-1">
+          {{ create ? 'Create Presentation' : 'Update Presentation' }}
+        </h1>
+        <p>Choose what to request from a wallet, then review how it will be verified.</p>
+      </div>
     </div>
     <div class="editor-actions">
-      <button mat-stroked-button type="button" (click)="toggleGuided()">
+      <button matButton="outlined" type="button" (click)="toggleGuided()">
         <mat-icon>{{ guided ? 'tune' : 'format_list_numbered' }}</mat-icon>
         {{ guided ? 'Switch to editor' : 'Use guided setup' }}
       </button>
       <button
-        mat-button
+        matButton
         type="button"
         (click)="viewAsJson()"
         [disabled]="!!jsonViewUnavailableReason"
@@ -28,7 +36,7 @@
         <mat-icon>code</mat-icon>JSON View
       </button>
       <a
-        mat-button
+        matButton
         href="https://docs.eudiplo.dev/presentation/configure-verification"
         target="_blank"
         rel="noopener"
@@ -45,7 +53,7 @@
       <a mat-button [routerLink]="['../../']">Back to the list</a>
     </app-load-error>
   } @else if (loadingConfig) {
-    <p><output>Loading presentation configuration…</output></p>
+    <p class="loading-state"><output>Loading presentation configuration…</output></p>
   } @else {
     @if (guided) {
       <p class="flow-hint" aria-live="polite">
@@ -60,7 +68,7 @@
         animationDuration="0ms"
       >
         <mat-tab label="1. Name">
-          <section class="form-section">
+          <section class="step-section">
             <h3>Name this presentation</h3>
             <p>
               Give this reusable request a name so you can find it when creating a presentation
@@ -88,24 +96,24 @@
           </section>
         </mat-tab>
         <mat-tab label="2. Credentials" [disabled]="guided && furthestStep < 1">
-          <section class="form-section">
+          <section class="step-section">
             <h3>Which credentials and claims do you need?</h3>
             <p>
               Start from an issuer to select available claims, browse a schema, or define a
               credential manually below.
             </p>
             <div class="editor-actions import-actions">
-              <button mat-stroked-button type="button" (click)="importFromIssuer()">
+              <button matButton="outlined" type="button" (click)="importFromIssuer()">
                 <mat-icon>cloud_download</mat-icon>Import from Issuer
               </button>
-              <button mat-stroked-button type="button" (click)="importFromSchemaMetadata()">
+              <button matButton="outlined" type="button" (click)="importFromSchemaMetadata()">
                 <mat-icon>schema</mat-icon>Import from Schema
               </button>
               <!-- Predefined Configs Menu -->
               @if (create) {
                 <button
                   type="button"
-                  mat-stroked-button
+                  matButton="outlined"
                   [matMenuTriggerFor]="templatesMenu"
                   matTooltip="Load predefined configuration"
                 >
@@ -117,7 +125,7 @@
                     <div>
                       <button type="button" mat-menu-item (click)="loadPredefinedConfig(template)">
                         <mat-icon>{{ template.icon }}</mat-icon>
-                        <div fxLayout="column" fxLayoutAlign="start start">
+                        <div class="option-copy">
                           <span>{{ template.name }}</span>
                           <small class="menu-description">{{ template.description }}</small>
                         </div>
@@ -142,7 +150,7 @@
           </section>
         </mat-tab>
         <mat-tab label="3. Settings" [disabled]="guided && furthestStep < 2">
-          <section class="form-section">
+          <section class="step-section">
             <h3>Review verification settings</h3>
             <p>Keep the defaults unless your wallet or integration needs a different setup.</p>
             <dl class="settings-summary">
@@ -193,7 +201,7 @@
                       <mat-select-trigger>{{ selectedStatusCheckModeLabel }}</mat-select-trigger>
                       @for (mode of statusCheckModeOptions; track mode.value) {
                         <mat-option [value]="mode.value">
-                          <div fxLayout="column">
+                          <div class="option-copy">
                             <span
                               ><strong>{{ mode.label }}</strong></span
                             >
@@ -265,7 +273,7 @@
                       </mat-option>
                       @for (keyChain of keyChains; track keyChain.id) {
                         <mat-option [value]="keyChain.id">
-                          <div fxLayout="column">
+                          <div class="option-copy">
                             <span
                               ><strong>{{ keyChain.id }}</strong></span
                             >
@@ -316,16 +324,10 @@
                     </output>
                   }
                   @if (registrationCertStatus !== 'none') {
-                    <div
-                      class="reg-cert-status"
-                      [attr.data-status]="registrationCertStatus"
-                      fxLayout="row"
-                      fxLayoutGap="12px"
-                      fxLayoutAlign="start center"
-                    >
+                    <div class="reg-cert-status" [attr.data-status]="registrationCertStatus">
                       @switch (registrationCertStatus) {
                         @case ('active') {
-                          <mat-icon color="primary">verified</mat-icon>
+                          <mat-icon class="tone-success" aria-hidden="true">verified</mat-icon>
                           <span
                             ><strong>Active</strong>
                             @if (registrationCertExpiresIn) {
@@ -334,35 +336,35 @@
                           </span>
                         }
                         @case ('expiring') {
-                          <mat-icon color="accent">schedule</mat-icon>
+                          <mat-icon class="tone-warning" aria-hidden="true">schedule</mat-icon>
                           <span
                             ><strong>Expiring soon</strong> — {{ registrationCertExpiresIn }}
                             remaining
                           </span>
                         }
                         @case ('expired') {
-                          <mat-icon color="warn">error_outline</mat-icon>
+                          <mat-icon class="tone-danger" aria-hidden="true">error_outline</mat-icon>
                           <span
                             ><strong>Expired</strong> — the configuration cannot be saved with it;
                             request a new one or remove it</span
                           >
                         }
                         @case ('notYetValid') {
-                          <mat-icon color="warn">schedule</mat-icon>
+                          <mat-icon class="tone-danger" aria-hidden="true">schedule</mat-icon>
                           <span
                             ><strong>Not yet valid</strong> — requests fail until its start
                             time</span
                           >
                         }
                         @case ('invalid') {
-                          <mat-icon color="warn">gpp_bad</mat-icon>
+                          <mat-icon class="tone-danger" aria-hidden="true">gpp_bad</mat-icon>
                           <span
                             ><strong>Not a valid JWT</strong> — the configuration cannot be saved
                             with it; paste a valid JWT or request a new one</span
                           >
                         }
                         @case ('missing') {
-                          <mat-icon color="accent">report</mat-icon>
+                          <mat-icon class="tone-warning" aria-hidden="true">report</mat-icon>
                           <span
                             ><strong>No certificate</strong> — the purpose and privacy policy are
                             kept for the next request</span
@@ -403,7 +405,7 @@
                     <mat-hint>Kept for requesting the next certificate.</mat-hint>
                   </mat-form-field>
 
-                  <div fxLayout="row" fxLayoutAlign="space-between center">
+                  <div class="purposes-header">
                     <h5>Purposes</h5>
                     <button
                       #addPurposeButton
@@ -416,20 +418,14 @@
                     </button>
                   </div>
 
-                  <div formArrayName="registrationCertPurpose" fxLayout="column" fxLayoutGap="12px">
+                  <div formArrayName="registrationCertPurpose" class="purpose-list">
                     @for (
                       purposeCtrl of registrationCertPurposeArray.controls;
                       let i = $index;
                       track purposeCtrl
                     ) {
-                      <div
-                        [formGroup]="asFormGroup(purposeCtrl)"
-                        fxLayout="row"
-                        fxLayoutGap="12px"
-                        fxLayout.lt-md="column"
-                        class="purpose-row"
-                      >
-                        <mat-form-field fxFlex="30">
+                      <div [formGroup]="asFormGroup(purposeCtrl)" class="purpose-row">
+                        <mat-form-field class="purpose-lang">
                           <mat-label>Language</mat-label>
                           <mat-select formControlName="lang">
                             @for (
@@ -444,7 +440,7 @@
                             }
                           </mat-select>
                         </mat-form-field>
-                        <mat-form-field fxFlex>
+                        <mat-form-field class="purpose-content">
                           <mat-label>Purpose</mat-label>
                           <input
                             #purposeContent
@@ -546,7 +542,7 @@
           </section>
         </mat-tab>
         <mat-tab label="4. Review" [disabled]="guided && furthestStep < 3">
-          <section class="form-section">
+          <section class="step-section">
             <h3>Review your presentation configuration</h3>
             <dl class="settings-summary">
               <div>
@@ -648,14 +644,12 @@
       @if (validationMessage) {
         <p class="form-error" role="alert">{{ validationMessage }}</p>
       }
-      <footer class="form-actions">
-        <button mat-button type="button" [routerLink]="copyMode ? ['../../'] : ['../']">
-          Cancel
-        </button>
-        <span class="action-spacer"></span>
+      <!-- Stays in view at the bottom while the form scrolls -->
+      <div class="action-bar">
+        <button matButton type="button" [routerLink]="backLink">Cancel</button>
         @if (guided && activeStep > 0) {
           <button
-            mat-stroked-button
+            matButton="outlined"
             type="button"
             (click)="previousStep()"
             [disabled]="saving"
@@ -666,10 +660,12 @@
           </button>
         }
         @if (guided && activeStep < 3) {
-          <button mat-flat-button type="submit">Continue<mat-icon>arrow_forward</mat-icon></button>
+          <button matButton="filled" type="submit">
+            Continue<mat-icon>arrow_forward</mat-icon>
+          </button>
         } @else {
           <button
-            mat-flat-button
+            matButton="filled"
             type="submit"
             [disabled]="saving"
             disabledInteractive
@@ -683,7 +679,7 @@
             }}
           </button>
         }
-      </footer>
+      </div>
     </form>
   }
 </div>

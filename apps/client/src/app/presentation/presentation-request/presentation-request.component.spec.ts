@@ -1,3 +1,4 @@
+import { ApplicationRef } from '@angular/core';
 import { ChangeDetectorRef } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -133,11 +134,35 @@ describe('PresentationRequestComponent', () => {
       await vi.waitFor(() => expect(component.loading).toBe(false));
       fixture.detectChanges();
 
-      expectUnavailable(
-        fixture,
-        generateButton(),
-        'The presentation configurations could not be loaded.'
+      const page = fixture.nativeElement as HTMLElement;
+      // Nothing can be requested, so the form stays hidden behind the error card.
+      expect(page.querySelector('form')).toBeNull();
+      expect(page.querySelector('app-load-error')?.textContent).toContain(
+        'Failed to load presentation configurations: Unavailable'
       );
+      expect(page.textContent).not.toContain('No presentation configurations');
+    });
+
+    it('loads the configurations again on Retry and continues from the heading', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      service.loadConfigurations.mockRejectedValueOnce({ statusCode: 503, message: 'Unavailable' });
+      fixture.detectChanges();
+      await vi.waitFor(() => expect(component.loading).toBe(false));
+      fixture.detectChanges();
+      const page = fixture.nativeElement as HTMLElement;
+      const retry = [...page.querySelectorAll<HTMLButtonElement>('app-load-error button')].find(
+        (button) => button.textContent?.includes('Retry')
+      )!;
+
+      retry.focus();
+      retry.click();
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        TestBed.inject(ApplicationRef).tick();
+        expect(page.querySelector('app-load-error')).toBeNull();
+        expect(document.activeElement).toBe(page.querySelector('h1'));
+      });
+      expect(component.configs.map((config) => config.id)).toEqual(['pid', 'mdl']);
     });
 
     it('generates the request of a configuration the page was opened for', async () => {
@@ -153,16 +178,14 @@ describe('PresentationRequestComponent', () => {
       expect(navigate).toHaveBeenCalledWith(['/session-management', 'session-id']);
     });
 
-    it('says why it cannot be used when there is no configuration', async () => {
+    it('offers no form and says why on submit when there is no configuration', async () => {
       service.loadConfigurations.mockResolvedValue([]);
       fixture.detectChanges();
       await fixture.whenStable();
       fixture.detectChanges();
-      expectUnavailable(
-        fixture,
-        generateButton(),
-        'There is no presentation configuration to request.'
-      );
+      const page = fixture.nativeElement as HTMLElement;
+      expect(page.textContent).toContain('No presentation configurations');
+      expect(page.querySelector('form')).toBeNull();
 
       await component.onSubmit();
 

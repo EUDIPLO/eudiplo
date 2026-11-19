@@ -589,6 +589,52 @@ describe('Presentation configuration flow', () => {
     expect(service.createConfiguration).not.toHaveBeenCalled();
   });
 
+  describe('back link', () => {
+    const backLink = () =>
+      (fixture.nativeElement as HTMLElement).querySelector<HTMLAnchorElement>('a.back-link')!;
+
+    it('leads a new configuration back to the list', () => {
+      fixture.detectChanges();
+      expect(backLink().textContent?.trim()).toContain('Verification Configs');
+      expect(backLink().getAttribute('aria-label')).toBe('Back to Verification Configs');
+      expect(backLink().getAttribute('href')).toBe('/');
+    });
+
+    it('leads an edit back to the configuration, also while it loads', () => {
+      route.snapshot.params = { id: 'age-check' };
+      route.snapshot.url = [{ path: 'age-check' }, { path: 'edit' }];
+      service.getPresentationById.mockReturnValue(new Promise(() => undefined));
+      fixture.detectChanges();
+
+      expect(component.loadingConfig).toBe(true);
+      expect(backLink().getAttribute('aria-label')).toBe('Back to age-check');
+      expect(component.backLink).toEqual(['../']);
+    });
+
+    it('leads a copy back to the list', async () => {
+      route.snapshot.params = { id: 'existing' };
+      route.snapshot.url = [{ path: 'existing' }, { path: 'copy' }];
+      service.getPresentationById.mockResolvedValue({
+        id: 'existing',
+        description: 'Existing request',
+        dcql_query: query,
+      });
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(backLink().getAttribute('aria-label')).toBe('Back to Verification Configs');
+      expect(backLink().getAttribute('href')).toBe('/');
+      const cancel = [
+        ...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(
+          '.action-bar button'
+        ),
+      ].find((button) => button.textContent?.trim() === 'Cancel');
+      expect(cancel).toBeDefined();
+      expect(component.backLink).toEqual(['../../']);
+    });
+  });
+
   describe('JSON View', () => {
     let open: ReturnType<typeof vi.fn>;
 
@@ -673,7 +719,8 @@ describe('Presentation configuration flow', () => {
     await expectHeadingFocusOnlyAfterRetry(
       fixture,
       () => component.loadConfigForEdit(),
-      () => !component.loadingConfig
+      () => !component.loadingConfig,
+      'h1'
     );
   });
 });

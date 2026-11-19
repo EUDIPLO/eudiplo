@@ -1,73 +1,100 @@
-.config-list {
-  padding: 0;
+@use '../../tenants/tenant-page' as page;
 
-  mat-list-item {
-    height: auto !important;
-    padding: 12px 0;
-    border-bottom: 1px solid var(--mat-sys-outline-variant);
+// Back link, header card and the cards below it, as on the user and key pages
+@include page.base;
+@include page.detail-page;
+@include page.details-list;
 
-    // Long values (ids, URLs, free text) wrap instead of widening the page
-    // or ending in an ellipsis. Nested so it outranks Material's nowrap rule.
-    [matListItemLine] {
-      white-space: normal;
-      overflow-wrap: anywhere;
-    }
-
-    &:last-child {
-      border-bottom: none;
-    }
-  }
+.hero-avatar mat-icon {
+  width: 32px;
+  height: 32px;
+  font-size: 32px;
 }
 
-mat-card-header {
-  mat-card-title {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-
-    mat-icon {
-      color: var(--mat-sys-on-surface-variant);
-    }
-  }
+.hero-meta .muted {
+  font: var(--mat-sys-body-medium);
 }
 
+.danger:not([disabled], .mat-mdc-button-disabled) {
+  --mat-button-outlined-label-text-color: var(--mat-sys-error);
+  --mat-button-outlined-outline-color: color-mix(in srgb, var(--mat-sys-error) 50%, transparent);
+}
+
+// More specific than Material's own :last-child padding rule of the card content
+mat-card mat-card-content {
+  padding: 0 20px 20px;
+}
+
+// The values an application needs, each in a tonal row with its copy button
 .settings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   margin: 0;
 
   .setting {
-    padding: 8px 0;
+    padding: 8px 4px 8px 16px;
+    border-radius: var(--mat-sys-corner-medium);
+    background: var(--mat-sys-surface-container-low);
   }
 
   dt {
-    font-size: 12px;
+    font: var(--mat-sys-label-medium);
     color: var(--mat-sys-on-surface-variant);
   }
 
   dd {
-    margin: 0;
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 4px;
+    min-height: 40px;
+    margin: 0;
     word-break: break-all;
+
+    code {
+      font-size: 13px;
+      color: var(--mat-sys-on-surface);
+    }
   }
 }
 
+.secret-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
 .secret {
-  border-bottom: 1px solid var(--mat-sys-outline-variant);
-  padding-bottom: 16px;
+  padding: 16px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: var(--mat-sys-corner-medium);
 
   h3 {
     margin: 0 0 4px;
-    font-size: 16px;
+    font: var(--mat-sys-title-small);
+    color: var(--mat-sys-on-surface);
   }
 
   p {
     margin: 0 0 12px;
+    font: var(--mat-sys-body-medium);
     color: var(--mat-sys-on-surface-variant);
   }
 
   .expired {
-    color: var(--eudiplo-danger);
     font-weight: normal;
+    color: var(--eudiplo-danger);
+  }
+}
+
+.secret-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+
+  .delete-action:not([disabled], .mat-mdc-button-disabled) mat-icon {
+    color: var(--mat-sys-error);
   }
 }

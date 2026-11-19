@@ -26,7 +26,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { ConfigOwnershipDirective } from '../../config-portability/config-ownership.directive';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
+import { MatExpansionModule } from '@angular/material/expansion';
 import { OfferResponse, PresentationConfig, PresentationRequest } from '@eudiplo/sdk-core';
 import { PresentationManagementService } from '../presentation-config/presentation-management.service';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
@@ -36,6 +36,8 @@ import { asSentence, getApiErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { JwtService } from '../../services/jwt.service';
 import { showFieldsToFix } from '../../common/field-to-fix.util';
+import { LoadErrorComponent } from '../../common/load-error.component';
+import { focusAfterRenderIfLost } from '../../common/focus-if-lost.util';
 
 type ClientIdScheme = 'x509_hash' | 'x509_san_dns' | 'openid_federation';
 
@@ -58,7 +60,8 @@ type PresentationRequestWithClientIdScheme = PresentationRequest & {
     MatProgressSpinnerModule,
     MatSnackBarModule,
     MatTooltipModule,
-    FlexLayoutModule,
+    MatExpansionModule,
+    LoadErrorComponent,
     RouterModule,
     ConfigOwnershipDirective,
     MatSlideToggleModule,
@@ -83,11 +86,15 @@ export class PresentationRequestComponent implements OnInit {
   showTransactionDataOverride = false;
   /** The configurations could not be loaded, so the empty list says nothing. */
   configsLoadFailed = false;
+  /** Why the configurations could not be loaded, for the error card. */
+  loadErrorMessage = '';
   transactionDataArraySchema = transactionDataArraySchema;
 
   private readonly jwtService = inject(JwtService);
   private readonly injector = inject(Injector);
   private readonly formElement = viewChild<ElementRef<HTMLFormElement>>('formElement');
+  /** Where focus goes after a successful Retry removed the error card with its Retry button. */
+  private readonly pageHeading = viewChild<ElementRef<HTMLElement>>('pageHeading');
 
   /** Presentation configurations can be created with `presentation:manage`. */
   get canManagePresentationConfigs(): boolean {
@@ -145,14 +152,20 @@ export class PresentationRequestComponent implements OnInit {
     } catch (error) {
       this.configsLoadFailed = true;
       console.error('Error loading configurations:', error);
-      openErrorSnackBar(
-        this.snackBar,
-        getApiErrorMessage(error, 'Failed to load presentation configurations'),
-        'Close',
-        { panelClass: ['error-snackbar'] }
+      this.loadErrorMessage = getApiErrorMessage(
+        error,
+        'Failed to load presentation configurations'
       );
     } finally {
       this.loading = false;
+    }
+  }
+
+  /** Loads the configurations again after a failure, then continues from the page heading. */
+  async retryLoad(): Promise<void> {
+    await this.loadConfigurations();
+    if (!this.configsLoadFailed) {
+      focusAfterRenderIfLost(this.injector, () => this.pageHeading()?.nativeElement);
     }
   }
 

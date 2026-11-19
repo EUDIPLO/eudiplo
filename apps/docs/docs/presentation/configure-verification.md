@@ -13,7 +13,7 @@ A presentation configuration is the reusable definition of a verification: which
 
 ## In the Web Client
 
-Open **Credential Verification → Verification Configs → Create**. The guided setup has four steps:
+Open **Credential Verification → Verification Configs** and choose **Create config**. The guided setup has four steps:
 
 1. **Name**: a unique ID (the `requestId` you use later) and an internal description.
 2. **Credentials**: **Import from Issuer** reads credential types and claims from an issuer's metadata, **Import from Schema** starts from TS11 schema metadata at a URL, and **Add credential** lets you enter the type and claims yourself.
