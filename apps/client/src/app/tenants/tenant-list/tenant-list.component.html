@@ -83,7 +83,7 @@
           <ng-container matColumnDef="name">
             <th mat-header-cell *matHeaderCellDef mat-sort-header>Tenant</th>
             <td mat-cell *matCellDef="let tenant">
-              <a class="tenant-link" [routerLink]="tenant.id">
+              <a class="tenant-link" [routerLink]="tenant.id | itemRoute">
                 <span class="tenant-avatar" [class]="avatarTone(tenant)" aria-hidden="true">{{
                   initial(tenant)
                 }}</span>
@@ -195,11 +195,11 @@
 
 <mat-menu #tenantMenu="matMenu" class="m3-menu" xPosition="before">
   <ng-template matMenuContent let-tenant="tenant">
-    <a mat-menu-item [routerLink]="tenant.id">
+    <a mat-menu-item [routerLink]="tenant.id | itemRoute">
       <mat-icon>visibility</mat-icon>
       <span>View details</span>
     </a>
-    <a mat-menu-item [routerLink]="[tenant.id, 'edit']">
+    <a mat-menu-item [routerLink]="tenant.id | itemRoute: 'edit'">
       <mat-icon>edit</mat-icon>
       <span>Edit</span>
     </a>

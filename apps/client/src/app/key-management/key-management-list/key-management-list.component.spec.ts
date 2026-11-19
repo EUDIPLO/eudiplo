@@ -298,7 +298,13 @@ describe('KeyManagementListComponent filters', () => {
 
   const text = (element: Element | null) => element?.textContent?.replace(/\s+/g, ' ').trim();
 
-  async function render() {
+  async function render(
+    chains = [
+      chain('a', 'attestation', 'internalChain'),
+      chain('b', 'attestation', 'standalone', 'vault'),
+      chain('c', 'statusList', 'standalone'),
+    ]
+  ) {
     TestBed.resetTestingModule();
     await TestBed.configureTestingModule({
       imports: [KeyManagementListComponent],
@@ -307,13 +313,7 @@ describe('KeyManagementListComponent filters', () => {
         {
           provide: KeyChainService,
           useValue: {
-            getAll: vi
-              .fn()
-              .mockResolvedValue([
-                chain('a', 'attestation', 'internalChain'),
-                chain('b', 'attestation', 'standalone', 'vault'),
-                chain('c', 'statusList', 'standalone'),
-              ]),
+            getAll: vi.fn().mockResolvedValue(chains),
             getDefaultAccess: vi.fn().mockResolvedValue({}),
           },
         },
@@ -355,6 +355,12 @@ describe('KeyManagementListComponent filters', () => {
     component.selectKmsProvider('vault');
     fixture.detectChanges();
     expect(names()).toEqual(['Key b']);
+  });
+
+  it('links a key chain whose ID contains a slash as one segment', async () => {
+    const { page } = await render([chain('team/key', 'attestation', 'standalone')]);
+
+    expect(page.querySelector('a.key-link')?.getAttribute('href')).toBe('/team%2Fkey');
   });
 
   it('links each key chain by its name, which keyboard and mouse share', async () => {

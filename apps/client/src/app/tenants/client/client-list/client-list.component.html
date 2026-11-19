@@ -99,7 +99,7 @@
               @if (loadedClients) {
                 <code>{{ client.clientId }}</code>
               } @else {
-                <a class="client-link" [routerLink]="client.clientId"
+                <a class="client-link" [routerLink]="client.clientId | itemRoute"
                   ><code>{{ client.clientId }}</code></a
                 >
               }
@@ -149,7 +149,7 @@
               <span [matTooltip]="manageDeniedHint" [matTooltipDisabled]="manageable">
                 <button
                   matIconButton
-                  [routerLink]="[client.clientId, 'edit']"
+                  [routerLink]="client.clientId | itemRoute: 'edit'"
                   [disabled]="!manageable"
                   matTooltip="Edit Client"
                   [attr.aria-label]="

@@ -14,10 +14,12 @@ import { DisplayFormValue } from '../credential-config.types';
 import { formatLifetime } from '../../../utils/duration';
 import { ConfigOwnershipDirective } from '../../../config-portability/config-ownership.directive';
 import { LoadErrorComponent } from '../../../common/load-error.component';
+import { ItemRoutePipe } from '../../../common/item-route.pipe';
 
 @Component({
   selector: 'app-credential-config-list',
   imports: [
+    ItemRoutePipe,
     MatTableModule,
     MatIconModule,
     MatButtonModule,

@@ -137,7 +137,7 @@
                   </span>
                   <span class="key-copy">
                     <!-- The name links to the key chain; its link covers the row -->
-                    <a class="key-link" [routerLink]="getViewRoute(item)">{{
+                    <a class="key-link" [routerLink]="item.id | itemRoute">{{
                       getDisplayName(item)
                     }}</a>
                     <span class="key-sub">
@@ -205,7 +205,7 @@
                 <div class="key-actions">
                   <button
                     mat-icon-button
-                    [routerLink]="[item.id, 'edit']"
+                    [routerLink]="item.id | itemRoute: 'edit'"
                     matTooltip="Edit"
                     aria-label="Edit"
                     appConfigManaged

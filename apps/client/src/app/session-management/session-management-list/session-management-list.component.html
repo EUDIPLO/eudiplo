@@ -298,7 +298,7 @@
                 <!-- The session id links to the session and its link covers the row -->
                 <a
                   class="session-link"
-                  [routerLink]="[session.id]"
+                  [routerLink]="session.id | itemRoute"
                   [attr.aria-label]="'Session ' + session.id"
                   >{{ session.id }}</a
                 >

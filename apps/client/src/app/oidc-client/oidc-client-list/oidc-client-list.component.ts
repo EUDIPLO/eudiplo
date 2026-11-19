@@ -12,10 +12,12 @@ import { BaseAsyncListComponent } from '../../common/base-async-list.component';
 import { LoadErrorComponent } from '../../common/load-error.component';
 import { PROFILE_LABELS } from '../oidc-client-create/oidc-client-form';
 import { OidcClientService } from '../oidc-client.service';
+import { ItemRoutePipe } from '../../common/item-route.pipe';
 
 @Component({
   selector: 'app-oidc-client-list',
   imports: [
+    ItemRoutePipe,
     MatTableModule,
     MatCardModule,
     MatIconModule,

@@ -24,6 +24,7 @@ import { getRole, JwtService } from '../../services/jwt.service';
 import { getApiErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { WebhookEndpointService } from '../webhook-endpoint.service';
+import { ItemRoutePipe } from '../../common/item-route.pipe';
 
 /** Roles that may manage webhook endpoints; either one is enough. */
 const WEBHOOK_ROLES = [getRole('issuance:manage'), getRole('presentation:manage')];
@@ -31,6 +32,7 @@ const WEBHOOK_ROLES = [getRole('issuance:manage'), getRole('presentation:manage'
 @Component({
   selector: 'app-webhook-endpoint-list',
   imports: [
+    ItemRoutePipe,
     MatTableModule,
     MatIconModule,
     MatButtonModule,

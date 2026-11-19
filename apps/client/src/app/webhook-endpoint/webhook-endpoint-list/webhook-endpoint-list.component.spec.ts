@@ -94,6 +94,13 @@ describe('WebhookEndpointListComponent', () => {
     expect(element.textContent).toContain('No webhook endpoints yet.');
   });
 
+  it('links an endpoint whose ID contains a slash as one segment, also from Edit', async () => {
+    const { element } = await render({ getAll: async () => [{ ...audit, id: 'team/hook' }] });
+
+    expect(element.querySelector('a.endpoint-link')?.getAttribute('href')).toBe('/team%2Fhook');
+    expect(element.querySelector('a[href="/team%2Fhook/edit"]')).not.toBeNull();
+  });
+
   it('lists the endpoints by name with a link, their ID, URL and authentication', async () => {
     const { element } = await render({ getAll: async () => [orders, audit] });
 

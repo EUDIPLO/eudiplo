@@ -29,10 +29,12 @@ import { uniqueRoles } from '../../services/role-groups';
 import { UnavailableCardComponent } from '../../common/unavailable-card.component';
 import { LoadErrorComponent } from '../../common/load-error.component';
 import { focusAfterRenderIfLost } from '../../common/focus-if-lost.util';
+import { ItemRoutePipe } from '../../common/item-route.pipe';
 
 @Component({
   selector: 'app-user-list',
   imports: [
+    ItemRoutePipe,
     MatTableModule,
     MatIconModule,
     MatButtonModule,

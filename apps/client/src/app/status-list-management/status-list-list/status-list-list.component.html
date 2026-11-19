@@ -84,7 +84,7 @@
                 >
                 <span class="item-copy">
                   <!-- The ID links to the list and its link covers the row -->
-                  <a class="item-link" [routerLink]="list.id">{{ list.id }}</a>
+                  <a class="item-link" [routerLink]="list.id | itemRoute">{{ list.id }}</a>
                 </span>
                 <button
                   matIconButton
@@ -167,7 +167,7 @@
               <span class="row-actions">
                 <button
                   matIconButton
-                  [routerLink]="list.id"
+                  [routerLink]="list.id | itemRoute"
                   appConfigManaged
                   managedKind="StatusList"
                   [managedResourceId]="list.id"

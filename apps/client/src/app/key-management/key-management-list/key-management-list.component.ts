@@ -28,6 +28,7 @@ import {
   missingDefaultAccessMessage,
 } from '../default-access-key-chain';
 import { keyUsages, type KeyUsageType } from '../key-usage';
+import { ItemRoutePipe } from '../../common/item-route.pipe';
 
 /**
  * Display item for key chains.
@@ -46,6 +47,7 @@ interface KeyDisplayItem {
 @Component({
   selector: 'app-key-management-list',
   imports: [
+    ItemRoutePipe,
     CommonModule,
     MatIconModule,
     MatButtonModule,
@@ -223,13 +225,6 @@ export class KeyManagementListComponent implements OnInit {
       return 'account_tree';
     }
     return item.rotationEnabled ? 'autorenew' : 'key';
-  }
-
-  /**
-   * Get the route path for viewing a key chain.
-   */
-  getViewRoute(item: KeyDisplayItem): string[] {
-    return [item.id];
   }
 
   async deleteItem(item: KeyDisplayItem, event: Event): Promise<void> {

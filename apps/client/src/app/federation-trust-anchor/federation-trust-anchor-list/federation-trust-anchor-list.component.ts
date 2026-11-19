@@ -14,10 +14,12 @@ import {
   type FederationTrustAnchor,
   FederationTrustAnchorService,
 } from '../federation-trust-anchor.service';
+import { ItemRoutePipe } from '../../common/item-route.pipe';
 
 @Component({
   selector: 'app-federation-trust-anchor-list',
   imports: [
+    ItemRoutePipe,
     MatTableModule,
     MatIconModule,
     MatButtonModule,

@@ -13,10 +13,12 @@ import { BaseAsyncListComponent } from '../../../common/base-async-list.componen
 import { AttributeProviderService } from '../attribute-provider.service';
 import { ConfigOwnershipDirective } from '../../../config-portability/config-ownership.directive';
 import { LoadErrorComponent } from '../../../common/load-error.component';
+import { ItemRoutePipe } from '../../../common/item-route.pipe';
 
 @Component({
   selector: 'app-attribute-provider-list',
   imports: [
+    ItemRoutePipe,
     MatTableModule,
     MatIconModule,
     MatButtonModule,

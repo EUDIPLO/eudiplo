@@ -14,10 +14,12 @@ import { BaseAsyncListComponent } from '../../common/base-async-list.component';
 import { LoadErrorComponent } from '../../common/load-error.component';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { TrustListService } from '../trust-list.service';
+import { ItemRoutePipe } from '../../common/item-route.pipe';
 
 @Component({
   selector: 'app-trust-list-list',
   imports: [
+    ItemRoutePipe,
     MatTableModule,
     CommonModule,
     MatIconModule,
