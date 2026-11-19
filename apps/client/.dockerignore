@@ -86,7 +86,6 @@ pids
 
 # Workspace-specific exclusions (not needed for client build)
 ../../apps/backend/
-../../apps/webhook/
 ../../docs/
 ../../deployment/
 ../../monitor/

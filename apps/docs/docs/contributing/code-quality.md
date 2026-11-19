@@ -8,7 +8,7 @@ Each package brings its own formatter and linter. The root scripts run them for 
 
 | Package | Formatter | Linter | Configuration |
 | --- | --- | --- | --- |
-| Backend, CLI, webhook (`test-rp`) | Biome (`biome format`) | Biome (`biome lint`; backend and CLI) | `biome.json` (TypeScript files of these three apps only) |
+| Backend, CLI | Biome (`biome format`) | Biome (`biome lint`) | `biome.json` (TypeScript files of these two apps only) |
 | Client | Prettier | ESLint (`ng lint`, angular-eslint) | `apps/client/.prettierrc`, `apps/client/eslint.config.js` |
 | Documentation | — | markdownlint | `apps/docs/.markdownlint.json` |
 
