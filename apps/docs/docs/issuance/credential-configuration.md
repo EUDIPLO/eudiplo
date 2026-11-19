@@ -5,7 +5,7 @@ sidebar_label: Credential configuration
 
 A credential configuration defines one credential type your tenant issues: its format, type identifier, claims, wallet display and signing behavior. This page walks through the decisions; every field is listed in the [credential configuration reference](../reference/credential-configuration.md).
 
-**Prerequisites:** a tenant and a client with the `issuance:manage` role, and an issuer [signing key and certificate](../trust/keys-and-certificates.md). The [first-credential cookbook](../cookbooks/first-credential.md) shows the same steps in the web client (**Credential Issuance → Credential Types**).
+**Prerequisites:** a tenant and a client with the `issuance:manage` role, and an issuer [signing key and certificate](../trust/keys-and-certificates.md). The [first-credential cookbook](../cookbooks/first-credential.md) shows the same steps in the web client (**Credential Issuance → Credential Configs**).
 
 ## 1. Choose format and type
 

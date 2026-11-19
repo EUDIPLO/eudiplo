@@ -219,7 +219,7 @@ export class CredentialConfigCreateComponent implements OnInit {
 
   /** Save and Back stay focusable while a save runs, so their tooltip says why they wait. */
   get saveTooltip(): string {
-    return this.loading ? 'Saving the credential configuration…' : '';
+    return this.loading ? 'Saving the credential config…' : '';
   }
 
   submitCredential(): void {
@@ -510,8 +510,8 @@ export class CredentialConfigCreateComponent implements OnInit {
           }
         },
         (error) => {
-          console.error('Error loading credential configuration:', error);
-          this.loadError = getApiErrorMessage(error, 'Failed to load credential configuration');
+          console.error('Error loading credential config:', error);
+          this.loadError = getApiErrorMessage(error, 'Failed to load credential config');
         }
       )
       .finally(() => (this.loadingConfig = false));
@@ -1329,7 +1329,7 @@ export class CredentialConfigCreateComponent implements OnInit {
   get jsonViewUnavailableReason(): string {
     return jsonViewUnavailableReason(
       { loading: this.loadingConfig, loadError: this.loadError, saving: this.loading },
-      'the credential configuration'
+      'the credential config'
     );
   }
 

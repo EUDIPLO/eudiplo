@@ -813,7 +813,7 @@ export class IssuanceOfferComponent implements OnInit {
    */
   get credentialStepUnavailableReason(): string {
     return this.credentialStepForm.invalid && this.availableCredentialConfigs.length === 0
-      ? 'No credential configuration can be selected for this flow.'
+      ? 'No credential config can be selected for this flow.'
       : '';
   }
 

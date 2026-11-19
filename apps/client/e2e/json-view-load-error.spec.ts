@@ -14,7 +14,7 @@ const screens = [
     api: '/api/verifier/config/age-over-18',
   },
   {
-    noun: 'credential configuration',
+    noun: 'credential config',
     path: '/credential-config/e2e-missing/edit',
     api: '/api/issuer/credentials/e2e-missing',
   },

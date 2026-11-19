@@ -24,7 +24,7 @@ async function tabToNavLink(page: Page, name: string) {
 test('a collapsed navigation section stays collapsed until the user needs it', async ({ page }) => {
   await page.goto('/dashboard');
   const header = page.getByRole('button', { name: 'Credential Issuance' });
-  const entry = page.getByText('Credential Types', { exact: true });
+  const entry = page.locator('mat-sidenav').getByText('Credential Configs', { exact: true });
   await expect(entry).toBeVisible();
 
   await header.click();
@@ -115,7 +115,7 @@ test.describe('on a phone', () => {
     await toggle.click();
     await expect(navigation.locator(':focus')).toHaveCount(1);
     await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    await navigation.getByText('Credential Types', { exact: true }).click();
+    await navigation.getByText('Credential Configs', { exact: true }).click();
     await expect(page).toHaveURL(/\/credential-config$/);
     await expect(toggle).toHaveAttribute('aria-expanded', 'false');
     await expect(navigation).toBeHidden();

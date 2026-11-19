@@ -12,8 +12,8 @@ test('create credential config', async ({ page }) => {
   const id = `e2e-pid-${Date.now()}`;
   await page.goto('/');
 
-  await page.getByText('Credential Types').click();
-  await page.getByRole('link', { name: 'Create credential configuration' }).first().click();
+  await page.locator('mat-sidenav').getByText('Credential Configs', { exact: true }).click();
+  await page.getByRole('link', { name: 'Create credential config' }).first().click();
   await page.getByRole('button', { name: 'Templates' }).click();
   await page
     .getByRole('menuitem', {
@@ -52,9 +52,9 @@ test('a failed load says why and loads again on Retry', async ({ page }) => {
 
   const alert = page
     .getByRole('alert')
-    .filter({ hasText: 'Failed to load credential configurations: Internal server error' });
+    .filter({ hasText: 'Failed to load credential configs: Internal server error' });
   await expect(alert).toBeVisible();
-  await expect(page.getByText('No credential configurations yet.')).toHaveCount(0);
+  await expect(page.getByText('No credential configs yet.')).toHaveCount(0);
   await expect(page.getByRole('table')).toHaveCount(0);
 
   failLoading = false;
@@ -62,13 +62,11 @@ test('a failed load says why and loads again on Retry', async ({ page }) => {
 
   // The table, or the empty state on a tenant without configurations.
   await expect(
-    page.getByRole('table').or(page.getByText('No credential configurations yet.'))
+    page.getByRole('table').or(page.getByText('No credential configs yet.'))
   ).toBeVisible();
   await expect(alert).toHaveCount(0);
   // Retry left with the error card, so keyboard focus continues from the page heading.
-  await expect(
-    page.getByRole('heading', { name: 'Credential Configurations', level: 1 })
-  ).toBeFocused();
+  await expect(page.getByRole('heading', { name: 'Credential Configs', level: 1 })).toBeFocused();
 });
 
 test('edits every display entry and keeps all of them on save', async ({ page, request }) => {
@@ -758,7 +756,7 @@ test('deletes a configuration from its row and keeps file-managed ones locked', 
 
   // The demo configurations come from the config folder, so their Delete is locked.
   const locked = page.getByRole('button', {
-    name: 'Delete credential configuration pid',
+    name: 'Delete credential config pid',
     exact: true,
   });
   await expect(locked).not.toHaveAttribute('aria-busy', 'true');
@@ -775,13 +773,11 @@ test('deletes a configuration from its row and keeps file-managed ones locked', 
   page.off('dialog', recordDialog);
   expect(lockedDialogs).toEqual([]);
 
-  await page.getByRole('searchbox', { name: /Search credential configurations/ }).fill(id);
-  const remove = page.getByRole('button', { name: `Delete credential configuration ${id}` });
+  await page.getByRole('searchbox', { name: /Search credential configs/ }).fill(id);
+  const remove = page.getByRole('button', { name: `Delete credential config ${id}` });
   await expect(remove).not.toHaveAttribute('aria-busy', 'true');
   page.once('dialog', (dialog) => {
-    expect(dialog.message()).toBe(
-      `Delete credential configuration "${id}"? This cannot be undone.`
-    );
+    expect(dialog.message()).toBe(`Delete credential config "${id}"? This cannot be undone.`);
     void dialog.accept();
   });
   await remove.click();

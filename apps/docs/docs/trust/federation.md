@@ -170,7 +170,7 @@ With this configuration, external authorization servers are checked before EUDIP
 
 ### SD-JWT VC trust format
 
-A credential configuration can sign SD-JWT VCs for federation instead of X.509: set `sdJwtTrustFormat` to `federation` (**Credential Types → SD-JWT Trust Format**). EUDIPLO then sets `iss` to the federation `entityId`, sets the `kid` header to the `kid` of the signing key and omits the `x5c` header. It falls back to `x5c` (the default) when no federation `entityId` or no trust anchor is configured, when a stored `entityId` breaks the rule above, or when `entityTypes` leaves out `openid_credential_issuer`, as verifiers would find the key nowhere else. The signing key chain is used in both cases.
+A credential configuration can sign SD-JWT VCs for federation instead of X.509: set `sdJwtTrustFormat` to `federation` (**Credential Configs → SD-JWT Trust Format**). EUDIPLO then sets `iss` to the federation `entityId`, sets the `kid` header to the `kid` of the signing key and omits the `x5c` header. It falls back to `x5c` (the default) when no federation `entityId` or no trust anchor is configured, when a stored `entityId` breaks the rule above, or when `entityTypes` leaves out `openid_credential_issuer`, as verifiers would find the key nowhere else. The signing key chain is used in both cases.
 
 ```json
 { "alg": "ES256", "typ": "dc+sd-jwt", "kid": "<kid of the active key of the signing key chain>" }

@@ -44,7 +44,7 @@ test.describe('after signing in', () => {
     await expect(page.getByText('Could not load your roles: Service Unavailable.')).toBeVisible();
     // The dashboard opens, so its toolbar offers Logout, but shows nothing of the roles.
     await expect(page).toHaveURL(/\/dashboard$/);
-    await expect(nav.getByText('Credential Types', { exact: true })).toHaveCount(0);
+    await expect(nav.getByText('Credential Configs', { exact: true })).toHaveCount(0);
     await expect(page.locator('.stat-value')).toHaveCount(0);
     expect(backend.requests()).toBe(1);
 
@@ -52,7 +52,7 @@ test.describe('after signing in', () => {
     // The dashboard offers its own Retry next to the notice's.
     await page.locator('.roles-missing-card').getByRole('button', { name: 'Retry' }).click();
 
-    await expect(nav.getByText('Credential Types', { exact: true })).toBeVisible();
+    await expect(nav.getByText('Credential Configs', { exact: true })).toBeVisible();
     // The dashboard loads its figures for the roles.
     await expect(page.locator('.stat-value').first()).toHaveText(/^\s*\d+\s*$/);
   });
@@ -81,9 +81,7 @@ test.describe('after signing in', () => {
     backend.recover();
     await page.locator('mat-snack-bar-container').getByRole('button', { name: 'Retry' }).click();
 
-    await expect(
-      page.getByRole('heading', { name: 'Credential Configurations', level: 1 })
-    ).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Credential Configs', level: 1 })).toBeVisible();
     await expect(page).toHaveURL(/\/credential-config$/);
   });
 });
@@ -96,17 +94,13 @@ test('opens a page whose roles could not be loaded on Retry', async ({ page }) =
   await page.goto('/credential-config');
 
   await expect(page.getByText('Could not load your roles: Service Unavailable.')).toBeVisible();
-  await expect(
-    page.getByRole('heading', { name: 'Credential Configurations', level: 1 })
-  ).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Credential Configs', level: 1 })).toHaveCount(0);
   // AuthGuard and RoleGuard of the route share the failed request.
   expect(backend.requests()).toBe(1);
 
   backend.recover();
   await page.getByRole('button', { name: 'Retry' }).click();
 
-  await expect(
-    page.getByRole('heading', { name: 'Credential Configurations', level: 1 })
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Credential Configs', level: 1 })).toBeVisible();
   await expect(page).toHaveURL(/\/credential-config$/);
 });

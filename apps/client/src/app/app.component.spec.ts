@@ -560,7 +560,7 @@ describe('AppComponent collapsible navigation', () => {
 
     expect(header().getAttribute('aria-expanded')).toBe('false');
     expect(group().hidden).toBe(true);
-    expect(group().textContent).toContain('Credential Types');
+    expect(group().textContent).toContain('Credential Configs');
 
     header().click();
     fixture.detectChanges();

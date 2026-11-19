@@ -95,7 +95,7 @@
           <mat-select formControlName="config">
             <mat-option value="">All Configurations</mat-option>
             @if (issuanceConfigOptions.length) {
-              <mat-optgroup label="Issuance (credential configuration)">
+              <mat-optgroup label="Issuance (credential config)">
                 @for (option of issuanceConfigOptions; track option.value) {
                   <mat-option [value]="option.value">{{ option.label }}</mat-option>
                 }

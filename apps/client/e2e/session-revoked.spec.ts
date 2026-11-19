@@ -41,7 +41,7 @@ test.describe('client with changed roles', () => {
   }) => {
     await loginWithClientCredentials(page, clientId, clientSecret);
     const nav = page.locator('mat-sidenav');
-    await expect(nav.getByText('Credential Types', { exact: true })).toBeVisible();
+    await expect(nav.getByText('Credential Configs', { exact: true })).toBeVisible();
     // The dashboard's own requests must not be the first ones refused.
     await page.waitForLoadState('networkidle');
 
@@ -49,7 +49,7 @@ test.describe('client with changed roles', () => {
     const refused = page.waitForResponse(
       (response) => response.url().includes('/api/issuer/credentials') && response.status() === 403
     );
-    await nav.getByText('Credential Types', { exact: true }).click();
+    await nav.getByText('Credential Configs', { exact: true }).click();
     await refused;
 
     await expect(
@@ -57,7 +57,7 @@ test.describe('client with changed roles', () => {
         'Your API client no longer has the role issuance:manage, which this page needs.'
       )
     ).toBeVisible();
-    await expect(nav.getByText('Credential Types', { exact: true })).toHaveCount(0);
+    await expect(nav.getByText('Credential Configs', { exact: true })).toHaveCount(0);
     await expect(page).toHaveURL(/\/credential-config$/);
     await page.getByRole('button', { name: 'Leave page' }).click();
     await expect(page).toHaveURL(/\/dashboard$/);
@@ -81,14 +81,14 @@ test.describe('reloaded session with changed roles', () => {
     // A reload drops the client secret: the tab keeps its token but cannot renew it.
     await page.reload();
     const nav = page.locator('mat-sidenav');
-    await expect(nav.getByText('Credential Types', { exact: true })).toBeVisible();
+    await expect(nav.getByText('Credential Configs', { exact: true })).toBeVisible();
     await page.waitForLoadState('networkidle');
 
     await setTenantClientRoles(request, clientId, ['presentation:manage']);
     const refused = page.waitForResponse(
       (response) => response.url().includes('/api/issuer/credentials') && response.status() === 403
     );
-    await nav.getByText('Credential Types', { exact: true }).click();
+    await nav.getByText('Credential Configs', { exact: true }).click();
     await refused;
 
     await expect(
@@ -96,7 +96,7 @@ test.describe('reloaded session with changed roles', () => {
         'Your API client no longer has the role issuance:manage, which this page needs.'
       )
     ).toBeVisible();
-    await expect(nav.getByText('Credential Types', { exact: true })).toHaveCount(0);
+    await expect(nav.getByText('Credential Configs', { exact: true })).toHaveCount(0);
     await expect(page).toHaveURL(/\/credential-config$/);
     await page.getByRole('button', { name: 'Leave page' }).click();
     await expect(page).toHaveURL(/\/dashboard$/);

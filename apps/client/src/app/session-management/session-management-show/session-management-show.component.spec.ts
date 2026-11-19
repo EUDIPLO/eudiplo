@@ -479,7 +479,7 @@ describe('SessionManagementShowComponent', () => {
     }
   );
 
-  it('lists each credential configuration of an issuance with its own copy button', () => {
+  it('lists each credential config of an issuance with its own copy button', () => {
     component.session = {
       ...issuance,
       credentialPayload: { credentialConfigurationIds: ['pid', 'mdl'] },

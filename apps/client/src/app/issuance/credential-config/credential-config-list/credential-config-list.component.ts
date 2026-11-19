@@ -34,7 +34,7 @@ import { LoadErrorComponent } from '../../../common/load-error.component';
   styleUrl: './credential-config-list.component.scss',
 })
 export class CredentialConfigListComponent extends BaseAsyncListComponent<CredentialConfig> {
-  protected readonly loadFailedMessage = 'Failed to load credential configurations';
+  protected readonly loadFailedMessage = 'Failed to load credential configs';
 
   get configs(): CredentialConfig[] {
     return this.items;
@@ -86,7 +86,7 @@ export class CredentialConfigListComponent extends BaseAsyncListComponent<Creden
     return this.deleteItem({
       item: config,
       id: config.id,
-      question: `Delete credential configuration "${config.id}"? This cannot be undone.`,
+      question: `Delete credential config "${config.id}"? This cannot be undone.`,
       request: () => this.credentialConfigService.deleteConfiguration(config.id),
       deleted: 'Configuration deleted successfully',
       failed: 'Failed to delete configuration',

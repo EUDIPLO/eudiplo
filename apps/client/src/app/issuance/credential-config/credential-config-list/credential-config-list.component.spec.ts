@@ -15,10 +15,10 @@ describe('CredentialConfigListComponent', () => {
     service: CredentialConfigService,
     fetchMethod: 'loadConfigurations',
     item: { id: 'pid', config: { format: 'dc+sd-jwt', display: [] } },
-    loading: 'Loading credential configurations',
-    empty: 'No credential configurations yet.',
-    create: 'Create credential configuration',
-    failure: 'Failed to load credential configurations',
+    loading: 'Loading credential configs',
+    empty: 'No credential configs yet.',
+    create: 'Create credential config',
+    failure: 'Failed to load credential configs',
     heading: 'h1',
     firstCell: 'pid',
   });
@@ -105,9 +105,7 @@ describe('CredentialConfigListComponent table', () => {
 
     expect(ids(element)).toEqual(['mdl', 'pid']);
     expect(element.querySelector('.item-link')?.getAttribute('href')).toBe('/mdl');
-    expect(element.querySelector('output')?.textContent?.trim()).toBe(
-      '2 credential configurations'
-    );
+    expect(element.querySelector('output')?.textContent?.trim()).toBe('2 credential configs');
     const pidRow = element.querySelectorAll('tr.mat-mdc-row')[1] as HTMLElement;
     expect(pidRow.textContent).toContain('SD-JWT VC');
     expect(pidRow.textContent).toContain('1 day');
@@ -116,9 +114,7 @@ describe('CredentialConfigListComponent table', () => {
     fixture.componentInstance.search = 'mso_mdoc';
     fixture.detectChanges();
     expect(ids(element)).toEqual(['mdl']);
-    expect(element.querySelector('output')?.textContent?.trim()).toBe(
-      '1 of 2 credential configurations'
-    );
+    expect(element.querySelector('output')?.textContent?.trim()).toBe('1 of 2 credential configs');
 
     fixture.componentInstance.search = 'identity';
     fixture.detectChanges();
@@ -127,7 +123,7 @@ describe('CredentialConfigListComponent table', () => {
     fixture.componentInstance.search = 'nothing';
     fixture.detectChanges();
     expect(element.querySelector('.no-match')?.textContent).toContain(
-      'No credential configuration matches "nothing".'
+      'No credential config matches "nothing".'
     );
   });
 
@@ -139,7 +135,7 @@ describe('CredentialConfigListComponent table', () => {
     const element = fixture.nativeElement as HTMLElement;
 
     element
-      .querySelector<HTMLButtonElement>('button[aria-label="Delete credential configuration pid"]')!
+      .querySelector<HTMLButtonElement>('button[aria-label="Delete credential config pid"]')!
       .click();
 
     await vi.waitFor(() => {
@@ -151,7 +147,7 @@ describe('CredentialConfigListComponent table', () => {
     // The row goes without loading the list again.
     expect(loadConfigurations).toHaveBeenCalledOnce();
     expect(window.confirm).toHaveBeenCalledWith(
-      'Delete credential configuration "pid"? This cannot be undone.'
+      'Delete credential config "pid"? This cannot be undone.'
     );
     expect(deleteConfiguration).toHaveBeenCalledWith('pid');
   });

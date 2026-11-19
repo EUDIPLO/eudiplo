@@ -141,9 +141,7 @@ describe('CredentialConfigShowComponent loading', () => {
     component.loadConfig();
 
     await vi.waitFor(() =>
-      expect(component.loadError).toBe(
-        'Failed to load credential configuration: Forbidden resource'
-      )
+      expect(component.loadError).toBe('Failed to load credential config: Forbidden resource')
     );
   });
 });
@@ -430,7 +428,7 @@ describe('CredentialConfigShowComponent delete', () => {
 
     expect(window.confirm).toHaveBeenCalledTimes(1);
     expect(window.confirm).toHaveBeenCalledWith(
-      'Delete credential configuration "pid"? This cannot be undone.'
+      'Delete credential config "pid"? This cannot be undone.'
     );
     expect(deleteConfiguration).toHaveBeenCalledTimes(1);
     expect(navigate).toHaveBeenCalledWith(['../'], expect.anything());

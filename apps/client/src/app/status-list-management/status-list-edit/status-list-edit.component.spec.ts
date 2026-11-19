@@ -50,7 +50,7 @@ describe('StatusListEditComponent', () => {
     expect(component.loadState).toEqual({ credentialConfigs: 'failed', keyChains: 'loaded' });
     expect(component.keyChains.map((keyChain) => keyChain.id)).toEqual(['status-keys']);
     expect(snackBar.open.mock.lastCall?.[0]).toBe(
-      'Failed to load credential configurations: Forbidden resource'
+      'Failed to load credential configs: Forbidden resource'
     );
 
     credentialsFail = false;

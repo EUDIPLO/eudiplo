@@ -127,12 +127,12 @@
       <section class="form-section" aria-labelledby="status-list-binding-heading">
         <div class="section-intro">
           <h2 id="status-list-binding-heading">Binding Configuration</h2>
-          <p>Which credential configuration uses this status list, and which key chain signs it.</p>
+          <p>Which credential config uses this status list, and which key chain signs it.</p>
         </div>
         <mat-card appearance="outlined">
           <mat-card-content class="field-stack">
             <mat-form-field appearance="outline" subscriptSizing="dynamic">
-              <mat-label>Credential Configuration</mat-label>
+              <mat-label>Credential Config</mat-label>
               <mat-select formControlName="credentialConfigurationId">
                 <mat-option [value]="null">Shared (no binding)</mat-option>
                 @for (config of credentialConfigs; track config.id) {
@@ -141,10 +141,10 @@
               </mat-select>
               <mat-icon matSuffix aria-hidden="true">badge</mat-icon>
               @if (loadState.credentialConfigs === 'failed') {
-                <mat-hint>Could not load credential configurations.</mat-hint>
+                <mat-hint>Could not load credential configs.</mat-hint>
               } @else {
                 <mat-hint>
-                  Bind this list exclusively to a credential configuration, or leave as shared
+                  Bind this list exclusively to a credential config, or leave as shared
                 </mat-hint>
               }
             </mat-form-field>
@@ -156,7 +156,7 @@
                 (click)="retrySource('credentialConfigs')"
               >
                 <mat-icon>refresh</mat-icon>
-                Retry loading credential configurations
+                Retry loading credential configs
               </button>
             }
 

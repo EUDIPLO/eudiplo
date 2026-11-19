@@ -173,7 +173,7 @@ It prints `{"membership":{"name":"Max","member_id":"M-001"}}`.
 
 1. Open **Credential Issuance → New Issuance**.
 2. In **Select Flow**, choose **Authorization Code (External AS)** and **Next**.
-3. Select `membership` under **Credential Configuration IDs** and continue.
+3. Select `membership` under **Credential Config IDs** and continue.
 4. Select `keycloak` as **Authorization Server**. Under **Claims Attribute Providers**, select `membership-directory` for `membership`.
 5. Choose **Generate Offer** and scan the QR code with the wallet.
 6. The wallet opens the Keycloak login. Sign in as `max`, then accept the credential.
