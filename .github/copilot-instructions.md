@@ -1,10 +1,9 @@
 # Copilot Instructions for EUDIPLO
 
 ## Project Architecture
-- **Monorepo**: Contains multiple apps (backend, client, webhook) and shared packages.
+- **Monorepo**: Contains multiple apps (backend, client, CLI, docs) and shared packages.
 - **Backend**: [apps/backend](../apps/backend) — NestJS API server, main business logic, protocol abstraction.
 - **Client**: [apps/client](../apps/client) — Angular web UI for managing credentials, keys, and sessions.
-- **Webhook**: [apps/webhook](../apps/webhook) — Cloudflare Worker webhook simulator.
 - **Packages**: [packages/eudiplo-sdk-core](../packages/eudiplo-sdk-core) — Shared SDK core library.
 - **Deployment**: [deployment/](../deployment) — Docker Compose configs for minimal/full setups. See [deployment/README.md](../deployment/README.md).
 - **Monitoring**: [monitor/](../monitor) — OpenTelemetry Collector, Prometheus, Tempo, Loki & Grafana for observability.
@@ -126,7 +125,6 @@
 
 ## Integration & External Dependencies
 - **OID4VCI, OID4VP, SD-JWT VC**: Protocol support in backend.
-- **Cloudflare Workers**: Used in [apps/webhook](../apps/webhook).
 - **OpenTelemetry / Prometheus / Tempo / Loki / Grafana**: Monitoring via [monitor/](../monitor).
 
 ## Examples

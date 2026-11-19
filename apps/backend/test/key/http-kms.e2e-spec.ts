@@ -28,7 +28,7 @@ const PROVIDER_ID = "kms-reference";
 
 // ---------------------------------------------------------------------------
 // Minimal in-process HTTP KMS server
-// Implements the same API contract as apps/kms-reference without any external
+// Implements the HTTP provider API (docs: reference/kms-config.md) without any external
 // process dependency, so the test is fast, portable, and port-conflict-free.
 // ---------------------------------------------------------------------------
 
