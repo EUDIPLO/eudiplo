@@ -120,13 +120,13 @@ test.describe('read and status roles', () => {
     await expect(
       page.getByText('Offers and requests that a wallet can still use are listed only')
     ).toBeVisible();
-    await page.getByRole('textbox', { name: 'Search' }).fill(sessionId);
+    await page.getByRole('searchbox', { name: /Search sessions/ }).fill(sessionId);
     await expect(page.locator('tr.session-row', { hasText: sessionId })).toBeVisible();
-    await page.getByRole('textbox', { name: 'Search' }).fill(openSessionId);
-    await expect(page.getByText('No sessions found')).toBeVisible();
+    await page.getByRole('searchbox', { name: /Search sessions/ }).fill(openSessionId);
+    await expect(page.getByText('No session matches these filters.')).toBeVisible();
     await expect(page.locator('table mat-checkbox')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Issuance Offer' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Presentation Request' })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Issuance Offer' })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Presentation Request' })).toHaveCount(0);
 
     await page.goto(`/session-management/${sessionId}`);
     await expect(page.getByRole('heading', { name: 'Presentation Session' })).toBeVisible();

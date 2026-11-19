@@ -799,3 +799,33 @@
     }
   }
 }
+
+// Tones of the session statuses on the .badge of the base mixin, as on the dashboard. Markup:
+// span.badge.status-<status>, for example .status-completed.
+@mixin session-status-badges {
+  .badge {
+    &.status-active {
+      --tone: var(--mat-sys-primary);
+    }
+
+    &.status-fetched {
+      --tone: var(--mat-sys-tertiary);
+    }
+
+    &.status-completed {
+      --tone: var(--eudiplo-success);
+    }
+
+    &.status-expired {
+      --tone: var(--eudiplo-warning);
+    }
+
+    &.status-failed {
+      --tone: var(--eudiplo-danger);
+    }
+
+    &.status-cancelled {
+      --tone: var(--mat-sys-on-surface-variant);
+    }
+  }
+}

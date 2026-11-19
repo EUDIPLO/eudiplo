@@ -194,6 +194,14 @@ export async function runPortabilityCommand(
         `${baseUrl}/api/config-bundles/${endpoint}?${query}`,
         { method: "POST", headers, body },
     );
+    if (action === "import" && !response.ok) {
+        const failure = await applyFailure(response);
+        if (failure)
+            return reportApplyFailure(
+                maskFilledValues(failure, folderEnv.filled),
+                context,
+            );
+    }
     await assertOk(response, folderEnv.filled);
     // The plan shows field values, and a placeholder can sit in any field.
     const result = maskFilledValues(await response.json(), folderEnv.filled);
@@ -332,6 +340,117 @@ async function isDirectory(path: string): Promise<boolean> {
 
 function resolvePath(value: string, context: CommandContext): string {
     return isAbsolute(value) ? value : join(context.cwd, value);
+}
+
+interface ApplyOperation {
+    stage: string;
+    kind?: string;
+    id?: string;
+    path?: string;
+    status: "pending" | "running" | "completed" | "failed";
+}
+
+interface ApplyFailure {
+    code: "CONFIG_APPLY_FAILED";
+    operationId: string;
+    message?: string;
+    failedOperation?: { stage: string; kind?: string; id?: string };
+    operations: ApplyOperation[];
+    generatedSecrets?: unknown[];
+}
+
+/**
+ * The body of an import that stopped part-way (CONFIG_APPLY_FAILED), or
+ * undefined for any other error. Reads a clone, so assertOk can still report
+ * the original response.
+ */
+async function applyFailure(
+    response: Response,
+): Promise<ApplyFailure | undefined> {
+    try {
+        const body = await response.clone().json();
+        if (
+            body?.code === "CONFIG_APPLY_FAILED" &&
+            typeof body.operationId === "string" &&
+            Array.isArray(body.operations)
+        )
+            return body;
+    } catch {
+        // Not JSON: fall through to the generic error.
+    }
+    return undefined;
+}
+
+/**
+ * An import is not one transaction: steps before the failed one stay applied.
+ * Shows one line per resource with its state, and keeps the server's report
+ * as JSON on stdout, where generated client secrets are shown once.
+ */
+function reportApplyFailure(
+    failure: ApplyFailure,
+    context: CommandContext,
+): number {
+    const resources = new Map<
+        string,
+        { label: string; statuses: ApplyOperation["status"][] }
+    >();
+    for (const operation of failure.operations) {
+        const deleting = operation.stage.startsWith("delete");
+        const name =
+            operation.path ?? `${operation.kind ?? "?"}/${operation.id ?? "?"}`;
+        const key = `${deleting ? "delete" : "apply"} ${name}`;
+        const entry = resources.get(key) ?? {
+            label: deleting ? `${name} (delete)` : name,
+            statuses: [],
+        };
+        entry.statuses.push(operation.status);
+        resources.set(key, entry);
+    }
+    const counts = { completed: 0, failed: 0, pending: 0 };
+    const lines = [...resources.values()].map(({ label, statuses }) => {
+        const state = resourceState(statuses);
+        counts[state]++;
+        return `  ${state.padEnd(9)} ${label}`;
+    });
+    let at = "";
+    const failed = failure.failedOperation;
+    if (failed) {
+        // An asset step has neither kind nor ID; its line below names the path.
+        const target = [failed.kind, failed.id].filter(Boolean).join("/");
+        at = ` at ${failed.stage}`;
+        if (target) at += ` ${target}`;
+    }
+    context.stderr.write(
+        `Import stopped${at}: ${counts.completed} completed, ${counts.failed} failed, ${counts.pending} not started.\n`,
+    );
+    context.stderr.write(`${lines.join("\n")}\n`);
+    context.stderr.write(
+        "Completed resources stay applied; the failed one may have partial effects.\n",
+    );
+    if (failure.generatedSecrets?.length)
+        context.stderr.write(
+            `${failure.generatedSecrets.length} client secret(s) were generated before the failure and are shown only once: see generatedSecrets in the output.\n`,
+        );
+    context.stderr.write(
+        `Inspect the report with: eudiplo config operations ${failure.operationId}\nThen run plan again before retrying.\n`,
+    );
+    context.stdout.write(`${JSON.stringify(failure, null, 2)}\n`);
+    return 1;
+}
+
+/**
+ * A resource with a failed step failed; one with every step done completed.
+ * The server marks the failed step before it answers; should a step still be
+ * marked running, it did not finish, so it counts as failed, not as not started.
+ */
+function resourceState(
+    statuses: ApplyOperation["status"][],
+): "completed" | "failed" | "pending" {
+    if (statuses.some((status) => status === "failed" || status === "running"))
+        return "failed";
+    return statuses.every((status) => status === "completed")
+        ? "completed"
+        : "pending";
 }
 
 async function assertOk(

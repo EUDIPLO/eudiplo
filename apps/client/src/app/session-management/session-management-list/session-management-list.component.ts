@@ -31,7 +31,6 @@ import { MatSort, MatSortModule, SortDirection } from '@angular/material/sort';
 import { MatTableDataSource, MatTableModule } from '@angular/material/table';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ActivatedRoute, Params, Router, RouterModule } from '@angular/router';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { fromDay, toDay } from '../../utils/local-day';
 import { Session } from '@eudiplo/sdk-core';
 import { from, merge, of as observableOf, Subject } from 'rxjs';
@@ -51,6 +50,7 @@ import {
   SessionQueryParams,
 } from '../session-management.service';
 import { maySessionChange, SESSION_CHANGER_ROLES } from '../session-roles';
+import { sessionStatusClass } from '../session-outcome';
 import { JwtService } from '../../services/jwt.service';
 import { LoadErrorComponent } from '../../common/load-error.component';
 import { getApiErrorMessage } from '../../utils/error-message';
@@ -134,7 +134,6 @@ function endOfDay(date: Date): Date {
     MatButtonModule,
     MatProgressSpinnerModule,
     RouterModule,
-    FlexLayoutModule,
     ReactiveFormsModule,
     MatPaginatorModule,
     LoadErrorComponent,
@@ -175,15 +174,13 @@ export class SessionManagementListComponent implements OnInit, AfterViewInit {
   /** Set when the sessions could not be loaded, so the page does not claim there are none. */
   loadError = '';
 
-  displayedColumns: (keyof Session | 'select' | 'type' | 'actions')[] = [
+  displayedColumns: (keyof Session | 'select' | 'type')[] = [
     'select',
     'id',
     'type',
     'status',
-    'reference',
     'createdAt',
     'updatedAt',
-    'actions',
   ];
 
   typeOptions = [
@@ -245,11 +242,14 @@ export class SessionManagementListComponent implements OnInit, AfterViewInit {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => (this.paginator.pageIndex = 0));
 
+    let recovering = false;
     // Reload data on any triggering event (sort, page change, filter change, manual refresh)
     merge(this.sort.sortChange, this.paginator.page, filterChange, this.refresh$)
       .pipe(
         startWith({}),
         switchMap(() => {
+          // A retry that loads removes the error card with its focused Retry button.
+          recovering ||= this.loadError !== '';
           this.isLoadingResults = true;
           this.loadError = '';
           const query = this.buildQuery();
@@ -275,6 +275,8 @@ export class SessionManagementListComponent implements OnInit, AfterViewInit {
           this.dataSource.data = result.items;
           this.totalItems = result.total;
           this.selection.clear();
+          if (recovering) this.focusHeadingIfLost();
+          recovering = false;
         }
       });
   }
@@ -658,7 +660,5 @@ export class SessionManagementListComponent implements OnInit, AfterViewInit {
     return this.sessionManagementService.getStatusDisplay(status);
   }
 
-  getStatusClass(status: any): string {
-    return 'status-' + (status as SessionStatus);
-  }
+  readonly statusClass = sessionStatusClass;
 }

@@ -10,7 +10,6 @@ import {
 import { UpperCasePipe } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
-import { MatChipsModule } from '@angular/material/chips';
 import { MatDialog } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -18,7 +17,6 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import * as QRCode from 'qrcode';
 import {
   Session,
@@ -57,6 +55,7 @@ import { copyToClipboard } from '../../utils/copy-to-clipboard';
 import {
   isFinishedSession,
   sessionResult,
+  sessionStatusClass,
   sessionStatusLabel,
   type SessionResultSummary,
 } from '../session-outcome';
@@ -69,9 +68,7 @@ import { presentedCredentials, type PresentedCredential } from '../presented-cla
     MatButtonModule,
     MatIconModule,
     RouterModule,
-    FlexLayoutModule,
     MatTabsModule,
-    MatChipsModule,
     MatProgressSpinnerModule,
     MatTooltipModule,
     UpperCasePipe,
@@ -399,13 +396,7 @@ export class SessionManagementShowComponent implements OnInit, OnDestroy {
     return isDcApiAvailable();
   }
 
-  getStatusClass(status: any): string {
-    const statusStr = this.getStatusDisplayText(status).toLowerCase();
-    if (statusStr.includes('completed') || statusStr.includes('success')) return 'status-success';
-    if (statusStr.includes('pending') || statusStr.includes('processing')) return 'status-pending';
-    if (statusStr.includes('failed') || statusStr.includes('error')) return 'status-error';
-    return 'status-default';
-  }
+  readonly statusClass = sessionStatusClass;
 
   formatDate(dateString: string): string {
     if (!dateString) return 'N/A';
@@ -416,10 +407,6 @@ export class SessionManagementShowComponent implements OnInit, OnDestroy {
   formatJson(obj: any): string {
     if (!obj) return 'N/A';
     return JSON.stringify(obj, null, 2);
-  }
-
-  goBack(): void {
-    this.router.navigate(['../'], { relativeTo: this.route });
   }
 
   /** Copies a value the page shows as it is, so it can be copied by hand. */
