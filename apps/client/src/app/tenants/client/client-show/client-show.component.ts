@@ -77,7 +77,7 @@ export class ClientShowComponent implements OnInit {
         title: 'Verification configs',
         ids: this.client?.allowedPresentationConfigs ?? [],
       },
-      { title: 'Credential configs', ids: this.client?.allowedIssuanceConfigs ?? [] },
+      { title: 'Credential types', ids: this.client?.allowedIssuanceConfigs ?? [] },
     ];
   }
 

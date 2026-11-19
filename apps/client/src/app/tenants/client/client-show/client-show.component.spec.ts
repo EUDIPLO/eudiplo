@@ -364,7 +364,7 @@ describe('ClientShowComponent details', () => {
       ])
     ).toEqual([
       ['Verification configs', 'pid'],
-      ['Credential configs', 'All of them, including those created later'],
+      ['Credential types', 'All of them, including those created later'],
     ]);
   });
 });
