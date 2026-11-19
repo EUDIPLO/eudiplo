@@ -124,3 +124,13 @@ details > mat-form-field {
     padding: 12px;
   }
 }
+
+// A warning only: a verifier may ask for claims a local config does not publish.
+.unpublished-claim {
+  font-weight: 500;
+}
+
+.option-detail {
+  color: var(--mat-sys-on-surface-variant);
+  margin-left: 8px;
+}

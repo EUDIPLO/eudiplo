@@ -130,7 +130,7 @@ describe('IssuerMetadataBrowserComponent with the tenant credential configs', ()
     fixture.detectChanges();
 
     const link = (fixture.nativeElement as HTMLElement).querySelector('a');
-    expect(link?.getAttribute('href')).toBe('/credential-config/create');
+    expect(link?.getAttribute('href')).toBe('/credential-config/create?from=form');
     expect(link?.getAttribute('target')).toBe('_blank');
   });
 

@@ -26,10 +26,10 @@
       </button>
     </div>
     @if (loading) {
-      <div class="fx-row align-center gap-8" role="status">
+      <output class="fx-row align-center gap-8">
         <mat-spinner diameter="20"></mat-spinner>
         <span>Loading credential configs…</span>
-      </div>
+      </output>
     }
     @if (noTenantCredentials) {
       <mat-card class="empty-card">
@@ -37,7 +37,11 @@
           <strong>This tenant has no credential configs yet.</strong>
           @if (canCreateCredentialConfig) {
             <span>
-              <a routerLink="/credential-config/create" target="_blank" rel="noopener"
+              <a
+                routerLink="/credential-config/create"
+                [queryParams]="createLinkQueryParams"
+                target="_blank"
+                rel="noopener"
                 >Create a credential config</a
               >
               in a new tab, then select Reload. What you entered here stays.

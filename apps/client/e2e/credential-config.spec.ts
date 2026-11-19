@@ -786,3 +786,42 @@ test('deletes a configuration from its row and keeps file-managed ones locked', 
   await expect(page.getByText(id, { exact: true })).toHaveCount(0);
   expect(deletes).toEqual([`${url}/${id}`]);
 });
+
+test('created for a form in another tab, it says to return there', async ({ page, request }) => {
+  test.skip(
+    !hasAuthCredentials,
+    'Set E2E_TENANT_CLIENT_ID and E2E_TENANT_CLIENT_SECRET for tenant flow tests.'
+  );
+  const id = `e2e-for-form-${Date.now()}`;
+  const url = `${resolvedE2EConfig.apiBaseUrl}/api/issuer/credentials`;
+  const headers = { Authorization: `Bearer ${await tenantToken(request)}` };
+
+  // The link from Import from Credential Config opens the page like this.
+  await page.goto('/credential-config/create?from=form');
+  await page.getByRole('textbox', { name: 'Configuration ID' }).fill(id);
+  await page.getByText('No (Custom URI)').click();
+  await page.getByRole('textbox', { name: 'VCT URI' }).fill(`urn:${id}`);
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await page.getByRole('textbox', { name: 'Display Name' }).fill('Membership');
+  for (let step = 0; step < 2; step++) {
+    await page.getByRole('button', { name: 'Continue' }).click();
+  }
+
+  try {
+    await page.getByRole('button', { name: 'Create Configuration' }).click();
+
+    const heading = page.getByRole('heading', { name: `Credential config "${id}" created` });
+    await expect(heading).toBeVisible();
+    await expect(heading).toBeFocused();
+    await expect(page.getByText('Your form is still open in the tab you came from.')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Open credential config' })).toHaveAttribute(
+      'href',
+      `/credential-config/${id}`
+    );
+    await expect(page.getByRole('button', { name: 'Create Configuration' })).toHaveCount(0);
+    await expect(page).toHaveURL(/\/credential-config\/create\?from=form$/);
+  } finally {
+    await writeConfig(() => request.delete(`${url}/${id}`, { headers }), `delete ${id}`);
+  }
+});
