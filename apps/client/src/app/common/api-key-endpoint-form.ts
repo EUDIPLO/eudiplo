@@ -239,5 +239,7 @@ export abstract class ApiKeyEndpointFormComponent implements OnInit {
       url: json.url || '',
       ...toAuthFormValue(json.auth as Parameters<typeof toAuthFormValue>[0]),
     });
+    // The fields changed without being typed in; the page says there are unsaved changes.
+    this.form.markAsDirty();
   }
 }

@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, provideRouter } from '@angular/router';
-import { EMPTY } from 'rxjs';
+import { EMPTY, of } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { expectHeadingFocusOnlyAfterRetry } from '../../common/retry-focus.testing';
@@ -227,6 +227,27 @@ describe('WebhookEndpointCreateComponent JSON View', () => {
     expect(open).toHaveBeenCalledOnce();
   });
 
+  it('marks the form as changed after JSON View applied its JSON', () => {
+    const json = { id: 'example', name: 'From JSON', url: 'https://b', auth: { type: 'none' } };
+    const component = TestBed.runInInjectionContext(
+      () =>
+        new WebhookEndpointCreateComponent(
+          {} as never,
+          { navigate: vi.fn() } as never,
+          { snapshot: { paramMap: { get: () => null } } } as never,
+          { open: vi.fn() } as never,
+          { open: () => ({ afterClosed: () => of(json) }) } as never
+        )
+    );
+    component.ngOnInit();
+    expect(component.form.dirty).toBe(false);
+
+    component.viewAsJson();
+
+    expect(component.form.controls.name.value).toBe('From JSON');
+    expect(component.form.dirty).toBe(true);
+  });
+
   it('opens JSON View right away when creating a webhook endpoint, but not while it saves', async () => {
     const open = vi.fn(() => ({ afterClosed: () => EMPTY }));
     let rejectSave!: (error: unknown) => void;
@@ -326,5 +347,13 @@ describe('WebhookEndpointCreateComponent back link', () => {
 
     resolve({ id: 'order-events', name: 'Order events', url: 'https://a' });
     await vi.waitFor(() => expect(label()).toBe('Back to Order events'));
+  });
+
+  it('names the endpoint by its ID when it has no name', async () => {
+    const { label } = render(
+      'order-events',
+      vi.fn(async () => ({ id: 'order-events', name: '', url: 'https://a' }))
+    );
+    await vi.waitFor(() => expect(label()).toBe('Back to order-events'));
   });
 });

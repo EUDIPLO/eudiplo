@@ -89,8 +89,8 @@ table {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 13px;
   color: var(--mat-sys-on-surface-variant);
-  // Wraps at the dots, slashes and hyphens of a URL, not after any letter
-  overflow-wrap: break-word;
+  // A long URL wraps instead of widening the table past its actions
+  overflow-wrap: anywhere;
 }
 
 // An endpoint called with an API key

@@ -186,6 +186,24 @@ describe('WebhookEndpointListComponent', () => {
     );
   });
 
+  it('focuses the heading after the last endpoint was deleted', async () => {
+    const { fixture, element } = await render({
+      getAll: async () => [audit],
+      delete: vi.fn().mockResolvedValue(undefined),
+    });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    element.querySelector<HTMLButtonElement>('.delete-action')!.focus();
+
+    await fixture.componentInstance.deleteEndpoint(audit as never);
+    fixture.detectChanges();
+
+    expect(element.textContent).toContain('No webhook endpoints yet.');
+    await vi.waitFor(() => {
+      TestBed.inject(ApplicationRef).tick();
+      expect(document.activeElement).toBe(element.querySelector('h1'));
+    });
+  });
+
   it("lets another endpoint's Delete run while one delete is pending", async () => {
     const remove = vi.fn(() => new Promise<void>(() => undefined));
     const { fixture, element } = await render({
