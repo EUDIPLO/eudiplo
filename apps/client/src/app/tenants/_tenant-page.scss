@@ -103,6 +103,145 @@
   }
 }
 
+// List page of a resource: a table in an outlined card with a title, a count and a search bar,
+// role badges, row actions, and the loading, empty and no-match states. Markup: .table-card >
+// .table-header (.table-title > h2 + output, .search-bar) + .table-scroll > table; .role-badges >
+// .role-badge (.more for the rest); .row-actions with a .delete-action; .loading-state;
+// .empty-state > .empty-icon + strong + p; a .no-match row from *matNoDataRow.
+@mixin list-page {
+  @include search-bar;
+
+  .table-card {
+    overflow: hidden;
+  }
+
+  // Title and count on the left, the search bar on the right
+  .table-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px 24px;
+    padding: 16px 20px;
+  }
+
+  .table-title {
+    display: flex;
+    flex-direction: column;
+
+    h2 {
+      margin: 0;
+      font: var(--mat-sys-title-medium);
+      color: var(--mat-sys-on-surface);
+    }
+
+    output {
+      font: var(--mat-sys-body-medium);
+      color: var(--mat-sys-on-surface-variant);
+    }
+  }
+
+  .table-scroll {
+    overflow-x: auto;
+  }
+
+  .role-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 0;
+  }
+
+  .role-badge {
+    padding: 2px 10px;
+    border-radius: var(--mat-sys-corner-small);
+    background: var(--mat-sys-surface-container-high);
+    font: var(--mat-sys-label-medium);
+    color: var(--mat-sys-on-surface-variant);
+    white-space: nowrap;
+
+    // A button only to reach the tooltip with the other roles by keyboard
+    &.more {
+      position: relative;
+      z-index: 1;
+      border: 0;
+      background: var(--mat-sys-secondary-container);
+      color: var(--mat-sys-on-secondary-container);
+      cursor: default;
+
+      &:focus-visible {
+        outline: 2px solid var(--mat-sys-primary);
+        outline-offset: 2px;
+      }
+    }
+  }
+
+  .row-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+
+    .delete-action:not([disabled]) mat-icon {
+      color: var(--mat-sys-error);
+    }
+  }
+
+  .no-match td {
+    padding: 32px 20px;
+    color: var(--mat-sys-on-surface-variant);
+    text-align: center;
+
+    mat-icon {
+      display: block;
+      margin: 0 auto 8px;
+    }
+
+    span {
+      display: block;
+      margin-bottom: 8px;
+    }
+  }
+
+  .loading-state {
+    display: flex;
+    justify-content: center;
+    padding: 48px;
+  }
+
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 48px 24px;
+    border: 1px dashed var(--mat-sys-outline-variant);
+    border-radius: var(--mat-sys-corner-large);
+    text-align: center;
+
+    strong {
+      margin-top: 8px;
+      font: var(--mat-sys-title-medium);
+      color: var(--mat-sys-on-surface);
+    }
+
+    p {
+      margin: 0 0 12px;
+      font: var(--mat-sys-body-medium);
+      color: var(--mat-sys-on-surface-variant);
+    }
+  }
+
+  .empty-icon {
+    display: grid;
+    place-items: center;
+    width: 56px;
+    height: 56px;
+    border-radius: var(--mat-sys-corner-full);
+    background: var(--mat-sys-secondary-container);
+    color: var(--mat-sys-on-secondary-container);
+  }
+}
+
 // Material 3 search bar: 56dp high, fully rounded, on the high surface container, no outline.
 // Markup: a .search-bar with a leading .search-icon, an <input type="search">, and a
 // .clear-search button while there is text.
@@ -329,6 +468,73 @@
   }
 }
 
+// A resource's roles grouped by area, as on the client and user pages. Markup:
+// section.role-group > h3 (mat-icon + title) + ul.role-list > li.role-badge, and an a.roles-link
+// to the role reference.
+@mixin role-groups {
+  .role-group {
+    padding: 12px 0;
+
+    & + & {
+      border-top: 1px solid var(--mat-sys-outline-variant);
+    }
+
+    h3 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 10px;
+      font: var(--mat-sys-title-small);
+      color: var(--mat-sys-on-surface);
+
+      mat-icon {
+        width: 20px;
+        height: 20px;
+        font-size: 20px;
+        color: var(--mat-sys-primary);
+      }
+    }
+  }
+
+  .role-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .role-badge {
+    padding: 4px 12px;
+    border-radius: var(--mat-sys-corner-small);
+    background: var(--mat-sys-secondary-container);
+    font: var(--mat-sys-label-large);
+    color: var(--mat-sys-on-secondary-container);
+  }
+
+  .roles-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 12px;
+    font: var(--mat-sys-label-large);
+    color: var(--mat-sys-primary);
+    text-decoration: none;
+
+    &:hover,
+    &:focus-visible {
+      text-decoration: underline;
+    }
+
+    mat-icon {
+      width: 16px;
+      height: 16px;
+      font-size: 16px;
+    }
+  }
+}
+
 // Create or edit form: a back link, a heading with an avatar, sections with their explanation
 // on the left and their fields in a card on the right, and a sticky action bar. Markup:
 // .back-link, .page-header .heading > .form-avatar, form > .form-section > .section-intro +
@@ -465,5 +671,88 @@
         flex-basis: 100%;
       }
     }
+  }
+}
+
+// Dialog that shows credentials once, such as a client secret or a temporary password: an icon
+// above the centred title, the warning as a tonal banner, and each credential in its own row with
+// a copy button. Markup: .dialog-icon, h2[mat-dialog-title], p.warning-banner, .credential >
+// .credential-copy (.label + .value, .secret for the secret) + copy button, .copy-both, p.hint.
+@mixin credential-dialog {
+  .dialog-icon {
+    display: flex;
+    justify-content: center;
+    padding-top: 24px;
+    color: var(--mat-sys-secondary);
+
+    mat-icon {
+      width: 24px;
+      height: 24px;
+      font-size: 24px;
+    }
+  }
+
+  h2[mat-dialog-title] {
+    text-align: center;
+  }
+
+  .warning-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin: 0 0 16px;
+    padding: 12px 16px;
+    border-radius: var(--mat-sys-corner-medium);
+    background: color-mix(in srgb, var(--eudiplo-warning) 12%, var(--mat-sys-surface));
+    font: var(--mat-sys-body-medium);
+    color: var(--mat-sys-on-surface);
+
+    mat-icon {
+      flex: none;
+      color: var(--eudiplo-warning);
+    }
+  }
+
+  .credential {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    padding: 8px 4px 8px 16px;
+    border-radius: var(--mat-sys-corner-medium);
+    background: var(--mat-sys-surface-container-high);
+  }
+
+  .credential-copy {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .label {
+    font: var(--mat-sys-label-medium);
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  .value {
+    font-size: 14px;
+    color: var(--mat-sys-on-surface);
+    word-break: break-all;
+  }
+
+  .secret {
+    color: var(--mat-sys-error);
+  }
+
+  .copy-both {
+    margin-top: 4px;
+  }
+
+  .hint {
+    margin: 12px 0 0;
+    font: var(--mat-sys-body-small);
+    color: var(--mat-sys-on-surface-variant);
   }
 }

@@ -28,6 +28,8 @@ import { openErrorSnackBar } from '../../../utils/error-snackbar';
 import { UnavailableCardComponent } from '../../../common/unavailable-card.component';
 import { LoadErrorComponent } from '../../../common/load-error.component';
 import { FrontendConfigService } from '../../../services/frontend-config.service';
+import { searchAndSort } from '../../../utils/search-list';
+import { uniqueRoles } from '../../../services/role-groups';
 
 /** Columns of the client table. */
 type ClientColumn = 'clientId' | 'roles' | 'actions';
@@ -91,18 +93,13 @@ export class ClientListComponent implements OnInit {
   /** The clients that match the search, sorted by client ID. */
   get shownClients(): ClientEntity[] {
     if (this.shown?.clients !== this.clients || this.shown.search !== this.search) {
-      const term = this.search.trim().toLowerCase();
-      const matches = term
-        ? this.clients.filter((client) =>
-            [client.clientId, client.description ?? '', ...(client.roles ?? [])].some((value) =>
-              value.toLowerCase().includes(term)
-            )
-          )
-        : [...this.clients];
-      matches.sort((a, b) =>
-        a.clientId.localeCompare(b.clientId, undefined, { numeric: true, sensitivity: 'base' })
+      const result = searchAndSort(
+        this.clients,
+        this.search,
+        (client) => [client.clientId, client.description ?? '', ...(client.roles ?? [])],
+        (client) => client.clientId
       );
-      this.shown = { clients: this.clients, search: this.search, result: matches };
+      this.shown = { clients: this.clients, search: this.search, result };
     }
     return this.shown.result;
   }
@@ -113,7 +110,7 @@ export class ClientListComponent implements OnInit {
 
   /** A client's roles without repeats, as stored records may name a role twice. */
   uniqueRoles(client: ClientEntity): string[] {
-    return [...new Set(client.roles ?? [])];
+    return uniqueRoles(client.roles);
   }
 
   readonly manageDeniedHint = 'This client has roles you neither hold nor may grant';

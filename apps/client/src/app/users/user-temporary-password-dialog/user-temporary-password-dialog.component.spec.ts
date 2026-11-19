@@ -54,4 +54,16 @@ describe('UserTemporaryPasswordDialogComponent', () => {
       expect.anything()
     );
   });
+
+  it('copies the username on its own', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const { dialog, snackBar } = createDialog({ writeText });
+
+    await dialog.copyUsername();
+
+    expect(writeText).toHaveBeenCalledWith('alice');
+    expect(snackBar.open).toHaveBeenCalledWith('Username copied to clipboard', 'Close', {
+      duration: 2000,
+    });
+  });
 });

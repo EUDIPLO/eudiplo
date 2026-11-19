@@ -1,34 +1,82 @@
-<div fxLayout="row" fxLayoutAlign="end center" fxLayoutGap="8px" class="mb-2">
-  <button
-    matIconButton
-    routerLink="../"
-    matTooltip="Back to Users List"
-    aria-label="Back to Users List"
-  >
+<div class="page">
+  <a class="back-link" matButton routerLink="../" aria-label="Back to Users">
     <mat-icon>arrow_back</mat-icon>
-  </button>
-</div>
-@if (user) {
-  <app-role-lock-notice subject="user" [roles]="unmanageableRoles" />
-  <mat-card>
-    <mat-card-header>
-      <mat-card-title>{{ user.username }}</mat-card-title>
-    </mat-card-header>
-    <mat-card-content>
-      <p><strong>Status:</strong> {{ user.enabled ? 'Enabled' : 'Disabled' }}</p>
+    Users
+  </a>
 
-      <h3>Roles</h3>
-      <mat-chip-set>
-        @for (role of user.roles; track role) {
-          <span>
-            <mat-chip>{{ role }}</mat-chip>
-          </span>
+  @if (user) {
+    <app-role-lock-notice subject="user" [roles]="unmanageableRoles" />
+
+    <!-- Who the user is, and what can be done with it -->
+    <mat-card appearance="outlined" class="hero">
+      <span class="hero-avatar" aria-hidden="true"><mat-icon>person</mat-icon></span>
+      <div class="hero-copy">
+        <h1>{{ user.username }}</h1>
+        <div class="hero-meta">
+          <span class="badge" [class.status-active]="user.enabled">{{
+            user.enabled ? 'Enabled' : 'Disabled'
+          }}</span>
+          <span class="badge">{{ roleCount }} {{ roleCount === 1 ? 'role' : 'roles' }}</span>
+        </div>
+        @if (user.email) {
+          <p class="hero-description">{{ user.email }}</p>
         }
-      </mat-chip-set>
-    </mat-card-content>
-    <mat-card-actions fxLayout="row" fxLayoutAlign="end center" fxLayoutGap="8px">
-      <button mat-button routerLink="edit" [disabled]="!canManage">Edit</button>
-      <button mat-button color="warn" (click)="deleteUser()" [disabled]="!canManage">Delete</button>
-    </mat-card-actions>
-  </mat-card>
-}
+      </div>
+      <div class="hero-actions">
+        <button matButton="tonal" routerLink="edit" [disabled]="!canManage || deleting">
+          <mat-icon>edit</mat-icon>
+          Edit
+        </button>
+        <button
+          matButton="outlined"
+          class="danger"
+          (click)="deleteUser()"
+          [disabled]="!canManage || deleting"
+          disabledInteractive
+          [matTooltip]="deleting ? 'Deleting the user…' : ''"
+        >
+          <mat-icon>delete_outline</mat-icon>
+          Delete
+        </button>
+      </div>
+    </mat-card>
+
+    <mat-card appearance="outlined">
+      <mat-card-header>
+        <mat-icon mat-card-avatar>badge</mat-icon>
+        <h2 mat-card-title>Roles</h2>
+        <mat-card-subtitle>What the user may do, by area</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        @for (group of roleGroups; track group.title) {
+          <section class="role-group" [attr.aria-labelledby]="'role-group-' + $index">
+            <h3 [id]="'role-group-' + $index">
+              <mat-icon aria-hidden="true">{{ group.icon }}</mat-icon>
+              {{ group.title }}
+            </h3>
+            <ul class="role-list">
+              @for (role of group.roles; track role) {
+                <li class="role-badge">{{ role }}</li>
+              }
+            </ul>
+          </section>
+        } @empty {
+          <p class="muted">This user has no roles.</p>
+        }
+        <a
+          class="roles-link"
+          href="https://docs.eudiplo.dev/reference/roles"
+          target="_blank"
+          rel="noopener"
+        >
+          What each role allows
+          <mat-icon aria-hidden="true">open_in_new</mat-icon>
+        </a>
+      </mat-card-content>
+    </mat-card>
+  } @else {
+    <div class="loading-state">
+      <mat-spinner diameter="40" aria-label="Loading user"></mat-spinner>
+    </div>
+  }
+</div>

@@ -1,0 +1,27 @@
+@use '../../tenants/tenant-page' as page;
+
+// Back link, header card and grouped roles, as on the API client page
+@include page.base;
+@include page.detail-page;
+@include page.role-groups;
+
+.hero-avatar mat-icon {
+  width: 32px;
+  height: 32px;
+  font-size: 32px;
+}
+
+.danger:not([disabled]) {
+  --mat-button-outlined-label-text-color: var(--mat-sys-error);
+  --mat-button-outlined-outline-color: color-mix(in srgb, var(--mat-sys-error) 50%, transparent);
+}
+
+// More specific than Material's own :last-child padding rule of the card content
+mat-card mat-card-content {
+  padding: 0 20px 20px;
+}
+
+// The notice shows only when it applies; without content it takes no gap in the page
+app-role-lock-notice {
+  display: contents;
+}

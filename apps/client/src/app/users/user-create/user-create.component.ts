@@ -19,7 +19,6 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import {
   userControllerCreateUser,
   userControllerGetUser,
@@ -45,7 +44,6 @@ import { focusAfterRenderIfLost } from '../../common/focus-if-lost.util';
     MatInputModule,
     MatButtonModule,
     MatIconModule,
-    FlexLayoutModule,
     MatSelectModule,
     RouterModule,
     MatTooltipModule,
@@ -55,6 +53,7 @@ import { focusAfterRenderIfLost } from '../../common/focus-if-lost.util';
   ],
   changeDetection: ChangeDetectionStrategy.Eager,
   templateUrl: './user-create.component.html',
+  styleUrl: './user-create.component.scss',
 })
 export class UserCreateComponent implements OnInit {
   private readonly jwtService = inject(JwtService);
@@ -77,6 +76,8 @@ export class UserCreateComponent implements OnInit {
   /** Set when the user to edit could not be loaded; the form stays hidden. */
   loadError = '';
   id?: string | null;
+  /** Username of the edited user, which the back link names. */
+  username = '';
 
   /** Where focus goes after a successful retry removed the error card with its Retry button. */
   @ViewChild('pageHeading') private readonly pageHeading?: ElementRef<HTMLElement>;
@@ -93,7 +94,8 @@ export class UserCreateComponent implements OnInit {
     private readonly route: ActivatedRoute
   ) {
     this.userForm = this.fb.group({
-      username: ['', [Validators.required, Validators.minLength(1)]],
+      // The backend trims the username, so only spaces count as empty
+      username: ['', [Validators.required, Validators.pattern(/\S/)]],
       enabled: [true],
       roles: [[], [Validators.required]],
     });
@@ -128,6 +130,7 @@ export class UserCreateComponent implements OnInit {
       }
 
       this.userForm.patchValue(res.data);
+      this.username = res.data.username;
       this.userForm.get('username')?.disable();
       const choices = roleChoices(this.jwtService.getRoles(), res.data.roles ?? []);
       this.roleOptions = choices.options;

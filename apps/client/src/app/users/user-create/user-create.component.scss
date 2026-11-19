@@ -1,0 +1,16 @@
+@use '../../tenants/tenant-page' as page;
+
+// Back link, heading, sections and action bar, as on the API client form
+@include page.base;
+@include page.form-page;
+
+.form-avatar mat-icon {
+  width: 28px;
+  height: 28px;
+  font-size: 28px;
+}
+
+// The notice shows only when it applies; without content it takes no gap in the page
+app-role-lock-notice {
+  display: contents;
+}
