@@ -188,6 +188,17 @@ configuration bundle) sets `roles`, EUDIPLO replaces only the EUDIPLO realm
 roles mapped directly to it; Keycloak's default roles, other realm roles and
 roles from groups stay. An update without `roles` keeps all of them.
 
+Creating a client whose ID already exists in Keycloak with the `tenant_id` of
+the tenant takes over that Keycloak client and replaces its EUDIPLO realm roles
+the same way. This happens when `POST /api/tenant` is sent again for the
+tenant's `<tenant>-admin` client, and when `POST /api/client`, a configuration
+bundle or a tenant folder creates a client that exists in Keycloak but not
+among EUDIPLO's clients of the tenant. Through `POST /api/client` or a bundle
+import, the caller must be allowed to manage that Keycloak client, as for an
+update, and to grant each requested role. A
+Keycloak client without that attribute, or with another tenant's, is never
+taken over.
+
 **Checkpoint:** sign in to the web client as a tenant user. The dashboard loads
 and shows only that tenant's data.
 

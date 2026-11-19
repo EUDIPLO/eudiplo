@@ -48,7 +48,10 @@ hand out only `clients:manage` and these roles, unless they include
 choose them with that in mind. The root client has no tenant and cannot change
 a tenant's clients, but sending `POST /api/tenant` again for the existing
 tenant, with its name and all roles the admin client needs, gives that client
-the roles; with the built-in server it also returns a new secret.
+`clients:manage` and these roles and removes its other EUDIPLO roles (with
+Keycloak only those mapped directly to it, see
+[Keycloak SSO](keycloak.md#4-give-people-access)); with the built-in server it
+also returns a new secret.
 `DELETE /api/tenant/:id` removes the tenant with its data and files. Tenants can
 also be created from a config folder with an `info.json`
 ([configuration as code](configuration-as-code.md)).

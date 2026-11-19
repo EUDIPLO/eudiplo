@@ -17,6 +17,7 @@ import {
     assertMayGrantRoles,
     GRANT_DENIED_DESCRIPTION,
     manageDeniedDescription,
+    TAKEOVER_DENIED_DESCRIPTION,
 } from "../roles/role-grants.js";
 import { Secured } from "../secure.decorator.js";
 import { requireTenantContext } from "../tenant-context.util.js";
@@ -157,7 +158,10 @@ export class ClientController {
     @ApiOperation({ summary: "Create a new client" })
     @ApiBody({ type: CreateClientDto })
     @ApiResponse({ status: 201, type: ClientResponseDto })
-    @ApiResponse({ status: 403, description: GRANT_DENIED_DESCRIPTION })
+    @ApiResponse({
+        status: 403,
+        description: `${GRANT_DENIED_DESCRIPTION}. ${TAKEOVER_DENIED_DESCRIPTION}`,
+    })
     @ApiResponse({
         status: 409,
         description: "The client ID is already in use",
@@ -171,10 +175,17 @@ export class ClientController {
         assertMayGrantRoles(user.roles, createClientDto.roles);
         // Before the lookup, which also finds records left from an earlier mode.
         this.clients.assertCanCreateClients();
-        // Creating must never replace a client, not even one of this tenant.
+        // A client EUDIPLO has a record of is never replaced, not even one of
+        // this tenant. The provider may still take over one it has no record
+        // of, which the check below covers.
         if (await this.clients.getClientById(createClientDto.clientId)) {
             throw new ClientIdTaken(createClientDto.clientId);
         }
+        await this.access.assertMayCreate(
+            user.roles,
+            tenantId,
+            createClientDto.clientId,
+        );
         return this.clients.addClient(tenantId, createClientDto);
     }
 

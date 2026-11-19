@@ -129,6 +129,16 @@ export class InternalClientsProvider
         return client?.roles;
     }
 
+    getReplacedClientRoles(
+        tenantId: string,
+        clientId: string,
+    ): Promise<string[] | undefined> {
+        // `addClient` replaces a stored client of the tenant. The client API
+        // refuses such IDs and bundle plans update them instead, so this only
+        // matters for a caller that skips those checks.
+        return this.getClientRoles(tenantId, clientId);
+    }
+
     /**
      * Get a client by its clientId only (without tenant context).
      * Used for JWT validation to fetch client restrictions.

@@ -4,9 +4,13 @@ import { ConfigService } from "@nestjs/config";
 import { Test, TestingModule } from "@nestjs/testing";
 import request from "supertest";
 import { App } from "supertest/types";
-import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import { AllExceptionsFilter } from "../../src/all-exceptions.filter.js";
 import { AppModule } from "../../src/app.module.js";
+import {
+    CLIENTS_PROVIDER,
+    ClientsProvider,
+} from "../../src/auth/client/client.provider.js";
 import { Role } from "../../src/auth/roles/role.enum.js";
 import { createAppValidationPipe } from "../../src/shared/common/zod/zod-schema.util.js";
 import { clientBundle } from "../shared/config-bundle.js";
@@ -62,6 +66,20 @@ describe("Client role grants (e2e)", () => {
             clientId: string;
             clientSecret: string;
         };
+    }
+
+    /**
+     * Lets the provider report a client that a create would take over, as
+     * Keycloak does for a client of the tenant EUDIPLO has no record of. The
+     * built-in authorization server knows no such client.
+     */
+    function takeoverOfClientWith(roles: string[]) {
+        return vi
+            .spyOn(
+                app.get<ClientsProvider>(CLIENTS_PROVIDER),
+                "getReplacedClientRoles",
+            )
+            .mockResolvedValue(roles);
     }
 
     function getClient(token: string, clientId: string) {
@@ -247,6 +265,27 @@ describe("Client role grants (e2e)", () => {
             );
             const client = await getClient(token, second.clientId).expect(200);
             expect(client.body.roles).toContain(Role.Registrar);
+        });
+
+        test("refuses to take over a client with a role the caller does not hold", async () => {
+            const takeover = takeoverOfClientWith([Role.TenantAdmin]);
+            try {
+                const response = await createClient(
+                    managerToken,
+                    "grants-takeover",
+                    [Role.IssuanceOffer],
+                ).expect(403);
+                expect(response.body.message).toContain(
+                    "Cannot manage client grants-takeover",
+                );
+                expect(takeover).toHaveBeenCalledWith(
+                    tenantId,
+                    "grants-takeover",
+                );
+            } finally {
+                takeover.mockRestore();
+            }
+            await getClient(adminToken, "grants-takeover").expect(404);
         });
 
         test("refuses the root client's ID", async () => {
@@ -502,6 +541,51 @@ describe("Client role grants (e2e)", () => {
                 }),
             ).expect(403);
             expect(planned.body.message).toContain("Cannot grant tenant:admin");
+        });
+
+        test("refuses to create a client that takes over one with more roles", async () => {
+            const bundle = clientBundle(platformTenantId, {
+                clientId: "grants-platform-takeover",
+                secret: "!generate",
+                roles: [Role.IssuanceOffer],
+            });
+            const takeover = takeoverOfClientWith([Role.Tenants]);
+            try {
+                const planned = await plan(bundle).expect(403);
+                expect(planned.body.message).toContain(
+                    "Cannot manage client grants-platform-takeover",
+                );
+                const imported = await request(app.getHttpServer())
+                    .post(
+                        `/config-bundles/import?mode=upsert&planFingerprint=${"0".repeat(64)}`,
+                    )
+                    .set("Authorization", `Bearer ${platformTenantAdminToken}`)
+                    .send(bundle)
+                    .expect(403);
+                expect(imported.body.message).toContain(
+                    "Cannot manage client grants-platform-takeover",
+                );
+            } finally {
+                takeover.mockRestore();
+            }
+        });
+
+        test("a takeover needs the right to grant every requested role, also one the client has", async () => {
+            const takeover = takeoverOfClientWith([Role.TenantAdmin]);
+            try {
+                const planned = await plan(
+                    clientBundle(platformTenantId, {
+                        clientId: "grants-platform-takeover",
+                        secret: "!generate",
+                        roles: [Role.TenantAdmin],
+                    }),
+                ).expect(403);
+                expect(planned.body.message).toContain(
+                    "Cannot grant tenant:admin",
+                );
+            } finally {
+                takeover.mockRestore();
+            }
         });
 
         test("blocks a client ID that another tenant uses", async () => {

@@ -11,6 +11,10 @@ const reservedRoles: ReadonlySet<Role> = new Set([
 export const GRANT_DENIED_DESCRIPTION =
     "The caller may not grant one of the requested roles";
 
+/** OpenAPI description of the 403 for a create that takes over a client with more roles. */
+export const TAKEOVER_DENIED_DESCRIPTION =
+    "An existing client of the tenant with this ID, whose roles the create would replace, has a role the caller neither holds nor may grant";
+
 /** OpenAPI description of the 403 for a client or user with more roles. */
 export function manageDeniedDescription(target: "client" | "user"): string {
     return `The ${target} has a role the caller neither holds nor may grant`;

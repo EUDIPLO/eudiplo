@@ -283,8 +283,9 @@ cannot be applied: fix the reported issue (missing secret, stale generation,
 unknown reference, including an OpenID Federation trust anchor that is not
 registered, client ID used by another tenant, a deleted trust list or trust
 anchor that a configuration still uses) and plan again. A plan
-that grants roles beyond the caller's own, or changes a client with more
-roles, answers `403` ([granting roles](../reference/roles.md#granting-roles)). The import sends the plan's fingerprint; if
+that grants roles beyond the caller's own, changes a client with more roles,
+or creates a client that takes over a Keycloak client with more roles, answers
+`403` ([granting roles](../reference/roles.md#granting-roles)). The import sends the plan's fingerprint; if
 the bundle, the mode or the target configuration changed in between, it fails
 with `CONFIG_PLAN_STALE` before writing anything.
 

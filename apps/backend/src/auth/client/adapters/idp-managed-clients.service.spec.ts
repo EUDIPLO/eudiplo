@@ -38,6 +38,12 @@ describe("IdpManagedClientsProvider", () => {
         });
     });
 
+    it("reports no client that a create would take over", async () => {
+        await expect(
+            provider.getReplacedClientRoles("acme", "shop"),
+        ).resolves.toBeUndefined();
+    });
+
     it.each([
         ["getClients", () => provider.getClients("acme")],
         ["getClient", () => provider.getClient("acme", "shop")],
