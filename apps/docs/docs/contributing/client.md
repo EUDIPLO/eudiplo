@@ -64,7 +64,7 @@ apps/client/src/
 │   ├── registrar/ (EUDI Hub dialogs), webhook-endpoint/, config-portability/
 │   ├── tenants/, users/, admin/   # tenants and clients, users, activity log
 │   └── types/
-├── styles/                  # shared Sass: _a11y.scss (global .visually-hidden), _theme-colors.scss (palettes)
+├── styles/                  # shared Sass, on the include path (`@use 'page'`): _page.scss (page mixins), _a11y.scss (global .visually-hidden), _theme-colors.scss (palettes)
 ├── environments/
 └── test-setup.ts            # shared unit-test setup
 ```

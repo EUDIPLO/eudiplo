@@ -36,10 +36,20 @@
     box-sizing: border-box;
   }
 
-  // Text link back to where the page was opened from, aligned with the content edge
+  // Text link back to where the page was opened from, aligned with the content edge. A long
+  // label, such as an ID, ends in an ellipsis on one line; the link's title or aria-label holds
+  // the full text.
   .back-link {
     align-self: flex-start;
+    max-width: calc(100% + 12px);
     margin-left: -12px;
+
+    ::ng-deep .mdc-button__label {
+      overflow: hidden;
+      min-width: 0;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
   }
 
   .page-header {
@@ -838,9 +848,8 @@
   }
 }
 
-// Row and column helpers for the large editors (credential configuration, Issuer Settings, offer)
-// in place of the former fxLayout attributes: .fx-row, .fx-col, .fx-wrap, .flex-1, .justify-*,
-// .align-*, .gap-N and .full-width.
+// Row and column helpers for the large editors (credential configuration, Issuer Settings, offer):
+// .fx-row, .fx-col, .fx-wrap, .flex-1, .justify-*, .align-*, .gap-N and .full-width.
 @mixin layout-utilities {
   .fx-row {
     display: flex;
@@ -979,32 +988,68 @@
   }
 }
 
-// Tones of the session statuses on the .badge of the base mixin, as on the dashboard. Markup:
+// Tone of each session status, as on the dashboard and the session pages.
+$session-status-tones: (
+  active: var(--mat-sys-primary),
+  fetched: var(--mat-sys-tertiary),
+  completed: var(--eudiplo-success),
+  expired: var(--eudiplo-warning),
+  failed: var(--eudiplo-danger),
+  cancelled: var(--mat-sys-on-surface-variant),
+);
+
+// Sets --tone on any element with a session status class, such as the dashboard's status bar.
+// Markup: .status-<status>, for example .status-completed.
+@mixin session-status-tones {
+  @each $status, $tone in $session-status-tones {
+    .status-#{$status} {
+      --tone: #{$tone};
+    }
+  }
+}
+
+// Tones of the session statuses on the .badge of the base mixin. Markup:
 // span.badge.status-<status>, for example .status-completed.
 @mixin session-status-badges {
   .badge {
-    &.status-active {
-      --tone: var(--mat-sys-primary);
+    @each $status, $tone in $session-status-tones {
+      &.status-#{$status} {
+        --tone: #{$tone};
+      }
+    }
+  }
+}
+
+// Status line with an icon on a tonal background: neutral by default, .ok green and .warning
+// orange. Pass the line's selector, then set its margin in a rule of its own. Markup: the line >
+// mat-icon + text.
+@mixin status-line($selector) {
+  #{$selector} {
+    --tone: var(--mat-sys-on-surface-variant);
+
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 16px;
+    border-radius: var(--mat-sys-corner-medium);
+    background: color-mix(in srgb, var(--tone) 8%, var(--mat-sys-surface));
+    font: var(--mat-sys-body-medium);
+    color: var(--mat-sys-on-surface);
+
+    > mat-icon {
+      flex: none;
+      width: 20px;
+      height: 20px;
+      font-size: 20px;
+      color: var(--tone);
     }
 
-    &.status-fetched {
-      --tone: var(--mat-sys-tertiary);
-    }
-
-    &.status-completed {
+    &.ok {
       --tone: var(--eudiplo-success);
     }
 
-    &.status-expired {
+    &.warning {
       --tone: var(--eudiplo-warning);
-    }
-
-    &.status-failed {
-      --tone: var(--eudiplo-danger);
-    }
-
-    &.status-cancelled {
-      --tone: var(--mat-sys-on-surface-variant);
     }
   }
 }

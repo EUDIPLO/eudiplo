@@ -1,5 +1,5 @@
-<div fxLayout="row" fxLayoutGap="16px">
-  <mat-form-field fxFlex>
+<div class="image-field">
+  <mat-form-field class="image-url">
     <mat-label>{{ label }}</mat-label>
     <input
       matInput
@@ -29,7 +29,7 @@
     title="Upload logo image"
     (change)="uploadLogoFile($event)"
   />
-  <div fxLayout="row" fxFlex fxLayoutAlign="center center">
+  <div class="image-preview-box">
     @if (shouldRenderPreview) {
       <img
         [src]="field.value"

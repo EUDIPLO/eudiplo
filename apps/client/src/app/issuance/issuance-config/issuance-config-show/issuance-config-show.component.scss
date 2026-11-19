@@ -1,4 +1,4 @@
-@use '../../../tenants/tenant-page' as page;
+@use 'page';
 
 // Header card and detail cards, as on the key and attribute provider pages
 @include page.base;

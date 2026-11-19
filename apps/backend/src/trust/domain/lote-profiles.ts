@@ -18,7 +18,11 @@ import { ServiceTypeIdentifiers } from "../types.js";
  *   and I say "The ServiceStatus component shall not be used", so any value
  *   there leaves the service out. Annex H (Table H.3) says it "shall be
  *   present" and allows `notified` and `withdrawn` "to the exclusion of any
- *   other". A Pub-EAA service without a status is still read, with a warning:
+ *   other". One exception in Annex D: PID lists in use, such as the German
+ *   one, set `.../PidProvidersList/SvcStatus/notified`, a URI no annex
+ *   defines, and `@owf/eudi-lote` accepts it in its compat mode, so a PID
+ *   service with that status is read as if it had none. A Pub-EAA service
+ *   without a status is still read, with a warning:
  *   the list is signed, an absent status cannot mean withdrawn (NOTE 1), and
  *   `@owf/eudi-lote` (0.5) forbids the component in its Pub-EAA schema, so
  *   lists built with it carry none. Other lists accept
@@ -43,6 +47,12 @@ export const LoteTypes = {
 } as const;
 
 export const ServiceStatuses = {
+    /**
+     * Set by PID lists in use although Annex D forbids `ServiceStatus`; no
+     * annex defines it. `@owf/eudi-lote` accepts it in compat mode.
+     */
+    PIDNotified:
+        "http://uri.etsi.org/19602/PidProvidersList/SvcStatus/notified", // NOSONAR: ETSI identifier URI, not fetched
     /** ETSI TS 119 602 Annex H, Table H.3. */
     PubEAANotified:
         "http://uri.etsi.org/19602/PubEAAProvidersList/SvcStatus/notified", // NOSONAR: ETSI identifier URI, not fetched
@@ -69,7 +79,7 @@ export interface LoteProfileRules {
      * no service has one; absent when the profile implies none.
      */
     impliedServiceType?: string;
-    /** `ServiceStatus` values that approve a service; empty when the profile forbids the component. */
+    /** `ServiceStatus` values that approve a service; empty when the profile forbids the component; for PID lists only the status lists in use set. */
     approvingStatuses: readonly string[];
     /**
      * Whether a service without `ServiceStatus` is read with a warning,
@@ -78,7 +88,7 @@ export interface LoteProfileRules {
     statusRequired: boolean;
 }
 
-/** Annexes D to G and I: "The ServiceStatus component shall not be used". */
+/** Annexes E to G and I: "The ServiceStatus component shall not be used". */
 const statusForbidden = {
     approvingStatuses: [],
     statusRequired: false,
@@ -100,7 +110,8 @@ const profiles: ReadonlyMap<string, LoteProfileRules> = new Map<
     [
         LoteTypes.PIDProviders,
         {
-            ...statusForbidden,
+            approvingStatuses: [ServiceStatuses.PIDNotified],
+            statusRequired: false,
             impliedServiceType: ServiceTypeIdentifiers.PIDIssuance,
         },
     ],

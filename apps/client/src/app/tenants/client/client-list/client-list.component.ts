@@ -1,8 +1,7 @@
-import { Component, Input, OnInit, ChangeDetectionStrategy, inject } from '@angular/core';
+import { Component, Input, ChangeDetectionStrategy, inject } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTableModule } from '@angular/material/table';
-import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { Router, RouterModule } from '@angular/router';
 import { NgTemplateOutlet } from '@angular/common';
@@ -28,7 +27,7 @@ import { openErrorSnackBar } from '../../../utils/error-snackbar';
 import { UnavailableCardComponent } from '../../../common/unavailable-card.component';
 import { LoadErrorComponent } from '../../../common/load-error.component';
 import { FrontendConfigService } from '../../../services/frontend-config.service';
-import { searchAndSort } from '../../../utils/search-list';
+import { BaseAsyncListComponent } from '../../../common/base-async-list.component';
 import { uniqueRoles } from '../../../services/role-groups';
 import { ItemRoutePipe } from '../../../common/item-route.pipe';
 
@@ -57,7 +56,10 @@ type ClientColumn = 'clientId' | 'roles' | 'actions';
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './client-list.component.scss',
 })
-export class ClientListComponent implements OnInit {
+export class ClientListComponent extends BaseAsyncListComponent<ClientEntity> {
+  protected readonly loadFailedMessage = 'Failed to load clients';
+  protected override readonly rowLinkSelector = 'a.client-link';
+
   @Input() loadedClients?: ClientEntity[];
   /** Shown inside another page's card, such as a tenant's: without heading, search and card. */
   @Input() embedded = false;
@@ -65,20 +67,8 @@ export class ClientListComponent implements OnInit {
   /** Roles a row shows before "+N more". */
   readonly visibleRoleCount = 4;
 
-  clients: ClientEntity[] = [];
-  loading = false;
-  /** Set when the list could not be loaded, so it is not shown as empty. */
-  loadError = '';
-  /** Why this instance manages no clients, for example because the identity provider does. */
-  unavailableMessage = '';
-  hasPermission = false;
-
   /** The client column also shows the description. */
   displayedColumns: ClientColumn[] = ['clientId', 'roles', 'actions'];
-  /** Text to find in a client's ID, description or roles. */
-  search = '';
-  /** The last search result, kept until the clients or the search change. */
-  private shown?: { clients: ClientEntity[]; search: string; result: ClientEntity[] };
 
   /** With another identity provider, records left from an earlier mode get no new secrets. */
   get rotatesSecrets(): boolean {
@@ -92,22 +82,17 @@ export class ClientListComponent implements OnInit {
       : this.displayedColumns;
   }
 
-  /** The clients that match the search, sorted by client ID. */
-  get shownClients(): ClientEntity[] {
-    if (this.shown?.clients !== this.clients || this.shown.search !== this.search) {
-      const result = searchAndSort(
-        this.clients,
-        this.search,
-        (client) => [client.clientId, client.description ?? '', ...(client.roles ?? [])],
-        (client) => client.clientId
-      );
-      this.shown = { clients: this.clients, search: this.search, result };
-    }
-    return this.shown.result;
+  get clients(): ClientEntity[] {
+    return this.items;
   }
 
-  clearSearch(): void {
-    this.search = '';
+  /** Text to find in a client's ID, description or roles. */
+  protected override searchTexts(client: ClientEntity): string[] {
+    return [client.clientId, client.description ?? '', ...(client.roles ?? [])];
+  }
+
+  protected override sortName(client: ClientEntity): string {
+    return client.clientId;
   }
 
   /** A client's roles without repeats, as stored records may name a role twice. */
@@ -123,12 +108,12 @@ export class ClientListComponent implements OnInit {
   private readonly frontendConfig = inject(FrontendConfigService);
 
   constructor(
-    private readonly snackBar: MatSnackBar,
     private readonly apiService: ApiService,
     private readonly router: Router,
     private readonly dialog: MatDialog,
     private readonly jwtService: JwtService
   ) {
+    super();
     this.callerRoles = jwtService.getRoles();
   }
 
@@ -146,59 +131,46 @@ export class ClientListComponent implements OnInit {
     return this.callerTenantId && client.tenantId === this.callerTenantId ? client.clientId : '';
   }
 
-  ngOnInit(): void {
+  override ngOnInit(): void {
     if (this.loadedClients) {
       this.callerTenantId = this.jwtService.getTenantId();
-      this.clients = this.loadedClients;
+      this.items = this.loadedClients;
+      this.loading = false;
     } else {
-      void this.loadClients();
+      super.ngOnInit();
     }
   }
 
-  async loadClients(): Promise<void> {
-    this.loading = true;
-    this.loadError = '';
-    this.unavailableMessage = '';
-    try {
-      this.clients = await clientControllerGetClients<true>().then((res) => res.data);
-    } catch (error) {
-      if (hasHttpStatus(error, 501)) {
-        this.unavailableMessage =
-          apiErrorDetail(error) ?? 'This instance does not manage API clients.';
-        return;
-      }
-      console.error('Error loading clients:', error);
-      this.loadError = getApiErrorMessage(error, 'Failed to load clients');
-    } finally {
-      this.loading = false;
-    }
+  protected fetchItems(): Promise<ClientEntity[]> {
+    return clientControllerGetClients<true>().then((res) => res.data);
+  }
+
+  protected override unavailableReason(error: unknown): string | undefined {
+    if (!hasHttpStatus(error, 501)) return undefined;
+    return apiErrorDetail(error) ?? 'This instance does not manage API clients.';
   }
 
   async deleteClient(client: ClientEntity): Promise<void> {
-    if (
-      !client.clientId ||
-      !confirm(clientDeleteConfirmation(client.clientId, this.apiService.getClientId()))
-    ) {
+    // Delete stays focusable while it waits or is refused (disabledInteractive).
+    if (!client.clientId || !this.canManage(client)) {
       return;
     }
-
-    try {
-      await clientControllerDeleteClient({ path: { id: client.clientId } });
-    } catch (error) {
-      console.error('Error deleting client:', error);
-      openErrorSnackBar(this.snackBar, getApiErrorMessage(error, 'Failed to delete client'));
-      return;
-    }
-
-    if (client.clientId === this.apiService.getClientId()) {
+    const ownClient = client.clientId === this.apiService.getClientId();
+    const deleted = await this.deleteItem({
+      item: client,
+      id: client.clientId,
+      question: clientDeleteConfirmation(client.clientId, this.apiService.getClientId()),
+      request: () => clientControllerDeleteClient({ path: { id: client.clientId } }),
+      deleted: ownClient
+        ? 'Client deleted. You have been signed out.'
+        : 'Client deleted successfully',
+      failed: 'Failed to delete client',
+    });
+    if (deleted && ownClient) {
       // The deleted client can no longer renew this session.
       this.apiService.logout();
-      this.snackBar.open('Client deleted. You have been signed out.', 'Close', { duration: 5000 });
       await this.router.navigate(['/login']);
-      return;
     }
-    await this.loadClients(); // Reload the list
-    this.snackBar.open('Client deleted successfully', 'Close', { duration: 3000 });
   }
 
   /**

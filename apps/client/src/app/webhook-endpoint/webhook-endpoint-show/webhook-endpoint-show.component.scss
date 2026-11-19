@@ -1,4 +1,4 @@
-@use '../../tenants/tenant-page' as page;
+@use 'page';
 
 // Back link, header card and detail cards, as on the user and API client pages
 @include page.base;

@@ -56,6 +56,7 @@ describe("serviceStatusVerdict", () => {
             [ServiceStatuses.PubEAAWithdrawn, "status-withdrawn"],
             [ServiceStatuses.SchemeApprovalWithdrawn, "status-withdrawn"],
             [ServiceStatuses.SchemeApprovalGranted, "status-unknown"],
+            [ServiceStatuses.PIDNotified, "status-unknown"],
             [UNKNOWN_STATUS, "status-unknown"],
         ])("leaves out a service with status %s", (status, note) => {
             expect(serviceStatusVerdict(rules, status)).toEqual({
@@ -65,8 +66,32 @@ describe("serviceStatusVerdict", () => {
         });
     });
 
+    describe(`${LoteTypes.PIDProviders}, where ServiceStatus shall not be used`, () => {
+        const rules = loteProfileRules(LoteTypes.PIDProviders);
+
+        it.each([undefined, ServiceStatuses.PIDNotified])(
+            "reads a service with status %s, as lists in use set it",
+            (status) => {
+                expect(serviceStatusVerdict(rules, status)).toEqual({
+                    keep: true,
+                });
+            },
+        );
+
+        it.each([
+            [ServiceStatuses.PubEAANotified, "status-unknown"],
+            [ServiceStatuses.SchemeApprovalGranted, "status-unknown"],
+            [UNKNOWN_STATUS, "status-unknown"],
+            [ServiceStatuses.SchemeApprovalWithdrawn, "status-withdrawn"],
+        ])("leaves out a service with status %s", (status, note) => {
+            expect(serviceStatusVerdict(rules, status)).toEqual({
+                keep: false,
+                note,
+            });
+        });
+    });
+
     describe.each([
-        LoteTypes.PIDProviders,
         LoteTypes.WalletProviders,
         LoteTypes.WRPACProviders,
         LoteTypes.WRPRCProviders,
@@ -83,6 +108,7 @@ describe("serviceStatusVerdict", () => {
         it.each([
             [ServiceStatuses.PubEAANotified, "status-not-used"],
             [ServiceStatuses.SchemeApprovalGranted, "status-not-used"],
+            [ServiceStatuses.PIDNotified, "status-not-used"],
             [UNKNOWN_STATUS, "status-not-used"],
             [ServiceStatuses.SchemeApprovalWithdrawn, "status-withdrawn"],
         ])("leaves out a service with status %s", (status, note) => {
@@ -113,6 +139,7 @@ describe("serviceStatusVerdict", () => {
         it.each([
             [ServiceStatuses.PubEAAWithdrawn, "status-withdrawn"],
             [ServiceStatuses.SchemeApprovalWithdrawn, "status-withdrawn"],
+            [ServiceStatuses.PIDNotified, "status-unknown"],
             [UNKNOWN_STATUS, "status-unknown"],
         ])("leaves out a service with status %s", (status, note) => {
             expect(serviceStatusVerdict(rules, status)).toEqual({

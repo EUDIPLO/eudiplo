@@ -21,7 +21,7 @@ test('presentation config create page is reachable when authenticated', async ({
   await page.goto('/presentation-config/create');
   await expect(page).not.toHaveURL(/\/login$/);
   await expect(page).toHaveURL(/\/presentation-config\/create$/);
-  await expect(page.getByRole('heading', { name: 'Create Presentation' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Create Verification Config' })).toBeVisible();
 });
 
 test('a file-managed presentation config is locked for a client without tenant:admin', async ({
@@ -43,7 +43,7 @@ test('a file-managed presentation config is locked for a client without tenant:a
 
   await page.goto('/presentation-config/pid/edit');
   await expect(page.getByText('Managed by a configuration bundle')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Save Configuration' })).toHaveAttribute(
+  await expect(page.getByRole('button', { name: 'Save Changes' })).toHaveAttribute(
     'aria-disabled',
     'true'
   );
@@ -59,10 +59,12 @@ test('a locked action on the list says why and lets no click or key through', as
   // The ID links to the configuration; Edit is the next stop in the row.
   const view = row.getByRole('link', { name: 'pid', exact: true });
   // The list names each action after its configuration.
-  const edit = row.getByRole('button', { name: 'Edit presentation configuration pid' });
+  const edit = row.getByRole('button', { name: 'Edit verification config pid' });
   const tooltip = page.locator('.mat-mdc-tooltip');
   await expect(edit).toHaveAttribute('aria-disabled', 'true');
-  await expect(edit).toHaveAccessibleDescription(/^Edit Configuration\. Managed by .+, read-only$/);
+  await expect(edit).toHaveAccessibleDescription(
+    /^Edit verification config\. Managed by .+, read-only$/
+  );
 
   /** Whether the edit page opens within a moment of `action`. */
   async function opensEditPage(action: () => Promise<void>): Promise<boolean> {
@@ -90,7 +92,7 @@ test('a locked action on the list says why and lets no click or key through', as
   await edit.blur();
   await expect(tooltip).toBeHidden();
   await edit.hover();
-  await expect(tooltip).toContainText('Edit Configuration. Managed by');
+  await expect(tooltip).toContainText('Edit verification config. Managed by');
   // Playwright treats aria-disabled as disabled and would wait for it otherwise.
   expect(await opensEditPage(() => edit.click({ force: true }))).toBe(false);
 });

@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, provideRouter, Router } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
-import { EMPTY, Subject } from 'rxjs';
+import { EMPTY, of, Subject } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { client } from '@eudiplo/sdk-core';
 import { PresentationCreateComponent } from './presentation-create.component';
@@ -10,6 +10,7 @@ import { PresentationManagementService } from '../presentation-management.servic
 import { EditorComponent } from '../../../utils/editor/editor.component';
 import { ThemeService } from '../../../services/theme.service';
 import { ConfigOwnershipService } from '../../../config-portability/config-ownership.service';
+import { registerFieldFocus } from '../../../common/field-to-fix.util';
 import { expectHeadingFocusOnlyAfterRetry } from '../../../common/retry-focus.testing';
 import { expectAvailable, expectUnavailable } from '../../../common/unavailable-action.testing';
 
@@ -24,7 +25,7 @@ const query = {
   ],
 };
 
-describe('Presentation configuration flow', () => {
+describe('Verification config editor', () => {
   let component: PresentationCreateComponent;
   let fixture: ComponentFixture<PresentationCreateComponent>;
   let service: {
@@ -308,7 +309,7 @@ describe('Presentation configuration flow', () => {
     fixture.detectChanges();
 
     expect(service.createConfiguration).toHaveBeenCalledOnce();
-    expectUnavailable(fixture, save, 'Saving the presentation configuration…');
+    expectUnavailable(fixture, save, 'Saving the verification config…');
   });
 
   it('steps back while idle and keeps the guided Back focusable while the configuration is saved', async () => {
@@ -337,7 +338,7 @@ describe('Presentation configuration flow', () => {
 
     expect(service.createConfiguration).toHaveBeenCalledOnce();
     expect(component.activeStep).toBe(3);
-    expectUnavailable(fixture, back, 'Saving the presentation configuration…');
+    expectUnavailable(fixture, back, 'Saving the verification config…');
   });
 
   it('does not save when Enter is pressed before review', () => {
@@ -354,7 +355,286 @@ describe('Presentation configuration flow', () => {
     component.createOrUpdatePresentation();
     expect(service.createConfiguration).not.toHaveBeenCalled();
     expect(component.activeStep).toBe(2);
-    expect(component.showSettingsErrors).toBe(true);
+    expect(component.validationMessage).toBe('Check the highlighted fields in Settings.');
+  });
+
+  it('shows the field to fix after a refused Continue', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const element = fixture.nativeElement as HTMLElement;
+    element.querySelector<HTMLButtonElement>('button[type="submit"]')!.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.activeStep).toBe(0);
+    expect(element.querySelector('[role="alert"]')?.textContent).toContain(
+      'Check the highlighted fields in Name.'
+    );
+    expect(document.activeElement).toBe(element.querySelector('input[formcontrolname="id"]'));
+  });
+
+  it('shows the Settings field to fix after a refused Save on Review', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fill();
+    component.form.patchValue({ lifeTime: 0 });
+    component.guided = false;
+    component.activeStep = 3;
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const element = fixture.nativeElement as HTMLElement;
+
+    element.querySelector<HTMLButtonElement>('button[type="submit"]')!.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(service.createConfiguration).not.toHaveBeenCalled();
+    expect(component.activeStep).toBe(2);
+    expect(document.activeElement).toBe(element.querySelector('input[formcontrolname="lifeTime"]'));
+  });
+
+  it('points at the query builder when the query keeps Continue from the Credentials step', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    component.form.patchValue({ id: 'test', description: 'Test request' });
+    component.nextStep();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const element = fixture.nativeElement as HTMLElement;
+
+    element.querySelector<HTMLButtonElement>('button[type="submit"]')!.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.activeStep).toBe(1);
+    expect(component.validationMessage).toBe('Check the errors in Credentials.');
+    expect(
+      element
+        .querySelector('[data-step="1"] app-dcql-query-editor')
+        ?.contains(document.activeElement)
+    ).toBe(true);
+  });
+
+  it('refuses an attachment that names a removed credential and shows where to fix it', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fill();
+    component.addAttachment();
+    component
+      .getFormArray('attached')
+      .at(0)
+      .patchValue({ format: 'dc+sd-jwt', data: 'signed', credential_ids: ['gone'] });
+    component.guided = false;
+    component.activeStep = 3;
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const element = fixture.nativeElement as HTMLElement;
+
+    element.querySelector<HTMLButtonElement>('button[type="submit"]')!.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(service.createConfiguration).not.toHaveBeenCalled();
+    expect(component.activeStep).toBe(2);
+    expect(component.validationMessage).toContain('references missing credential "gone"');
+    expect(document.activeElement).toBe(
+      element.querySelector('[data-step="2"] [formarrayname="attached"] input')
+    );
+  });
+
+  it('refuses transaction data that names a removed credential and focuses its editor', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fill();
+    component.form.patchValue({
+      transaction_data: JSON.stringify([{ type: 'payment', credential_ids: ['gone'] }]),
+    });
+    component.guided = false;
+    // Settings is rendered once shown, and stays rendered.
+    component.activeStep = 2;
+    fixture.detectChanges();
+    await fixture.whenStable();
+    component.activeStep = 3;
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const element = fixture.nativeElement as HTMLElement;
+    const transactionEditor = element.querySelector<HTMLElement>(
+      '[data-step="2"] app-editor[formcontrolname="transaction_data"]'
+    )!;
+    const focus = vi.fn();
+    registerFieldFocus(transactionEditor, focus);
+
+    element.querySelector<HTMLButtonElement>('button[type="submit"]')!.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(service.createConfiguration).not.toHaveBeenCalled();
+    expect(component.activeStep).toBe(2);
+    expect(component.validationMessage).toContain(
+      'Transaction data references missing credential "gone"'
+    );
+    expect(focus).toHaveBeenCalled();
+  });
+
+  it('focuses the field to fix in its own step, also after the Credentials step was shown', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fill();
+    component.nextStep();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(component.activeStep).toBe(1);
+    component.nextStep();
+    component.form.patchValue({ lifeTime: 0 });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const element = fixture.nativeElement as HTMLElement;
+
+    element.querySelector<HTMLButtonElement>('button[type="submit"]')!.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.activeStep).toBe(2);
+    expect(document.activeElement).toBe(element.querySelector('input[formcontrolname="lifeTime"]'));
+  });
+
+  it('moves focus to the next attachment after a removal, and to Add Attachment after the last', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fill();
+    component.guided = false;
+    component.activeStep = 2;
+    component.addAttachment();
+    component.addAttachment();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const element = fixture.nativeElement as HTMLElement;
+    const rows = () => [...element.querySelectorAll('[data-step="2"] app-credential-ids')];
+    rows()[0].querySelector('input')!.focus();
+
+    component.removeAttachment(0);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(rows()[0].querySelector('input'));
+
+    component.removeAttachment(0);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(document.activeElement?.textContent).toContain('Add Attachment');
+  });
+
+  it('opens an edit page without unsaved changes', async () => {
+    route.snapshot.params = { id: 'existing' };
+    route.snapshot.url = [{ path: 'existing' }, { path: 'edit' }];
+    service.getPresentationById.mockResolvedValue({
+      id: 'existing',
+      description: 'Existing request',
+      dcql_query: query,
+      transaction_data: [{ type: 'payment', credential_ids: ['pid'] }],
+      attached: [{ format: 'dc+sd-jwt', data: 'signed', credential_ids: ['pid'] }],
+      registration_cert: { purpose: [{ lang: 'en', content: 'Age check' }] },
+    });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(component.form.dirty).toBe(false);
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.change-state')?.textContent?.trim()
+    ).toBe('No changes');
+  });
+
+  it('counts added and removed list entries and an imported query as unsaved changes', () => {
+    fill();
+    component.form.markAsPristine();
+    component.addPurposeByUser();
+    expect(component.form.dirty).toBe(true);
+
+    component.form.markAsPristine();
+    component.removeRegistrationCertPurpose(0);
+    expect(component.form.dirty).toBe(true);
+
+    component.form.markAsPristine();
+    component.addAttachmentByUser();
+    expect(component.form.dirty).toBe(true);
+
+    component.form.markAsPristine();
+    component.removeAttachment(0);
+    expect(component.form.dirty).toBe(true);
+
+    component.form.markAsPristine();
+    const dialog = TestBed.inject(MatDialog) as unknown as { open: ReturnType<typeof vi.fn> };
+    dialog.open.mockReturnValue({ afterClosed: () => of(query) });
+    component.importFromIssuer();
+    expect(component.form.dirty).toBe(true);
+
+    component.form.markAsPristine();
+    dialog.open.mockReturnValue({ afterClosed: () => of({ dcqlQuery: query }) });
+    component.importFromSchemaMetadata();
+    expect(component.form.dirty).toBe(true);
+  });
+
+  it('shows every setting in its own section, without panels to expand', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fill();
+    component.guided = false;
+    component.activeStep = 2;
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const settings = (fixture.nativeElement as HTMLElement).querySelector('[data-step="2"]')!;
+
+    expect(
+      [...settings.querySelectorAll('section[aria-labelledby] h2')].map((heading) =>
+        heading.textContent?.trim()
+      )
+    ).toEqual([
+      'Request and verification options',
+      'Registration certificate',
+      'Application integration',
+      'Transaction data',
+    ]);
+    expect(settings.querySelector('mat-expansion-panel')).toBeNull();
+    for (const name of [
+      'lifeTime',
+      'statusCheckMode',
+      'accessKeyChainId',
+      'redirectUri',
+      'allowedOrigins',
+      'registrationCertJwt',
+      'registrationCertPrivacyPolicy',
+      'webhookEndpointId',
+    ]) {
+      expect(settings.querySelector(`[formcontrolname="${name}"]`), name).not.toBeNull();
+    }
+  });
+
+  it('names the verification config in the heading, Save and the change state', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fill();
+    component.guided = false;
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.querySelector('h1')?.textContent?.trim()).toBe('Create Verification Config');
+    expect(element.querySelector('button[type="submit"]')?.textContent).toContain(
+      'Create Verification Config'
+    );
+    expect(element.querySelector('.change-state')?.textContent?.trim()).toBe('');
+    component.form.markAsDirty();
+    fixture.detectChanges();
+    expect(element.querySelector('.change-state')?.textContent?.trim()).toBe('Unsaved changes');
+  });
+
+  it('says the verification config was created', async () => {
+    fill();
+    component.activeStep = 3;
+    component.submitPresentation();
+    await vi.waitFor(() => expect(component.saving).toBe(false));
+    expect(TestBed.inject(MatSnackBar).open).toHaveBeenCalledWith(
+      'Verification config created',
+      'Close',
+      { duration: 3000 }
+    );
   });
 
   it('summarises omitted, empty and malformed claims differently', () => {
@@ -459,7 +739,6 @@ describe('Presentation configuration flow', () => {
     expect(component.form.get('allowedOrigins')!.value).toBe(
       'https://shop.example\nhttps://app.example'
     );
-    expect(component.hasRequestOverrides).toBe(true);
   });
 
   it('reports JSON null as invalid without crashing the editor', async () => {
@@ -501,7 +780,7 @@ describe('Presentation configuration flow', () => {
       dcql_query: query,
     });
     expect(component.getFormArray('attached').length).toBe(0);
-    expect(component.hasRegistrationCertificate).toBe(false);
+    expect(component.registrationCertSummary).toBe('Not configured');
     component.createOrUpdatePresentation();
     expect(service.createConfiguration.mock.calls[0][0]).toMatchObject({
       attached: [],
@@ -537,6 +816,10 @@ describe('Presentation configuration flow', () => {
     );
     expect(component.guided).toBe(false);
     expect(component.form.get('id')!.disabled).toBe(true);
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.querySelector('h1')?.textContent?.trim()).toBe('Edit Verification Config');
+    expect(element.querySelector('button[type="submit"]')?.textContent).toContain('Save Changes');
+    expect(element.querySelector('.change-state')?.textContent?.trim()).toBe('No changes');
     component.toggleGuided();
     component.createOrUpdatePresentation();
     expect(client.patch).toHaveBeenCalledWith(
@@ -548,6 +831,13 @@ describe('Presentation configuration flow', () => {
           allowedOrigins: ['https://shop.example', 'https://app.example'],
         }),
       })
+    );
+    await vi.waitFor(() =>
+      expect(TestBed.inject(MatSnackBar).open).toHaveBeenCalledWith(
+        'Verification config saved',
+        'Close',
+        { duration: 3000 }
+      )
     );
   });
 
@@ -582,7 +872,7 @@ describe('Presentation configuration flow', () => {
     const element = fixture.nativeElement as HTMLElement;
     expect(component.create).toBe(false);
     expect(element.querySelector('[role="alert"]')?.textContent).toContain(
-      'Failed to load presentation configuration: Not found'
+      'Failed to load verification config: Not found'
     );
     expect(element.querySelector('form')).toBeNull();
     component.submitPresentation();
@@ -673,14 +963,14 @@ describe('Presentation configuration flow', () => {
 
       fixture.detectChanges();
       expect(component.jsonViewUnavailableReason).toBe(
-        'Wait until the presentation configuration has loaded'
+        'Wait until the verification config has loaded'
       );
       // The button stays clickable while it cannot be used, so the handler checks again.
       component.viewAsJson();
       await vi.waitFor(() => expect(component.loadingConfig).toBe(false));
       fixture.detectChanges();
       expect(component.jsonViewUnavailableReason).toBe(
-        'Retry loading the presentation configuration before opening JSON View'
+        'Retry loading the verification config before opening JSON View'
       );
       expect(jsonViewButton().getAttribute('aria-disabled')).toBe('true');
       expect(jsonViewButton().disabled).toBe(false);
@@ -713,7 +1003,7 @@ describe('Presentation configuration flow', () => {
       component.createOrUpdatePresentation();
       expect(service.createConfiguration).toHaveBeenCalledOnce();
       expect(component.jsonViewUnavailableReason).toBe(
-        'Wait until the presentation configuration has been saved'
+        'Wait until the verification config has been saved'
       );
       component.viewAsJson();
       expect(open).toHaveBeenCalledOnce();

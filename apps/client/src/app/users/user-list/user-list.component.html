@@ -4,7 +4,7 @@
       <h1 #listHeading tabindex="-1">Users</h1>
       <p>People sign in to the Web Client with a username and password and act with their roles.</p>
     </div>
-    @if (!isUnavailable) {
+    @if (!unavailableMessage) {
       <a matButton="filled" [routerLink]="['create']">
         <mat-icon>person_add</mat-icon>
         Create user
@@ -12,10 +12,10 @@
     }
   </header>
 
-  @if (isUnavailable) {
+  @if (unavailableMessage) {
     <app-unavailable-card heading="User management is unavailable" [message]="unavailableMessage" />
   } @else if (loadError) {
-    <app-load-error [message]="loadError" (retry)="loadUsers()" />
+    <app-load-error [message]="loadError" (retry)="loadItems()" />
   } @else if (loading) {
     <div class="loading-state">
       <mat-spinner diameter="40" aria-label="Loading users"></mat-spinner>
@@ -37,7 +37,7 @@
           <h2>All users</h2>
           <output>
             @if (search.trim()) {
-              {{ shownUsers.length }} of {{ users.length }} users
+              {{ shownItems.length }} of {{ users.length }} users
             } @else {
               {{ users.length }} {{ users.length === 1 ? 'user' : 'users' }}
             }
@@ -67,15 +67,15 @@
       </div>
 
       <div class="table-scroll">
-        <table mat-table [dataSource]="shownUsers" class="linked">
+        <table mat-table [dataSource]="shownItems" class="linked">
           <ng-container matColumnDef="username">
             <th mat-header-cell *matHeaderCellDef>User</th>
             <td mat-cell *matCellDef="let user">
-              <span class="user-cell">
-                <span class="user-icon" aria-hidden="true"><mat-icon>person</mat-icon></span>
-                <span class="user-copy">
+              <span class="item-cell">
+                <span class="item-icon" aria-hidden="true"><mat-icon>person</mat-icon></span>
+                <span class="item-copy">
                   <!-- The username links to the user and its link covers the row -->
-                  <a class="user-link" [routerLink]="user.id | itemRoute">{{ user.username }}</a>
+                  <a class="item-link" [routerLink]="user.id | itemRoute">{{ user.username }}</a>
                   @if (user.email) {
                     <small>{{ user.email }}</small>
                   }
@@ -138,14 +138,18 @@
                     <mat-icon>edit</mat-icon>
                   </button>
                 </span>
-                <span [matTooltip]="manageDeniedHint" [matTooltipDisabled]="manageable">
+                <span>
                   <button
                     matIconButton
                     class="delete-action"
                     (click)="deleteUser(user)"
-                    [disabled]="!manageable || deletingId === user.id"
+                    [disabled]="!manageable || deletingId !== undefined"
                     disabledInteractive
-                    [matTooltip]="deletingId === user.id ? 'Deleting the user…' : 'Delete User'"
+                    [matTooltip]="
+                      manageable
+                        ? deleteTooltip(user.id, 'Delete User', 'Deleting the user…')
+                        : manageDeniedHint
+                    "
                     [attr.aria-label]="
                       manageable ? 'Delete User' : 'Delete User: ' + manageDeniedHint
                     "

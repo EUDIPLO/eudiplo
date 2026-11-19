@@ -11,6 +11,7 @@ import {
   attributeProviderRoutes,
 } from './issuance/issuance.routes';
 import { webhookEndpointRoutes } from './webhook-endpoint/webhook-endpoint.routes';
+import { WEBHOOK_ENDPOINT_ROLES } from './webhook-endpoint/webhook-endpoint-roles';
 import { oidcClientRoutes } from './oidc-client/oidc-client.routes';
 import { keyManagementRoutes } from './key-management/key-management.routes';
 import { KEY_CHAIN_ROLES } from './key-management/key-chain.service';
@@ -132,7 +133,7 @@ export const routes: Routes = [
   {
     path: 'webhook-endpoints',
     canActivate: [AuthGuard, RoleGuard],
-    data: { role: [getRole('issuance:manage'), getRole('presentation:manage')] },
+    data: { role: WEBHOOK_ENDPOINT_ROLES },
     children: webhookEndpointRoutes,
   },
 

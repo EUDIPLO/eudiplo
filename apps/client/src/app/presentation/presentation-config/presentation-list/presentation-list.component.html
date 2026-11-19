@@ -14,7 +14,7 @@
     <app-load-error [message]="loadError" (retry)="loadItems()" />
   } @else if (loading) {
     <div class="loading-state">
-      <mat-spinner diameter="40" aria-label="Loading presentation configurations"></mat-spinner>
+      <mat-spinner diameter="40" aria-label="Loading verification configs"></mat-spinner>
     </div>
   } @else if (configurations.length === 0) {
     <div class="empty-state">
@@ -113,11 +113,11 @@
                 <button
                   matIconButton
                   [routerLink]="config.id | itemRoute: 'edit'"
-                  matTooltip="Edit Configuration"
+                  matTooltip="Edit verification config"
                   appConfigManaged
                   managedKind="PresentationConfig"
                   [managedResourceId]="config.id"
-                  [attr.aria-label]="'Edit presentation configuration ' + config.id"
+                  [attr.aria-label]="'Edit verification config ' + config.id"
                 >
                   <mat-icon>edit</mat-icon>
                 </button>
@@ -128,12 +128,16 @@
                   [disabled]="deletingId !== undefined"
                   disabledInteractive
                   [matTooltip]="
-                    deleteTooltip(config.id, 'Delete Configuration', 'Deleting the configuration…')
+                    deleteTooltip(
+                      config.id,
+                      'Delete verification config',
+                      'Deleting the verification config…'
+                    )
                   "
                   appConfigManaged
                   managedKind="PresentationConfig"
                   [managedResourceId]="config.id"
-                  [attr.aria-label]="'Delete presentation configuration ' + config.id"
+                  [attr.aria-label]="'Delete verification config ' + config.id"
                 >
                   <mat-icon>delete_outline</mat-icon>
                 </button>

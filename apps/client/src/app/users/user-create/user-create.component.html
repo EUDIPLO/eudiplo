@@ -2,6 +2,7 @@
   <a
     class="back-link"
     matButton
+    [title]="loaded ? username || 'User' : 'Users'"
     [routerLink]="['../']"
     [attr.aria-label]="'Back to ' + (loaded ? username || 'user' : 'Users')"
   >

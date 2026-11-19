@@ -1,3 +1,8 @@
+@use 'page';
+
+// Rows and columns of the dialog
+@include page.layout-utilities;
+
 :host {
   display: block;
 }

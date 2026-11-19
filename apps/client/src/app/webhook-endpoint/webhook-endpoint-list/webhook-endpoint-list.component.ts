@@ -20,14 +20,12 @@ import { BaseAsyncListComponent } from '../../common/base-async-list.component';
 import { focusRowAfterRemoval } from '../../common/focus-if-lost.util';
 import { LoadErrorComponent } from '../../common/load-error.component';
 import { ConfigOwnershipDirective } from '../../config-portability/config-ownership.directive';
-import { getRole, JwtService } from '../../services/jwt.service';
+import { JwtService } from '../../services/jwt.service';
 import { getApiErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
+import { WEBHOOK_ENDPOINT_ROLES } from '../webhook-endpoint-roles';
 import { WebhookEndpointService } from '../webhook-endpoint.service';
 import { ItemRoutePipe } from '../../common/item-route.pipe';
-
-/** Roles that may manage webhook endpoints; either one is enough. */
-const WEBHOOK_ROLES = [getRole('issuance:manage'), getRole('presentation:manage')];
 
 @Component({
   selector: 'app-webhook-endpoint-list',
@@ -68,7 +66,7 @@ export class WebhookEndpointListComponent extends BaseAsyncListComponent<Webhook
     jwtService: JwtService
   ) {
     super();
-    this.canManage = jwtService.hasRole(WEBHOOK_ROLES);
+    this.canManage = jwtService.hasRole(WEBHOOK_ENDPOINT_ROLES);
   }
 
   get endpoints(): WebhookEndpointEntity[] {

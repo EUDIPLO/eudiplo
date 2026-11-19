@@ -135,8 +135,11 @@ test.describe('read and status roles', () => {
     await expect(page.getByRole('button', { name: /^Cancel (Offer|Request)$/ })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Recreate Request' })).toHaveCount(0);
 
-    // Pending requests stay hidden from read-only callers, so the page returns to the list.
+    // Pending requests stay hidden from read-only callers: the page says it cannot load them.
     await page.goto(`/session-management/${openSessionId}`);
+    await expect(page.locator('app-load-error').getByRole('alert')).toBeVisible();
+    await expect(page.getByText(openSessionId)).toHaveCount(0);
+    await page.getByRole('link', { name: 'Back to the list' }).click();
     await expect(page).toHaveURL(/\/session-management$/);
   });
 

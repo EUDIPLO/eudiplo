@@ -1,4 +1,4 @@
-@use '../../../tenants/tenant-page' as page;
+@use 'page';
 
 // Back link, heading and action bar of the form pages; the tabs and panels inside stay as they are
 @include page.base;
