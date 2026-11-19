@@ -153,21 +153,31 @@ export class ConfigBundleApplyService {
         plan: ConfigImportPlan,
         callerRoles: readonly string[],
     ): Promise<void> {
-        for (const item of plan.items) {
-            if (item.kind !== "Client") continue;
-            if (item.action === "update" || item.action === "delete") {
-                await this.clientAccess.assertMayManage(
-                    callerRoles,
-                    tenantId,
-                    item.id,
-                );
-            } else if (item.action === "create") {
-                await this.clientAccess.assertMayCreate(
-                    callerRoles,
-                    tenantId,
-                    item.id,
-                );
-            }
+        const checks = plan.items
+            .filter((item) => item.kind === "Client")
+            .map((item) => {
+                if (item.action === "update" || item.action === "delete") {
+                    return this.clientAccess.assertMayManage(
+                        callerRoles,
+                        tenantId,
+                        item.id,
+                    );
+                }
+                if (item.action === "create") {
+                    return this.clientAccess.assertMayCreate(
+                        callerRoles,
+                        tenantId,
+                        item.id,
+                    );
+                }
+                return undefined;
+            });
+        // All checks run; the refusal reported is the first in plan order.
+        const refused = (await Promise.allSettled(checks)).find(
+            (check) => check.status === "rejected",
+        );
+        if (refused) {
+            throw refused.reason;
         }
     }
 
