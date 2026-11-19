@@ -77,6 +77,24 @@ describe("Unknown tenant (e2e)", () => {
         expect(response.body.message).toBe(`Tenant '${unknown}' not found`);
     });
 
+    // A tenant created through the API has no Issuer Settings until they are
+    // saved or first read, like a tenant that only verifies: it has no
+    // metadata to serve.
+    test.each([
+        `/.well-known/openid-credential-issuer/issuers/${known}`,
+        `/.well-known/oauth-authorization-server/issuers/${known}`,
+        `/.well-known/oauth-authorization-server/issuers/${known}/chained-as`,
+        `/.well-known/jwks.json/issuers/${known}`,
+        `/.well-known/jwks.json/issuers/${known}/chained-as`,
+        `/.well-known/oauth-authorization-server/issuers/${known}/authorization-servers/x`,
+        `/.well-known/jwks.json/issuers/${known}/authorization-servers/x`,
+    ])("GET %s answers 404 for a tenant that does not issue", async (path) => {
+        const response = await request(app.getHttpServer())
+            .get(path)
+            .expect(404);
+        expect(response.body.error).toBe("well_known_error");
+    });
+
     test("a known tenant still reaches the handler", async () => {
         const response = await request(app.getHttpServer())
             .post(`/issuers/${known}/vci/nonce`)

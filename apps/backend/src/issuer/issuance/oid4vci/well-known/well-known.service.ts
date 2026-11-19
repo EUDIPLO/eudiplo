@@ -3,6 +3,7 @@ import { CertService } from "../../../../crypto/key/cert/cert.service.js";
 import { KeyChainService } from "../../../../crypto/key/key-chain.service.js";
 import { KeyUsageType } from "../../../../crypto/key/types/key-usage-type.js";
 import { MediaType } from "../../../../shared/utils/media-type/media-type.enum.js";
+import { IssuanceConfigurationNotFound } from "../../../configuration/issuance/domain/issuance-configuration.js";
 import { IssuanceService } from "../../../configuration/issuance/issuance.service.js";
 import { BuildIssuerMetadata } from "../application/build-issuer-metadata.js";
 import { AuthorizationServersService } from "../authorization/authorization-servers/authorization-servers.service.js";
@@ -13,6 +14,25 @@ import { WellKnownException } from "../exceptions/index.js";
 import { Oid4vciSdkFactory } from "../oid4vci-sdk.factory.js";
 import { CredentialIssuerMetadataDto } from "./dto/credential-issuer-metadata.dto.js";
 import { EC_Public, JwksResponseDto } from "./dto/jwks-response.dto.js";
+
+/**
+ * The error a well-known endpoint answers with. A `WellKnownException` passes
+ * as is. A tenant without Issuer Settings does not issue, so it has no
+ * metadata: 404. Everything else, including a missing key chain or another
+ * not-found error behind an issuing tenant's config, is a broken setup: 500.
+ */
+function wellKnownFailure(what: string, error: unknown): WellKnownException {
+    if (error instanceof WellKnownException) {
+        return error;
+    }
+    const reason = error instanceof Error ? error.message : "Unknown error";
+    return new WellKnownException(
+        `${what}: ${reason}`,
+        error instanceof IssuanceConfigurationNotFound
+            ? HttpStatus.NOT_FOUND
+            : HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+}
 
 /**
  * Service to handle well-known endpoints and metadata retrieval.
@@ -79,12 +99,9 @@ export class WellKnownService {
 
             return metadata;
         } catch (error) {
-            if (error instanceof WellKnownException) {
-                throw error;
-            }
-            throw new WellKnownException(
-                `Failed to retrieve issuer metadata for tenant ${tenantId}: ${error instanceof Error ? error.message : "Unknown error"}`,
-                HttpStatus.INTERNAL_SERVER_ERROR,
+            throw wellKnownFailure(
+                `Failed to retrieve issuer metadata for tenant ${tenantId}`,
+                error,
             );
         }
     }
@@ -97,12 +114,9 @@ export class WellKnownService {
         try {
             return await this.authorizeService.authzMetadata(tenantId);
         } catch (error) {
-            if (error instanceof WellKnownException) {
-                throw error;
-            }
-            throw new WellKnownException(
-                `Failed to retrieve authorization server metadata for tenant ${tenantId}: ${error instanceof Error ? error.message : "Unknown error"}`,
-                HttpStatus.INTERNAL_SERVER_ERROR,
+            throw wellKnownFailure(
+                `Failed to retrieve authorization server metadata for tenant ${tenantId}`,
+                error,
             );
         }
     }
@@ -129,12 +143,9 @@ export class WellKnownService {
 
             return { keys: keys as EC_Public[] };
         } catch (error) {
-            if (error instanceof WellKnownException) {
-                throw error;
-            }
-            throw new WellKnownException(
-                `Failed to retrieve JWKS for tenant ${tenantId}: ${error instanceof Error ? error.message : "Unknown error"}`,
-                HttpStatus.INTERNAL_SERVER_ERROR,
+            throw wellKnownFailure(
+                `Failed to retrieve JWKS for tenant ${tenantId}`,
+                error,
             );
         }
     }
@@ -152,12 +163,9 @@ export class WellKnownService {
         try {
             return await this.chainedAsService.getMetadata(tenantId);
         } catch (error) {
-            if (error instanceof WellKnownException) {
-                throw error;
-            }
-            throw new WellKnownException(
-                `Failed to retrieve Chained AS metadata for tenant ${tenantId}: ${error instanceof Error ? error.message : "Unknown error"}`,
-                HttpStatus.INTERNAL_SERVER_ERROR,
+            throw wellKnownFailure(
+                `Failed to retrieve Chained AS metadata for tenant ${tenantId}`,
+                error,
             );
         }
     }
@@ -173,12 +181,9 @@ export class WellKnownService {
         try {
             return await this.chainedAsService.getJwks(tenantId);
         } catch (error) {
-            if (error instanceof WellKnownException) {
-                throw error;
-            }
-            throw new WellKnownException(
-                `Failed to retrieve Chained AS JWKS for tenant ${tenantId}: ${error instanceof Error ? error.message : "Unknown error"}`,
-                HttpStatus.INTERNAL_SERVER_ERROR,
+            throw wellKnownFailure(
+                `Failed to retrieve Chained AS JWKS for tenant ${tenantId}`,
+                error,
             );
         }
     }
@@ -193,12 +198,9 @@ export class WellKnownService {
                 authorizationServerId,
             );
         } catch (error) {
-            if (error instanceof WellKnownException) {
-                throw error;
-            }
-            throw new WellKnownException(
-                `Failed to retrieve managed authorization server metadata for tenant ${tenantId}: ${error instanceof Error ? error.message : "Unknown error"}`,
-                HttpStatus.INTERNAL_SERVER_ERROR,
+            throw wellKnownFailure(
+                `Failed to retrieve managed authorization server metadata for tenant ${tenantId}`,
+                error,
             );
         }
     }
@@ -213,12 +215,9 @@ export class WellKnownService {
                 authorizationServerId,
             );
         } catch (error) {
-            if (error instanceof WellKnownException) {
-                throw error;
-            }
-            throw new WellKnownException(
-                `Failed to retrieve managed authorization server JWKS for tenant ${tenantId}: ${error instanceof Error ? error.message : "Unknown error"}`,
-                HttpStatus.INTERNAL_SERVER_ERROR,
+            throw wellKnownFailure(
+                `Failed to retrieve managed authorization server JWKS for tenant ${tenantId}`,
+                error,
             );
         }
     }

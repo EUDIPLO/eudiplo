@@ -3,7 +3,7 @@ title: Configure the issuer
 sidebar_label: Issuance configuration
 ---
 
-Set the issuer-wide settings of a tenant: how the issuer is shown in wallets, which authorization servers it offers, and how its token and credential endpoints behave. Each tenant has exactly one issuance configuration; credential types are configured separately in [credential configurations](credential-configuration.md).
+Set the issuer-wide settings of a tenant: how the issuer is shown in wallets, which authorization servers it offers, and how its token and credential endpoints behave. Each tenant that issues has exactly one issuance configuration; credential types are configured separately in [credential configurations](credential-configuration.md).
 
 **Prerequisites:** a client with the `issuance:manage` role. In the web client, open **Credential Issuance → Issuer Settings**.
 
@@ -36,7 +36,7 @@ curl -X POST "$EUDIPLO_URL/api/issuer/config" \
 
 `POST /api/issuer/config` creates the configuration or updates it field by field: each top-level field you send replaces the stored value as a whole (an `authorizationServers` array replaces all servers), fields you leave out keep their stored value, and `null` clears the settings that accept it (`federation`, `registrationCertificate`, `txCodeMaxAttempts`, `offerLifetimeSeconds`). `GET /api/issuer/config` returns it and creates a default one (a single built-in authorization server) if none exists. To manage it as a file, see [Configuration as code](../operate/configuration-as-code.md).
 
-**Check:** `GET /.well-known/openid-credential-issuer/issuers/{tenant}` shows your `display`, the `authorization_servers` and the endpoints.
+**Check:** `GET /.well-known/openid-credential-issuer/issuers/{tenant}` shows your `display`, the `authorization_servers` and the endpoints. Until the configuration exists, the well-known metadata and JWKS endpoints of the tenant answer `404`, as for a tenant that only verifies.
 
 ## Settings
 
