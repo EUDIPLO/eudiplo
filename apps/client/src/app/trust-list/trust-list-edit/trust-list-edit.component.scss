@@ -1,7 +1,7 @@
 @use '@angular/material' as mat;
 @use '../../tenants/tenant-page' as page;
 
-// Heading, outlined cards and the sticky action bar, as on the tenant, client and key forms
+// Back link, heading, sections and action bar, as on the tenant, client, key and federation forms
 @include page.base;
 @include page.form-page;
 
@@ -40,20 +40,16 @@ mat-panel-description {
   color: var(--mat-sys-primary);
 }
 
-.form-page {
-  max-width: 1040px;
-}
-
 .page-header .page-title {
   margin: 0;
   font: var(--mat-sys-headline-medium);
   color: var(--mat-sys-on-surface);
 }
 
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.form-avatar mat-icon {
+  width: 28px;
+  height: 28px;
+  font-size: 28px;
 }
 
 // The ownership notice shows only when it applies; without content it takes no gap
@@ -61,13 +57,10 @@ app-config-ownership-notice {
   display: contents;
 }
 
-mat-card-header {
-  padding: 20px 20px 12px;
-}
-
-// More specific than Material's own :last-child padding rule of the card content
-mat-card mat-card-content {
-  padding: 4px 20px 20px;
+.add-entity-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 // Tonal note while the list has no entity yet
@@ -93,155 +86,36 @@ mat-card mat-card-content {
   gap: 12px;
 }
 
+.info-text {
+  margin: 0;
+  color: var(--mat-sys-on-surface-variant);
+}
+
 mat-expansion-panel {
   border: 1px solid var(--mat-sys-outline-variant);
   box-shadow: none;
 }
 
-.remove-entity {
-  --mat-button-text-label-text-color: var(--mat-sys-error);
-}
-
-.info-text {
-  color: var(--mat-sys-on-surface-variant);
-  font-style: italic;
+// Group headings inside an entity
+h4 {
   margin: 0;
-
-  a {
-    color: var(--eudiplo-info);
-  }
-}
-
-mat-error {
-  font-size: 12px;
-  margin-top: 8px;
-  display: block;
-}
-
-.loading-state {
-  padding: 48px 24px;
-  text-align: center;
-
-  .loading-icon {
-    font-size: 64px;
-    width: 64px;
-    height: 64px;
-    color: var(--mat-sys-on-surface-variant);
-  }
-
-  p {
-    margin: 0;
-    font-size: 16px;
-    color: var(--mat-sys-on-surface-variant);
-  }
-}
-
-// Entity list styling
-.entity-panel {
-  margin-bottom: 8px;
-
-  &.internal-entity {
-    .mat-expansion-panel-header {
-      background-color: var(--eudiplo-info-subtle);
-    }
-  }
-
-  &.external-entity {
-    .mat-expansion-panel-header {
-      background-color: var(--eudiplo-accent-subtle);
-    }
-  }
-
-  .entity-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: 100%;
-
-    .entity-type-badge {
-      font-size: 11px;
-      padding: 2px 8px;
-      border-radius: 12px;
-      font-weight: 500;
-
-      &.internal {
-        background-color: var(--eudiplo-info);
-        color: white;
-      }
-
-      &.external {
-        background-color: var(--eudiplo-accent);
-        color: white;
-      }
-    }
-
-    .entity-label {
-      flex: 1;
-      font-weight: 500;
-    }
-  }
-}
-
-.entity-content {
-  padding: 16px 0;
-}
-
-.entity-info-section {
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid var(--mat-sys-outline-variant);
-
-  h4 {
-    margin: 0 0 16px 0;
-    color: var(--mat-sys-on-surface-variant);
-    font-size: 14px;
-    font-weight: 500;
-  }
-}
-
-// Empty state
-.no-entities-message {
-  padding: 32px;
-  text-align: center;
+  font: var(--mat-sys-title-small);
   color: var(--mat-sys-on-surface-variant);
-
-  mat-icon {
-    font-size: 48px;
-    width: 48px;
-    height: 48px;
-    margin-bottom: 8px;
-  }
 }
 
-// Form field adjustments
-mat-form-field {
-  &.full-width {
-    width: 100%;
-  }
+.editor-label {
+  margin: 0 0 8px;
+  font: var(--mat-sys-label-large);
+  color: var(--mat-sys-on-surface);
 }
 
-textarea.pem-editor {
-  font-family: 'Roboto Mono', monospace;
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-// Action buttons
 .entity-actions {
   display: flex;
   justify-content: flex-end;
-  margin-top: 16px;
 }
 
-// Add entity buttons
-.add-entity-buttons {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 16px;
-
-  button {
-    flex: 1;
-  }
+.remove-entity {
+  --mat-button-text-label-text-color: var(--mat-sys-error);
 }
 
 .editor-error {

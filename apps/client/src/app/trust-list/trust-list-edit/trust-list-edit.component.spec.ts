@@ -264,6 +264,34 @@ describe('TrustListEditComponent loading the trust list', () => {
     );
   }
 
+  /** Where the back link and Cancel lead, once the form is shown. */
+  async function exits(url?: string): Promise<{ backLink: string; cancel: string }> {
+    const { harness, page } = await render(url);
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(page.querySelector('form')).not.toBeNull();
+    });
+    const cancel = [...page.querySelectorAll('a')].find((a) => a.textContent?.trim() === 'Cancel');
+    return {
+      backLink: page.querySelector('a.back-link')!.getAttribute('href')!,
+      cancel: cancel!.getAttribute('href')!,
+    };
+  }
+
+  it('returns from editing to the trust list on Cancel and by the back link', async () => {
+    expect(await exits()).toEqual({
+      backLink: `/trust-list/${trustList.id}`,
+      cancel: `/trust-list/${trustList.id}`,
+    });
+  });
+
+  it('returns from creating to the list on Cancel and by the back link', async () => {
+    expect(await exits('/trust-list/create')).toEqual({
+      backLink: '/trust-list',
+      cancel: '/trust-list',
+    });
+  });
+
   it('says it is loading and shows no form until the trust list arrives', async () => {
     answers.trustList = null;
     const { page } = await render();
@@ -273,6 +301,10 @@ describe('TrustListEditComponent loading the trust list', () => {
     expect(page.querySelector('form')).toBeNull();
     expect(buttons(page, 'Add Internal Entity')).toHaveLength(0);
     expect(page.querySelector('app-load-error')).toBeNull();
+    // The way back is there before the trust list arrives
+    expect(page.querySelector('a.back-link')?.getAttribute('href')).toBe(
+      `/trust-list/${trustList.id}`
+    );
   });
 
   it('stays on the page and says why the trust list could not be loaded', async () => {

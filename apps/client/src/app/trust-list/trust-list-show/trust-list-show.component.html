@@ -1,18 +1,15 @@
-@if (trustList) {
-  <div class="page">
+<div class="page">
+  <a class="back-link" matButton [routerLink]="['../']">
+    <mat-icon>arrow_back</mat-icon>
+    Trust Lists
+  </a>
+
+  @if (trustList) {
     <app-config-ownership-notice kind="TrustList" [resourceId]="trustList.id" />
     <!-- Header: the heading and its actions, which the tests find in one container -->
     <header class="page-header">
       <h2 #pageHeading tabindex="-1" class="page-title">Trust List Details</h2>
       <div class="header-actions">
-        <button
-          mat-icon-button
-          [routerLink]="['../']"
-          matTooltip="Back to list"
-          aria-label="Back to list"
-        >
-          <mat-icon>arrow_back</mat-icon>
-        </button>
         <button
           matButton="tonal"
           [routerLink]="['edit']"
@@ -386,11 +383,11 @@
         </mat-card-content>
       </mat-card>
     }
-  </div>
-} @else if (loadError) {
-  <app-load-error [message]="loadError" (retry)="load()">
-    <a mat-button [routerLink]="['../']">Back to the list</a>
-  </app-load-error>
-} @else {
-  <p class="loading-state"><output>Loading trust list…</output></p>
-}
+  } @else if (loadError) {
+    <app-load-error [message]="loadError" (retry)="load()">
+      <a mat-button [routerLink]="['../']">Back to the list</a>
+    </app-load-error>
+  } @else {
+    <p class="loading-state"><output>Loading trust list…</output></p>
+  }
+</div>

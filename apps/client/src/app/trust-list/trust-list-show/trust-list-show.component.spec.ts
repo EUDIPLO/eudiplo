@@ -743,7 +743,7 @@ describe('TrustListShowComponent download', () => {
     const header = button.parentElement as HTMLElement;
 
     expect([...header.querySelectorAll('button')].map((b) => b.getAttribute('aria-label'))).toEqual(
-      ['Back to list', 'Edit list', 'Download configuration', 'Delete list']
+      ['Edit list', 'Download configuration', 'Delete list']
     );
   });
 
@@ -805,6 +805,14 @@ describe('TrustListShowComponent loading the list', () => {
     // <output> is a status live region, so screen readers announce the loading state.
     expect(page.querySelector('output')?.textContent?.trim()).toBe('Loading trust list…');
     expect(page.querySelector('app-load-error')).toBeNull();
+  });
+
+  it('leads back to the list while the list is still loading', async () => {
+    client.setConfig({ fetch: () => new Promise<Response>(() => undefined) });
+    const back = (await render()).routeNativeElement!.querySelector('a.back-link');
+
+    expect(back?.textContent?.trim()).toContain('Trust Lists');
+    expect(back?.getAttribute('href')).toBe('/trust-list');
   });
 
   it('stays on the page and says why the list could not be loaded', async () => {

@@ -1,12 +1,14 @@
-@if (anchor) {
-  <div class="page">
+<div class="page">
+  <a class="back-link" matButton [routerLink]="['../']">
+    <mat-icon>arrow_back</mat-icon>
+    Federation Trust Anchors
+  </a>
+
+  @if (anchor) {
     <app-config-ownership-notice kind="FederationTrustAnchor" [resourceId]="anchor.id" />
     <header class="page-header">
       <h2 #pageHeading tabindex="-1" class="page-title">Federation Trust Anchor</h2>
       <div class="header-actions">
-        <a matIconButton [routerLink]="['../']" matTooltip="Back to list" aria-label="Back to list">
-          <mat-icon>arrow_back</mat-icon>
-        </a>
         <a
           matButton="tonal"
           [routerLink]="['edit']"
@@ -201,11 +203,11 @@
         </mat-card-content>
       </mat-card>
     </div>
-  </div>
-} @else if (loadError) {
-  <app-load-error [message]="loadError" (retry)="load()">
-    <a matButton [routerLink]="['../']">Back to the list</a>
-  </app-load-error>
-} @else {
-  <p class="loading-state"><output>Loading trust anchor…</output></p>
-}
+  } @else if (loadError) {
+    <app-load-error [message]="loadError" (retry)="load()">
+      <a matButton [routerLink]="['../']">Back to the list</a>
+    </app-load-error>
+  } @else {
+    <p class="loading-state"><output>Loading trust anchor…</output></p>
+  }
+</div>

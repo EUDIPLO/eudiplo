@@ -101,6 +101,16 @@ describe('FederationTrustAnchorShowComponent', () => {
     vi.restoreAllMocks();
   });
 
+  it('leads back to the list while the trust anchor is still loading', () => {
+    const { fixture } = render({
+      service: { getById: () => new Promise(() => undefined), delete: vi.fn() },
+    });
+    const back = (fixture.nativeElement as HTMLElement).querySelector('a.back-link');
+
+    expect(back?.textContent?.trim()).toContain('Federation Trust Anchors');
+    expect(fixture.nativeElement.querySelector('output')?.textContent).toContain('Loading');
+  });
+
   it('lists the pinned keys and the configurations naming the entity ID', async () => {
     const { fixture } = render();
     const element = await loaded(fixture);

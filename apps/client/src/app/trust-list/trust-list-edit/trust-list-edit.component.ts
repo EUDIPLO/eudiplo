@@ -33,7 +33,6 @@ import { MatRadioModule } from '@angular/material/radio';
 import { MatExpansionModule, MatExpansionPanel } from '@angular/material/expansion';
 import { MatDividerModule } from '@angular/material/divider';
 import { ActivatedRoute, type Params, Router, RouterModule } from '@angular/router';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import {
   keyChainControllerGetAll,
   trustListControllerCreateTrustList,
@@ -131,7 +130,6 @@ const CREATED_KEY_CHAIN_NAMES: Record<TrustListKeyChainUsage, string> = {
     MatRadioModule,
     MatExpansionModule,
     MatDividerModule,
-    FlexLayoutModule,
     ReactiveFormsModule,
     RouterModule,
     EditorComponent,
