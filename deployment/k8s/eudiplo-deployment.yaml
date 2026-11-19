@@ -51,7 +51,7 @@ spec:
                 echo "waiting for postgres..."; sleep 3;
               done
         - name: wait-for-rustfs
-          image: busybox:1.36
+          image: busybox:1.38
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -67,7 +67,7 @@ spec:
               done
       containers:
         - name: eudiplo
-          image: ghcr.io/eudiplo/eudiplo:9.0.0
+          image: ghcr.io/eudiplo/eudiplo:9.1.0
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000
