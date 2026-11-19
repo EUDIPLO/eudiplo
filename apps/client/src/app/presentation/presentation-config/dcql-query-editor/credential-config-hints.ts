@@ -137,5 +137,5 @@ export function isUnpublishedClaim(
 export function configNames(configs: readonly NormalizedCredential[]): string {
   const ids = configs.map((config) => `"${config.id}"`);
   if (ids.length <= 1) return `credential config ${ids.join('')}`;
-  return `credential configs ${ids.slice(0, -1).join(', ')} and ${ids[ids.length - 1]}`;
+  return `credential configs ${ids.slice(0, -1).join(', ')} and ${ids.at(-1)}`;
 }
