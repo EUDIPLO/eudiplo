@@ -37,7 +37,11 @@
           <strong>This tenant has no credential configs yet.</strong>
           @if (canCreateCredentialConfig) {
             <span>
-              <a routerLink="/credential-config/create" target="_blank" rel="noopener"
+              <a
+                routerLink="/credential-config/create"
+                [queryParams]="createLinkQueryParams"
+                target="_blank"
+                rel="noopener"
                 >Create a credential config</a
               >
               in a new tab, then select Reload. What you entered here stays.

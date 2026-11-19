@@ -14,6 +14,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { JsonPipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
+import { fromFormQueryParams } from '../../../common/return-to-form';
 import { asSentence, getApiErrorMessage, getHttpErrorMessage } from '../../../utils/error-message';
 import { JwtService } from '../../../services/jwt.service';
 import { CredentialConfigService } from '../../../issuance/credential-config/credential-config.service';
@@ -114,6 +115,9 @@ export class IssuerMetadataBrowserComponent implements OnInit {
 
   /** Whether the caller may open the page that creates a credential config. */
   readonly canCreateCredentialConfig: boolean;
+
+  /** The create page opens in a new tab and then says to return to this one. */
+  readonly createLinkQueryParams = fromFormQueryParams({});
 
   // Selection state: credential ID -> Set of claim paths (as JSON strings)
   selectedCredentials = new Map<string, Set<string>>();
