@@ -1,32 +1,41 @@
-@if (endpoint) {
-  <div fxLayout="column" fxFlex fxLayoutGap="24px">
+<div class="page">
+  <a class="back-link" matButton routerLink="../" aria-label="Back to Webhook Endpoints">
+    <mat-icon>arrow_back</mat-icon>
+    Webhook Endpoints
+  </a>
+
+  @if (endpoint) {
     <app-config-ownership-notice kind="WebhookEndpoint" [resourceId]="endpoint.id" />
-    <!-- Header -->
-    <div fxLayout="row" fxLayoutAlign="space-between center">
-      <h2>Webhook Endpoint</h2>
-      <div>
-        <button
-          mat-icon-button
-          [routerLink]="['../']"
-          matTooltip="Back to list"
-          aria-label="Back to list"
-        >
-          <mat-icon>arrow_back</mat-icon>
-        </button>
-        <button
-          mat-icon-button
-          [routerLink]="['edit']"
-          matTooltip="Edit webhook endpoint"
-          aria-label="Edit webhook endpoint"
+
+    <!-- What the endpoint is, and what can be done with it -->
+    <mat-card appearance="outlined" class="hero">
+      <span class="hero-avatar" aria-hidden="true"><mat-icon>webhook</mat-icon></span>
+      <div class="hero-copy">
+        <h1 #pageHeading tabindex="-1">{{ endpoint.name || endpoint.id }}</h1>
+        <div class="hero-meta">
+          <span class="badge" [class.auth-key]="authLabel === 'API key'">{{ authLabel }}</span>
+          <span class="endpoint-id"
+            >ID: <code>{{ endpoint.id }}</code></span
+          >
+        </div>
+        <p class="hero-description" [class.muted]="!endpoint.description">
+          {{ endpoint.description || 'No description' }}
+        </p>
+      </div>
+      <div class="hero-actions">
+        <a
+          matButton="tonal"
+          routerLink="edit"
           appConfigManaged
           managedKind="WebhookEndpoint"
           [managedResourceId]="endpoint.id"
         >
           <mat-icon>edit</mat-icon>
-        </button>
+          Edit
+        </a>
         @if (canDownloadConfig) {
           <button
-            mat-icon-button
+            matIconButton
             aria-label="Download configuration"
             [disabled]="downloadingConfig"
             [attr.aria-busy]="downloadingConfig"
@@ -38,86 +47,85 @@
           </button>
         }
         <button
-          mat-icon-button
+          matButton="outlined"
+          class="danger"
           (click)="deleteEndpoint()"
-          matTooltip="Delete webhook endpoint"
-          aria-label="Delete webhook endpoint"
-          color="warn"
+          [disabled]="deleting"
+          disabledInteractive
+          [matTooltip]="deleting ? 'Deleting the webhook endpoint…' : ''"
           appConfigManaged
           managedKind="WebhookEndpoint"
           [managedResourceId]="endpoint.id"
         >
-          <mat-icon>delete</mat-icon>
+          <mat-icon>delete_outline</mat-icon>
+          Delete
         </button>
       </div>
+    </mat-card>
+
+    <div class="content-grid">
+      <mat-card appearance="outlined">
+        <mat-card-header>
+          <mat-icon mat-card-avatar>link</mat-icon>
+          <h2 mat-card-title>Endpoint</h2>
+          <mat-card-subtitle>Where EUDIPLO sends its calls</mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
+          <dl class="details">
+            <div class="detail">
+              <dt>URL</dt>
+              <dd class="with-action">
+                <code>{{ endpoint.url }}</code>
+                <button
+                  matIconButton
+                  type="button"
+                  matTooltip="Copy URL"
+                  aria-label="Copy URL"
+                  (click)="copyUrl()"
+                >
+                  <mat-icon>content_copy</mat-icon>
+                </button>
+              </dd>
+            </div>
+          </dl>
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card appearance="outlined">
+        <mat-card-header>
+          <mat-icon mat-card-avatar>security</mat-icon>
+          <h2 mat-card-title>Authentication</h2>
+          <mat-card-subtitle>How EUDIPLO identifies itself to the endpoint</mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
+          <dl class="details">
+            <div class="detail">
+              <dt>Type</dt>
+              <dd>{{ authLabel }}</dd>
+            </div>
+            @if (getAuthHeaderName(); as headerName) {
+              <div class="detail">
+                <dt>Header name</dt>
+                <dd>
+                  <code>{{ headerName }}</code>
+                </dd>
+              </div>
+              <div class="detail">
+                <dt>Header value</dt>
+                <dd class="muted">Stored encrypted and never shown</dd>
+              </div>
+            }
+          </dl>
+        </mat-card-content>
+      </mat-card>
     </div>
-
-    <!-- Details Card -->
-    <mat-card>
-      <mat-card-header>
-        <mat-card-title>
-          <mat-icon>webhook</mat-icon>
-          Endpoint Details
-        </mat-card-title>
-      </mat-card-header>
-      <mat-card-content>
-        <mat-list class="config-list">
-          <mat-list-item>
-            <mat-icon matListItemIcon>fingerprint</mat-icon>
-            <span matListItemTitle>ID</span>
-            <span matListItemLine>{{ endpoint.id }}</span>
-          </mat-list-item>
-          <mat-list-item>
-            <mat-icon matListItemIcon>label</mat-icon>
-            <span matListItemTitle>Name</span>
-            <span matListItemLine>{{ endpoint.name }}</span>
-          </mat-list-item>
-          @if (endpoint.description) {
-            <mat-list-item>
-              <mat-icon matListItemIcon>description</mat-icon>
-              <span matListItemTitle>Description</span>
-              <span matListItemLine>{{ endpoint.description }}</span>
-            </mat-list-item>
-          }
-          <mat-list-item>
-            <mat-icon matListItemIcon>link</mat-icon>
-            <span matListItemTitle>URL</span>
-            <span matListItemLine>{{ endpoint.url }}</span>
-          </mat-list-item>
-        </mat-list>
-      </mat-card-content>
-    </mat-card>
-
-    <!-- Authentication Card -->
-    <mat-card>
-      <mat-card-header>
-        <mat-card-title>
-          <mat-icon>security</mat-icon>
-          Authentication
-        </mat-card-title>
-      </mat-card-header>
-      <mat-card-content>
-        <mat-list class="config-list">
-          <mat-list-item>
-            <mat-icon matListItemIcon>vpn_key</mat-icon>
-            <span matListItemTitle>Type</span>
-            <span matListItemLine>{{ getAuthType() }}</span>
-          </mat-list-item>
-          @if (getAuthHeaderName()) {
-            <mat-list-item>
-              <mat-icon matListItemIcon>code</mat-icon>
-              <span matListItemTitle>Header Name</span>
-              <span matListItemLine>{{ getAuthHeaderName() }}</span>
-            </mat-list-item>
-          }
-        </mat-list>
-      </mat-card-content>
-    </mat-card>
-  </div>
-} @else if (loadError) {
-  <app-load-error [message]="loadError" (retry)="load()">
-    <a mat-button [routerLink]="['../']">Back to the list</a>
-  </app-load-error>
-} @else {
-  <p><output>Loading webhook endpoint…</output></p>
-}
+  } @else if (loadError) {
+    <app-load-error [message]="loadError" (retry)="load()">
+      <a matButton routerLink="../">Back to the list</a>
+    </app-load-error>
+  } @else {
+    <div class="loading-state">
+      <mat-spinner diameter="40" aria-label="Loading webhook endpoint"></mat-spinner>
+    </div>
+  }
+</div>

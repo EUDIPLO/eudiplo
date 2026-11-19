@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, provideRouter } from '@angular/router';
-import { EMPTY } from 'rxjs';
+import { EMPTY, of } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { expectHeadingFocusOnlyAfterRetry } from '../../common/retry-focus.testing';
@@ -54,7 +54,7 @@ describe('WebhookEndpointCreateComponent save', () => {
     component.onSubmit();
     expect(create).toHaveBeenCalledOnce();
     expect(snackBar.open.mock.lastCall?.[0]).toBe(
-      'Check the highlighted fields in Endpoint Details, Authentication.'
+      'Check the highlighted fields in Endpoint, Authentication.'
     );
   });
 
@@ -182,7 +182,7 @@ describe('WebhookEndpointCreateComponent save', () => {
         [...page.querySelectorAll('mat-error')].map((error) => error.textContent?.trim())
       ).toEqual(['Name is required', 'URL is required']);
       expect(snackBar.open).toHaveBeenLastCalledWith(
-        'Check the highlighted fields in Endpoint Details.',
+        'Check the highlighted fields in Endpoint.',
         'Close',
         expect.anything()
       );
@@ -225,6 +225,27 @@ describe('WebhookEndpointCreateComponent JSON View', () => {
     expect(component.jsonViewUnavailableReason).toBe('');
     component.viewAsJson();
     expect(open).toHaveBeenCalledOnce();
+  });
+
+  it('marks the form as changed after JSON View applied its JSON', () => {
+    const json = { id: 'example', name: 'From JSON', url: 'https://b', auth: { type: 'none' } };
+    const component = TestBed.runInInjectionContext(
+      () =>
+        new WebhookEndpointCreateComponent(
+          {} as never,
+          { navigate: vi.fn() } as never,
+          { snapshot: { paramMap: { get: () => null } } } as never,
+          { open: vi.fn() } as never,
+          { open: () => ({ afterClosed: () => of(json) }) } as never
+        )
+    );
+    component.ngOnInit();
+    expect(component.form.dirty).toBe(false);
+
+    component.viewAsJson();
+
+    expect(component.form.controls.name.value).toBe('From JSON');
+    expect(component.form.dirty).toBe(true);
   });
 
   it('opens JSON View right away when creating a webhook endpoint, but not while it saves', async () => {
@@ -282,7 +303,57 @@ describe('WebhookEndpointCreateComponent JSON View', () => {
     await expectHeadingFocusOnlyAfterRetry(
       fixture,
       () => component.retryLoad(),
-      () => !component.loading
+      () => !component.loading,
+      'h1'
     );
+  });
+});
+
+describe('WebhookEndpointCreateComponent back link', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  function render(id: string | null, getById = vi.fn()) {
+    TestBed.configureTestingModule({
+      imports: [WebhookEndpointCreateComponent],
+      providers: [
+        provideRouter([]),
+        { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => id } } } },
+        { provide: WebhookEndpointService, useValue: { getById } },
+        { provide: ConfigOwnershipService, useValue: { get: async () => undefined } },
+      ],
+    });
+    const fixture = TestBed.createComponent(WebhookEndpointCreateComponent);
+    fixture.detectChanges();
+    const label = () => {
+      fixture.detectChanges();
+      return (fixture.nativeElement as HTMLElement)
+        .querySelector('a.back-link')
+        ?.getAttribute('aria-label');
+    };
+    return { fixture, label };
+  }
+
+  it('leads back to the list when creating', () => {
+    expect(render(null).label()).toBe('Back to Webhook Endpoints');
+  });
+
+  it('names the endpoint being edited once it has loaded, as its page does', async () => {
+    let resolve!: (value: unknown) => void;
+    const { label } = render(
+      'order-events',
+      vi.fn(() => new Promise((r) => (resolve = r)))
+    );
+    expect(label()).toBe('Back to Webhook endpoint');
+
+    resolve({ id: 'order-events', name: 'Order events', url: 'https://a' });
+    await vi.waitFor(() => expect(label()).toBe('Back to Order events'));
+  });
+
+  it('names the endpoint by its ID when it has no name', async () => {
+    const { label } = render(
+      'order-events',
+      vi.fn(async () => ({ id: 'order-events', name: '', url: 'https://a' }))
+    );
+    await vi.waitFor(() => expect(label()).toBe('Back to order-events'));
   });
 });
