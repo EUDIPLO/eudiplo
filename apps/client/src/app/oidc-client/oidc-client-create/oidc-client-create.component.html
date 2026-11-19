@@ -340,7 +340,7 @@
         <button
           matButton
           type="button"
-          [routerLink]="['../']"
+          [routerLink]="saving ? null : ['../']"
           [disabled]="saving"
           disabledInteractive
           [matTooltip]="saving ? 'Saving the OIDC client…' : ''"

@@ -97,6 +97,22 @@ describe('OidcClientCreateComponent', () => {
     expect(cancel).toBeDefined();
   });
 
+  it('keeps Cancel on the page while a save runs', async () => {
+    const { fixture, component } = await render(null, {});
+    component.saving = true;
+    fixture.detectChanges();
+    const navigateByUrl = vi.spyOn(TestBed.inject(Router), 'navigateByUrl');
+    const cancel = [
+      ...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>(
+        '.action-bar button'
+      ),
+    ].find((button) => button.textContent?.trim() === 'Cancel')!;
+
+    expect(cancel.getAttribute('aria-disabled')).toBe('true');
+    cancel.click();
+    expect(navigateByUrl).not.toHaveBeenCalled();
+  });
+
   it('shows the back link while the client to edit loads', async () => {
     const { fixture } = await render('c7d1', { getById: () => new Promise(() => undefined) });
     const page = fixture.nativeElement as HTMLElement;

@@ -611,6 +611,22 @@ describe('Presentation configuration flow', () => {
       expect(component.backLink).toEqual(['../']);
     });
 
+    it('keeps Cancel on the page while a save runs', () => {
+      fixture.detectChanges();
+      component.saving = true;
+      fixture.detectChanges();
+      const navigateByUrl = vi.spyOn(TestBed.inject(Router), 'navigateByUrl');
+      const cancel = [
+        ...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>(
+          '.action-bar button'
+        ),
+      ].find((button) => button.textContent?.trim() === 'Cancel')!;
+
+      expect(cancel.getAttribute('aria-disabled')).toBe('true');
+      cancel.click();
+      expect(navigateByUrl).not.toHaveBeenCalled();
+    });
+
     it('leads a copy back to the list', async () => {
       route.snapshot.params = { id: 'existing' };
       route.snapshot.url = [{ path: 'existing' }, { path: 'copy' }];

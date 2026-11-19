@@ -646,7 +646,16 @@
       }
       <!-- Stays in view at the bottom while the form scrolls -->
       <div class="action-bar">
-        <button matButton type="button" [routerLink]="backLink">Cancel</button>
+        <button
+          matButton
+          type="button"
+          [routerLink]="saving ? null : backLink"
+          [disabled]="saving"
+          disabledInteractive
+          [matTooltip]="saving ? 'Saving the configuration…' : ''"
+        >
+          Cancel
+        </button>
         @if (guided && activeStep > 0) {
           <button
             matButton="outlined"

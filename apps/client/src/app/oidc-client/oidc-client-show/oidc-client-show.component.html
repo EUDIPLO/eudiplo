@@ -31,8 +31,10 @@
       <div class="hero-actions">
         <button
           matButton="tonal"
-          [routerLink]="['edit']"
+          [routerLink]="deleting ? null : ['edit']"
           [disabled]="deleting"
+          disabledInteractive
+          [matTooltip]="deleting ? 'Deleting the OIDC client…' : ''"
           aria-label="Edit OIDC client"
         >
           <mat-icon>edit</mat-icon>

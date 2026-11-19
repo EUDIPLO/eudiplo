@@ -437,7 +437,9 @@ describe('PresentationShowComponent page', () => {
     await fixture.componentInstance.deletePresentation();
 
     expect(navigate).not.toHaveBeenCalled();
-    expect(String(snackBar.open.mock.calls.at(-1)?.[0])).toMatch(/^Failed to delete presentation/);
+    expect(snackBar.open.mock.calls.at(-1)?.[0]).toBe(
+      'Failed to delete presentation configuration: x'
+    );
     expect(fixture.componentInstance.deleting).toBe(false);
   });
 

@@ -214,11 +214,7 @@ export class PresentationRequestComponent implements OnInit {
   }
 
   /** Why Generate Request cannot be used on a page that lists no configuration. */
-  private get noConfigurationReason(): string {
-    return this.configsLoadFailed
-      ? 'The presentation configurations could not be loaded.'
-      : 'There is no presentation configuration to request.';
-  }
+  private readonly noConfigurationReason = 'There is no presentation configuration to request.';
 
   /** Why the selected configuration cannot be requested from this page, if it cannot. */
   private get generateProblem(): string | null {

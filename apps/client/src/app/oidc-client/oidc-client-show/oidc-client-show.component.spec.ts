@@ -241,6 +241,12 @@ describe('OidcClientShowComponent failures and confirmations', () => {
     ).toBe('true');
     component.deleteClient();
     expect(deleteClient).toHaveBeenCalledTimes(1);
+    // Edit says why it waits and does not open while the delete runs.
+    const navigateByUrl = vi.spyOn(TestBed.inject(Router), 'navigateByUrl');
+    const edit = page.querySelector<HTMLButtonElement>('button[aria-label="Edit OIDC client"]')!;
+    expect(edit.getAttribute('aria-disabled')).toBe('true');
+    edit.click();
+    expect(navigateByUrl).not.toHaveBeenCalled();
     finish();
     await vi.waitFor(() => expect(navigate).toHaveBeenCalled());
     await vi.waitFor(() => expect(component.deleting).toBe(false));
