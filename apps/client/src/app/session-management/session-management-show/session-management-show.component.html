@@ -1,105 +1,100 @@
-@if (session) {
-  <div fxLayout="column" fxFlex fxLayoutGap="16px">
-    <!-- Header: what this session is, its state and the actions on it -->
-    <div
-      class="page-header"
-      fxLayout="row wrap"
-      fxLayoutAlign="space-between center"
-      fxLayoutGap="8px"
-    >
-      <div class="page-title" fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px">
-        <button
-          matIconButton
-          (click)="goBack()"
-          matTooltip="Back to sessions"
-          aria-label="Back to sessions"
-        >
-          <mat-icon>arrow_back</mat-icon>
-        </button>
-        <div>
-          <div fxLayout="row wrap" fxLayoutAlign="start center" fxLayoutGap="8px">
-            <h2 #pageHeading tabindex="-1">
-              {{ isIssuanceSession() ? 'Issuance' : 'Presentation' }} Session
-            </h2>
-            <mat-chip [class]="getStatusClass(session.status)" selected>
-              {{ getStatusDisplayText(session.status) }}
-            </mat-chip>
-            @if (isPolling()) {
-              <div class="polling-indicator">
-                <mat-icon class="spinning" aria-hidden="true">refresh</mat-icon>
-                <span class="polling-text">Live updates</span>
-              </div>
-            }
-          </div>
-          <p class="page-subtitle">
-            @if (configurationIds().length > 0) {
-              <span>{{ configurationIds().join(', ') }}</span> ·
-            }
-            @if (session.reference) {
-              <span>Reference {{ session.reference }}</span> ·
-            }
-            <span>Created {{ formatDate(session.createdAt) }}</span>
-          </p>
+<div class="page">
+  <a class="back-link" matButton routerLink="../" aria-label="Back to Sessions">
+    <mat-icon>arrow_back</mat-icon>
+    Sessions
+  </a>
+
+  @if (session) {
+    <!-- What this session is, its state and the actions on it -->
+    <mat-card appearance="outlined" class="hero">
+      <span class="hero-avatar" aria-hidden="true">
+        <mat-icon>{{ isIssuanceSession() ? 'badge' : 'verified_user' }}</mat-icon>
+      </span>
+      <div class="hero-copy">
+        <h1 #pageHeading tabindex="-1">
+          {{ isIssuanceSession() ? 'Issuance' : 'Presentation' }} Session
+        </h1>
+        <div class="hero-meta">
+          <span class="badge status-badge" [class]="statusClass(session.status)">
+            {{ getStatusDisplayText(session.status) }}
+          </span>
+          @if (isPolling()) {
+            <span class="polling-indicator">
+              <mat-icon class="spinning" aria-hidden="true">refresh</mat-icon>
+              Live updates
+            </span>
+          }
         </div>
+        <p class="hero-description">
+          @if (configurationIds().length > 0) {
+            <span>{{ configurationIds().join(', ') }}</span> ·
+          }
+          @if (session.reference) {
+            <span>Reference {{ session.reference }}</span> ·
+          }
+          <span>Created {{ formatDate(session.createdAt) }}</span>
+        </p>
       </div>
-      <div fxLayout="row wrap" fxLayoutGap="8px">
-        @if (grafanaEnabled) {
-          <button
-            mat-button
-            (click)="openGrafanaLogs()"
-            matTooltip="View related logs in Grafana Loki"
-          >
-            <mat-icon>description</mat-icon>
-            Logs
-          </button>
-          <button
-            mat-button
-            (click)="openGrafanaTraces()"
-            matTooltip="View related traces in Grafana Tempo"
-          >
-            <mat-icon>timeline</mat-icon>
-            Traces
-          </button>
-        }
-        @if (canCancel()) {
-          <button
-            mat-button
-            color="warn"
-            (click)="cancelSession()"
-            [disabled]="cancelling"
-            disabledInteractive
-            [matTooltip]="cancelTooltip"
-          >
-            <mat-icon>cancel</mat-icon>
-            {{ isIssuanceSession() ? 'Cancel Offer' : 'Cancel Request' }}
-          </button>
-        }
-        @if (canRecreateOffer()) {
-          <button
-            mat-button
-            (click)="recreateOffer()"
-            [matTooltip]="
-              isIssuanceSession()
-                ? 'Create a new offer with the same parameters'
-                : 'Create a new request with the same parameters'
-            "
-          >
-            <mat-icon>replay</mat-icon>
-            {{ isIssuanceSession() ? 'Recreate Offer' : 'Recreate Request' }}
-          </button>
-        }
-      </div>
-    </div>
+      @if (grafanaEnabled || canCancel() || canRecreateOffer()) {
+        <div class="hero-actions">
+          @if (canRecreateOffer()) {
+            <button
+              matButton="tonal"
+              (click)="recreateOffer()"
+              [matTooltip]="
+                isIssuanceSession()
+                  ? 'Create a new offer with the same parameters'
+                  : 'Create a new request with the same parameters'
+              "
+            >
+              <mat-icon>replay</mat-icon>
+              {{ isIssuanceSession() ? 'Recreate Offer' : 'Recreate Request' }}
+            </button>
+          }
+          @if (canCancel()) {
+            <button
+              matButton="outlined"
+              class="danger"
+              (click)="cancelSession()"
+              [disabled]="cancelling"
+              disabledInteractive
+              [matTooltip]="cancelTooltip"
+            >
+              <mat-icon>cancel</mat-icon>
+              {{ isIssuanceSession() ? 'Cancel Offer' : 'Cancel Request' }}
+            </button>
+          }
+          @if (grafanaEnabled) {
+            <button
+              matButton
+              (click)="openGrafanaLogs()"
+              matTooltip="View related logs in Grafana Loki"
+            >
+              <mat-icon>description</mat-icon>
+              Logs
+            </button>
+            <button
+              matButton
+              (click)="openGrafanaTraces()"
+              matTooltip="View related traces in Grafana Tempo"
+            >
+              <mat-icon>timeline</mat-icon>
+              Traces
+            </button>
+          }
+        </div>
+      }
+    </mat-card>
 
     <!-- How the session ended; announced when polling picks up the change -->
-    <div aria-live="polite">
+    <div class="live-region" aria-live="polite">
       @if (result(); as result) {
-        <mat-card class="result-card" [class]="'result-' + result.tone">
+        <mat-card appearance="outlined" class="result-card" [class]="'result-' + result.tone">
           <mat-card-content>
             <div class="result-summary">
               <mat-icon class="result-icon" aria-hidden="true">{{ result.icon }}</mat-icon>
               <div class="result-text">
-                <h3 class="result-title">{{ result.title }}</h3>
+                <h2 class="result-title">{{ result.title }}</h2>
                 @if (result.message) {
                   <p class="result-message">{{ result.message }}</p>
                 }
@@ -186,49 +181,49 @@
     <!-- While pending: what the wallet needs. The backend returns the offer or
          request only to the session's side. -->
     @if (session.status === 'fetched') {
-      <mat-card class="waiting-card">
+      <mat-card appearance="outlined" class="waiting-card">
         <mat-card-header>
-          <h3 mat-card-title>Waiting for the wallet</h3>
+          <mat-icon mat-card-avatar aria-hidden="true">hourglass_top</mat-icon>
+          <h2 mat-card-title>Waiting for the wallet</h2>
         </mat-card-header>
         <mat-card-content>
-          <div class="no-uri-message">
-            <mat-icon aria-hidden="true">hourglass_top</mat-icon>
-            <p>
-              {{
-                isIssuanceSession()
-                  ? 'The credentials were issued. Waiting for the wallet to confirm them.'
-                  : 'A wallet fetched the request. Waiting for its answer.'
-              }}
-            </p>
-          </div>
+          <p class="muted">
+            {{
+              isIssuanceSession()
+                ? 'The credentials were issued. Waiting for the wallet to confirm them.'
+                : 'A wallet fetched the request. Waiting for its answer.'
+            }}
+          </p>
         </mat-card-content>
       </mat-card>
     } @else if (!result()) {
       @if (canSeeOffer()) {
-        <mat-card class="qr-card">
+        <mat-card appearance="outlined" class="qr-card">
           <mat-card-header>
-            <mat-card-title>
+            <mat-icon mat-card-avatar aria-hidden="true">{{
+              session.useDcApi ? 'api' : 'qr_code'
+            }}</mat-icon>
+            <h2 mat-card-title>
               @if (session.useDcApi) {
-                <mat-icon>api</mat-icon>
-                @if (isIssuanceSession()) {
-                  Issuance Offer
-                } @else {
-                  Presentation Request
-                }
+                {{ isIssuanceSession() ? 'Issuance Offer' : 'Presentation Request' }}
               } @else {
-                <mat-icon>qr_code</mat-icon>
-                @if (isIssuanceSession()) {
-                  Issuance Offer QR Code
-                } @else {
-                  Presentation Request QR Code
-                }
+                {{
+                  isIssuanceSession() ? 'Issuance Offer QR Code' : 'Presentation Request QR Code'
+                }}
               }
-            </mat-card-title>
+            </h2>
+            <mat-card-subtitle>
+              {{
+                isIssuanceSession()
+                  ? 'The wallet scans the code or opens the link to receive the credentials.'
+                  : 'The wallet scans the code or opens the link to answer the request.'
+              }}
+            </mat-card-subtitle>
           </mat-card-header>
           <mat-card-content>
             @if (session.useDcApi) {
-              <div class="dc-api-section" fxLayout="row" fxLayoutAlign="center center">
-                <button mat-flat-button color="primary" (click)="getDcApiCall()">
+              <div class="dc-api-section">
+                <button matButton="filled" (click)="getDcApiCall()">
                   <mat-icon>api</mat-icon>
                   DC API
                 </button>
@@ -290,19 +285,21 @@
 
     <!-- What the wallet presented, as readable claims -->
     @if (presented().length > 0) {
-      <mat-card class="presented-card">
+      <mat-card appearance="outlined" class="presented-card">
         <mat-card-header>
-          <h3 mat-card-title>Presented credentials</h3>
+          <mat-icon mat-card-avatar aria-hidden="true">fact_check</mat-icon>
+          <h2 mat-card-title>Presented credentials</h2>
+          <mat-card-subtitle>The claims the wallet disclosed</mat-card-subtitle>
         </mat-card-header>
         <mat-card-content>
           @for (credential of presented(); track $index) {
             <section class="presented-credential">
-              <h4 class="presented-title">
+              <h3 class="presented-title">
                 {{ credential.queryId }}
                 @if (credential.type || outcomeCredential(credential.queryId)?.docType; as type) {
                   <span class="presented-type">{{ type }}</span>
                 }
-              </h4>
+              </h3>
               @if (credential.issuer || trustedIssuer(credential.queryId)) {
                 <p class="presented-meta">
                   @if (trustedIssuer(credential.queryId); as trusted) {
@@ -348,9 +345,11 @@
     }
 
     <!-- Identifiers and timing -->
-    <mat-card>
+    <mat-card appearance="outlined">
       <mat-card-header>
-        <mat-card-title>Details</mat-card-title>
+        <mat-icon mat-card-avatar aria-hidden="true">info</mat-icon>
+        <h2 mat-card-title>Details</h2>
+        <mat-card-subtitle>Identifiers and timing of the session</mat-card-subtitle>
       </mat-card-header>
       <mat-card-content>
         <dl class="info-grid">
@@ -457,260 +456,237 @@
     </mat-card>
 
     <!-- Raw data for integrators and debugging -->
-    <h3 class="section-heading">Technical data</h3>
-    <mat-tab-group>
-      <!-- Credentials Tab -->
-      @if (session.credentials && session.credentials.length > 0) {
-        <mat-tab label="Credentials ({{ session.credentials.length }})">
-          <div class="tab-content">
-            @for (credential of session.credentials; track $index) {
-              <mat-card class="credential-card">
-                <mat-card-header>
-                  <mat-card-title>Credential {{ $index + 1 }}</mat-card-title>
-                  <div class="spacer"></div>
-                  <button
-                    matIconButton
-                    (click)="copyValue(formatJson(credential))"
-                    matTooltip="Copy credential"
-                    [attr.aria-label]="'Copy credential ' + ($index + 1)"
-                  >
-                    <mat-icon>content_copy</mat-icon>
-                  </button>
-                </mat-card-header>
-                <mat-card-content>
+    <mat-card appearance="outlined" class="technical-card">
+      <mat-card-header>
+        <mat-icon mat-card-avatar aria-hidden="true">data_object</mat-icon>
+        <h2 mat-card-title>Technical data</h2>
+        <mat-card-subtitle>Raw data of the session for integrators and debugging</mat-card-subtitle>
+      </mat-card-header>
+      <mat-tab-group mat-stretch-tabs="false" mat-align-tabs="start">
+        <!-- Credentials Tab -->
+        @if (session.credentials && session.credentials.length > 0) {
+          <mat-tab label="Credentials ({{ session.credentials.length }})">
+            <div class="tab-content">
+              @for (credential of session.credentials; track $index) {
+                <section class="json-block">
+                  <div class="json-block-header">
+                    <h3>Credential {{ $index + 1 }}</h3>
+                    <button
+                      matIconButton
+                      (click)="copyValue(formatJson(credential))"
+                      matTooltip="Copy credential"
+                      [attr.aria-label]="'Copy credential ' + ($index + 1)"
+                    >
+                      <mat-icon>content_copy</mat-icon>
+                    </button>
+                  </div>
                   <pre class="json-display">{{ formatJson(credential) }}</pre>
-                </mat-card-content>
-              </mat-card>
-            }
-          </div>
-        </mat-tab>
-      }
+                </section>
+              }
+            </div>
+          </mat-tab>
+        }
 
-      <!-- Offer Tab -->
-      @if (session.offer) {
-        <mat-tab label="Offer">
-          <div class="tab-content">
-            <mat-card>
-              <mat-card-header>
-                <mat-card-title>Credential Offer</mat-card-title>
-                <div class="spacer"></div>
-                <button
-                  matIconButton
-                  (click)="copyValue(formatJson(session.offer))"
-                  matTooltip="Copy offer"
-                  aria-label="Copy offer"
-                >
-                  <mat-icon>content_copy</mat-icon>
-                </button>
-              </mat-card-header>
-              <mat-card-content>
-                <pre class="json-display">{{ formatJson(session.offer) }}</pre>
-              </mat-card-content>
-            </mat-card>
-          </div>
-        </mat-tab>
-      }
-
-      @if (session.requestObject) {
-        <mat-tab label="Presentation Request">
-          <div class="tab-content">
-            <mat-card>
-              <mat-card-header>
-                <mat-card-title>Presentation Request</mat-card-title>
-                <div class="spacer"></div>
-                <button
-                  matIconButton
-                  (click)="copyRequestObject(session.requestObject)"
-                  matTooltip="Copy presentation request"
-                  aria-label="Copy presentation request"
-                >
-                  <mat-icon>content_copy</mat-icon>
-                </button>
-              </mat-card-header>
-              <mat-card-content>
-                <pre class="json-display">{{ printJWT(session.requestObject) }}</pre>
-              </mat-card-content>
-            </mat-card>
-          </div>
-        </mat-tab>
-      }
-
-      <!-- Credential Payload Tab -->
-      @if (session.credentialPayload) {
-        <mat-tab label="Credential Payload">
-          <div class="tab-content">
-            <mat-card>
-              <mat-card-header>
-                <mat-card-title>Credential Payload</mat-card-title>
-                <div class="spacer"></div>
-                <button
-                  matIconButton
-                  (click)="copyValue(formatJson(session.credentialPayload))"
-                  matTooltip="Copy payload"
-                  aria-label="Copy payload"
-                >
-                  <mat-icon>content_copy</mat-icon>
-                </button>
-              </mat-card-header>
-              <mat-card-content>
-                <pre class="json-display">{{ formatJson(session.credentialPayload) }}</pre>
-              </mat-card-content>
-            </mat-card>
-          </div>
-        </mat-tab>
-      }
-
-      <!-- Authorization Queries Tab -->
-      @if (session.auth_queries) {
-        <mat-tab label="Auth Queries">
-          <div class="tab-content">
-            <mat-card>
-              <mat-card-header>
-                <mat-card-title>Authorization Queries</mat-card-title>
-                <div class="spacer"></div>
-                <button
-                  matIconButton
-                  (click)="copyValue(formatJson(session.auth_queries))"
-                  matTooltip="Copy auth queries"
-                  aria-label="Copy auth queries"
-                >
-                  <mat-icon>content_copy</mat-icon>
-                </button>
-              </mat-card-header>
-              <mat-card-content>
-                <pre class="json-display">{{ formatJson(session.auth_queries) }}</pre>
-              </mat-card-content>
-            </mat-card>
-          </div>
-        </mat-tab>
-      }
-
-      <!-- Webhooks Tab -->
-      @if (session.parsedWebhook || session.webhookEndpointId) {
-        <mat-tab label="Webhooks">
-          <div class="tab-content">
-            @if (session.parsedWebhook) {
-              <mat-card class="webhook-card">
-                <mat-card-header>
-                  <mat-card-title>Main Webhook</mat-card-title>
-                  <div class="spacer"></div>
+        <!-- Offer Tab -->
+        @if (session.offer) {
+          <mat-tab label="Offer">
+            <div class="tab-content">
+              <section class="json-block">
+                <div class="json-block-header">
+                  <h3>Credential Offer</h3>
                   <button
                     matIconButton
-                    (click)="copyValue(formatJson(session.parsedWebhook))"
-                    matTooltip="Copy webhook config"
-                    aria-label="Copy webhook config"
+                    (click)="copyValue(formatJson(session.offer))"
+                    matTooltip="Copy offer"
+                    aria-label="Copy offer"
                   >
                     <mat-icon>content_copy</mat-icon>
                   </button>
-                </mat-card-header>
-                <mat-card-content>
-                  <pre class="json-display">{{ formatJson(session.parsedWebhook) }}</pre>
-                </mat-card-content>
-              </mat-card>
-            }
+                </div>
+                <pre class="json-display">{{ formatJson(session.offer) }}</pre>
+              </section>
+            </div>
+          </mat-tab>
+        }
 
-            @if (session.webhookEndpointId) {
-              <mat-card class="webhook-card">
-                <mat-card-header>
-                  <mat-card-title>Notification Webhook Endpoint</mat-card-title>
-                </mat-card-header>
-                <mat-card-content>
+        @if (session.requestObject) {
+          <mat-tab label="Presentation Request">
+            <div class="tab-content">
+              <section class="json-block">
+                <div class="json-block-header">
+                  <h3>Presentation Request</h3>
+                  <button
+                    matIconButton
+                    (click)="copyRequestObject(session.requestObject)"
+                    matTooltip="Copy presentation request"
+                    aria-label="Copy presentation request"
+                  >
+                    <mat-icon>content_copy</mat-icon>
+                  </button>
+                </div>
+                <pre class="json-display">{{ printJWT(session.requestObject) }}</pre>
+              </section>
+            </div>
+          </mat-tab>
+        }
+
+        <!-- Credential Payload Tab -->
+        @if (session.credentialPayload) {
+          <mat-tab label="Credential Payload">
+            <div class="tab-content">
+              <section class="json-block">
+                <div class="json-block-header">
+                  <h3>Credential Payload</h3>
+                  <button
+                    matIconButton
+                    (click)="copyValue(formatJson(session.credentialPayload))"
+                    matTooltip="Copy payload"
+                    aria-label="Copy payload"
+                  >
+                    <mat-icon>content_copy</mat-icon>
+                  </button>
+                </div>
+                <pre class="json-display">{{ formatJson(session.credentialPayload) }}</pre>
+              </section>
+            </div>
+          </mat-tab>
+        }
+
+        <!-- Authorization Queries Tab -->
+        @if (session.auth_queries) {
+          <mat-tab label="Auth Queries">
+            <div class="tab-content">
+              <section class="json-block">
+                <div class="json-block-header">
+                  <h3>Authorization Queries</h3>
+                  <button
+                    matIconButton
+                    (click)="copyValue(formatJson(session.auth_queries))"
+                    matTooltip="Copy auth queries"
+                    aria-label="Copy auth queries"
+                  >
+                    <mat-icon>content_copy</mat-icon>
+                  </button>
+                </div>
+                <pre class="json-display">{{ formatJson(session.auth_queries) }}</pre>
+              </section>
+            </div>
+          </mat-tab>
+        }
+
+        <!-- Webhooks Tab -->
+        @if (session.parsedWebhook || session.webhookEndpointId) {
+          <mat-tab label="Webhooks">
+            <div class="tab-content">
+              @if (session.parsedWebhook) {
+                <section class="json-block">
+                  <div class="json-block-header">
+                    <h3>Main Webhook</h3>
+                    <button
+                      matIconButton
+                      (click)="copyValue(formatJson(session.parsedWebhook))"
+                      matTooltip="Copy webhook config"
+                      aria-label="Copy webhook config"
+                    >
+                      <mat-icon>content_copy</mat-icon>
+                    </button>
+                  </div>
+                  <pre class="json-display">{{ formatJson(session.parsedWebhook) }}</pre>
+                </section>
+              }
+
+              @if (session.webhookEndpointId) {
+                <section class="json-block">
+                  <div class="json-block-header">
+                    <h3>Notification Webhook Endpoint</h3>
+                  </div>
                   <p>
                     Endpoint ID: <strong>{{ session.webhookEndpointId }}</strong>
                   </p>
-                </mat-card-content>
-              </mat-card>
-            }
-          </div>
-        </mat-tab>
-      }
-
-      <!-- Notifications Tab -->
-      @if (session.notifications && session.notifications.length > 0) {
-        <mat-tab label="Notifications ({{ session.notifications.length }})">
-          <div class="tab-content">
-            @for (notification of session.notifications; track $index) {
-              <mat-card class="notification-card">
-                <mat-card-header>
-                  <mat-card-title>Notification {{ $index + 1 }}</mat-card-title>
-                  <div class="spacer"></div>
-                  <button
-                    matIconButton
-                    (click)="copyValue(formatJson(notification))"
-                    matTooltip="Copy notification"
-                    [attr.aria-label]="'Copy notification ' + ($index + 1)"
-                  >
-                    <mat-icon>content_copy</mat-icon>
-                  </button>
-                </mat-card-header>
-                <mat-card-content>
-                  <pre class="json-display">{{ formatJson(notification) }}</pre>
-                </mat-card-content>
-              </mat-card>
-            }
-          </div>
-        </mat-tab>
-      }
-
-      <!-- Session Logs Tab -->
-      @if (sessionLogs.length > 0) {
-        <mat-tab label="Logs ({{ sessionLogs.length }})">
-          <div class="tab-content">
-            @if (grafanaEnabled) {
-              <div
-                class="grafana-links"
-                fxLayout="row"
-                fxLayoutGap="8px"
-                fxLayoutAlign="end center"
-              >
-                <button
-                  mat-stroked-button
-                  (click)="openGrafanaLogs()"
-                  matTooltip="View full logs in Grafana Loki"
-                >
-                  <mat-icon>open_in_new</mat-icon>
-                  View in Grafana
-                </button>
-              </div>
-            }
-            <div class="log-entries">
-              @for (log of sessionLogs; track log.id) {
-                <div class="log-entry" [class]="getLogLevelClass(log.level)">
-                  <div class="log-header">
-                    <mat-chip class="log-level-chip" [class]="getLogLevelClass(log.level)">
-                      {{ log.level | uppercase }}
-                    </mat-chip>
-                    @if (log.stage) {
-                      <span class="log-stage">{{ log.stage }}</span>
-                    }
-                    <span class="log-timestamp">{{ formatDate(log.timestamp) }}</span>
-                    @if (grafanaEnabled && getTraceIdFromDetail(log.detail)) {
-                      <button
-                        mat-icon-button
-                        (click)="openGrafanaTrace(getTraceIdFromDetail(log.detail)!)"
-                        matTooltip="View trace in Grafana Tempo"
-                        aria-label="View trace in Grafana Tempo"
-                        class="trace-link-btn"
-                      >
-                        <mat-icon>timeline</mat-icon>
-                      </button>
-                    }
-                  </div>
-                  <div class="log-message">{{ log.message }}</div>
-                  @if (log.detail) {
-                    <pre class="json-display log-detail">{{ formatJson(log.detail) }}</pre>
-                  }
-                </div>
+                </section>
               }
             </div>
-          </div>
-        </mat-tab>
-      }
-    </mat-tab-group>
-  </div>
-} @else {
-  <div fxLayout="column" fxLayoutAlign="center center" fxFill>
-    <mat-icon class="loading-icon">hourglass_empty</mat-icon>
-    <p>Loading session details...</p>
-  </div>
-}
+          </mat-tab>
+        }
+
+        <!-- Notifications Tab -->
+        @if (session.notifications && session.notifications.length > 0) {
+          <mat-tab label="Notifications ({{ session.notifications.length }})">
+            <div class="tab-content">
+              @for (notification of session.notifications; track $index) {
+                <section class="json-block">
+                  <div class="json-block-header">
+                    <h3>Notification {{ $index + 1 }}</h3>
+                    <button
+                      matIconButton
+                      (click)="copyValue(formatJson(notification))"
+                      matTooltip="Copy notification"
+                      [attr.aria-label]="'Copy notification ' + ($index + 1)"
+                    >
+                      <mat-icon>content_copy</mat-icon>
+                    </button>
+                  </div>
+                  <pre class="json-display">{{ formatJson(notification) }}</pre>
+                </section>
+              }
+            </div>
+          </mat-tab>
+        }
+
+        <!-- Session Logs Tab -->
+        @if (sessionLogs.length > 0) {
+          <mat-tab label="Logs ({{ sessionLogs.length }})">
+            <div class="tab-content">
+              @if (grafanaEnabled) {
+                <div class="grafana-links">
+                  <button
+                    matButton="outlined"
+                    (click)="openGrafanaLogs()"
+                    matTooltip="View full logs in Grafana Loki"
+                  >
+                    <mat-icon>open_in_new</mat-icon>
+                    View in Grafana
+                  </button>
+                </div>
+              }
+              <div class="log-entries">
+                @for (log of sessionLogs; track log.id) {
+                  <div class="log-entry" [class]="getLogLevelClass(log.level)">
+                    <div class="log-header">
+                      <span class="badge log-level" [class]="getLogLevelClass(log.level)">
+                        {{ log.level | uppercase }}
+                      </span>
+                      @if (log.stage) {
+                        <span class="log-stage">{{ log.stage }}</span>
+                      }
+                      <span class="log-timestamp">{{ formatDate(log.timestamp) }}</span>
+                      @if (grafanaEnabled && getTraceIdFromDetail(log.detail)) {
+                        <button
+                          matIconButton
+                          (click)="openGrafanaTrace(getTraceIdFromDetail(log.detail)!)"
+                          matTooltip="View trace in Grafana Tempo"
+                          aria-label="View trace in Grafana Tempo"
+                          class="trace-link-btn"
+                        >
+                          <mat-icon>timeline</mat-icon>
+                        </button>
+                      }
+                    </div>
+                    <div class="log-message">{{ log.message }}</div>
+                    @if (log.detail) {
+                      <pre class="json-display log-detail">{{ formatJson(log.detail) }}</pre>
+                    }
+                  </div>
+                }
+              </div>
+            </div>
+          </mat-tab>
+        }
+      </mat-tab-group>
+    </mat-card>
+  } @else {
+    <div class="loading-state">
+      <mat-spinner diameter="40" aria-label="Loading session"></mat-spinner>
+    </div>
+  }
+</div>

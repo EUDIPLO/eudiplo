@@ -1,36 +1,78 @@
-// Status indicators
+@use '../../tenants/tenant-page' as page;
+
+// Back link, header card with the status and actions, and cards below, as on the user page
+@include page.base;
+@include page.detail-page;
+@include page.session-status-badges;
+
+.danger:not([disabled]) {
+  --mat-button-outlined-label-text-color: var(--mat-sys-error);
+  --mat-button-outlined-outline-color: color-mix(in srgb, var(--mat-sys-error) 50%, transparent);
+}
+
+.hero-avatar mat-icon {
+  width: 32px;
+  height: 32px;
+  font-size: 32px;
+}
+
+.hero-description {
+  font: var(--mat-sys-body-medium);
+  overflow-wrap: anywhere;
+}
+
+// More specific than Material's own :last-child padding rule of the card content
+mat-card mat-card-content {
+  padding: 0 20px 20px;
+}
+
+// Stays in the accessibility tree so a result is announced when it appears; while empty, a
+// negative margin takes back the page gap it adds
+.live-region:empty {
+  margin-top: -16px;
+}
+
 .polling-indicator {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 12px;
+  font: var(--mat-sys-label-medium);
   color: var(--mat-sys-on-surface-variant);
 
   .spinning {
-    font-size: 16px;
     width: 16px;
     height: 16px;
+    font-size: 16px;
     animation: spin 2s linear infinite;
-  }
-
-  .polling-text {
-    font-size: 11px;
   }
 }
 
 @keyframes spin {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
+  to {
     transform: rotate(360deg);
   }
 }
 
-// General layout
+@media (prefers-reduced-motion: reduce) {
+  .polling-indicator .spinning {
+    animation: none;
+  }
+}
+
+.role-hint {
+  margin: 0;
+  font: var(--mat-sys-body-medium);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.muted {
+  margin: 0;
+}
+
+// Details
 .info-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 16px 24px;
   margin: 0;
 }
@@ -42,12 +84,14 @@
   min-width: 0;
 
   dt {
-    font-size: 12px;
+    font: var(--mat-sys-label-medium);
     color: var(--mat-sys-on-surface-variant);
   }
 
   dd {
     margin: 0;
+    font: var(--mat-sys-body-medium);
+    color: var(--mat-sys-on-surface);
     overflow-wrap: anywhere;
   }
 }
@@ -57,41 +101,44 @@
   align-items: center;
   gap: 8px;
   flex: 1;
+  min-width: 0;
 
   .uri-value {
-    word-break: break-all;
+    flex: 1;
+    min-width: 0;
+    padding: 8px 12px;
+    border-radius: var(--mat-sys-corner-small);
+    background: var(--mat-sys-surface-container);
     font-family: monospace;
     font-size: 12px;
-    background-color: var(--mat-sys-surface-container);
-    padding: 4px 8px;
-    border-radius: 4px;
-    flex: 1;
+    word-break: break-all;
   }
 }
 
-.creation-date {
-  font-size: 14px;
-  color: var(--mat-sys-on-surface-variant);
+// Offer or request for the wallet
+.dc-api-section {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0;
 }
 
 .qr-section {
   display: flex;
   flex-direction: column;
-  gap: 24px;
-  margin-top: 16px;
+  gap: 16px;
 }
 
 .qr-container {
   display: flex;
   justify-content: center;
   padding: 20px;
-  background-color: var(--mat-sys-surface-container);
-  border-radius: 8px;
+  border-radius: var(--mat-sys-corner-medium);
+  background: var(--mat-sys-surface-container);
 
   .qr-image {
     max-width: 100%;
     height: auto;
-    border-radius: 4px;
+    border-radius: var(--mat-sys-corner-extra-small);
   }
 }
 
@@ -100,22 +147,15 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 16px;
   padding: 40px;
-  background-color: var(--mat-sys-surface-container);
-  border-radius: 8px;
+  border-radius: var(--mat-sys-corner-medium);
+  background: var(--mat-sys-surface-container);
   color: var(--mat-sys-on-surface-variant);
-
-  mat-icon {
-    font-size: 48px;
-    width: 48px;
-    height: 48px;
-    margin-bottom: 16px;
-    opacity: 0.5;
-  }
 
   p {
     margin: 0;
-    font-size: 14px;
+    font: var(--mat-sys-body-medium);
   }
 }
 
@@ -123,89 +163,68 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 16px;
-  background-color: var(--mat-sys-tertiary-container);
-  border-radius: 8px;
-  color: var(--eudiplo-warning);
+  padding: 12px 16px;
+  border-radius: var(--mat-sys-corner-medium);
+  background: color-mix(in srgb, var(--eudiplo-warning) 12%, var(--mat-sys-surface));
+  color: var(--mat-sys-on-surface);
 
   mat-icon {
-    font-size: 20px;
-    width: 20px;
-    height: 20px;
+    flex: none;
+    color: var(--eudiplo-warning);
   }
 
   p {
     margin: 0;
-    font-size: 14px;
+    font: var(--mat-sys-body-medium);
   }
 }
 
-// Tab content
+// Technical data
+.technical-card mat-tab-group {
+  border-top: 1px solid var(--mat-sys-outline-variant);
+}
+
 .tab-content {
-  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px 20px 20px;
 }
 
-// Status chips
-.status-success {
-  --mat-chip-label-text-color: white;
-  --mat-chip-selected-label-text-color: white;
-  background-color: var(--eudiplo-success) !important;
-  color: white !important;
-}
+.json-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
 
-.status-pending {
-  --mat-chip-label-text-color: white;
-  --mat-chip-selected-label-text-color: white;
-  background-color: var(--eudiplo-warning) !important;
-  color: white !important;
-}
-
-.status-error {
-  --mat-chip-label-text-color: white;
-  --mat-chip-selected-label-text-color: white;
-  background-color: var(--eudiplo-danger) !important;
-  color: white !important;
-}
-
-.status-default {
-  --mat-chip-label-text-color: white;
-  --mat-chip-selected-label-text-color: white;
-  background-color: var(--mat-sys-on-surface-variant) !important;
-  color: white !important;
-}
-
-// Snackbar styles
-::ng-deep {
-  .success-snackbar {
-    --mdc-snackbar-container-color: var(--eudiplo-success);
-    --mdc-snackbar-supporting-text-color: white;
-  }
-
-  .error-snackbar {
-    --mdc-snackbar-container-color: var(--eudiplo-danger);
-    --mdc-snackbar-supporting-text-color: white;
+  h3 {
+    margin: 0;
+    font: var(--mat-sys-title-small);
+    color: var(--mat-sys-on-surface);
   }
 }
 
-.spacer {
-  flex: 1;
-}
-
-// JSON and JWT display formatting
 .json-display {
-  background-color: var(--mat-sys-surface-container);
+  max-width: 100%;
+  margin: 0;
   padding: 16px;
-  border-radius: 4px;
+  border-radius: var(--mat-sys-corner-medium);
+  background: var(--mat-sys-surface-container);
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 13px;
   line-height: 1.5;
-  overflow-x: auto; // Enable horizontal scrolling when needed
-  white-space: pre-wrap; // Wrap text when possible
-  word-break: break-word; // Break words if necessary to prevent overflow
-  max-width: 100%; // Ensure it doesn't exceed the parent container
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 // Session log entries
+.grafana-links {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .log-entries {
   display: flex;
   flex-direction: column;
@@ -213,19 +232,19 @@
 }
 
 .log-entry {
+  --tone: var(--mat-sys-primary);
+
   padding: 12px;
-  border-radius: 4px;
-  border-left: 4px solid #90caf9;
+  border-left: 4px solid var(--tone);
+  border-radius: var(--mat-sys-corner-small);
   background: var(--mat-sys-surface-container);
 
   &.log-error {
-    border-left-color: var(--eudiplo-danger);
-    background: var(--mat-sys-error-container);
+    --tone: var(--eudiplo-danger);
   }
 
   &.log-warn {
-    border-left-color: var(--eudiplo-warning);
-    background: var(--mat-sys-tertiary-container);
+    --tone: var(--eudiplo-warning);
   }
 }
 
@@ -234,76 +253,42 @@
   align-items: center;
   gap: 8px;
   margin-bottom: 4px;
-  font-size: 12px;
-}
-
-.log-level-chip {
-  font-size: 10px;
-  min-height: 20px;
-  padding: 0 8px;
 }
 
 .log-stage {
-  font-weight: 500;
+  font: var(--mat-sys-label-large);
   color: var(--mat-sys-on-surface-variant);
 }
 
 .log-timestamp {
   margin-left: auto;
+  font: var(--mat-sys-body-small);
   color: var(--mat-sys-on-surface-variant);
-  font-size: 11px;
 }
 
 .log-message {
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 13px;
   line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .log-detail {
   margin-top: 8px;
-  font-size: 12px;
   padding: 8px;
-}
-
-// Grafana deep links
-.grafana-links {
-  margin-bottom: 12px;
+  font-size: 12px;
 }
 
 .trace-link-btn {
-  width: 24px;
-  height: 24px;
-  line-height: 24px;
+  --mat-icon-button-state-layer-size: 32px;
+
+  padding: 4px;
 
   mat-icon {
-    font-size: 16px;
-    width: 16px;
-    height: 16px;
+    width: 18px;
+    height: 18px;
+    font-size: 18px;
   }
-}
-
-.role-hint {
-  margin: 0;
-  color: var(--mat-sys-on-surface-variant);
-}
-
-// Header
-.page-header h2 {
-  margin: 0;
-}
-
-.page-subtitle {
-  margin: 2px 0 0;
-  font-size: 13px;
-  color: var(--mat-sys-on-surface-variant);
-  overflow-wrap: anywhere;
-}
-
-.section-heading {
-  margin: 8px 0 0;
-  font-size: 16px;
-  font-weight: 500;
 }
 
 .result-label {
@@ -321,8 +306,7 @@
   align-items: baseline;
   gap: 8px;
   margin: 0 0 4px;
-  font-size: 15px;
-  font-weight: 500;
+  font: var(--mat-sys-title-small);
 }
 
 .presented-type {
@@ -377,18 +361,27 @@
   }
 }
 
-// Result of a finished session
+// Result of a finished session, tinted with its tone
 .result-card {
-  border-left: 4px solid var(--mat-sys-outline);
+  --tone: var(--mat-sys-outline);
+
+  border-left: 4px solid var(--tone);
 
   &.result-error {
-    border-left-color: var(--eudiplo-danger);
-    background-color: var(--mat-sys-error-container);
+    --tone: var(--eudiplo-danger);
+
+    background: var(--mat-sys-error-container);
     color: var(--mat-sys-on-error-container);
   }
 
   &.result-success {
-    border-left-color: var(--eudiplo-success);
+    --tone: var(--eudiplo-success);
+
+    background: color-mix(in srgb, var(--eudiplo-success) 8%, var(--mat-sys-surface));
+  }
+
+  mat-card-content {
+    padding: 20px;
   }
 }
 
@@ -426,8 +419,7 @@
 
 .result-title {
   margin: 0;
-  font-size: 18px;
-  font-weight: 500;
+  font: var(--mat-sys-title-large);
 }
 
 .result-message {

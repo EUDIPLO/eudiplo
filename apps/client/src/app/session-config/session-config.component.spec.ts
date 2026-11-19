@@ -44,7 +44,7 @@ describe('SessionConfigComponent', () => {
   }
 
   function settingsTitle(element: HTMLElement): HTMLElement | null {
-    return element.querySelector('mat-card-title');
+    return element.querySelector('h1');
   }
 
   /** Opens the cleanup mode select and returns its "Use global default" option. */
@@ -318,7 +318,7 @@ describe('SessionConfigComponent', () => {
       fixture.detectChanges();
       expect(document.activeElement).toBe(settingsTitle(element));
     });
-    expect(settingsTitle(element)?.textContent).toContain('Session Retention Settings');
+    expect(settingsTitle(element)?.textContent).toContain('Session Settings');
   });
 
   it('keeps Save focusable while saving and gives focus back to it once saving has finished', async () => {
@@ -426,6 +426,68 @@ describe('SessionConfigComponent', () => {
       expect.anything()
     );
     expect(requests).not.toContain('PUT /api/session-config');
+  });
+
+  it('validates on submit when the form is submitted from a field', async () => {
+    responses['GET /api/session-config'] = { status: 200, body: {} };
+    const element = await render();
+    fixture.componentInstance.configForm.patchValue({ ttlSeconds: 30 });
+    fixture.detectChanges();
+
+    snackBar.open.mockClear();
+    // Enter in the TTL field submits the form, as Save does.
+    element.querySelector('form')!.dispatchEvent(new Event('submit', { cancelable: true }));
+
+    await vi.waitFor(() => expect(snackBar.open).toHaveBeenCalled());
+    expect(snackBar.open.mock.lastCall?.[0]).toBe(
+      'Check the highlighted fields in Session Time-to-Live (TTL).'
+    );
+    expect(requests).not.toContain('PUT /api/session-config');
+  });
+
+  it('marks the TTL preset in use and says when the form differs from the stored settings', async () => {
+    responses['GET /api/session-config'] = { status: 200, body: { ttlSeconds: 86400 } };
+    const element = await render();
+    const presets = () =>
+      [...element.querySelectorAll<HTMLButtonElement>('.ttl-presets button')].map((preset) => [
+        preset.textContent!.trim(),
+        preset.getAttribute('aria-pressed'),
+      ]);
+    const changeState = () => element.querySelector('.change-state')!.textContent!.trim();
+
+    expect(presets()).toEqual([
+      ['1 hour', 'false'],
+      ['24 hours', 'true'],
+      ['7 days', 'false'],
+      ['30 days', 'false'],
+      ['Use default', 'false'],
+    ]);
+    expect(changeState()).toBe('No changes');
+
+    button(element, '7 days').click();
+    fixture.detectChanges();
+    expect(presets()[2]).toEqual(['7 days', 'true']);
+    expect(changeState()).toBe('Unsaved changes');
+
+    button(element, 'Use default').click();
+    fixture.detectChanges();
+    expect(presets()[4]).toEqual(['Use default', 'true']);
+    expect(changeState()).toBe('Unsaved changes');
+
+    button(element, '24 hours').click();
+    fixture.detectChanges();
+    expect(changeState()).toBe('No changes');
+  });
+
+  it('says the form has unsaved changes when only the cleanup mode changes', async () => {
+    responses['GET /api/session-config'] = { status: 200, body: {} };
+    const element = await render();
+    const changeState = () => element.querySelector('.change-state')!.textContent!.trim();
+    expect(changeState()).toBe('This tenant already follows the global defaults.');
+
+    pickCleanupMode('Anonymize');
+
+    expect(changeState()).toBe('Unsaved changes');
   });
 
   it('spells out the TTL exactly', () => {

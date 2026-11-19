@@ -58,6 +58,62 @@ describe('SessionManagementShowComponent', () => {
     expect(component).toBeTruthy();
   });
 
+  it('shows the back link to the list while the session loads', () => {
+    const element = fixture.nativeElement as HTMLElement;
+    const back = element.querySelector<HTMLAnchorElement>('a.back-link')!;
+
+    expect(component.session).toBeNull();
+    expect(back.getAttribute('aria-label')).toBe('Back to Sessions');
+    expect(back.getAttribute('href')).toBe('/');
+    expect(element.querySelector('mat-spinner')?.getAttribute('aria-label')).toBe(
+      'Loading session'
+    );
+  });
+
+  it.each([
+    ['active', 'status-active', 'Active'],
+    ['completed', 'status-completed', 'Completed'],
+    ['failed', 'status-failed', 'Failed'],
+  ])('shows a %s session in the header with its status badge', (status, tone, label) => {
+    roles = ['sessions:read'];
+    component.session = {
+      ...presentation,
+      status,
+      createdAt: '2026-10-16T07:04:22.000Z',
+      updatedAt: '2026-10-16T07:04:29.000Z',
+      notifications: [],
+    } as unknown as Session;
+    fixture.detectChanges();
+
+    const hero: HTMLElement = fixture.nativeElement.querySelector('.hero');
+    expect(hero.querySelector('h1')?.textContent?.trim()).toBe('Presentation Session');
+    const badge = hero.querySelector('.status-badge')!;
+    expect(badge.classList).toContain(tone);
+    expect(badge.textContent?.trim()).toBe(label);
+    expect(hero.querySelector('.hero-description')?.textContent).toContain('age-check');
+  });
+
+  it('keeps the live region for the result in the page before a result arrives', () => {
+    roles = ['presentation:request'];
+    component.session = {
+      ...presentation,
+      createdAt: '2026-10-16T07:04:22.000Z',
+      updatedAt: '2026-10-16T07:04:29.000Z',
+      notifications: [],
+    } as unknown as Session;
+    fixture.detectChanges();
+    const region = (fixture.nativeElement as HTMLElement).querySelector('[aria-live="polite"]')!;
+    expect(region).not.toBeNull();
+    expect(region.querySelector('.result-card')).toBeNull();
+
+    component.session = { ...component.session, status: 'cancelled' } as Session;
+    fixture.detectChanges();
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('[aria-live="polite"] .result-card')
+    ).not.toBeNull();
+  });
+
   it('shows sessions:read the credential status but no cancel, recreate or status change', () => {
     roles = ['sessions:read'];
     component.session = issuance;

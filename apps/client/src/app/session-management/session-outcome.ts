@@ -140,6 +140,14 @@ function failedResult(
   return { ...failed, title: presentation ? 'Presentation failed' : 'Issuance failed' };
 }
 
+/**
+ * Class of a session status badge, `status-<status>`, whose tone the
+ * `session-status-badges` mixin sets; empty for a status that is not a string.
+ */
+export function sessionStatusClass(status: unknown): string {
+  return typeof status === 'string' ? `status-${status}` : '';
+}
+
 /** Readable label of a session status. */
 export function sessionStatusLabel(status: string | null | undefined): string {
   switch (status) {
