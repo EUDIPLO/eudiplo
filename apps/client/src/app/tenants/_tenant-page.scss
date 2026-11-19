@@ -36,6 +36,12 @@
     box-sizing: border-box;
   }
 
+  // Text link back to where the page was opened from, aligned with the content edge
+  .back-link {
+    align-self: flex-start;
+    margin-left: -12px;
+  }
+
   .page-header {
     display: flex;
     flex-wrap: wrap;
@@ -358,11 +364,6 @@
     gap: 16px;
   }
 
-  .back-link {
-    align-self: flex-start;
-    margin-left: -12px;
-  }
-
   .hero {
     // mat-card lays out in a column; the header reads left to right
     display: flex;
@@ -546,11 +547,6 @@
     gap: 16px;
   }
 
-  .back-link {
-    align-self: flex-start;
-    margin-left: -12px;
-  }
-
   .page-header .heading {
     display: flex;
     align-items: center;
@@ -590,7 +586,7 @@
   }
 
   .section-intro {
-    h2 {
+    :is(h2, h3) {
       margin: 0;
       font: var(--mat-sys-title-medium);
       color: var(--mat-sys-on-surface);
