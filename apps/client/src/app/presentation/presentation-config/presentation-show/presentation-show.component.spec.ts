@@ -49,7 +49,7 @@ describe('PresentationShowComponent loading', () => {
     );
 
     await component.loadPresentation();
-    expect(component.loadError).toBe('Failed to load presentation configuration: Not found');
+    expect(component.loadError).toBe('Failed to load verification config: Not found');
 
     await component.loadPresentation();
     expect(component.loadError).toBe('');
@@ -271,7 +271,7 @@ describe('PresentationShowComponent EUDI Hub', () => {
     component.requestFromEudiHub();
 
     expect(confirm.mock.lastCall?.[0]).toContain(
-      'replaces the registration certificate of this configuration'
+      'replaces the registration certificate of this verification config'
     );
     confirm.mockRestore();
     expect(open.mock.lastCall?.[1]).toMatchObject({
@@ -437,9 +437,7 @@ describe('PresentationShowComponent page', () => {
     await fixture.componentInstance.deletePresentation();
 
     expect(navigate).not.toHaveBeenCalled();
-    expect(snackBar.open.mock.calls.at(-1)?.[0]).toBe(
-      'Failed to delete presentation configuration: x'
-    );
+    expect(snackBar.open.mock.calls.at(-1)?.[0]).toBe('Failed to delete verification config: x');
     expect(fixture.componentInstance.deleting).toBe(false);
   });
 

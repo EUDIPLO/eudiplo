@@ -17,8 +17,8 @@ Open **Credential Verification → Verification Configs** and choose **Create co
 
 1. **Name**: a unique ID (the `requestId` you use later) and an internal description.
 2. **Credentials**: **Import from Issuer** reads credential types and claims from an issuer's metadata, **Import from Schema** starts from TS11 schema metadata at a URL, and **Add credential** lets you enter the type and claims yourself.
-3. **Settings**: review the request lifetime (default 300 seconds), the status check mode (default strict) and the access key chain (default: the tenant's access key chain). Expand the panels for redirect URI, [allowed origins](#allowed-origins-digital-credentials-api) for the Digital Credentials API (**Request and verification options**), registration certificate, webhook endpoint (**Application integration**) or transaction data.
-4. **Review**: check the request and create the configuration. Use **Create offer** on the saved configuration to test it with a wallet.
+3. **Settings**: review the request lifetime (default 300 seconds), the status check mode (default strict) and the access key chain (default: the tenant's access key chain). The same section, **Request and verification options**, holds the redirect URI and the [allowed origins](#allowed-origins-digital-credentials-api) for the Digital Credentials API; further sections hold the **Registration certificate**, the webhook endpoint (**Application integration**) and **Transaction data**.
+4. **Review**: check the request and choose **Create Verification Config**. Use **Create offer** on the saved configuration to test it with a wallet.
 
 **Switch to editor** shows all sections at once; existing configurations open in this mode. **Use guided setup** returns to the steps. Both modes edit the same form.
 

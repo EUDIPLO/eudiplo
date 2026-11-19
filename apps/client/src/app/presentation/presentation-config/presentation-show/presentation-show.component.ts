@@ -120,7 +120,7 @@ export class PresentationShowComponent implements OnInit {
     if (
       config.registration_cert?.jwt &&
       !confirm(
-        'This replaces the registration certificate of this configuration with one from the EUDI Hub. It is not renewed automatically; request a new one before it expires and after the DCQL query changes.\n\nRequest a registration certificate from the EUDI Hub?'
+        'This replaces the registration certificate of this verification config with one from the EUDI Hub. It is not renewed automatically; request a new one before it expires and after the DCQL query changes.\n\nRequest a registration certificate from the EUDI Hub?'
       )
     ) {
       return;
@@ -173,8 +173,8 @@ export class PresentationShowComponent implements OnInit {
         this.config = await this.presentationService.getPresentationById(presentationId);
       }
     } catch (error) {
-      console.error('Error loading presentation:', error);
-      this.loadError = getApiErrorMessage(error, 'Failed to load presentation configuration');
+      console.error('Error loading verification config:', error);
+      this.loadError = getApiErrorMessage(error, 'Failed to load verification config');
     }
     if (retrying && !this.loadError) {
       focusAfterRenderIfLost(this.injector, () => this.pageHeading?.nativeElement);
@@ -279,19 +279,19 @@ export class PresentationShowComponent implements OnInit {
       !config ||
       this.deleting ||
       !this.jwtService.hasRole('presentation:manage') ||
-      !confirm(`Delete presentation configuration "${config.id}"? This cannot be undone.`)
+      !confirm(`Delete verification config "${config.id}"? This cannot be undone.`)
     ) {
       return;
     }
     this.deleting = true;
     try {
       await this.presentationService.deleteConfiguration(config.id);
-      this.snackBar.open('Presentation configuration deleted', 'Close', { duration: 3000 });
+      this.snackBar.open('Verification config deleted', 'Close', { duration: 3000 });
       await this.router.navigate(['../'], { relativeTo: this.route });
     } catch (error) {
       openErrorSnackBar(
         this.snackBar,
-        getApiErrorMessage(error, 'Failed to delete presentation configuration')
+        getApiErrorMessage(error, 'Failed to delete verification config')
       );
       console.error('Delete error:', error);
     } finally {
