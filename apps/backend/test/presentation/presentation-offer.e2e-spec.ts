@@ -80,12 +80,39 @@ describe("Presentation - Offer Creation", () => {
                 response_type: ResponseType.URI,
                 requestId: "invalid",
             })
-            .expect(409)
+            .expect(404)
             .expect((res) => {
-                expect(res.body.message).toContain(
-                    "Request ID invalid not found",
+                expect(res.body.message).toBe(
+                    'Presentation config "invalid" not found',
                 );
             });
+    });
+
+    test("answers 404 for an unknown verifier config", async () => {
+        const server = app.getHttpServer();
+        const expectNotFound = (res: request.Response) =>
+            expect(res.body.message).toBe(
+                'Presentation config "unknown-config" not found',
+            );
+        await request(server)
+            .get("/verifier/config/unknown-config")
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .expect(404)
+            .expect(expectNotFound);
+        await request(server)
+            .patch("/verifier/config/unknown-config")
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .send({ description: "changed" })
+            .expect(404)
+            .expect(expectNotFound);
+        await request(server)
+            .delete("/verifier/config/unknown-config")
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .expect(404)
+            .expect(expectNotFound);
     });
 
     test("rejects an inline webhook with an empty URL", async () => {

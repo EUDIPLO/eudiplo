@@ -1757,7 +1757,7 @@ export class StatusListService implements OnApplicationBootstrap {
 
         if (mappingsCount > 0) {
             throw new ConflictException(
-                `Cannot delete status list ${listId}: ${mappingsCount} credentials are using it`,
+                `Cannot delete status list ${listId}: ${mappingsCount === 1 ? "1 credential is" : `${mappingsCount} credentials are`} using it`,
             );
         }
 

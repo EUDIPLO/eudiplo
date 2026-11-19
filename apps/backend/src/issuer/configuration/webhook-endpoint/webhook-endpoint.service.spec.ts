@@ -32,6 +32,8 @@ describe.each([
             },
             tenantActionLogService: { record },
             outboundUrlPolicyService: { assertSafeUrl: vi.fn() },
+            // Attribute providers only: no credential config names it.
+            references: { find: vi.fn().mockResolvedValue([]) },
         }) as WebhookEndpointService;
         vi.spyOn(instance, "getById").mockResolvedValue(existing);
         return { instance, record };

@@ -31,6 +31,7 @@ const sidebars: SidebarsConfig = {
         'cookbooks/sign-in-with-wallet',
         'cookbooks/revocable-credentials',
         'cookbooks/trusted-issuers',
+        'cookbooks/eudi-hub-certificates',
         'cookbooks/production-vm',
         'cookbooks/manage-with-cli',
         'troubleshooting',

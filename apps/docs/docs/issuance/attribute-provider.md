@@ -72,3 +72,22 @@ An offer can also define a one-off `webhook` source with the same contract. Offe
 **Check:** issue a credential through an [offer](credential-offers.md) and inspect the request your endpoint received. A failing or unreachable endpoint makes the wallet's credential request fail with `invalid_credential_request`.
 
 Attribute providers only supply claims. To learn whether the wallet stored the credential, use [notifications](notifications.md).
+
+## Delete an attribute provider
+
+`DELETE /api/issuer/attribute-providers/{id}` answers `409` while a credential config of the tenant names the provider in `attributeProviderId`, because issuing that credential would fail without it. The response names the credential configs in `message` and lists them in `references`:
+
+```json
+{
+    "statusCode": 409,
+    "timestamp": "2026-11-19T12:00:00.000Z",
+    "path": "/api/issuer/attribute-providers/member-db",
+    "code": "ATTRIBUTE_PROVIDER_IN_USE",
+    "message": "Attribute provider \"member-db\" is still used by 1 credential config (\"membership\"). Remove these references before deleting the attribute provider.",
+    "references": [
+        { "kind": "CredentialConfig", "id": "membership", "description": "Membership card" }
+    ]
+}
+```
+
+Remove `attributeProviderId` from these credential configs, or point it to another provider, then delete the provider. Offers that name the provider in `credentialClaims` do not count: an open offer that still names it fails when the wallet requests the credential. A `replace` [configuration import](../operate/configuration-as-code.md) deletes left-out providers without this check.

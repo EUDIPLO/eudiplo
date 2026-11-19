@@ -26,46 +26,33 @@
             <h2>Choose Issuance Flow Type</h2>
             <p class="step-description">Select how the credential will be issued to the wallet.</p>
 
-            <mat-radio-group formControlName="flow" class="flow-selection fx-col gap-16">
-              <mat-radio-button value="pre_authorized_code" class="flow-option">
-                <div class="flow-option-content">
-                  <div class="flow-option-header">
-                    <mat-icon>flash_on</mat-icon>
-                    <strong>Pre-Authorized Code</strong>
-                  </div>
-                  <p class="flow-option-description">
-                    Claims are provided upfront. The wallet receives the credential immediately
-                    after scanning the QR code. Best for scenarios where user identity is already
-                    verified.
-                  </p>
-                </div>
-              </mat-radio-button>
-
-              <mat-radio-button value="authorization_code_external" class="flow-option">
-                <div class="flow-option-content">
-                  <div class="flow-option-header">
-                    <mat-icon>dns</mat-icon>
-                    <strong>Authorization Code (External AS)</strong>
-                  </div>
-                  <p class="flow-option-description">
-                    User authentication is handled by an external Authorization Server. The AS
-                    provides user claims after authentication.
-                  </p>
-                </div>
-              </mat-radio-button>
-
-              <mat-radio-button value="authorization_code_iae" class="flow-option">
-                <div class="flow-option-content">
-                  <div class="flow-option-header">
-                    <mat-icon>verified_user</mat-icon>
-                    <strong>Authorization Code (IAE)</strong>
-                  </div>
-                  <p class="flow-option-description">
-                    User authentication is handled by the built-in Interactive Authorization
-                    Endpoint. Claims are collected through configured IAE actions.
-                  </p>
-                </div>
-              </mat-radio-button>
+            <mat-radio-group formControlName="flow" class="option-grid">
+              @for (option of flowOptions; track option.value) {
+                <!-- The whole tile is the radio's label; the radio is named by the flow title -->
+                <label
+                  class="option-card"
+                  [class.selected]="flowStepForm.value.flow === option.value"
+                  [for]="'flow-' + option.value + '-input'"
+                >
+                  <span class="option-top">
+                    <span class="option-icon" aria-hidden="true"
+                      ><mat-icon>{{ option.icon }}</mat-icon></span
+                    >
+                    <mat-radio-button
+                      [id]="'flow-' + option.value"
+                      [value]="option.value"
+                      [aria-labelledby]="'flow-' + option.value + '-label'"
+                      [aria-describedby]="'flow-' + option.value + '-description'"
+                    />
+                  </span>
+                  <span class="option-label" [id]="'flow-' + option.value + '-label'">{{
+                    option.label
+                  }}</span>
+                  <span class="option-description" [id]="'flow-' + option.value + '-description'">{{
+                    option.description
+                  }}</span>
+                </label>
+              }
             </mat-radio-group>
           </div>
 

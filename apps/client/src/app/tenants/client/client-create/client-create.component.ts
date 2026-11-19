@@ -17,13 +17,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
-import {
-  clientControllerCreateClient,
-  clientControllerGetClient,
-  clientControllerUpdateClient,
-  type CreateClientDto,
-  type UpdateClientDto,
-} from '@eudiplo/sdk-core';
+import type { CreateClientDto, UpdateClientDto } from '@eudiplo/sdk-core';
 import { ApiService } from '../../../core';
 import { JwtService } from '../../../services/jwt.service';
 import { type Role, type RoleOption, roleChoices } from '../../../services/role-grants';
@@ -34,6 +28,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { PresentationManagementService } from '../../../presentation/presentation-config/presentation-management.service';
 import { CredentialConfigService } from '../../../issuance/credential-config/credential-config.service';
 import { SecretDialogComponent } from '../secret-dialog/secret-dialog.component';
+import { ApiClientService } from '../api-client.service';
 import { ConfigOwnershipDirective } from '../../../config-portability/config-ownership.directive';
 import { ConfigOwnershipNoticeComponent } from '../../../config-portability/config-ownership-notice.component';
 import { RoleLockNoticeComponent } from '../../../common/role-lock-notice.component';
@@ -163,6 +158,7 @@ export class ClientCreateComponent implements OnInit {
   private readonly retryButtons?: QueryList<ElementRef<HTMLElement>>;
 
   private readonly injector = inject(Injector);
+  private readonly clientService = inject(ApiClientService);
 
   constructor(
     private readonly fb: FormBuilder,
@@ -211,13 +207,12 @@ export class ClientCreateComponent implements OnInit {
     this.loading = true;
     this.loadError = '';
     try {
-      const res = await clientControllerGetClient({ path: { id } });
-      if (!res.data) {
+      const clientData = await this.clientService.getById(id);
+      if (!clientData) {
         this.snackBar.open('Client not found', 'Close', { duration: 3000 });
         this.router.navigate(['../..'], { relativeTo: this.route });
         return;
       }
-      const clientData = res.data;
       this.clientForm.patchValue({
         ...clientData,
         allowedPresentationConfigs: clientData.allowedPresentationConfigs ?? [],
@@ -463,10 +458,7 @@ export class ClientCreateComponent implements OnInit {
       if (this.loaded) {
         const payload = this.buildUpdateClientPayload();
 
-        await clientControllerUpdateClient({
-          path: { id: this.id! },
-          body: payload,
-        });
+        await this.clientService.update(this.id!, payload);
         this.snackBar.open('Client updated successfully', 'Close', {
           duration: 3000,
         });
@@ -480,12 +472,7 @@ export class ClientCreateComponent implements OnInit {
       } else {
         const payload = this.buildCreateClientPayload();
 
-        const result = await clientControllerCreateClient({
-          body: payload,
-        });
-
-        // Cast to expected type since SDK returns generic response
-        const clientData = result.data as typeof result.data & { clientSecret?: string };
+        const clientData = await this.clientService.create(payload);
 
         // Show secret dialog for new clients
         if (clientData?.clientSecret) {

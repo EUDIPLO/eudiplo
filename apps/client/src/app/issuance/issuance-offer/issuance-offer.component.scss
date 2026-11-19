@@ -70,50 +70,8 @@
   border-top: 1px solid var(--mat-sys-outline-variant);
 }
 
-// Flow selection styles
-.flow-selection {
-  .flow-option {
-    margin-bottom: 8px;
-
-    ::ng-deep .mdc-form-field {
-      align-items: flex-start;
-    }
-
-    ::ng-deep .mdc-radio {
-      margin-top: 4px;
-    }
-  }
-
-  .flow-option-content {
-    padding: 12px 0;
-
-    .flow-option-header {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 4px;
-
-      mat-icon {
-        color: var(--eudiplo-info);
-        font-size: 20px;
-        width: 20px;
-        height: 20px;
-      }
-
-      strong {
-        font-size: 1rem;
-      }
-    }
-
-    .flow-option-description {
-      color: var(--mat-sys-on-surface-variant);
-      font-size: 0.875rem;
-      margin: 0;
-      padding-left: 28px;
-      line-height: 1.5;
-    }
-  }
-}
+// Flow choices as selectable tiles, as in the key create wizard
+@include page.choice-tiles;
 
 // IAE Status Summary styles
 .iae-status-summary {

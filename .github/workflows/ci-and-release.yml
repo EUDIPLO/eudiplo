@@ -746,6 +746,14 @@ jobs:
             VERSION=${{ needs.build-info.outputs.version }}
             REVISION=${{ needs.build-info.outputs.revision }}
 
+      # The health check does not load pkcs11js, which is only required on
+      # first PKCS#11 use, so load every native module explicitly.
+      - name: Load native modules
+        if: matrix.arch == 'amd64'
+        run: |
+          docker run --rm -w /app --entrypoint node ghcr.io/eudiplo/eudiplo:test \
+            -e "require('better-sqlite3'); require('bcrypt'); require('pkcs11js')"
+
       - name: Run container (detached)
         if: matrix.arch == 'amd64'
         run: |

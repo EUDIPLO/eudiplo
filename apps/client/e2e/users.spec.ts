@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test';
 import { expect, test } from './support/test';
 import { hasRootCredentials } from './support/e2e-config';
 import { loginWithClientCredentials } from './support/login';
+import { holdRequests } from './support/routes';
 import { createTenant } from './support/tenants';
 
 // The user pages need the backend's Keycloak user management, which the E2E backend does not
@@ -18,8 +19,19 @@ interface ManagedUser {
   temporaryPassword?: string;
 }
 
-/** Answers the user API from `users` and gives the caller users:manage. */
+/**
+ * Answers the user API from `users` and gives the caller users:manage. The instance reports
+ * Keycloak as its identity provider, as one that manages people does; with its own `builtin`
+ * mode the side navigation drops the Users entry once it knows the mode.
+ */
 async function mockUserManagement(page: Page, users: ManagedUser[]): Promise<void> {
+  await page.route(
+    (url) => url.pathname.endsWith('/api/frontend-config'),
+    async (route) => {
+      const response = await route.fetch();
+      await route.fulfill({ response, json: { ...(await response.json()), authMode: 'keycloak' } });
+    }
+  );
   await page.route(
     (url) => url.pathname.endsWith('/api/auth/me'),
     async (route) => {
@@ -100,10 +112,9 @@ test('lists and searches users, and locks the actions for a user it cannot manag
   page,
 }) => {
   await page.goto('/users');
-  // users:manage brings the Users page into the navigation.
-  await expect(
-    page.locator('mat-sidenav').getByRole('link', { name: 'Users', exact: true })
-  ).toBeVisible();
+  // users:manage brings the Users page into the navigation, marked as the current page.
+  const entry = page.locator('mat-sidenav').getByRole('link', { name: 'Users', exact: true });
+  await expect(entry).toHaveAttribute('aria-current', 'page');
   const links = page.getByRole('table').getByRole('link');
   await expect(links).toHaveText(['alice', 'bob', 'carol']);
   await expect(page.getByText(/^\s*3 users\s*$/)).toBeVisible();
@@ -125,11 +136,18 @@ test('lists and searches users, and locks the actions for a user it cannot manag
   await expect(
     carol.getByRole('button', { name: /^Delete User: This user has roles/ })
   ).toHaveAttribute('aria-disabled', 'true');
-  await expect(
-    carol.getByRole('button', { name: /^Edit User: This user has roles/ })
-  ).toBeDisabled();
+  // Edit stays focusable too, so keyboard users reach its reason. That it leads nowhere is
+  // checked by the unit spec, where the router call is seen at once.
+  const edit = carol.getByRole('button', { name: /^Edit User: This user has roles/ });
+  await expect(edit).toHaveAttribute('aria-disabled', 'true');
+  await edit.focus();
+  await expect(edit).toBeFocused();
   const alice = page.getByRole('row').filter({ has: page.getByRole('link', { name: 'alice' }) });
   await expect(alice.getByRole('button', { name: 'Delete User', exact: true })).toBeEnabled();
+  // A page below /users keeps the entry current.
+  await alice.getByRole('button', { name: 'Edit User', exact: true }).click();
+  await expect(page).toHaveURL(/\/users\/user-1\/edit$/);
+  await expect(entry).toHaveAttribute('aria-current', 'page');
 });
 
 test('creates a user and shows the temporary password once', async ({ page }) => {
@@ -196,16 +214,30 @@ test('opens a user and deletes it from its page', async ({ page }) => {
   await expect(page.getByRole('table').getByRole('link')).toHaveText(['bob', 'carol']);
 });
 
-test('deletes a user from its row', async ({ page }) => {
+test('deletes a user from its row and keeps the table while it runs', async ({ page }) => {
+  const { sent, release } = await holdRequests(page, 'DELETE', '/api/user/user-2');
   await page.goto('/users');
-  const bob = page.getByRole('row').filter({ has: page.getByRole('link', { name: 'bob' }) });
+  const row = (name: string) =>
+    page.getByRole('row').filter({ has: page.getByRole('link', { name, exact: true }) });
   page.once('dialog', (dialog) => {
     expect(dialog.message()).toContain('"bob"');
     void dialog.accept();
   });
-  await bob.getByRole('button', { name: 'Delete User', exact: true }).click();
+  await row('bob').getByRole('button', { name: 'Delete User', exact: true }).click();
+  await sent;
+
+  // While the delete runs, the table stays and the other rows' Delete waits.
+  await expect(page.getByRole('progressbar', { name: 'Loading users' })).toHaveCount(0);
+  const other = row('alice').getByRole('button', { name: 'Delete User', exact: true });
+  await expect(other).toHaveAttribute('aria-disabled', 'true');
+  await expect(other).toHaveAccessibleDescription('Wait until the other delete has finished');
+
+  release();
   await expect(page.getByText('User deleted successfully')).toBeVisible();
   await expect(page.getByRole('table').getByRole('link')).toHaveText(['alice', 'carol']);
+  // The focused Delete left with its row: focus moves to the row now in its place.
+  await expect(page.getByRole('link', { name: 'carol', exact: true })).toBeFocused();
+  await expect(other).not.toHaveAttribute('aria-disabled', 'true');
 });
 
 test('edits a user and returns to its page', async ({ page }) => {

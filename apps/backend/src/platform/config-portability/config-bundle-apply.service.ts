@@ -512,7 +512,19 @@ export class ConfigBundleApplyService {
                 );
                 return;
             case "AttributeProvider":
-                await this.attributeProviderService.delete(tenantId, id);
+                // Unlike DELETE /issuer/attribute-providers/{id}, without the
+                // reference check: apply cannot roll back, so it must not stop
+                // partway. Left-out credential configs are deleted first
+                // (higher import phase); unlike trust lists, the plan does not
+                // yet block deleting a provider that a credential config kept
+                // by the import still names.
+                await this.attributeProviderService.delete(
+                    tenantId,
+                    id,
+                    undefined,
+                    undefined,
+                    { checkReferences: false },
+                );
                 return;
             case "WebhookEndpoint":
                 await this.webhookEndpointService.delete(tenantId, id);

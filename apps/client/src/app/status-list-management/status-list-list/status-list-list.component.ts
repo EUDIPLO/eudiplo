@@ -17,6 +17,7 @@ import { ConfigOwnershipDirective } from '../../config-portability/config-owners
 import { LoadErrorComponent } from '../../common/load-error.component';
 import { copyToClipboard } from '../../utils/copy-to-clipboard';
 import { ItemRoutePipe } from '../../common/item-route.pipe';
+import { hasHttpStatus } from '../../utils/error-message';
 
 @Component({
   selector: 'app-status-list-list',
@@ -96,7 +97,14 @@ export class StatusListListComponent extends BaseAsyncListComponent<StatusListRe
     return this.deleteTooltip(list.id, 'Delete status list', 'Deleting the status list…');
   }
 
-  /** A list with entries in use cannot be deleted; its button only looks disabled. */
+  /** Keeps a row, and the focus in it, when its list is loaded again. */
+  readonly trackById = (_: number, list: StatusListResponseDto): string => list.id;
+
+  /**
+   * A list with entries in use cannot be deleted; its button only looks disabled. When the
+   * backend refuses the delete (409) because entries came into use since the list loaded, the
+   * row loads again, so it shows the usage and why Delete refuses. Delete stays busy until then.
+   */
   deleteList(list: StatusListResponseDto): Promise<boolean> {
     if (list.usedEntries > 0) {
       this.snackBar.open('Cannot delete a status list that has entries in use', 'Close', {
@@ -108,10 +116,24 @@ export class StatusListListComponent extends BaseAsyncListComponent<StatusListRe
       item: list,
       id: list.id,
       question: `Delete status list "${list.id}"? This cannot be undone.`,
-      request: () => this.statusListService.deleteList(list.id),
+      request: () =>
+        this.statusListService.deleteList(list.id).catch(async (error: unknown) => {
+          if (hasHttpStatus(error, 409)) await this.reloadRow(list);
+          throw error;
+        }),
       deleted: 'Status list deleted successfully',
       failed: 'Failed to delete status list',
     });
+  }
+
+  /** Replaces the row's list with the backend's current one; a failure leaves the row as is. */
+  private async reloadRow(list: StatusListResponseDto): Promise<void> {
+    try {
+      const current = await this.statusListService.getList(list.id);
+      this.items = this.items.map((other) => (other.id === list.id ? current : other));
+    } catch (error) {
+      console.error('Failed to reload status list:', error);
+    }
   }
 
   async copyUri(uri: string): Promise<void> {

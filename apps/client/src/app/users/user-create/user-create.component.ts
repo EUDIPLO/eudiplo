@@ -19,12 +19,8 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
-import {
-  userControllerCreateUser,
-  userControllerGetUser,
-  userControllerUpdateUser,
-} from '@eudiplo/sdk-core';
 import { JwtService } from '../../services/jwt.service';
+import { UserService } from '../user.service';
 import { type RoleOption, roleChoices } from '../../services/role-grants';
 import { getApiErrorMessage } from '../../utils/error-message';
 import { RoleLockNoticeComponent } from '../../common/role-lock-notice.component';
@@ -57,6 +53,7 @@ import { focusAfterRenderIfLost } from '../../common/focus-if-lost.util';
 })
 export class UserCreateComponent implements OnInit {
   private readonly jwtService = inject(JwtService);
+  private readonly userService = inject(UserService);
 
   userForm: FormGroup;
   isSubmitting = false;
@@ -122,17 +119,17 @@ export class UserCreateComponent implements OnInit {
     this.loading = true;
     this.loadError = '';
     try {
-      const res = await userControllerGetUser({ path: { id } });
-      if (!res.data) {
+      const user = await this.userService.getById(id);
+      if (!user) {
         this.snackBar.open('User not found', 'Close', { duration: 3000 });
         this.router.navigate(['../..'], { relativeTo: this.route });
         return;
       }
 
-      this.userForm.patchValue(res.data);
-      this.username = res.data.username;
+      this.userForm.patchValue(user);
+      this.username = user.username;
       this.userForm.get('username')?.disable();
-      const choices = roleChoices(this.jwtService.getRoles(), res.data.roles ?? []);
+      const choices = roleChoices(this.jwtService.getRoles(), user.roles ?? []);
       this.roleOptions = choices.options;
       this.unmanageableRoles = choices.unmanageable;
       if (this.unmanageableRoles.length > 0) {
@@ -174,19 +171,16 @@ export class UserCreateComponent implements OnInit {
       const payload = this.userForm.getRawValue();
 
       if (this.loaded) {
-        await userControllerUpdateUser({
-          path: { id: this.id! },
-          body: payload,
-        });
+        await this.userService.update(this.id!, payload);
         this.snackBar.open('User updated successfully', 'Close', { duration: 3000 });
         await this.router.navigate(['..'], { relativeTo: this.route });
       } else {
-        const response = await userControllerCreateUser({ body: payload });
-        const temporaryPassword = response.data?.temporaryPassword;
+        const created = await this.userService.create(payload);
+        const temporaryPassword = created?.temporaryPassword;
         if (temporaryPassword) {
           const dialogRef = this.dialog.open(UserTemporaryPasswordDialogComponent, {
             data: {
-              username: response.data?.username || payload.username,
+              username: created?.username || payload.username,
               temporaryPassword,
             },
             width: '500px',

@@ -214,10 +214,10 @@ spelling, and the metadata must be reachable:
 ```bash
 curl -s -o /dev/null -w '%{http_code}\n' https://eudiplo.example.com/api/docs
 curl -s -o /dev/null -w '%{http_code}\n' https://eudiplo.example.com/API/docs
-curl -s -o /dev/null -w '%{http_code}\n' https://eudiplo.example.com/.well-known/openid-credential-issuer/issuers/<tenant>
+curl -s -o /dev/null -w '%{http_code}\n' https://eudiplo.example.com/.well-known/openid-credential-issuer/issuers/<issuing-tenant>
 ```
 
-The first two must not return `200`; the third must. Then issue and present a
+The first two must not return `200`; the third must. Use a tenant that issues: one without Issuer Settings answers `404`. Then issue and present a
 credential several times with each wallet you support, through every flow you
 offer (QR code, same device, DC API), and look for blocked requests in the WAF
 log. Because the token false positives are random, one successful run is not

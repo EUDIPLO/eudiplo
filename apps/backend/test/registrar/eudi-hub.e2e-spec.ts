@@ -633,7 +633,7 @@ describe("Access certificate from the EUDI Hub (e2e)", () => {
         );
     });
 
-    test("answers 409 for an unknown presentation configuration without calling the EUDI Hub", async () => {
+    test("answers 404 for an unknown presentation configuration without calling the EUDI Hub", async () => {
         const hubCalled = nock(hub)
             .get(`${base}/organizations/${ORG}/credential-requests`)
             .query(true)
@@ -648,7 +648,7 @@ describe("Access certificate from the EUDI Hub (e2e)", () => {
                 purpose: certificateFields.serviceDescription,
                 privacyPolicy: "https://verifier.example/privacy",
             })
-            .expect(409);
+            .expect(404);
         expect(hubCalled.isDone()).toBe(false);
     });
 

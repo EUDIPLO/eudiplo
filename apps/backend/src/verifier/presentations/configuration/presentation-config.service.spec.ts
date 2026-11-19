@@ -1,4 +1,4 @@
-import { BadRequestException } from "@nestjs/common";
+import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
 import { PresentationConfigService } from "./presentation-config.service.js";
 
@@ -23,7 +23,7 @@ function setup(
     const repository = {
         save: vi.fn(async (config) => config),
         delete: vi.fn(),
-        findOneByOrFail: vi.fn().mockResolvedValue({
+        findOneBy: vi.fn().mockResolvedValue({
             id: "pid",
             tenantId: "tenant",
             dcql_query: { credentials: options.stored ?? [trustedPid] },
@@ -204,7 +204,7 @@ describe("PresentationConfigService imported registration certificate", () => {
     it("checks the stored certificate against a changed DCQL query", async () => {
         const validate = overasking();
         const { service, repository } = setup({ validate });
-        repository.findOneByOrFail.mockResolvedValue({
+        repository.findOneBy.mockResolvedValue({
             id: "pid",
             tenantId: "tenant",
             dcql_query: { credentials: [trustedPid] },
@@ -354,7 +354,7 @@ describe("PresentationConfigService transaction data", () => {
 
     it("rejects an update that removes the query the stored transaction data references", async () => {
         const { service, repository } = setup();
-        repository.findOneByOrFail.mockResolvedValue({
+        repository.findOneBy.mockResolvedValue({
             id: "pid",
             tenantId: "tenant",
             dcql_query: { credentials: [trustedPid] },
@@ -411,5 +411,38 @@ describe("PresentationConfigService audit log", () => {
                 }),
             }),
         );
+    });
+});
+
+describe("PresentationConfigService unknown config", () => {
+    it("answers 404 for an unknown ID on read, update and delete", async () => {
+        const { service, repository } = setup();
+        repository.findOneBy.mockResolvedValue(null);
+
+        for (const call of [
+            () => service.getPresentationConfig("missing", "tenant"),
+            () =>
+                service.updatePresentationConfig("missing", "tenant", {
+                    description: "x",
+                } as any),
+            () => service.deletePresentationConfig("missing", "tenant"),
+        ]) {
+            const error = await call().catch((e: unknown) => e);
+            expect(error).toBeInstanceOf(NotFoundException);
+            expect((error as NotFoundException).message).toBe(
+                'Presentation config "missing" not found',
+            );
+        }
+        expect(repository.save).not.toHaveBeenCalled();
+        expect(repository.delete).not.toHaveBeenCalled();
+    });
+
+    it("does not report a failing lookup as not found", async () => {
+        const { service, repository } = setup();
+        repository.findOneBy.mockRejectedValue(new Error("connection lost"));
+
+        await expect(
+            service.getPresentationConfig("pid", "tenant"),
+        ).rejects.toThrow("connection lost");
     });
 });

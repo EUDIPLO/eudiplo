@@ -74,67 +74,8 @@ mat-stepper {
   }
 }
 
-// Choices as selectable tiles, at most three to a row so six choices wrap
-// into even rows; auto-fit stretches two or three choices across the row
-.option-grid {
-  --option-gap: 12px;
-
-  display: grid;
-  grid-template-columns: repeat(
-    auto-fit,
-    minmax(max(260px, calc((100% - 2 * var(--option-gap)) / 3)), 1fr)
-  );
-  gap: var(--option-gap);
-}
-
-.option-card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 16px;
-  border: 1px solid var(--mat-sys-outline-variant);
-  border-radius: var(--mat-sys-corner-large);
-  background: var(--mat-sys-surface);
-  cursor: pointer;
-  transition:
-    background-color 150ms ease,
-    border-color 150ms ease,
-    box-shadow 150ms ease;
-
-  &:hover {
-    border-color: var(--mat-sys-outline);
-    background: var(--mat-sys-surface-container-low);
-  }
-
-  // The radio inside has the keyboard focus; the tile shows it
-  &:has(input:focus-visible) {
-    outline: 2px solid var(--mat-sys-primary);
-    outline-offset: 2px;
-  }
-
-  &.selected {
-    border-color: var(--mat-sys-primary);
-    background: color-mix(in srgb, var(--mat-sys-primary) 8%, var(--mat-sys-surface));
-    box-shadow: inset 0 0 0 1px var(--mat-sys-primary);
-
-    .option-icon {
-      background: var(--mat-sys-primary);
-      color: var(--mat-sys-on-primary);
-    }
-  }
-}
-
-.option-top {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin-bottom: 8px;
-
-  mat-radio-button {
-    margin: -8px -8px 0 auto;
-  }
-}
+// Choices as selectable tiles, shared with the New Issuance flow step
+@include page.choice-tiles;
 
 // The recommended choice carries a badge and a primary outline before it is picked
 .recommended-badge {
@@ -148,30 +89,6 @@ mat-stepper {
 
 .option-card.recommended:not(.selected) {
   border-color: color-mix(in srgb, var(--mat-sys-primary) 50%, var(--mat-sys-outline-variant));
-}
-
-// The option's icon on a tonal square
-.option-icon {
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  border-radius: var(--mat-sys-corner-medium);
-  background: color-mix(in srgb, var(--mat-sys-primary) 12%, var(--mat-sys-surface));
-  color: var(--mat-sys-primary);
-  transition:
-    background-color 150ms ease,
-    color 150ms ease;
-}
-
-.option-label {
-  font: var(--mat-sys-title-medium);
-  color: var(--mat-sys-on-surface);
-}
-
-.option-description {
-  font: var(--mat-sys-body-medium);
-  color: var(--mat-sys-on-surface-variant);
 }
 
 .option-hint {
@@ -447,11 +364,5 @@ textarea.mono {
 
   to {
     transform: rotate(360deg);
-  }
-}
-
-@container (max-width: 600px) {
-  .option-grid {
-    grid-template-columns: minmax(0, 1fr);
   }
 }

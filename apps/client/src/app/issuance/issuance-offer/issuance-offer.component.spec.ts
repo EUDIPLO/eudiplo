@@ -89,6 +89,76 @@ describe('IssuanceOfferComponent', () => {
     expect(component).toBeTruthy();
   });
 
+  describe('flow tiles', () => {
+    async function render(): Promise<HTMLElement> {
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+      return fixture.nativeElement;
+    }
+
+    const flows = [
+      ['pre_authorized_code', 'Pre-Authorized Code', 'Claims are provided upfront.'],
+      [
+        'authorization_code_external',
+        'Authorization Code (External AS)',
+        'User authentication is handled by an external Authorization Server.',
+      ],
+      [
+        'authorization_code_iae',
+        'Authorization Code (IAE)',
+        'User authentication is handled by the built-in Interactive Authorization Endpoint.',
+      ],
+    ] as const;
+
+    it.each(flows)(
+      'makes the %s tile the label of its radio, named by the title',
+      async (value, title, description) => {
+        const element = await render();
+        const input = element.querySelector<HTMLInputElement>(`#flow-${value}-input`);
+        expect(input).not.toBeNull();
+        expect(input!.closest('label.option-card')!.getAttribute('for')).toBe(
+          `flow-${value}-input`
+        );
+
+        const text = (attribute: string) =>
+          (input!.getAttribute(attribute) ?? '')
+            .split(' ')
+            .map((id) => element.querySelector(`#${id}`)?.textContent?.trim());
+        expect(text('aria-labelledby')).toEqual([title]);
+        expect(text('aria-describedby')[0]).toContain(description);
+      }
+    );
+
+    it('selects the flow when the tile text is clicked', async () => {
+      const element = await render();
+      element.querySelector<HTMLElement>('#flow-authorization_code_external-description')!.click();
+      fixture.detectChanges();
+
+      expect(component.flowStepForm.value.flow).toBe('authorization_code_external');
+      expect(
+        element.querySelector<HTMLInputElement>('#flow-authorization_code_external-input')!.checked
+      ).toBe(true);
+    });
+
+    it('highlights only the tile of the selected flow, also after a reset', async () => {
+      const element = await render();
+      const selected = () =>
+        Array.from(element.querySelectorAll('.option-card.selected')).map((tile) =>
+          tile.querySelector('.option-label')!.textContent!.trim()
+        );
+      expect(selected()).toEqual(['Pre-Authorized Code']);
+
+      component.flowStepForm.patchValue({ flow: 'authorization_code_iae' });
+      fixture.detectChanges();
+      expect(selected()).toEqual(['Authorization Code (IAE)']);
+
+      component.flowStepForm.reset();
+      fixture.detectChanges();
+      expect(selected()).toEqual([]);
+    });
+  });
+
   it('renders mdoc fields without the namespace wrapper and wraps them on submit', async () => {
     const config = buildMdocConfig() as any;
     component.credentialConfigs = [config];

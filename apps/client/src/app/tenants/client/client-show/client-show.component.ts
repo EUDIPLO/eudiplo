@@ -1,10 +1,6 @@
 import { Component, OnInit, ChangeDetectionStrategy, DestroyRef } from '@angular/core';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
-import {
-  clientControllerDeleteClient,
-  clientControllerGetClient,
-  ClientEntity,
-} from '@eudiplo/sdk-core';
+import type { ClientEntity } from '@eudiplo/sdk-core';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 
 import { MatCardModule } from '@angular/material/card';
@@ -22,6 +18,7 @@ import { ApiService } from '../../../core';
 import { clientDeleteConfirmation } from '../client-delete-confirmation';
 import { openErrorSnackBar } from '../../../utils/error-snackbar';
 import { copyToClipboard } from '../../../utils/copy-to-clipboard';
+import { ApiClientService } from '../api-client.service';
 import { groupRoles, type RoleGroup, uniqueRoles } from '../../../services/role-groups';
 
 @Component({
@@ -52,7 +49,8 @@ export class ClientShowComponent implements OnInit {
     private readonly router: Router,
     private readonly jwtService: JwtService,
     private readonly apiService: ApiService,
-    private readonly destroyRef: DestroyRef
+    private readonly destroyRef: DestroyRef,
+    private readonly clientService: ApiClientService
   ) {}
 
   /** Roles of the client that keep the signed-in caller from editing or deleting it */
@@ -98,8 +96,8 @@ export class ClientShowComponent implements OnInit {
 
   ngOnInit() {
     const clientId = this.route.snapshot.paramMap.get('id')!;
-    clientControllerGetClient({ path: { id: clientId } }).then(
-      (client) => (this.client = client.data),
+    this.clientService.getById(clientId).then(
+      (client) => (this.client = client),
       (err) => {
         openErrorSnackBar(this.snackBar, getApiErrorMessage(err, 'Failed to load client'));
         this.router.navigate(['..'], { relativeTo: this.route });
@@ -119,7 +117,7 @@ export class ClientShowComponent implements OnInit {
 
     this.deleting = true;
     try {
-      await clientControllerDeleteClient({ path: { id: clientId } });
+      await this.clientService.delete(clientId);
     } catch (error) {
       this.deleting = false;
       console.error('Error deleting client:', error);
