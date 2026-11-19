@@ -1,4 +1,4 @@
-FROM node:26@sha256:e18c3ccdf7d71619990b0e85639f506e2028a95410999cab24cc373cbd10e0ac AS base
+FROM node:26-trixie@sha256:e18c3ccdf7d71619990b0e85639f506e2028a95410999cab24cc373cbd10e0ac AS base
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 # Node 25 and later no longer bundle corepack, so install it before enabling it.
@@ -20,7 +20,11 @@ FROM build AS build-frontend
 RUN pnpm --filter @eudiplo/sdk-core build
 RUN pnpm --filter @eudiplo/client build
 
-FROM base AS eudiplo
+# The runtime only needs node and the compiled app, so it uses the slim image
+# instead of the full one with build tools and image libraries. Native modules
+# (better-sqlite3, bcrypt, pkcs11js) are built in the base stage, so both
+# FROM lines must name the same Debian release (trixie).
+FROM node:26-trixie-slim@sha256:e6bedef217677b276c591795e169840edd9096dbf13f29df8ef8d1856b8820bc AS eudiplo
 # Copy production dependencies for backend and built dist
 COPY --from=build-backend /prod/backend /app
 COPY --from=build-backend /usr/src/app/apps/backend/dist /app/dist
@@ -47,7 +51,8 @@ WORKDIR /app
 EXPOSE 3000
 
 # --- Healthcheck dependencies ---
-# Install curl for HEALTHCHECK
+# Install curl for HEALTHCHECK. The compose files in docker-compose.yml,
+# deployment/docker-compose and the CLI template also run curl in this image.
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 
 # --- HEALTHCHECK ---
