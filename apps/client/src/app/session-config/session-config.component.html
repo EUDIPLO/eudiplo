@@ -1,16 +1,18 @@
-<div fxLayout="column" fxFlex fxLayoutGap="24px">
+<div class="page form-page">
   <app-config-ownership-notice kind="Tenant" resourceId="tenant" />
-  <div fxLayout="row" fxLayoutAlign="space-between center">
-    <div>
-      <h2>Session Storage Configuration</h2>
-      <p class="subtitle">Configure how sessions are stored and cleaned up for your tenant</p>
+
+  <header class="page-header">
+    <div class="heading">
+      <span class="form-avatar" aria-hidden="true"><mat-icon>schedule</mat-icon></span>
+      <div>
+        <h1 #settingsTitle tabindex="-1">Session Settings</h1>
+        <p>How long this tenant's sessions are kept and what happens to them when they expire.</p>
+      </div>
     </div>
-  </div>
+  </header>
 
   @if (isLoading) {
-    <div fxLayout="row" fxLayoutAlign="center center" style="padding: 48px">
-      <mat-spinner diameter="48"></mat-spinner>
-    </div>
+    <p class="loading-state"><output>Loading the session settings…</output></p>
   } @else if (loadError) {
     <app-load-error
       [message]="loadError"
@@ -18,29 +20,19 @@
       (retry)="loadConfig()"
     />
   } @else {
-    <mat-card>
-      <mat-card-header>
-        <mat-icon mat-card-avatar>schedule</mat-icon>
-        <mat-card-title #settingsTitle tabindex="-1">Session Retention Settings</mat-card-title>
-        <mat-card-subtitle>
-          Control how long sessions are kept and what happens when they expire
-        </mat-card-subtitle>
-      </mat-card-header>
-
-      <mat-card-content>
-        <form #formElement [formGroup]="configForm" fxLayout="column" fxLayoutGap="24px">
-          <!-- TTL Configuration -->
-          <div class="config-section">
-            <h3>
-              <mat-icon>timer</mat-icon>
-              Session Time-to-Live (TTL)
-            </h3>
-            <p class="section-description">
-              Sessions older than this will be cleaned up automatically. Leave empty to use the
-              global default that the operator of this instance sets with SESSION_TTL.
-            </p>
-
-            <mat-form-field appearance="outline" class="full-width">
+    <form #formElement [formGroup]="configForm" (ngSubmit)="onSave()">
+      <!-- Each section: what it is for on the left, its fields on the right -->
+      <section class="form-section" aria-labelledby="session-ttl-heading">
+        <div class="section-intro">
+          <h2 id="session-ttl-heading">Session Time-to-Live (TTL)</h2>
+          <p>
+            Sessions older than this are cleaned up automatically. Leave it empty to use the global
+            default that the operator of this instance sets with SESSION_TTL.
+          </p>
+        </div>
+        <mat-card appearance="outlined">
+          <mat-card-content class="field-stack">
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
               <mat-label>TTL in seconds</mat-label>
               <input
                 matInput
@@ -59,97 +51,67 @@
               }
             </mat-form-field>
 
-            <div class="ttl-presets" fxLayout="row wrap" fxLayoutGap="8px">
-              <button
-                mat-stroked-button
-                type="button"
-                (click)="configForm.patchValue({ ttlSeconds: 3600 })"
-                [color]="configForm.get('ttlSeconds')?.value === 3600 ? 'primary' : undefined"
-              >
-                1 hour
-              </button>
-              <button
-                mat-stroked-button
-                type="button"
-                (click)="configForm.patchValue({ ttlSeconds: 86400 })"
-                [color]="configForm.get('ttlSeconds')?.value === 86400 ? 'primary' : undefined"
-              >
-                24 hours
-              </button>
-              <button
-                mat-stroked-button
-                type="button"
-                (click)="configForm.patchValue({ ttlSeconds: 604800 })"
-                [color]="configForm.get('ttlSeconds')?.value === 604800 ? 'primary' : undefined"
-              >
-                7 days
-              </button>
-              <button
-                mat-stroked-button
-                type="button"
-                (click)="configForm.patchValue({ ttlSeconds: 2592000 })"
-                [color]="configForm.get('ttlSeconds')?.value === 2592000 ? 'primary' : undefined"
-              >
-                30 days
-              </button>
-              <button
-                mat-stroked-button
-                type="button"
-                (click)="configForm.patchValue({ ttlSeconds: null })"
-                [color]="!configForm.get('ttlSeconds')?.value ? 'accent' : undefined"
-              >
-                Use default
-              </button>
+            <div class="ttl-presets" role="group" aria-label="TTL presets">
+              @for (preset of ttlPresets; track preset.label) {
+                <button
+                  matButton="outlined"
+                  type="button"
+                  [class.selected]="isTtlPreset(preset.seconds)"
+                  [attr.aria-pressed]="isTtlPreset(preset.seconds)"
+                  (click)="configForm.patchValue({ ttlSeconds: preset.seconds })"
+                >
+                  {{ preset.label }}
+                </button>
+              }
             </div>
-          </div>
+          </mat-card-content>
+        </mat-card>
+      </section>
 
-          <mat-divider></mat-divider>
-
-          <!-- Cleanup Mode Configuration -->
-          <div class="config-section">
-            <h3>
-              <mat-icon>cleaning_services</mat-icon>
-              Cleanup Mode
-            </h3>
-            <p class="section-description">
-              Choose how expired sessions are handled. Anonymize mode keeps audit metadata but
-              removes personal data like credentials. Without a choice, the global default that the
-              operator of this instance sets with SESSION_CLEANUP_MODE applies.
-            </p>
-
-            <mat-form-field appearance="outline" floatLabel="always" class="full-width">
+      <section class="form-section" aria-labelledby="session-cleanup-heading">
+        <div class="section-intro">
+          <h2 id="session-cleanup-heading">Cleanup Mode</h2>
+          <p>
+            How expired sessions are handled. Anonymize keeps audit metadata but removes personal
+            data like credentials. Without a choice, the global default that the operator of this
+            instance sets with SESSION_CLEANUP_MODE applies.
+          </p>
+        </div>
+        <mat-card appearance="outlined">
+          <mat-card-content class="field-stack">
+            <mat-form-field appearance="outline" floatLabel="always" subscriptSizing="dynamic">
               <mat-label>Cleanup mode</mat-label>
               <mat-select formControlName="cleanupMode" placeholder="Use global default">
                 <mat-select-trigger>
                   {{ cleanupModeLabel(configForm.get('cleanupMode')?.value) }}
                 </mat-select-trigger>
                 <mat-option [value]="null" [disabled]="hasStoredCleanupMode">
-                  <div fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px">
+                  <span class="mode-option">
                     <mat-icon>settings_backup_restore</mat-icon>
-                    <div>
+                    <span>
                       <strong>Use global default</strong>
-                      <div class="option-description">
+                      <span class="option-description">
                         @if (hasStoredCleanupMode) {
                           A stored mode can only be cleared with Reset to Defaults, which also
                           clears the TTL
                         } @else {
                           Follow SESSION_CLEANUP_MODE of this instance
                         }
-                      </div>
-                    </div>
-                  </div>
+                      </span>
+                    </span>
+                  </span>
                 </mat-option>
                 @for (mode of cleanupModes; track mode.value) {
                   <mat-option [value]="mode.value">
-                    <div fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px">
+                    <span class="mode-option">
                       <mat-icon>{{
                         mode.value === 'full' ? 'delete_forever' : 'visibility_off'
                       }}</mat-icon>
-                      <div>
+                      <span>
                         <strong>{{ mode.label }}</strong>
-                        <div class="option-description">{{ mode.description }}</div>
-                      </div>
-                    </div>
+                        <span class="option-description">{{ mode.description }}</span>
+                      </span>
+                    </span>
                   </mat-option>
                 }
               </mat-select>
@@ -163,7 +125,7 @@
 
             @if (configForm.get('cleanupMode')?.value === 'anonymize') {
               <div class="info-box">
-                <mat-icon>info</mat-icon>
+                <mat-icon aria-hidden="true">info</mat-icon>
                 <span>
                   <strong>Anonymize mode</strong> will keep session metadata (ID, status,
                   timestamps) but remove: credentials, credential payloads, auth queries, offers,
@@ -171,35 +133,64 @@
                 </span>
               </div>
             }
-          </div>
-        </form>
-      </mat-card-content>
+          </mat-card-content>
+        </mat-card>
+      </section>
 
-      <mat-card-actions fxLayout="row" fxLayoutAlign="space-between center">
-        <div class="reset-action">
-          <button
-            mat-button
-            color="warn"
-            (click)="onReset()"
-            [disabled]="isSaving || !hasStoredOverride"
-            disabledInteractive
-            appConfigManaged
-            managedKind="Tenant"
-            managedResourceId="tenant"
-            [matTooltip]="resetTooltip"
-          >
-            <mat-icon>restart_alt</mat-icon>
-            Reset to Defaults
-          </button>
-          @if (!hasStoredOverride) {
-            <span class="reset-hint">This tenant already follows the global defaults.</span>
+      <!-- What is stored now, apart from unsaved edits above -->
+      @if (currentConfig) {
+        <section class="form-section" aria-labelledby="session-current-heading">
+          <div class="section-intro">
+            <h2 id="session-current-heading">In effect</h2>
+            <p>The saved settings the next cleanup run uses.</p>
+          </div>
+          <mat-card appearance="outlined" class="summary-card">
+            <mat-card-content>
+              <dl class="summary">
+                <div class="summary-item">
+                  <dt>Session TTL</dt>
+                  <dd>{{ formatTtl(currentConfig.ttlSeconds) }}</dd>
+                </div>
+                <div class="summary-item">
+                  <dt>Cleanup Mode</dt>
+                  <dd>{{ cleanupModeLabel(currentConfig.cleanupMode) }}</dd>
+                </div>
+              </dl>
+            </mat-card-content>
+          </mat-card>
+        </section>
+      }
+
+      <!-- Stays in view at the bottom while the form scrolls -->
+      <div class="action-bar">
+        <output class="change-state" [class.dirty]="hasChanges">
+          @if (hasChanges) {
+            Unsaved changes
+          } @else if (!hasStoredOverride) {
+            This tenant already follows the global defaults.
+          } @else {
+            No changes
           }
-        </div>
+        </output>
+        <button
+          matButton
+          type="button"
+          class="danger"
+          (click)="onReset()"
+          [disabled]="isSaving || !hasStoredOverride"
+          disabledInteractive
+          appConfigManaged
+          managedKind="Tenant"
+          managedResourceId="tenant"
+          [matTooltip]="resetTooltip"
+        >
+          <mat-icon>restart_alt</mat-icon>
+          Reset to Defaults
+        </button>
         <button
           #saveButton
-          mat-flat-button
-          color="primary"
-          (click)="onSave()"
+          matButton="filled"
+          type="submit"
           [disabled]="isSaving"
           disabledInteractive
           [matTooltip]="saveTooltip"
@@ -214,29 +205,7 @@
           }
           Save Configuration
         </button>
-      </mat-card-actions>
-    </mat-card>
-
-    <!-- Current Configuration Summary -->
-    @if (currentConfig) {
-      <mat-card class="summary-card">
-        <mat-card-header>
-          <mat-icon mat-card-avatar>check_circle</mat-icon>
-          <mat-card-title>Current Configuration</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <div fxLayout="row wrap" fxLayoutGap="24px">
-            <div class="summary-item">
-              <span class="label">Session TTL</span>
-              <span class="value">{{ formatTtl(currentConfig.ttlSeconds) }}</span>
-            </div>
-            <div class="summary-item">
-              <span class="label">Cleanup Mode</span>
-              <span class="value">{{ cleanupModeLabel(currentConfig.cleanupMode) }}</span>
-            </div>
-          </div>
-        </mat-card-content>
-      </mat-card>
-    }
+      </div>
+    </form>
   }
 </div>

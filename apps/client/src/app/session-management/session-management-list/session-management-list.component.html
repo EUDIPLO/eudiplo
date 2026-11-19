@@ -1,32 +1,26 @@
-<div fxLayout="column" fxLayoutGap="24px">
-  <!-- Header -->
-  <div fxLayout="row" fxLayoutAlign="space-between center">
-    <h2 #pageHeading tabindex="-1">Sessions</h2>
-    <div fxLayout="row" fxLayoutGap="16px">
-      @if (canOfferIssuance) {
-        <button
-          mat-raised-button
-          color="primary"
-          [routerLink]="['/offer/issuance']"
-          matTooltip="Create New Session"
-        >
-          <mat-icon>add</mat-icon>
-          Issuance Offer
-        </button>
-      }
-      @if (canRequestPresentation) {
-        <button
-          mat-raised-button
-          color="primary"
-          [routerLink]="['/offer/presentation']"
-          matTooltip="Create New Session"
-        >
-          <mat-icon>add</mat-icon>
-          Presentation Request
-        </button>
-      }
+<div class="page">
+  <header class="page-header">
+    <div>
+      <h1 #pageHeading tabindex="-1">Sessions</h1>
+      <p>Offers to issue credentials and requests for presentations, and how wallets answered.</p>
     </div>
-  </div>
+    @if (canOfferIssuance || canRequestPresentation) {
+      <div class="header-actions">
+        @if (canOfferIssuance) {
+          <a matButton="filled" [routerLink]="['/offer/issuance']">
+            <mat-icon>add</mat-icon>
+            Issuance Offer
+          </a>
+        }
+        @if (canRequestPresentation) {
+          <a matButton="tonal" [routerLink]="['/offer/presentation']">
+            <mat-icon>add</mat-icon>
+            Presentation Request
+          </a>
+        }
+      </div>
+    }
+  </header>
 
   @if (hidesOpenSessions) {
     <p class="role-hint">
@@ -35,339 +29,375 @@
     </p>
   }
 
-  <form [formGroup]="filters" fxLayout="column" fxLayoutGap="8px" class="filters">
-    <mat-form-field appearance="outline" class="search-field">
-      <mat-label>Search</mat-label>
-      <mat-icon matPrefix>search</mat-icon>
-      <input
-        matInput
-        formControlName="q"
-        placeholder="Session id, reference, pre-authorized code, or a pasted offer or request link"
-      />
-      @if (filters.controls.q.value) {
-        <button
-          matIconButton
-          matSuffix
-          type="button"
-          aria-label="Clear search"
-          (click)="filters.controls.q.setValue('')"
-        >
-          <mat-icon>close</mat-icon>
-        </button>
-      }
-    </mat-form-field>
-
-    <div fxLayout="row wrap" fxLayoutGap="16px" fxLayoutAlign="start center">
-      <mat-form-field appearance="outline">
-        <mat-label>Session Type</mat-label>
-        <mat-select formControlName="type">
-          @for (option of typeOptions; track option.value) {
-            <mat-option [value]="option.value">
-              {{ option.label }}
-            </mat-option>
-          }
-        </mat-select>
-        <mat-icon matSuffix>category</mat-icon>
-      </mat-form-field>
-
-      <mat-form-field appearance="outline">
-        <mat-label>Status</mat-label>
-        <mat-select formControlName="status" multiple placeholder="All Statuses">
-          @for (option of statusOptions; track option.value) {
-            <mat-option [value]="option.value">
-              {{ option.label }}
-            </mat-option>
-          }
-        </mat-select>
-        <mat-icon matSuffix>flag</mat-icon>
-      </mat-form-field>
-
-      <button
-        mat-stroked-button
-        type="button"
-        (click)="showPending()"
-        [disabled]="isPendingSelected()"
-        matTooltip="Active and fetched sessions the wallet has not finished yet"
-      >
-        <mat-icon>hourglass_empty</mat-icon>
-        Pending
-      </button>
-
-      <mat-form-field appearance="outline">
-        <mat-label>Configuration</mat-label>
-        <mat-select formControlName="config">
-          <mat-option value="">All Configurations</mat-option>
-          @if (issuanceConfigOptions.length) {
-            <mat-optgroup label="Issuance (credential configuration)">
-              @for (option of issuanceConfigOptions; track option.value) {
-                <mat-option [value]="option.value">{{ option.label }}</mat-option>
+  <mat-card appearance="outlined" class="table-card">
+    <form [formGroup]="filters" class="toolbar">
+      <div class="table-header">
+        <div class="table-title">
+          <h2>All sessions</h2>
+          <output>
+            @if (!isLoadingResults && !loadError) {
+              @if (hasActiveFilters()) {
+                {{ totalItems }} {{ totalItems === 1 ? 'session matches' : 'sessions match' }}
+              } @else {
+                {{ totalItems }} {{ totalItems === 1 ? 'session' : 'sessions' }}
               }
-            </mat-optgroup>
-          }
-          @if (presentationConfigOptions.length) {
-            <mat-optgroup label="Presentation">
-              @for (option of presentationConfigOptions; track option.value) {
-                <mat-option [value]="option.value">{{ option.label }}</mat-option>
-              }
-            </mat-optgroup>
-          }
-        </mat-select>
-        <mat-icon matSuffix>tune</mat-icon>
-      </mat-form-field>
-
-      <mat-form-field appearance="outline">
-        <mat-label>Created</mat-label>
-        <mat-date-range-input [rangePicker]="createdPicker">
+            }
+          </output>
+        </div>
+        <div class="search-bar" role="search">
+          <mat-icon class="search-icon" aria-hidden="true">search</mat-icon>
           <input
-            matStartDate
-            formControlName="createdFrom"
-            placeholder="From"
-            aria-label="Created from"
+            type="search"
+            formControlName="q"
+            placeholder="Search sessions"
+            aria-label="Search sessions by session id, reference, pre-authorized code, or a pasted offer or request link"
           />
-          <input matEndDate formControlName="createdTo" placeholder="To" aria-label="Created to" />
-        </mat-date-range-input>
-        <mat-datepicker-toggle matIconSuffix [for]="createdPicker"></mat-datepicker-toggle>
-        <mat-date-range-picker #createdPicker></mat-date-range-picker>
-      </mat-form-field>
-
-      <mat-form-field appearance="outline">
-        <mat-label>Updated</mat-label>
-        <mat-select formControlName="updated">
-          <mat-option value="">Any Time</mat-option>
-          @for (option of updatedOptions; track option.value) {
-            <mat-option [value]="option.value">{{ option.label }}</mat-option>
+          @if (filters.controls.q.value) {
+            <button
+              matIconButton
+              type="button"
+              class="clear-search"
+              aria-label="Clear search"
+              matTooltip="Clear search"
+              (click)="filters.controls.q.setValue('')"
+            >
+              <mat-icon>close</mat-icon>
+            </button>
           }
-          <mat-option value="custom">Custom Range</mat-option>
-        </mat-select>
-        <mat-icon matSuffix>update</mat-icon>
-      </mat-form-field>
+        </div>
+      </div>
 
-      @if (filters.controls.updated.value === 'custom') {
-        <mat-form-field appearance="outline">
-          <mat-label>Updated Between</mat-label>
-          <mat-date-range-input [rangePicker]="updatedPicker">
+      <div class="filters">
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Session Type</mat-label>
+          <mat-select formControlName="type">
+            @for (option of typeOptions; track option.value) {
+              <mat-option [value]="option.value">
+                {{ option.label }}
+              </mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Status</mat-label>
+          <mat-select formControlName="status" multiple placeholder="All Statuses">
+            @for (option of statusOptions; track option.value) {
+              <mat-option [value]="option.value">
+                {{ option.label }}
+              </mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Configuration</mat-label>
+          <mat-select formControlName="config">
+            <mat-option value="">All Configurations</mat-option>
+            @if (issuanceConfigOptions.length) {
+              <mat-optgroup label="Issuance (credential configuration)">
+                @for (option of issuanceConfigOptions; track option.value) {
+                  <mat-option [value]="option.value">{{ option.label }}</mat-option>
+                }
+              </mat-optgroup>
+            }
+            @if (presentationConfigOptions.length) {
+              <mat-optgroup label="Presentation">
+                @for (option of presentationConfigOptions; track option.value) {
+                  <mat-option [value]="option.value">{{ option.label }}</mat-option>
+                }
+              </mat-optgroup>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Created</mat-label>
+          <mat-date-range-input [rangePicker]="createdPicker">
             <input
               matStartDate
-              formControlName="updatedFrom"
+              formControlName="createdFrom"
               placeholder="From"
-              aria-label="Updated from"
+              aria-label="Created from"
             />
             <input
               matEndDate
-              formControlName="updatedTo"
+              formControlName="createdTo"
               placeholder="To"
-              aria-label="Updated to"
+              aria-label="Created to"
             />
           </mat-date-range-input>
-          <mat-datepicker-toggle matIconSuffix [for]="updatedPicker"></mat-datepicker-toggle>
-          <mat-date-range-picker #updatedPicker></mat-date-range-picker>
+          <mat-datepicker-toggle matIconSuffix [for]="createdPicker"></mat-datepicker-toggle>
+          <mat-date-range-picker #createdPicker></mat-date-range-picker>
         </mat-form-field>
-      }
 
-      <mat-form-field appearance="outline">
-        <mat-label>Failure Code</mat-label>
-        <input matInput formControlName="failureCode" [matAutocomplete]="failureCodes" />
-        <mat-autocomplete #failureCodes="matAutocomplete">
-          @for (code of matchingFailureCodes(); track code) {
-            <mat-option [value]="code">{{ code }}</mat-option>
-          }
-        </mat-autocomplete>
-        <mat-icon matSuffix>error_outline</mat-icon>
-      </mat-form-field>
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Updated</mat-label>
+          <mat-select formControlName="updated">
+            <mat-option value="">Any Time</mat-option>
+            @for (option of updatedOptions; track option.value) {
+              <mat-option [value]="option.value">{{ option.label }}</mat-option>
+            }
+            <mat-option value="custom">Custom Range</mat-option>
+          </mat-select>
+        </mat-form-field>
 
-      @if (hasActiveFilters()) {
-        <button mat-button type="button" (click)="clearFilters()">
-          <mat-icon>filter_alt_off</mat-icon>
-          Clear Filters
+        @if (filters.controls.updated.value === 'custom') {
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>Updated Between</mat-label>
+            <mat-date-range-input [rangePicker]="updatedPicker">
+              <input
+                matStartDate
+                formControlName="updatedFrom"
+                placeholder="From"
+                aria-label="Updated from"
+              />
+              <input
+                matEndDate
+                formControlName="updatedTo"
+                placeholder="To"
+                aria-label="Updated to"
+              />
+            </mat-date-range-input>
+            <mat-datepicker-toggle matIconSuffix [for]="updatedPicker"></mat-datepicker-toggle>
+            <mat-date-range-picker #updatedPicker></mat-date-range-picker>
+          </mat-form-field>
+        }
+
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Failure Code</mat-label>
+          <input matInput formControlName="failureCode" [matAutocomplete]="failureCodes" />
+          <mat-autocomplete #failureCodes="matAutocomplete">
+            @for (code of matchingFailureCodes(); track code) {
+              <mat-option [value]="code">{{ code }}</mat-option>
+            }
+          </mat-autocomplete>
+        </mat-form-field>
+      </div>
+
+      <div class="filter-actions">
+        <button
+          matButton="outlined"
+          type="button"
+          (click)="showPending()"
+          [disabled]="isPendingSelected()"
+          matTooltip="Active and fetched sessions the wallet has not finished yet"
+        >
+          <mat-icon>hourglass_empty</mat-icon>
+          Pending
         </button>
-      }
-
-      <button mat-button type="button" (click)="refreshSessions()">
-        <mat-icon>refresh</mat-icon>
-        Refresh
-      </button>
-
-      <!-- Bulk Actions -->
-      @if (selection.selected.length > 0) {
-        <div fxLayout="row" fxLayoutGap="8px" fxLayoutAlign="start center" class="bulk-actions">
-          <span class="selection-info">{{ selection.selected.length }} selected</span>
-          <button
-            mat-stroked-button
-            color="warn"
-            type="button"
-            (click)="cancelSelectedSessions()"
-            [disabled]="!!runningBulkAction || cancellableSelected.length === 0"
-            disabledInteractive
-            [matTooltip]="cancelSelectedTooltip"
-          >
-            <mat-icon>cancel</mat-icon>
-            @if (cancellingSelected) {
-              Cancelling...
-            } @else {
-              Cancel Selected
-            }
+        @if (hasActiveFilters()) {
+          <button matButton type="button" (click)="clearFilters()">
+            <mat-icon>filter_alt_off</mat-icon>
+            Clear Filters
           </button>
-          <button
-            mat-raised-button
-            color="warn"
-            type="button"
-            (click)="deleteSelectedSessions()"
-            [disabled]="!!runningBulkAction"
-            disabledInteractive
-            [matTooltip]="runningBulkAction || 'Delete selected sessions'"
-          >
-            <mat-icon>delete</mat-icon>
-            @if (deletingSelected) {
-              Deleting...
-            } @else {
-              Delete Selected
-            }
-          </button>
-          <button mat-button type="button" (click)="clearSelection()" matTooltip="Clear selection">
-            <mat-icon>clear</mat-icon>
-            Clear
-          </button>
-        </div>
-      }
-    </div>
-  </form>
+        }
+        <button matButton type="button" (click)="refreshSessions()">
+          <mat-icon>refresh</mat-icon>
+          Refresh
+        </button>
+      </div>
+    </form>
 
-  <div class="table-container">
-    @if (isLoadingResults) {
-      <div class="loading-shade">
-        <mat-spinner></mat-spinner>
+    <!-- Bulk actions on the selected rows -->
+    @if (selection.selected.length > 0) {
+      <div class="bulk-actions">
+        <span class="selection-info">{{ selection.selected.length }} selected</span>
+        <button
+          matButton="outlined"
+          class="danger"
+          type="button"
+          (click)="cancelSelectedSessions()"
+          [disabled]="!!runningBulkAction || cancellableSelected.length === 0"
+          disabledInteractive
+          [matTooltip]="cancelSelectedTooltip"
+        >
+          <mat-icon>cancel</mat-icon>
+          @if (cancellingSelected) {
+            Cancelling...
+          } @else {
+            Cancel Selected
+          }
+        </button>
+        <button
+          matButton="filled"
+          class="danger-filled"
+          type="button"
+          (click)="deleteSelectedSessions()"
+          [disabled]="!!runningBulkAction"
+          disabledInteractive
+          [matTooltip]="runningBulkAction || 'Delete selected sessions'"
+        >
+          <mat-icon>delete</mat-icon>
+          @if (deletingSelected) {
+            Deleting...
+          } @else {
+            Delete Selected
+          }
+        </button>
+        <button matButton type="button" (click)="clearSelection()" matTooltip="Clear selection">
+          <mat-icon>clear</mat-icon>
+          Clear
+        </button>
       </div>
     }
-    <table
-      mat-table
-      [dataSource]="dataSource"
-      matSort
-      [matSortActive]="initialSort.active"
-      [matSortDirection]="initialSort.direction"
-      class="sessions-table"
-    >
-      <!-- Checkbox Column -->
-      <ng-container matColumnDef="select">
-        <th mat-header-cell *matHeaderCellDef>
-          <mat-checkbox
-            (change)="$event ? masterToggle() : null"
-            [checked]="selection.hasValue() && isAllSelected()"
-            [indeterminate]="selection.hasValue() && !isAllSelected()"
-            [disabled]="!hasChangeableRows"
-            [aria-label]="checkboxLabel()"
-          >
-          </mat-checkbox>
-        </th>
-        <td mat-cell *matCellDef="let session">
-          <mat-checkbox
-            (click)="$event.stopPropagation()"
-            (change)="$event ? selection.toggle(session) : null"
-            [checked]="selection.isSelected(session)"
-            [disabled]="!canChange(session)"
-            disabledInteractive
-            [matTooltip]="canChange(session) ? '' : readOnlyRowHint"
-            [aria-label]="checkboxLabel(session)"
-          >
-          </mat-checkbox>
-        </td>
-      </ng-container>
 
-      <ng-container matColumnDef="id">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header>Session ID</th>
-        <td mat-cell *matCellDef="let session">
-          <span class="session-id">{{ session.id }}</span>
-        </td>
-      </ng-container>
+    @if (loadError) {
+      <div class="load-error">
+        <app-load-error [message]="loadError" (retry)="refreshSessions()" />
+      </div>
+    }
 
-      <ng-container matColumnDef="type">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header>Type</th>
-        <td mat-cell *matCellDef="let session">
-          @if (isPresentationSession(session)) {
-            <span class="type-badge presentation"> Presentation </span>
-          } @else {
-            <span class="type-badge issuance"> Issuance </span>
-          }
-        </td>
-      </ng-container>
-
-      <ng-container matColumnDef="status">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header>Status</th>
-        <td mat-cell *matCellDef="let session">
-          <span
-            class="status-badge"
-            [class]="getStatusClass(session.status)"
-            [matTooltip]="session.failureCode ?? ''"
-          >
-            {{ getSessionStatus(session) | titlecase }}
-          </span>
-        </td>
-      </ng-container>
-
-      <ng-container matColumnDef="reference">
-        <th mat-header-cell *matHeaderCellDef>Reference</th>
-        <td mat-cell *matCellDef="let session">
-          <span class="reference-text">{{ session.reference }}</span>
-        </td>
-      </ng-container>
-
-      <ng-container matColumnDef="createdAt">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header="createdAt">Created At</th>
-        <td mat-cell *matCellDef="let session">
-          <span class="date-text">{{ session.createdAt | date: 'short' }}</span>
-        </td>
-      </ng-container>
-
-      <ng-container matColumnDef="updatedAt">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header="updatedAt">Updated At</th>
-        <td mat-cell *matCellDef="let session">
-          <span class="date-text">{{ session.updatedAt | date: 'short' }}</span>
-        </td>
-      </ng-container>
-
-      <ng-container matColumnDef="actions">
-        <th mat-header-cell *matHeaderCellDef>Actions</th>
-        <td mat-cell *matCellDef="let session">
-          <button
-            matIconButton
-            [routerLink]="[session.id]"
-            matTooltip="View Session Details"
-            [attr.aria-label]="'View session ' + session.id"
-          >
-            <mat-icon>visibility</mat-icon>
-          </button>
-        </td>
-      </ng-container>
-
-      <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-      <tr mat-row *matRowDef="let row; columns: displayedColumns" class="session-row"></tr>
-    </table>
-
-    <mat-paginator
-      [length]="totalItems"
-      [pageIndex]="initialPageIndex"
-      [pageSize]="pageSize"
-      [pageSizeOptions]="pageSizeOptions"
-      showFirstLastButtons
-      aria-label="Select page of sessions"
-    ></mat-paginator>
-  </div>
-
-  @if (loadError) {
-    <app-load-error [message]="loadError" (retry)="refreshSessions()" />
-  } @else if (dataSource.data.length === 0 && !isLoadingResults) {
-    <div fxLayout="column" fxLayoutAlign="center center" class="empty-state">
-      <mat-icon>inbox</mat-icon>
-      <p>No sessions found</p>
-      <p class="subtitle">
-        @if (hasActiveFilters()) {
-          Try adjusting your filters
-          @if (canOfferIssuance || canRequestPresentation) {
-            or create your first session to get started
-          }
-        } @else if (canOfferIssuance || canRequestPresentation) {
-          Create your first session to get started
+    <!-- Stays in the DOM, as sort and paginator drive the server-side paging -->
+    <div class="table-body" [hidden]="!!loadError">
+      <div class="table-scroll">
+        @if (isLoadingResults) {
+          <div class="loading-shade">
+            <mat-spinner diameter="40" aria-label="Loading sessions"></mat-spinner>
+          </div>
         }
-      </p>
+        <table
+          mat-table
+          [dataSource]="dataSource"
+          matSort
+          [matSortActive]="initialSort.active"
+          [matSortDirection]="initialSort.direction"
+          class="linked"
+        >
+          <!-- Checkbox Column -->
+          <ng-container matColumnDef="select">
+            <th mat-header-cell *matHeaderCellDef>
+              <mat-checkbox
+                (change)="$event ? masterToggle() : null"
+                [checked]="selection.hasValue() && isAllSelected()"
+                [indeterminate]="selection.hasValue() && !isAllSelected()"
+                [disabled]="!hasChangeableRows"
+                [aria-label]="checkboxLabel()"
+              >
+              </mat-checkbox>
+            </th>
+            <td mat-cell *matCellDef="let session">
+              <mat-checkbox
+                class="row-select"
+                (click)="$event.stopPropagation()"
+                (change)="$event ? selection.toggle(session) : null"
+                [checked]="selection.isSelected(session)"
+                [disabled]="!canChange(session)"
+                disabledInteractive
+                [matTooltip]="canChange(session) ? '' : readOnlyRowHint"
+                [aria-label]="checkboxLabel(session)"
+              >
+              </mat-checkbox>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="id">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>Session</th>
+            <td mat-cell *matCellDef="let session">
+              <span class="session-copy">
+                <!-- The session id links to the session and its link covers the row -->
+                <a
+                  class="session-link"
+                  [routerLink]="[session.id]"
+                  [attr.aria-label]="'Session ' + session.id"
+                  >{{ session.id }}</a
+                >
+                @if (session.reference) {
+                  <small class="reference-text">{{ session.reference }}</small>
+                }
+              </span>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="type">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>Type</th>
+            <td mat-cell *matCellDef="let session">
+              <span class="type-label">
+                <mat-icon aria-hidden="true">{{
+                  isPresentationSession(session) ? 'verified_user' : 'badge'
+                }}</mat-icon>
+                {{ isPresentationSession(session) ? 'Presentation' : 'Issuance' }}
+              </span>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="status">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>Status</th>
+            <td mat-cell *matCellDef="let session">
+              <span class="badge" [class]="statusClass(session.status)">
+                {{ getSessionStatus(session) | titlecase }}
+              </span>
+              @if (session.failureCode) {
+                <small class="failure-code">{{ session.failureCode }}</small>
+              }
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="createdAt">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header="createdAt">Created</th>
+            <td mat-cell *matCellDef="let session">
+              <span class="date-text">{{ session.createdAt | date: 'short' }}</span>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="updatedAt">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header="updatedAt">Updated</th>
+            <td mat-cell *matCellDef="let session">
+              <span class="date-text">{{ session.updatedAt | date: 'short' }}</span>
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: displayedColumns" class="session-row"></tr>
+          <tr class="mat-mdc-row no-match" *matNoDataRow>
+            <td class="mat-mdc-cell" [attr.colspan]="displayedColumns.length">
+              @if (!isLoadingResults) {
+                @if (hasActiveFilters()) {
+                  <mat-icon aria-hidden="true">search_off</mat-icon>
+                  <!-- Clear Filters above the table resets them -->
+                  <span>No session matches these filters.</span>
+                } @else {
+                  <div class="empty-state">
+                    <span class="empty-icon"><mat-icon>inbox</mat-icon></span>
+                    <strong>No sessions yet</strong>
+                    @if (canOfferIssuance || canRequestPresentation) {
+                      <p>
+                        A session starts with an issuance offer or a presentation request to a
+                        wallet.
+                      </p>
+                      <span class="empty-actions">
+                        @if (canOfferIssuance) {
+                          <a matButton="filled" [routerLink]="['/offer/issuance']">
+                            <mat-icon>add</mat-icon>
+                            Issuance Offer
+                          </a>
+                        }
+                        @if (canRequestPresentation) {
+                          <a matButton="tonal" [routerLink]="['/offer/presentation']">
+                            <mat-icon>add</mat-icon>
+                            Presentation Request
+                          </a>
+                        }
+                      </span>
+                    } @else {
+                      <p>Sessions appear here once offers or requests are sent to wallets.</p>
+                    }
+                  </div>
+                }
+              }
+            </td>
+          </tr>
+        </table>
+      </div>
+
+      <mat-paginator
+        [length]="totalItems"
+        [pageIndex]="initialPageIndex"
+        [pageSize]="pageSize"
+        [pageSizeOptions]="pageSizeOptions"
+        showFirstLastButtons
+        aria-label="Select page of sessions"
+      ></mat-paginator>
     </div>
-  }
+  </mat-card>
 </div>

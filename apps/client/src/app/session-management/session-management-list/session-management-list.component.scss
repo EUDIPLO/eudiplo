@@ -1,150 +1,214 @@
-::ng-deep .mat-mdc-form-field-bottom-align {
-  display: none;
-}
+@use '../../tenants/tenant-page' as page;
 
-.filters {
-  .search-field {
-    width: 100%;
-  }
-}
+// Heading, table card with search, status badges and states, as on the user list
+@include page.base;
+@include page.list-page;
+@include page.session-status-badges;
 
-.sessions-table {
-  width: 100%;
-
-  .reference-text {
-    max-width: 160px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    display: inline-block;
-  }
-
-  .session-id {
-    max-width: 200px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .type-badge,
-  .status-badge {
-    padding: 4px 8px;
-    border-radius: 12px;
-    font-size: 12px;
-    font-weight: 500;
-    text-align: center;
-    display: inline-block;
-    min-width: 60px;
-  }
-
-  .type-badge {
-    &.issuance {
-      background-color: var(--mat-sys-secondary-container);
-      color: var(--eudiplo-success);
-    }
-
-    &.presentation {
-      background-color: var(--mat-sys-primary-container);
-      color: var(--eudiplo-info);
-    }
-  }
-
-  .status-badge {
-    background-color: var(--mat-sys-surface-container);
-    color: var(--mat-sys-on-surface-variant);
-
-    &.status-active {
-      background-color: var(--mat-sys-secondary-container);
-      color: var(--eudiplo-success);
-    }
-
-    &.status-completed {
-      background-color: var(--mat-sys-primary-container);
-      color: var(--eudiplo-info);
-    }
-
-    &.status-expired {
-      background-color: var(--mat-sys-tertiary-container);
-      color: var(--eudiplo-warning);
-    }
-
-    &.status-failed {
-      background-color: var(--mat-sys-error-container);
-      color: var(--eudiplo-danger);
-    }
-
-    &.status-cancelled {
-      background-color: var(--mat-sys-surface-container-high);
-      color: var(--mat-sys-on-surface-variant);
-    }
-  }
-
-  .date-text {
-    font-size: 13px;
-    color: var(--mat-sys-on-surface-variant);
-  }
-}
-
-.empty-state {
-  padding: 60px 20px;
-  text-align: center;
-
-  mat-icon {
-    font-size: 64px;
-    width: 64px;
-    height: 64px;
-    opacity: 0.3;
-    margin-bottom: 16px;
-  }
-
-  p {
-    margin: 8px 0;
-
-    &.subtitle {
-      opacity: 0.7;
-      font-size: 14px;
-    }
-  }
-}
-
-.bulk-actions {
-  background-color: var(--mat-sys-surface-container);
-  padding: 8px 16px;
-  border-radius: 8px;
-  margin-left: 16px;
-
-  .selection-info {
-    font-size: 14px;
-    color: var(--mat-sys-on-surface-variant);
-    margin-right: 8px;
-  }
-}
-
-// Checkbox column width
-.mat-column-select {
-  width: 48px;
-  padding-right: 8px !important;
-}
-
-.table-container {
-  position: relative;
-}
-
-// Loading overlay
-.loading-shade {
-  position: absolute;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  right: 0;
-  background: var(--eudiplo-scrim-soft);
-  z-index: 1;
+.header-actions {
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .role-hint {
   margin: 0;
+  font: var(--mat-sys-body-medium);
   color: var(--mat-sys-on-surface-variant);
+}
+
+// Search and filters sit in the card above the table
+.toolbar {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 12px;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 0 20px;
+
+  mat-form-field {
+    flex: 1 1 200px;
+  }
+}
+
+.filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px 0;
+}
+
+// Shown while rows are selected, between the filters and the table
+.bulk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 20px 12px;
+  padding: 8px 12px 8px 16px;
+  border-radius: var(--mat-sys-corner-medium);
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+
+  .selection-info {
+    margin-right: auto;
+    font: var(--mat-sys-label-large);
+  }
+}
+
+.danger:not([disabled]) {
+  --mat-button-outlined-label-text-color: var(--mat-sys-error);
+  --mat-button-outlined-outline-color: color-mix(in srgb, var(--mat-sys-error) 50%, transparent);
+}
+
+.danger-filled:not([disabled]) {
+  --mat-button-filled-container-color: var(--mat-sys-error);
+  --mat-button-filled-label-text-color: var(--mat-sys-on-error);
+}
+
+.load-error {
+  padding: 0 20px 20px;
+}
+
+.table-scroll {
+  position: relative;
+  min-height: 96px;
+}
+
+// Covers the rows of the previous query while the next page loads
+.loading-shade {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--eudiplo-scrim-soft);
+}
+
+table {
+  @include page.data-table;
+
+  // The session link covers its row; the checkbox sits above it
+  &.linked tr.mat-mdc-row:not(.no-match) {
+    position: relative;
+    cursor: pointer;
+
+    // Above the row link: the checkbox, and texts that can be selected and copied
+    .row-select,
+    .reference-text,
+    .failure-code {
+      position: relative;
+      z-index: 1;
+    }
+
+    &:hover .session-link {
+      color: var(--mat-sys-primary);
+    }
+  }
+}
+
+.mat-column-select {
+  width: 48px;
+}
+
+.session-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 12px 0;
+}
+
+.session-link {
+  font: var(--mat-sys-title-small);
+  font-family: var(--mat-sys-body-medium-font);
+  color: var(--mat-sys-on-surface);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+  transition: color 120ms ease;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--mat-sys-primary);
+    outline-offset: 2px;
+    border-radius: var(--mat-sys-corner-extra-small);
+  }
+}
+
+.reference-text {
+  font: var(--mat-sys-body-small);
+  color: var(--mat-sys-on-surface-variant);
+  overflow-wrap: anywhere;
+}
+
+.type-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: var(--mat-sys-body-medium);
+  white-space: nowrap;
+
+  mat-icon {
+    width: 18px;
+    height: 18px;
+    font-size: 18px;
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+.failure-code {
+  display: block;
+  margin-top: 4px;
+  font: var(--mat-sys-body-small);
+  font-family: monospace;
+  color: var(--mat-sys-on-surface-variant);
+  overflow-wrap: anywhere;
+}
+
+.empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.date-text {
+  font: var(--mat-sys-body-small);
+  color: var(--mat-sys-on-surface-variant);
+  white-space: nowrap;
+}
+
+// The empty state sits in the table's no-data row
+.no-match .empty-state {
+  border: 0;
+  padding: 16px 24px;
+}
+
+mat-paginator {
+  border-top: 1px solid var(--mat-sys-outline-variant);
+  background: transparent;
+}
+
+@container (max-width: 600px) {
+  .search-bar {
+    flex: 1 1 100%;
+  }
+}
+
+// Phones: the list leaves the update time to each session's page
+@container (max-width: 560px) {
+  .mat-column-updatedAt {
+    display: none;
+  }
 }

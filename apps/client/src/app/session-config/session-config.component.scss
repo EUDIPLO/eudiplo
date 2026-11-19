@@ -1,60 +1,90 @@
-.subtitle {
-  color: var(--mat-sys-outline);
-  margin: 0;
-}
+@use '../tenants/tenant-page' as page;
 
-.config-section {
-  h3 {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin: 0 0 8px 0;
-    font-size: 16px;
-    font-weight: 500;
+// Heading, sections and action bar, as on the user and API client forms
+@include page.base;
+@include page.form-page;
 
-    mat-icon {
-      color: var(--mat-sys-primary);
-    }
-  }
-
-  .section-description {
-    color: var(--mat-sys-outline);
-    margin: 0 0 16px 0;
-    font-size: 14px;
-  }
-}
-
-.full-width {
-  width: 100%;
+.form-avatar mat-icon {
+  width: 28px;
+  height: 28px;
+  font-size: 28px;
 }
 
 .ttl-presets {
-  margin-top: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+
+  // The preset the TTL field holds
+  .selected {
+    --mat-button-outlined-container-color: var(--mat-sys-secondary-container);
+    --mat-button-outlined-label-text-color: var(--mat-sys-on-secondary-container);
+    --mat-button-outlined-outline-color: var(--mat-sys-secondary-container);
+  }
 }
 
 .info-box {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  padding: 16px;
-  background-color: var(--mat-sys-surface-variant);
-  border-radius: 8px;
-  margin-top: 16px;
+  padding: 12px 16px;
+  border-radius: var(--mat-sys-corner-medium);
+  background: var(--mat-sys-surface-container-high);
+  font: var(--mat-sys-body-medium);
+  color: var(--mat-sys-on-surface);
 
   mat-icon {
+    flex: none;
     color: var(--mat-sys-primary);
-    flex-shrink: 0;
   }
+}
 
-  span {
-    font-size: 14px;
-    line-height: 1.5;
+.mode-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  strong {
+    display: block;
   }
 }
 
 .option-description {
-  font-size: 12px;
-  color: var(--mat-sys-outline);
+  display: block;
+  font: var(--mat-sys-body-small);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.summary-card {
+  background: var(--mat-sys-surface-container-low);
+}
+
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 48px;
+  margin: 0;
+}
+
+.summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  dt {
+    font: var(--mat-sys-label-medium);
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  dd {
+    margin: 0;
+    font: var(--mat-sys-title-small);
+    color: var(--mat-sys-on-surface);
+  }
+}
+
+.danger:not([disabled]):not(.mat-mdc-button-disabled) {
+  --mat-button-text-label-text-color: var(--mat-sys-error);
 }
 
 .button-spinner {
@@ -62,35 +92,7 @@
   margin-right: 8px;
 }
 
-.summary-card {
-  background-color: var(--mat-sys-surface-container-low);
-
-  .summary-item {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-
-    .label {
-      font-size: 12px;
-      color: var(--mat-sys-outline);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
-    .value {
-      font-size: 16px;
-      font-weight: 500;
-    }
-  }
-}
-
-.reset-action {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.reset-hint {
-  font-size: 12px;
-  color: var(--mat-sys-on-surface-variant);
+// The ownership notice shows only when it applies; without content it takes no gap in the page
+app-config-ownership-notice {
+  display: contents;
 }

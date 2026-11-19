@@ -1,7 +1,12 @@
 import type { Session } from '@eudiplo/sdk-core';
 import { describe, expect, it } from 'vitest';
 
-import { isFinishedSession, sessionResult, sessionStatusLabel } from './session-outcome';
+import {
+  isFinishedSession,
+  sessionResult,
+  sessionStatusClass,
+  sessionStatusLabel,
+} from './session-outcome';
 
 type ResultInput = Parameters<typeof sessionResult>[0];
 const session = (fields: Partial<Session>) => fields as ResultInput;
@@ -199,5 +204,13 @@ describe('sessionStatusLabel', () => {
     expect(sessionStatusLabel('active')).toBe('Active');
     expect(sessionStatusLabel(undefined)).toBe('Unknown');
     expect(sessionStatusLabel('weird')).toBe('weird');
+  });
+});
+
+describe('sessionStatusClass', () => {
+  it('names the badge tone of a status and nothing for a status that is not a string', () => {
+    expect(sessionStatusClass('failed')).toBe('status-failed');
+    expect(sessionStatusClass('fetched')).toBe('status-fetched');
+    expect(sessionStatusClass({ status: 'failed' })).toBe('');
   });
 });

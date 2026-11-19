@@ -382,7 +382,8 @@ describe('SessionManagementListComponent', () => {
 
     expect(component.displayedColumns).not.toContain('select');
     expect(component.canChange({ id: 's-1' } as Session)).toBe(false);
-    const buttons = [...(fixture.nativeElement as HTMLElement).querySelectorAll('button')].map(
+    // The create actions are links.
+    const buttons = [...(fixture.nativeElement as HTMLElement).querySelectorAll('button, a')].map(
       (button) => button.textContent!.trim()
     );
     expect(buttons.some((text) => text.includes('Issuance Offer'))).toBe(false);
@@ -436,7 +437,7 @@ describe('SessionManagementListComponent', () => {
     expect(cancelSession).not.toHaveBeenCalled();
   });
 
-  it('shows why loading failed and a retry instead of "No sessions found"', async () => {
+  it('shows why loading failed and a retry instead of the empty state', async () => {
     await setup();
     component.selection.select({ id: 's-1', status: 'active' } as Session);
     getAllSessions.mockRejectedValueOnce({ statusCode: 403, message: 'Forbidden resource' });
@@ -449,9 +450,102 @@ describe('SessionManagementListComponent', () => {
     expect(element.querySelector('[role="alert"]')?.textContent).toContain(
       'Failed to load sessions: Forbidden resource'
     );
-    expect(element.textContent).not.toContain('No sessions found');
+    // The table stays in the DOM for sort and paging, hidden with its empty state.
+    expect(element.querySelector('.table-body')?.hasAttribute('hidden')).toBe(true);
     // Bulk actions must not act on sessions that are no longer shown.
     expect(component.selection.selected).toEqual([]);
+  });
+
+  it('moves focus to the heading when a retry loads the sessions', async () => {
+    await setup();
+    getAllSessions.mockRejectedValueOnce({ statusCode: 500, message: 'Internal server error' });
+    component.refreshSessions();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+    const retry = [...element.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Retry')
+    )!;
+    retry.focus();
+
+    retry.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(element.querySelector('[role="alert"]')).toBeNull();
+    expect(document.activeElement).toBe(element.querySelector('h1'));
+  });
+
+  it('shows an empty state without filters and a no-match row with them', async () => {
+    await setup();
+    fixture.detectChanges();
+    let element = fixture.nativeElement as HTMLElement;
+    expect(element.querySelector('.empty-state')?.textContent).toContain('No sessions yet');
+    expect(
+      [...element.querySelectorAll('.empty-state a')].map((a) => a.textContent?.trim())
+    ).toEqual(['add Issuance Offer', 'add Presentation Request']);
+    expect(element.querySelector('.table-title output')?.textContent?.trim()).toBe('0 sessions');
+
+    TestBed.resetTestingModule();
+    await setup({ q: 'nothing' });
+    fixture.detectChanges();
+    element = fixture.nativeElement as HTMLElement;
+    expect(element.querySelector('.empty-state')).toBeNull();
+    expect(element.querySelector('.no-match')?.textContent).toContain(
+      'No session matches these filters.'
+    );
+    // One Clear Filters, above the table, as the dashboard links rely on.
+    expect(
+      [...element.querySelectorAll('button')].filter((b) =>
+        b.textContent?.includes('Clear Filters')
+      )
+    ).toHaveLength(1);
+    expect(element.querySelector('.table-title output')?.textContent?.trim()).toBe(
+      '0 sessions match'
+    );
+  });
+
+  it('tells callers who cannot create sessions where sessions come from', async () => {
+    await setup({}, ['sessions:read']);
+    fixture.detectChanges();
+    const empty = (fixture.nativeElement as HTMLElement).querySelector('.empty-state')!;
+
+    expect(empty.textContent).toContain(
+      'Sessions appear here once offers or requests are sent to wallets.'
+    );
+    expect(empty.querySelectorAll('a')).toHaveLength(0);
+  });
+
+  it('links each row to its session and shows its status as a badge', async () => {
+    await setup();
+    getAllSessions.mockResolvedValueOnce({
+      items: [
+        { id: 's-1', status: 'failed', failureCode: 'signature_invalid', reference: 'order-7' },
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 25,
+      totalPages: 1,
+    });
+    component.refreshSessions();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const row = (fixture.nativeElement as HTMLElement).querySelector('tr.session-row')!;
+    const link = row.querySelector<HTMLAnchorElement>('a.session-link')!;
+    // The mocked route resolves no relative href, so check what the link says.
+    expect(link.textContent?.trim()).toBe('s-1');
+    expect(link.getAttribute('aria-label')).toBe('Session s-1');
+    expect(row.querySelector('.reference-text')?.textContent).toBe('order-7');
+    const badge = row.querySelector('.badge')!;
+    expect(badge.classList).toContain('status-failed');
+    expect(badge.textContent?.trim()).toBe('Failed');
+    // The row link covers the row, so the failure code is text, not a tooltip.
+    expect(row.querySelector('.failure-code')?.textContent).toBe('signature_invalid');
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.table-title output')?.textContent
+    ).toContain('1 session');
   });
 
   it('deletes selected sessions only after confirmation and reports the ones that failed', async () => {

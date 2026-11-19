@@ -17,8 +17,6 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { MatDividerModule } from '@angular/material/divider';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { SessionConfigService, SessionCleanupMode, cleanupModes } from './session-config.service';
 import { SessionStorageConfig, UpdateSessionConfigDto } from '@eudiplo/sdk-core';
 import { ConfigOwnershipDirective } from '../config-portability/config-ownership.directive';
@@ -44,8 +42,6 @@ import { wholeNumberValidator } from '../utils/whole-number-validator';
     MatTooltipModule,
     MatSnackBarModule,
     MatProgressSpinnerModule,
-    MatDividerModule,
-    FlexLayoutModule,
     ConfigOwnershipDirective,
     ConfigOwnershipNoticeComponent,
     LoadErrorComponent,
@@ -77,6 +73,15 @@ export class SessionConfigComponent implements OnInit {
   private readonly formElement?: ElementRef<HTMLFormElement>;
 
   cleanupModes = cleanupModes;
+
+  /** Common TTLs; null clears the TTL, so the global default applies. */
+  readonly ttlPresets: { label: string; seconds: number | null }[] = [
+    { label: '1 hour', seconds: 3600 },
+    { label: '24 hours', seconds: 86400 },
+    { label: '7 days', seconds: 604800 },
+    { label: '30 days', seconds: 2592000 },
+    { label: 'Use default', seconds: null },
+  ];
 
   constructor(
     private readonly fb: FormBuilder,
@@ -125,6 +130,26 @@ export class SessionConfigComponent implements OnInit {
   /** Whether the tenant overrides any global default, so Reset has something to do. */
   get hasStoredOverride(): boolean {
     return this.hasStoredCleanupMode || !!this.currentConfig?.ttlSeconds;
+  }
+
+  /** Whether the TTL field holds this preset; an empty field matches "Use default". */
+  isTtlPreset(seconds: number | null): boolean {
+    return this.formTtl() === seconds;
+  }
+
+  /** Whether the form differs from the stored settings, including changes made by a preset. */
+  get hasChanges(): boolean {
+    const cleanupMode = (this.configForm.get('cleanupMode')?.value ?? null) as string | null;
+    return (
+      this.formTtl() !== (this.currentConfig?.ttlSeconds ?? null) ||
+      cleanupMode !== (this.currentConfig?.cleanupMode ?? null)
+    );
+  }
+
+  /** The TTL field as a number, null while it is empty. */
+  private formTtl(): number | null {
+    const value = this.configForm.get('ttlSeconds')?.value as number | '' | null | undefined;
+    return value === '' || value == null ? null : value;
   }
 
   get resetTooltip(): string {
