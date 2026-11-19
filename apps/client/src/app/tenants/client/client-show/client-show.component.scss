@@ -3,6 +3,7 @@
 @include page.base;
 
 @include page.detail-page;
+@include page.role-groups;
 
 // Roles beside the access restrictions
 .page {
@@ -34,8 +35,7 @@ mat-card mat-card-content {
   padding: 0 20px 20px;
 }
 
-// Roles grouped by area
-.role-group,
+// The access restrictions, laid out like the role groups
 .restriction {
   padding: 12px 0;
 
@@ -60,7 +60,6 @@ mat-card mat-card-content {
   }
 }
 
-.role-list,
 .config-list {
   display: flex;
   flex-wrap: wrap;
@@ -68,14 +67,6 @@ mat-card mat-card-content {
   margin: 0;
   padding: 0;
   list-style: none;
-}
-
-.role-badge {
-  padding: 4px 12px;
-  border-radius: var(--mat-sys-corner-small);
-  background: var(--mat-sys-secondary-container);
-  font: var(--mat-sys-label-large);
-  color: var(--mat-sys-on-secondary-container);
 }
 
 .config-list li {
@@ -101,27 +92,6 @@ mat-card mat-card-content {
     width: 20px;
     height: 20px;
     font-size: 20px;
-  }
-}
-
-.roles-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-top: 12px;
-  font: var(--mat-sys-label-large);
-  color: var(--mat-sys-primary);
-  text-decoration: none;
-
-  &:hover,
-  &:focus-visible {
-    text-decoration: underline;
-  }
-
-  mat-icon {
-    width: 16px;
-    height: 16px;
-    font-size: 16px;
   }
 }
 

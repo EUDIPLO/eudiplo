@@ -5,11 +5,11 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
-import { MatChipsModule } from '@angular/material/chips';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { JwtService } from '../../services/jwt.service';
 import { roleChoices } from '../../services/role-grants';
+import { groupRoles, type RoleGroup, uniqueRoles } from '../../services/role-groups';
 import { RoleLockNoticeComponent } from '../../common/role-lock-notice.component';
 import { getApiErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
@@ -22,16 +22,18 @@ import { openErrorSnackBar } from '../../utils/error-snackbar';
     MatButtonModule,
     MatIconModule,
     RouterModule,
-    FlexLayoutModule,
-    MatChipsModule,
+    MatProgressSpinnerModule,
     MatTooltipModule,
     RoleLockNoticeComponent,
   ],
   changeDetection: ChangeDetectionStrategy.Eager,
   templateUrl: './user-show.component.html',
+  styleUrl: './user-show.component.scss',
 })
 export class UserShowComponent implements OnInit {
   user?: ManagedUserDto;
+  /** While the delete runs; Edit and Delete wait for it. */
+  deleting = false;
 
   constructor(
     private readonly route: ActivatedRoute,
@@ -43,6 +45,16 @@ export class UserShowComponent implements OnInit {
   /** Roles of the user that keep the signed-in caller from editing or deleting it */
   get unmanageableRoles(): string[] {
     return roleChoices(this.jwtService.getRoles(), this.user?.roles ?? []).unmanageable;
+  }
+
+  /** The user's roles by area. */
+  get roleGroups(): RoleGroup[] {
+    return groupRoles(this.user?.roles ?? []);
+  }
+
+  /** How many different roles the user has. */
+  get roleCount(): number {
+    return uniqueRoles(this.user?.roles).length;
   }
 
   /** Whether the signed-in caller may edit or delete the user. */
@@ -62,15 +74,22 @@ export class UserShowComponent implements OnInit {
   }
 
   async deleteUser(): Promise<void> {
-    if (!this.user?.id || !confirm(`Delete user "${this.user.username}"? This cannot be undone.`)) {
+    if (
+      !this.user?.id ||
+      !this.canManage ||
+      this.deleting ||
+      !confirm(`Delete user "${this.user.username}"? This cannot be undone.`)
+    ) {
       return;
     }
 
+    this.deleting = true;
     try {
       await userControllerDeleteUser({ path: { id: this.user.id } });
       this.snackBar.open('User deleted successfully', 'Close', { duration: 3000 });
       await this.router.navigate(['../'], { relativeTo: this.route });
     } catch (error) {
+      this.deleting = false;
       console.error('Error deleting user:', error);
       openErrorSnackBar(this.snackBar, getApiErrorMessage(error, 'Failed to delete user'));
     }

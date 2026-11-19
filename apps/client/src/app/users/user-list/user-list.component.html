@@ -1,86 +1,173 @@
-<div fxLayout="row" fxLayoutAlign="space-between center">
-  <h2>Users</h2>
-  @if (!isUnavailable) {
-    <button
-      matIconButton
-      [routerLink]="['create']"
-      matTooltip="Create New User"
-      aria-label="Create New User"
-    >
-      <mat-icon>person_add</mat-icon>
-    </button>
-  }
-</div>
+<div class="page">
+  <header class="page-header">
+    <div>
+      <h1 #listHeading tabindex="-1">Users</h1>
+      <p>People sign in to the Web Client with a username and password and act with their roles.</p>
+    </div>
+    @if (!isUnavailable) {
+      <a matButton="filled" [routerLink]="['create']">
+        <mat-icon>person_add</mat-icon>
+        Create user
+      </a>
+    }
+  </header>
 
-@if (!loading) {
   @if (isUnavailable) {
     <app-unavailable-card heading="User management is unavailable" [message]="unavailableMessage" />
   } @else if (loadError) {
     <app-load-error [message]="loadError" (retry)="loadUsers()" />
+  } @else if (loading) {
+    <div class="loading-state">
+      <mat-spinner diameter="40" aria-label="Loading users"></mat-spinner>
+    </div>
+  } @else if (users.length === 0) {
+    <div class="empty-state">
+      <span class="empty-icon"><mat-icon>person</mat-icon></span>
+      <strong>No users yet</strong>
+      <p>Create a user for each person who manages this tenant in the Web Client.</p>
+      <a matButton="filled" [routerLink]="['create']">
+        <mat-icon>person_add</mat-icon>
+        Create user
+      </a>
+    </div>
   } @else {
-    <table mat-table [dataSource]="users" class="mat-elevation-z8">
-      <ng-container matColumnDef="username">
-        <th mat-header-cell *matHeaderCellDef>Username</th>
-        <td mat-cell *matCellDef="let user">{{ user.username }}</td>
-      </ng-container>
-
-      <ng-container matColumnDef="roles">
-        <th mat-header-cell *matHeaderCellDef>Roles</th>
-        <td mat-cell *matCellDef="let user">
-          <mat-chip-set>
-            @for (role of user.roles; track role) {
-              <span>
-                <mat-chip>{{ role }}</mat-chip>
-              </span>
+    <mat-card appearance="outlined" class="table-card">
+      <div class="table-header">
+        <div class="table-title">
+          <h2>All users</h2>
+          <output>
+            @if (search.trim()) {
+              {{ shownUsers.length }} of {{ users.length }} users
+            } @else {
+              {{ users.length }} {{ users.length === 1 ? 'user' : 'users' }}
             }
-          </mat-chip-set>
-        </td>
-      </ng-container>
-
-      <ng-container matColumnDef="enabled">
-        <th mat-header-cell *matHeaderCellDef>Status</th>
-        <td mat-cell *matCellDef="let user">{{ user.enabled ? 'Enabled' : 'Disabled' }}</td>
-      </ng-container>
-
-      <ng-container matColumnDef="actions">
-        <th mat-header-cell *matHeaderCellDef>Actions</th>
-        <td mat-cell *matCellDef="let user">
-          @let manageable = canManage(user);
-          <button
-            matIconButton
-            [routerLink]="[user.id]"
-            matTooltip="View User Details"
-            [attr.aria-label]="'View user ' + user.username"
-          >
-            <mat-icon>visibility</mat-icon>
-          </button>
-          <span [matTooltip]="manageDeniedHint" [matTooltipDisabled]="manageable">
+          </output>
+        </div>
+        <div class="search-bar" role="search">
+          <mat-icon class="search-icon" aria-hidden="true">search</mat-icon>
+          <input
+            type="search"
+            [(ngModel)]="search"
+            placeholder="Search users"
+            aria-label="Search users by username, e-mail address or role"
+          />
+          @if (search) {
             <button
               matIconButton
-              [routerLink]="[user.id, 'edit']"
-              [disabled]="!manageable"
-              matTooltip="Edit User"
-              [attr.aria-label]="manageable ? 'Edit User' : 'Edit User: ' + manageDeniedHint"
+              type="button"
+              class="clear-search"
+              aria-label="Clear search"
+              matTooltip="Clear search"
+              (click)="clearSearch()"
             >
-              <mat-icon>edit</mat-icon>
+              <mat-icon>close</mat-icon>
             </button>
-          </span>
-          <span [matTooltip]="manageDeniedHint" [matTooltipDisabled]="manageable">
-            <button
-              matIconButton
-              (click)="deleteUser(user)"
-              [disabled]="!manageable"
-              matTooltip="Delete User"
-              [attr.aria-label]="manageable ? 'Delete User' : 'Delete User: ' + manageDeniedHint"
-            >
-              <mat-icon>delete</mat-icon>
-            </button>
-          </span>
-        </td>
-      </ng-container>
+          }
+        </div>
+      </div>
 
-      <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-      <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
-    </table>
+      <div class="table-scroll">
+        <table mat-table [dataSource]="shownUsers" class="linked">
+          <ng-container matColumnDef="username">
+            <th mat-header-cell *matHeaderCellDef>User</th>
+            <td mat-cell *matCellDef="let user">
+              <span class="user-cell">
+                <span class="user-icon" aria-hidden="true"><mat-icon>person</mat-icon></span>
+                <span class="user-copy">
+                  <!-- The username links to the user and its link covers the row -->
+                  <a class="user-link" [routerLink]="user.id">{{ user.username }}</a>
+                  @if (user.email) {
+                    <small>{{ user.email }}</small>
+                  }
+                </span>
+              </span>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="enabled">
+            <th mat-header-cell *matHeaderCellDef>Status</th>
+            <td mat-cell *matCellDef="let user">
+              <span class="badge" [class.status-active]="user.enabled">{{
+                user.enabled ? 'Enabled' : 'Disabled'
+              }}</span>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="roles">
+            <th mat-header-cell *matHeaderCellDef>Roles</th>
+            <td mat-cell *matCellDef="let user">
+              @let roles = uniqueRoles(user);
+              <span class="role-badges">
+                @for (role of roles.slice(0, visibleRoleCount); track role) {
+                  <span class="role-badge">{{ role }}</span>
+                }
+                @if (roles.length > visibleRoleCount) {
+                  <button
+                    type="button"
+                    class="role-badge more"
+                    [matTooltip]="roles.slice(visibleRoleCount).join(', ')"
+                    [attr.aria-label]="
+                      roles.length -
+                      visibleRoleCount +
+                      ' more roles: ' +
+                      roles.slice(visibleRoleCount).join(', ')
+                    "
+                  >
+                    +{{ roles.length - visibleRoleCount }} more
+                  </button>
+                }
+              </span>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="actions">
+            <th mat-header-cell *matHeaderCellDef>
+              <span class="visually-hidden">Actions</span>
+            </th>
+            <td mat-cell *matCellDef="let user">
+              @let manageable = canManage(user);
+              <span class="row-actions">
+                <span [matTooltip]="manageDeniedHint" [matTooltipDisabled]="manageable">
+                  <button
+                    matIconButton
+                    [routerLink]="[user.id, 'edit']"
+                    [disabled]="!manageable"
+                    matTooltip="Edit User"
+                    [attr.aria-label]="manageable ? 'Edit User' : 'Edit User: ' + manageDeniedHint"
+                  >
+                    <mat-icon>edit</mat-icon>
+                  </button>
+                </span>
+                <span [matTooltip]="manageDeniedHint" [matTooltipDisabled]="manageable">
+                  <button
+                    matIconButton
+                    class="delete-action"
+                    (click)="deleteUser(user)"
+                    [disabled]="!manageable || deletingId === user.id"
+                    disabledInteractive
+                    [matTooltip]="deletingId === user.id ? 'Deleting the user…' : 'Delete User'"
+                    [attr.aria-label]="
+                      manageable ? 'Delete User' : 'Delete User: ' + manageDeniedHint
+                    "
+                  >
+                    <mat-icon>delete_outline</mat-icon>
+                  </button>
+                </span>
+              </span>
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+          <tr class="mat-mdc-row no-match" *matNoDataRow>
+            <td class="mat-mdc-cell" [attr.colspan]="displayedColumns.length">
+              <mat-icon aria-hidden="true">search_off</mat-icon>
+              <span>No user matches "{{ search.trim() }}".</span>
+              <button matButton type="button" (click)="clearSearch()">Clear search</button>
+            </td>
+          </tr>
+        </table>
+      </div>
+    </mat-card>
   }
-}
+</div>

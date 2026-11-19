@@ -2,41 +2,7 @@
 
 @include page.base;
 
-.table-card {
-  overflow: hidden;
-}
-
-// Title and count on the left, the search bar on the right
-.table-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px 24px;
-  padding: 16px 20px;
-}
-
-.table-title {
-  display: flex;
-  flex-direction: column;
-
-  h2 {
-    margin: 0;
-    font: var(--mat-sys-title-medium);
-    color: var(--mat-sys-on-surface);
-  }
-
-  output {
-    font: var(--mat-sys-body-medium);
-    color: var(--mat-sys-on-surface-variant);
-  }
-}
-
-@include page.search-bar;
-
-.table-scroll {
-  overflow-x: auto;
-}
+@include page.list-page;
 
 table {
   @include page.data-table;
@@ -116,102 +82,6 @@ table {
     font: var(--mat-sys-body-small);
     color: var(--mat-sys-on-surface-variant);
   }
-}
-
-.role-badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 8px 0;
-}
-
-.role-badge {
-  padding: 2px 10px;
-  border-radius: var(--mat-sys-corner-small);
-  background: var(--mat-sys-surface-container-high);
-  font: var(--mat-sys-label-medium);
-  color: var(--mat-sys-on-surface-variant);
-  white-space: nowrap;
-
-  // A button only to reach the tooltip with the other roles by keyboard
-  &.more {
-    position: relative;
-    z-index: 1;
-    border: 0;
-    background: var(--mat-sys-secondary-container);
-    color: var(--mat-sys-on-secondary-container);
-    cursor: default;
-
-    &:focus-visible {
-      outline: 2px solid var(--mat-sys-primary);
-      outline-offset: 2px;
-    }
-  }
-}
-
-.row-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-
-  .delete-action:not([disabled]) mat-icon {
-    color: var(--mat-sys-error);
-  }
-}
-
-.no-match td {
-  padding: 32px 20px;
-  color: var(--mat-sys-on-surface-variant);
-  text-align: center;
-
-  mat-icon {
-    display: block;
-    margin: 0 auto 8px;
-  }
-
-  span {
-    display: block;
-    margin-bottom: 8px;
-  }
-}
-
-.loading-state {
-  display: flex;
-  justify-content: center;
-  padding: 48px;
-}
-
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 48px 24px;
-  border: 1px dashed var(--mat-sys-outline-variant);
-  border-radius: var(--mat-sys-corner-large);
-  text-align: center;
-
-  strong {
-    margin-top: 8px;
-    font: var(--mat-sys-title-medium);
-    color: var(--mat-sys-on-surface);
-  }
-
-  p {
-    margin: 0 0 12px;
-    font: var(--mat-sys-body-medium);
-    color: var(--mat-sys-on-surface-variant);
-  }
-}
-
-.empty-icon {
-  display: grid;
-  place-items: center;
-  width: 56px;
-  height: 56px;
-  border-radius: var(--mat-sys-corner-full);
-  background: var(--mat-sys-secondary-container);
-  color: var(--mat-sys-on-secondary-container);
 }
 
 .section-hint {

@@ -4,7 +4,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { copyToClipboard } from '../../utils/copy-to-clipboard';
 
 export interface UserTemporaryPasswordDialogData {
@@ -15,7 +15,7 @@ export interface UserTemporaryPasswordDialogData {
 @Component({
   selector: 'app-user-temporary-password-dialog',
   standalone: true,
-  imports: [CommonModule, MatDialogModule, MatButtonModule, MatIconModule, FlexLayoutModule],
+  imports: [CommonModule, MatDialogModule, MatButtonModule, MatIconModule, MatTooltipModule],
   templateUrl: './user-temporary-password-dialog.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './user-temporary-password-dialog.component.scss',
@@ -26,6 +26,15 @@ export class UserTemporaryPasswordDialogComponent {
     private dialogRef: MatDialogRef<UserTemporaryPasswordDialogComponent>,
     private snackBar: MatSnackBar
   ) {}
+
+  async copyUsername(): Promise<void> {
+    await copyToClipboard(
+      this.snackBar,
+      this.data.username,
+      'Username copied to clipboard',
+      'Could not copy the username. Select it and copy it by hand.'
+    );
+  }
 
   async copyPassword(): Promise<void> {
     await copyToClipboard(

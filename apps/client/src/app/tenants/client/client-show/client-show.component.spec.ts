@@ -17,7 +17,7 @@ import {
 import { ConfigOwnershipService } from '../../../config-portability/config-ownership.service';
 import { ApiService } from '../../../core';
 import { JwtService } from '../../../services/jwt.service';
-import { ClientShowComponent, groupRoles } from './client-show.component';
+import { ClientShowComponent } from './client-show.component';
 import { errorSnackBarDuration } from '../../../utils/error-snackbar';
 
 describe('ClientShowComponent', () => {
@@ -297,27 +297,6 @@ describe('ClientShowComponent delete', () => {
     expect(button.getAttribute('aria-disabled')).toBe('true');
     expect(confirm).not.toHaveBeenCalled();
     expect(requests).not.toContain('DELETE /api/client/offer-client');
-  });
-});
-
-describe('groupRoles', () => {
-  it('groups the roles by area, once each, and keeps unknown roles under Other', () => {
-    expect(
-      groupRoles([
-        'clients:manage',
-        'issuance:offer',
-        'clients:manage',
-        'audit:read',
-        'presentation:manage',
-        'future:role',
-      ]).map((group) => [group.title, group.roles])
-    ).toEqual([
-      ['Issuance', ['issuance:offer']],
-      ['Presentation', ['presentation:manage']],
-      ['Sessions and audit', ['audit:read']],
-      ['Administration', ['clients:manage']],
-      ['Other', ['future:role']],
-    ]);
   });
 });
 

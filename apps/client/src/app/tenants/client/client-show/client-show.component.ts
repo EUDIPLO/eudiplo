@@ -22,46 +22,7 @@ import { ApiService } from '../../../core';
 import { clientDeleteConfirmation } from '../client-delete-confirmation';
 import { openErrorSnackBar } from '../../../utils/error-snackbar';
 import { copyToClipboard } from '../../../utils/copy-to-clipboard';
-
-/** Roles of one area, as the client page groups them. */
-interface RoleGroup {
-  title: string;
-  icon: string;
-  roles: string[];
-}
-
-/** The areas the client page groups roles into; a role in none of them falls under "Other". */
-const roleAreas: { title: string; icon: string; roles: string[] }[] = [
-  {
-    title: 'Issuance',
-    icon: 'card_giftcard',
-    roles: ['issuance:manage', 'issuance:offer', 'credentials:status'],
-  },
-  {
-    title: 'Presentation',
-    icon: 'verified_user',
-    roles: ['presentation:manage', 'presentation:request'],
-  },
-  { title: 'Sessions and audit', icon: 'history', roles: ['sessions:read', 'audit:read'] },
-  { title: 'Keys and certificates', icon: 'key', roles: ['keys:manage', 'registrar:manage'] },
-  {
-    title: 'Administration',
-    icon: 'admin_panel_settings',
-    roles: ['clients:manage', 'users:manage', 'tenant:admin', 'tenants:manage'],
-  },
-];
-
-/** The client's roles by area, each role once, in the order of the areas. */
-export function groupRoles(roles: string[]): RoleGroup[] {
-  const own = new Set(roles);
-  const groups: RoleGroup[] = roleAreas
-    .map((area) => ({ ...area, roles: area.roles.filter((role) => own.has(role)) }))
-    .filter((group) => group.roles.length > 0);
-  const known = new Set(roleAreas.flatMap((area) => area.roles));
-  const other = [...own].filter((role) => !known.has(role));
-  if (other.length) groups.push({ title: 'Other', icon: 'more_horiz', roles: other });
-  return groups;
-}
+import { groupRoles, type RoleGroup, uniqueRoles } from '../../../services/role-groups';
 
 @Component({
   selector: 'app-client-show',
@@ -106,7 +67,7 @@ export class ClientShowComponent implements OnInit {
 
   /** How many different roles the client has. */
   get roleCount(): number {
-    return new Set(this.client?.roles ?? []).size;
+    return uniqueRoles(this.client?.roles).length;
   }
 
   /** The configurations the client may use; an empty list allows all of them. */

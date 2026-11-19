@@ -2,13 +2,14 @@ import { TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltip } from '@angular/material/tooltip';
 import { By } from '@angular/platform-browser';
-import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { client } from '@eudiplo/sdk-core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { JwtService } from '../../services/jwt.service';
 import { UserCreateComponent } from './user-create.component';
+import { userRoutes } from '../users.routes';
 
 describe('UserCreateComponent Save', () => {
   let snackBar: { open: ReturnType<typeof vi.fn> };
@@ -231,39 +232,176 @@ describe('UserCreateComponent Save', () => {
       );
     });
     expect(page.querySelector('[role="alert"]')).toBeNull();
-    await vi.waitFor(() => expect(document.activeElement).toBe(page.querySelector('h2')));
+    await vi.waitFor(() => expect(document.activeElement).toBe(page.querySelector('h1')));
   });
 });
 
-describe('UserCreateComponent back button', () => {
-  async function backLabel(params: Record<string, string>): Promise<string | null> {
+describe('UserCreateComponent back link and Cancel', () => {
+  afterEach(() => {
+    client.setConfig({ fetch: () => new Promise<Response>(() => undefined) });
+  });
+
+  /** Opens the form at `url` under the real user routes and says where its exits lead. */
+  async function exitsFrom(
+    url: string
+  ): Promise<{ label: string; name: string | null; backLink: string; afterCancel: string }> {
+    client.setConfig({
+      fetch: vi.fn<typeof fetch>(
+        async () =>
+          new Response(
+            JSON.stringify({ id: 'u-1', username: 'alice', enabled: true, roles: ['audit:read'] }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          )
+      ),
+    });
     await TestBed.configureTestingModule({
-      imports: [UserCreateComponent],
       providers: [
-        provideRouter([]),
-        {
-          provide: ActivatedRoute,
-          useValue: { snapshot: { paramMap: convertToParamMap(params) } },
-        },
+        provideRouter([{ path: 'users', children: userRoutes }]),
+        { provide: MatSnackBar, useValue: { open: vi.fn() } },
         {
           provide: JwtService,
-          useValue: { getRoles: () => ['users:manage'], grantHint: () => '' },
+          useValue: { getRoles: () => ['tenant:admin'], grantHint: () => '' },
         },
       ],
     }).compileComponents();
-    const fixture = TestBed.createComponent(UserCreateComponent);
-    fixture.detectChanges();
-    const back = [...(fixture.nativeElement as HTMLElement).querySelectorAll('button')].find(
-      (button) => button.querySelector('mat-icon')?.textContent?.trim() === 'arrow_back'
-    );
-    return back?.getAttribute('aria-label') ?? null;
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl(url, UserCreateComponent);
+    const page = harness.routeNativeElement as HTMLElement;
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(page.querySelector('form')).not.toBeNull();
+    });
+    const back = page.querySelector('a.back-link')!;
+    const label = back.textContent!.replace('arrow_back', '').trim();
+    const name = back.getAttribute('aria-label');
+    const backLink = back.getAttribute('href')!;
+    const cancel = [...page.querySelectorAll('button')].find(
+      (button) => button.textContent?.trim() === 'Cancel'
+    )!;
+    cancel.click();
+    const router = TestBed.inject(Router);
+    await vi.waitFor(() => expect(router.url).not.toBe(url));
+    return { label, name, backLink, afterCancel: router.url };
   }
 
-  it('names the users list it leads to when creating a user', async () => {
-    expect(await backLabel({})).toBe('Back to Users List');
+  it('returns from creating to the list on Cancel and by the back link', async () => {
+    expect(await exitsFrom('/users/create')).toEqual({
+      label: 'Users',
+      name: 'Back to Users',
+      backLink: '/users',
+      afterCancel: '/users',
+    });
   });
 
-  it('names the user page it leads to when editing a user', async () => {
-    expect(await backLabel({ id: 'alice' })).toBe('Back to User Details');
+  it('returns from editing to the user, named by username, on Cancel and by the back link', async () => {
+    expect(await exitsFrom('/users/u-1/edit')).toEqual({
+      label: 'alice',
+      name: 'Back to alice',
+      backLink: '/users/u-1',
+      afterCancel: '/users/u-1',
+    });
+  });
+
+  it('names the user page while the user is still loading', async () => {
+    client.setConfig({ fetch: () => new Promise<Response>(() => undefined) });
+    await TestBed.configureTestingModule({
+      providers: [
+        provideRouter([{ path: 'users', children: userRoutes }]),
+        { provide: MatSnackBar, useValue: { open: vi.fn() } },
+        {
+          provide: JwtService,
+          useValue: { getRoles: () => ['tenant:admin'], grantHint: () => '' },
+        },
+      ],
+    }).compileComponents();
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl('/users/u-1/edit', UserCreateComponent);
+    const back = harness.routeNativeElement!.querySelector('a.back-link')!;
+
+    expect(back.textContent?.replace('arrow_back', '').trim()).toBe('User');
+    expect(back.getAttribute('href')).toBe('/users/u-1');
+    expect(back.getAttribute('aria-label')).toBe('Back to user');
+  });
+});
+
+describe('UserCreateComponent change state', () => {
+  it('says when the form has unsaved changes', async () => {
+    client.setConfig({
+      fetch: vi.fn<typeof fetch>(
+        async () =>
+          new Response(
+            JSON.stringify({ id: 'u-1', username: 'alice', enabled: true, roles: ['audit:read'] }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          )
+      ),
+    });
+    await TestBed.configureTestingModule({
+      providers: [
+        provideRouter([{ path: 'users', children: userRoutes }]),
+        { provide: MatSnackBar, useValue: { open: vi.fn() } },
+        {
+          provide: JwtService,
+          useValue: { getRoles: () => ['tenant:admin'], grantHint: () => '' },
+        },
+      ],
+    }).compileComponents();
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl('/users/u-1/edit', UserCreateComponent);
+    const page = harness.routeNativeElement!;
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(page.querySelector('form')).not.toBeNull();
+    });
+    const state = () => page.querySelector('.action-bar output')?.textContent?.trim();
+    expect(state()).toBe('No changes');
+
+    page.querySelector<HTMLInputElement>('mat-checkbox input')!.click();
+    harness.detectChanges();
+
+    expect(state()).toBe('Unsaved changes');
+  });
+
+  it('says nothing about changes on a new form until something is entered', async () => {
+    await TestBed.configureTestingModule({
+      providers: [
+        provideRouter([{ path: 'users', children: userRoutes }]),
+        { provide: MatSnackBar, useValue: { open: vi.fn() } },
+        {
+          provide: JwtService,
+          useValue: { getRoles: () => ['tenant:admin'], grantHint: () => '' },
+        },
+      ],
+    }).compileComponents();
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl('/users/create', UserCreateComponent);
+    const page = harness.routeNativeElement!;
+    const state = () => page.querySelector('.action-bar output')?.textContent?.trim();
+    expect(state()).toBe('');
+
+    const field = page.querySelector<HTMLInputElement>('input[formcontrolname="username"]')!;
+    field.value = 'dave';
+    field.dispatchEvent(new Event('input'));
+    harness.detectChanges();
+
+    expect(state()).toBe('Unsaved changes');
+  });
+
+  it('takes a username of only spaces as missing', async () => {
+    await TestBed.configureTestingModule({
+      providers: [
+        provideRouter([{ path: 'users', children: userRoutes }]),
+        { provide: MatSnackBar, useValue: { open: vi.fn() } },
+        {
+          provide: JwtService,
+          useValue: { getRoles: () => ['tenant:admin'], grantHint: () => '' },
+        },
+      ],
+    }).compileComponents();
+    const harness = await RouterTestingHarness.create();
+    const component = await harness.navigateByUrl('/users/create', UserCreateComponent);
+
+    component.userForm.controls['username'].setValue('   ');
+
+    expect(component.userForm.controls['username'].invalid).toBe(true);
   });
 });
