@@ -71,8 +71,8 @@ const configSources: Record<ConfigSource, ConfigSourceInfo> = {
   },
   issuanceConfigs: {
     control: 'allowedIssuanceConfigs',
-    title: 'Allowed Credential Types',
-    label: 'credential types',
+    title: 'Allowed Credential Configs',
+    label: 'credential configs',
     roles: ['issuance:manage'],
   },
 };
