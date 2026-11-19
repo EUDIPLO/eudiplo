@@ -79,7 +79,24 @@ The tables below are maintained by hand from reported runs. Besides the tested v
 
 ## Testing a new wallet
 
-Protocol conformance is tested automatically; wallet-specific behavior still needs a manual run. The quickest way is [Wallet QA](https://github.com/EUDIPLO/wallet-qa): its [tester guide](https://github.com/EUDIPLO/wallet-qa/blob/main/docs/tester-guide.md) covers setting up a phone, running the tests and publishing the results. The steps below test a wallet against your own EUDIPLO instead.
+Protocol conformance is tested automatically; wallet-specific behavior still needs a run with the wallet itself. There are two ways to do it:
+
+|              | Wallet QA (hosted)                                                       | Your own EUDIPLO                                                                        |
+| ------------ | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| For          | Wallet developers with a build they can configure                        | Anyone, including store builds of a wallet                                              |
+| Wallet build | Must trust the Wallet QA test root                                       | Must accept your EUDIPLO's certificates ([requirements](../trust/wallet-registrars.md)) |
+| Setup        | None: open [conformance.eudiplo.dev](https://conformance.eudiplo.dev)    | EUDIPLO on a public HTTPS URL                                                           |
+| Verdict      | Decided from EUDIPLO's session evidence and your checklist answers       | You judge each step yourself                                                            |
+| Result       | Published on the [results page](https://conformance.eudiplo.dev/results) | Reported in an issue                                                                    |
+
+### With Wallet QA
+
+The hosted instance at [conformance.eudiplo.dev](https://conformance.eudiplo.dev) runs EUDIPLO as issuer and verifier and needs nothing installed besides the wallet.
+
+1. **Trust the test root in your wallet build.** The instance signs credentials and presentation requests with certificates from the Wallet QA test root. Download it from [`/trust/wallet-qa-test-root.der`](https://conformance.eudiplo.dev/trust/wallet-qa-test-root.der) and check its SHA-256 fingerprint against [`/trust/trust.json`](https://conformance.eudiplo.dev/trust/trust.json). A wallet installed from an app store does not trust this root, so it rejects the instance's presentation requests and may refuse its credentials; test a store build against your own EUDIPLO, with certificates the wallet already accepts (see [Wallet and registrar requirements](../trust/wallet-registrars.md)). The start page shows under **This instance** what the wallet has to trust.
+2. **Run the tests and publish.** Open the instance, create a workspace for your wallet build, run the tests from the catalog and press **Publish results**. The [tester guide](https://github.com/EUDIPLO/wallet-qa/blob/main/docs/tester-guide.md) walks through each step, the verdicts and troubleshooting, and explains how to run Wallet QA locally.
+
+### Against your own EUDIPLO
 
 1. **Set up EUDIPLO.** Follow [Foundation](../cookbooks/foundation.md) and [Issue your first credential](../cookbooks/first-credential.md). A mobile wallet needs a public HTTPS URL, so set `PUBLIC_URL` to a tunnel or public host. Without the CLI, a minimal container is:
 
@@ -100,6 +117,6 @@ Protocol conformance is tested automatically; wallet-specific behavior still nee
 ## Report results
 
 - **Tested with Wallet QA:** publish the results from your workspace (**Publish results**), or upload the workspace JSON report on a hosted instance. They appear on the [results page](https://conformance.eudiplo.dev/results).
-- **Wallet works:** open an issue with the [wallet compatibility template](https://github.com/EUDIPLO/eudiplo/issues/new?template=wallet-compatibility.md) and include the results from step 5, so the wallet can be added to this page.
+- **Wallet works:** open an issue with the [wallet compatibility template](https://github.com/EUDIPLO/eudiplo/issues/new?template=wallet-compatibility.md) and include the results you recorded in [Against your own EUDIPLO](#against-your-own-eudiplo), so the wallet can be added to this page.
 - **Wallet fails:** check the notes above, then open an [issue](https://github.com/EUDIPLO/eudiplo/issues/new) with reproduction steps, EUDIPLO and wallet versions, and the [session logs](../operate/logging.md).
 - **Questions:** ask in the [Discord community](https://discord.gg/5Q4bgBQABa).
