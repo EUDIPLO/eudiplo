@@ -15,7 +15,7 @@ export const keyUsages: Record<
     short: 'Credential Signing',
     icon: 'card_membership',
     description:
-      'Keys for signing Electronic Attestations of Attributes (EAAs) issued to wallets. Each credential type has its own isolated key chain.',
+      'Keys for signing Electronic Attestations of Attributes (EAAs) issued to wallets. Each credential config selects its own key chain.',
   },
   access: {
     label: 'EUDI Wallet Access Certificate Keys',
