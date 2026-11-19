@@ -42,7 +42,7 @@ import { LoadErrorComponent } from '../../../common/load-error.component';
   styleUrl: './presentation-list.component.scss',
 })
 export class PresentationListComponent extends BaseAsyncListComponent<PresentationConfig> {
-  protected readonly loadFailedMessage = 'Failed to load presentation configurations';
+  protected readonly loadFailedMessage = 'Failed to load verification configs';
 
   displayedColumns: (keyof PresentationConfig | 'actions' | 'registrationCert')[] = [
     'id',
@@ -73,14 +73,14 @@ export class PresentationListComponent extends BaseAsyncListComponent<Presentati
     return this.presentationService.loadConfigurations();
   }
 
-  deleteConfiguration(config: PresentationConfig): Promise<void> {
+  deleteConfiguration(config: PresentationConfig): Promise<boolean> {
     return this.deleteItem({
       item: config,
       id: config.id,
-      question: `Delete presentation configuration "${config.id}"? This cannot be undone.`,
+      question: `Delete verification config "${config.id}"? This cannot be undone.`,
       request: () => this.presentationService.deleteConfiguration(config.id),
-      deleted: 'Presentation configuration deleted',
-      failed: 'Failed to delete presentation configuration',
+      deleted: 'Verification config deleted',
+      failed: 'Failed to delete verification config',
     });
   }
 

@@ -371,9 +371,7 @@
           @for (id of configurationIds(); track id) {
             <div class="info-item">
               <dt>
-                {{
-                  isIssuanceSession() ? 'Credential configuration' : 'Presentation configuration'
-                }}
+                {{ isIssuanceSession() ? 'Credential configuration' : 'Verification config' }}
               </dt>
               <dd class="value-with-copy">
                 <span>{{ id }}</span>
@@ -684,6 +682,10 @@
         }
       </mat-tab-group>
     </mat-card>
+  } @else if (loadError) {
+    <app-load-error [message]="loadError" (retry)="open()">
+      <a matButton routerLink="../">Back to the list</a>
+    </app-load-error>
   } @else {
     <div class="loading-state">
       <mat-spinner diameter="40" aria-label="Loading session"></mat-spinner>

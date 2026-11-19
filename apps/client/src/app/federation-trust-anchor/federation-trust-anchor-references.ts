@@ -55,13 +55,13 @@ export class FederationTrustAnchorReferences {
 
   /**
    * The configurations found, as a sentence names them, such as "the issuance configuration
-   * and 2 presentation configurations"; empty when none were found.
+   * and 2 verification configs"; empty when none were found.
    */
   describe(): string {
     const uses: string[] = [];
     if (this.issuance.found) uses.push('the issuance configuration');
     const count = this.presentations.found.length;
-    if (count) uses.push(`${count} presentation configuration${count === 1 ? '' : 's'}`);
+    if (count) uses.push(`${count} verification config${count === 1 ? '' : 's'}`);
     return uses.join(' and ');
   }
 

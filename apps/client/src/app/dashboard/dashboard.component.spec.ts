@@ -255,8 +255,8 @@ describe('DashboardComponent', () => {
       link.textContent?.includes('Open Security Tab')
     );
     expect(links.map((link) => link.getAttribute('aria-label'))).toEqual([
-      'Open the Security tab of presentation configuration "Age check" (age-1)',
-      'Open the Security tab of presentation configuration "Age check" (age-2)',
+      'Open the Security tab of verification config "Age check" (age-1)',
+      'Open the Security tab of verification config "Age check" (age-2)',
     ]);
     expect(links.map((link) => link.getAttribute('href'))).toEqual([
       '/presentation-config/age-1#security',

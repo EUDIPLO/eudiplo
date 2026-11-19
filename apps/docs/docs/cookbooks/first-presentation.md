@@ -134,16 +134,16 @@ For other credentials, **Import from Issuer** fills in the types and claim paths
 On **3. Settings**:
 
 1. Keep **Lifetime of the request** at `300` seconds and **Status List Check Mode** at **Strict**. The cookbook credential has no status entry, so there is nothing to check yet.
-2. Open **Request and verification options** and select `Membership verifier access` in **Access Key Chain (optional)**. Do not select the credential signing key.
+2. Under **Request and verification options**, select `Membership verifier access` in **Access Key Chain (optional)**. Do not select the credential signing key.
 3. Leave the registration certificate empty unless your wallet requires one.
 4. Leave redirect URI, webhook and the other options empty.
-5. Choose **Continue**, check that the review lists `name` and `member_id`, then choose **Create Configuration**.
+5. Choose **Continue**, check that the review lists `name` and `member_id`, then choose **Create Verification Config**.
 
 **Checkpoint:** `membership-check` appears under **Verification Configs**. Only credentials of this type from issuers on `membership-issuers` pass; [Accept only trusted issuers](trusted-issuers.md) shows what happens to one from another issuer.
 
 ## Step 5: Generate and approve a request
 
-1. Open `membership-check` and choose the **Create offer** button, or open **Credential Verification → New Verification** and select `membership-check` as **Presentation Configuration**.
+1. Open `membership-check` and choose the **Create offer** button, or open **Credential Verification → New Verification** and select `membership-check` as **Verification Config**.
 2. Choose **Generate Request**.
 3. Scan the QR code with the wallet that holds the credential.
 4. Check that the wallet offers the membership credential and asks for name and member ID, then approve before the request expires.

@@ -47,7 +47,7 @@ describe('WebhookEndpointCreateComponent save', () => {
     expect(snackBar.open.mock.lastCall?.[0]).toBe(
       'Failed to create webhook endpoint. Check the highlighted fields.'
     );
-    expect(component.fieldError('url', 'URL is required')).toBe('Must be an https URL');
+    expect(component.urlError).toBe('Must be an https URL');
     expect(component.fieldError('authHeaderName')).toBe('Invalid header name');
 
     // Until a rejected field is edited, Save points at it instead of sending the same again.
@@ -87,7 +87,7 @@ describe('WebhookEndpointCreateComponent save', () => {
     await vi.waitFor(() => expect(update).toHaveBeenCalled());
     await vi.waitFor(() => expect(component.saving).toBe(false));
 
-    expect(component.fieldError('url', 'URL is required')).toBe('Must be an https URL');
+    expect(component.urlError).toBe('Must be an https URL');
   });
 
   it('lets Save go again when a rejected header field is hidden by choosing no auth', () => {

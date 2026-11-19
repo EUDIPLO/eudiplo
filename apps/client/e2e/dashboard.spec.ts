@@ -16,7 +16,7 @@ test('dashboard counts a new session and links to it', async ({ page }) => {
   const before = Number(await sessions.textContent());
 
   await page.getByText('New Verification').click();
-  await page.getByRole('combobox', { name: 'Presentation Configuration' }).click();
+  await page.getByRole('combobox', { name: 'Verification Config' }).click();
   await page.getByRole('option', { name: 'pid', exact: true }).click();
   await page.getByRole('button', { name: 'Generate Request' }).click();
   await expect(page).toHaveURL(/\/session-management\/[^/]+$/);

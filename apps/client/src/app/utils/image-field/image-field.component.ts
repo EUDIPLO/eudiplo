@@ -1,3 +1,4 @@
+import { MatTooltipModule } from '@angular/material/tooltip';
 import {
   Component,
   Input,
@@ -10,7 +11,6 @@ import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { storageControllerUpload } from '@eudiplo/sdk-core';
 import { MatButtonModule } from '@angular/material/button';
 import { getApiErrorMessage } from '../error-message';
@@ -23,8 +23,8 @@ import { openErrorSnackBar } from '../error-snackbar';
     MatInputModule,
     MatIconModule,
     MatSnackBarModule,
-    FlexLayoutModule,
     MatButtonModule,
+    MatTooltipModule,
   ],
   templateUrl: './image-field.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,

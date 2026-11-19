@@ -1,4 +1,5 @@
 @use '@angular/material' as mat;
+@use 'page';
 
 // Material 3 dashboard: outlined cards on the page surface, a tonal banner for anything that
 // needs attention, and one accent colour per status. Colours come from the theme
@@ -45,29 +46,7 @@
 }
 
 // Session statuses, in the session list's colours
-.status-active {
-  --tone: var(--mat-sys-primary);
-}
-
-.status-fetched {
-  --tone: var(--mat-sys-tertiary);
-}
-
-.status-completed {
-  --tone: var(--eudiplo-success);
-}
-
-.status-expired {
-  --tone: var(--eudiplo-warning);
-}
-
-.status-failed {
-  --tone: var(--eudiplo-danger);
-}
-
-.status-cancelled {
-  --tone: var(--mat-sys-on-surface-variant);
-}
+@include page.session-status-tones;
 
 // Page layout. The container query follows the content panel, which is narrower than the
 // window while the side navigation is open.

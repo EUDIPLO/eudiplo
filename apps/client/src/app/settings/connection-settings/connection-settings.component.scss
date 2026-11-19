@@ -1,4 +1,5 @@
 @use '@angular/material' as mat;
+@use 'page';
 
 // Material 3 settings page: outlined cards on the page surface, grouped by what they describe.
 :host {
@@ -81,34 +82,10 @@ mat-card-content {
 }
 
 // Status line below the fields: neutral by default, green when the token renews itself
+@include page.status-line('.hint-row');
+
 .hint-row {
-  --tone: var(--mat-sys-on-surface-variant);
-
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
   margin-top: 16px;
-  padding: 12px 16px;
-  border-radius: var(--mat-sys-corner-medium);
-  background: color-mix(in srgb, var(--tone) 8%, var(--mat-sys-surface));
-  font: var(--mat-sys-body-medium);
-  color: var(--mat-sys-on-surface);
-
-  mat-icon {
-    flex: none;
-    width: 20px;
-    height: 20px;
-    font-size: 20px;
-    color: var(--tone);
-  }
-
-  &.ok {
-    --tone: var(--eudiplo-success);
-  }
-
-  &.warning {
-    --tone: var(--eudiplo-warning);
-  }
 }
 
 @container (max-width: 640px) {

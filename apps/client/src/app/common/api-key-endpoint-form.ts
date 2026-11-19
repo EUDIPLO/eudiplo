@@ -8,6 +8,7 @@ import { JsonViewDialogComponent } from '../issuance/credential-config/credentia
 import { getApiErrorMessage } from '../utils/error-message';
 import { openErrorSnackBar } from '../utils/error-snackbar';
 import { fieldErrorMessage, showIssuesAtFields } from '../utils/form-errors';
+import { httpUrlValidator } from '../utils/http-url-validator';
 import { webhookSchema } from '../utils/schemas';
 import { showFieldsToFix } from './field-to-fix.util';
 import {
@@ -51,7 +52,7 @@ export abstract class ApiKeyEndpointFormComponent implements OnInit {
     id: new FormControl('', [Validators.required]),
     name: new FormControl('', [Validators.required]),
     description: new FormControl(''),
-    url: new FormControl('', [Validators.required]),
+    url: new FormControl('', [Validators.required, httpUrlValidator]),
     authType: new FormControl<AuthFormValue['authType']>('none', [Validators.required]),
     authHeaderName: new FormControl(''),
     authHeaderValue: new FormControl(''),
@@ -159,7 +160,8 @@ export abstract class ApiKeyEndpointFormComponent implements OnInit {
 
     const { id, ...body } = this.buildPayload();
     const [verb, request, next] = this.create
-      ? (['create', this.service.create({ id, ...body }), ['../']] as const)
+      ? // Like the other create flows, a new endpoint opens on its own page.
+        (['create', this.service.create({ id, ...body }), ['../', id]] as const)
       : (() => {
           const routeId = this.route.snapshot.paramMap.get('id')!;
           return ['update', this.service.update(routeId, body), ['../../', routeId]] as const;
@@ -178,6 +180,14 @@ export abstract class ApiKeyEndpointFormComponent implements OnInit {
         console.error(`${label} ${verb} error:`, error);
       })
       .finally(() => (this.saving = false));
+  }
+
+  /** Message under the URL field: which of its local checks failed, or the backend's issue. */
+  get urlError(): string {
+    const local = this.form.controls.url.hasError('required')
+      ? 'URL is required'
+      : 'Enter an absolute http or https URL, such as https://example.com/path';
+    return this.fieldError('url', local);
   }
 
   /** Message under a field: the backend's issue, else the local validator's message. */
@@ -222,7 +232,7 @@ export abstract class ApiKeyEndpointFormComponent implements OnInit {
       id: value.id ?? '',
       name: value.name ?? '',
       description: value.description || undefined,
-      url: value.url ?? '',
+      url: value.url?.trim() ?? '',
       auth: buildAuthConfig({
         authType: value.authType ?? 'none',
         authHeaderName: value.authHeaderName ?? '',

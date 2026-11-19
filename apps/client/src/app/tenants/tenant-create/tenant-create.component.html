@@ -1,5 +1,10 @@
 <div class="page form-page">
-  <a class="back-link" matButton [routerLink]="['../']">
+  <a
+    class="back-link"
+    matButton
+    [title]="isEditMode ? backLabel : 'Tenants'"
+    [routerLink]="['../']"
+  >
     <mat-icon>arrow_back</mat-icon>
     {{ isEditMode ? backLabel : 'Tenants' }}
   </a>

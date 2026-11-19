@@ -1,3 +1,4 @@
+import { MatTooltipModule } from '@angular/material/tooltip';
 import {
   Component,
   EventEmitter,
@@ -13,16 +14,15 @@ import { MatCardModule } from '@angular/material/card';
 import { MatChipInputEvent, MatChipsModule } from '@angular/material/chips';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 
 @Component({
   selector: 'app-credential-ids',
   imports: [
+    MatTooltipModule,
     ReactiveFormsModule,
     MatCardModule,
     MatInputModule,
     MatIconModule,
-    FlexLayoutModule,
     MatChipsModule,
     MatButtonModule,
   ],

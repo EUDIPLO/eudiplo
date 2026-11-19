@@ -1,4 +1,4 @@
-@use '../../tenants/tenant-page' as page;
+@use 'page';
 
 // Page heading and outlined cards of the restyled pages; the stepper inside stays as it is
 @include page.base;

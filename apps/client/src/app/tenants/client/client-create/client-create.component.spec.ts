@@ -14,8 +14,8 @@ import { JwtService } from '../../../services/jwt.service';
 import { grantHint } from '../../../services/role-grants';
 import { ClientCreateComponent, type ConfigSource } from './client-create.component';
 
-const PRESENTATION = 'Allowed Presentation Configurations';
-const CREDENTIAL = 'Allowed Credential Configurations';
+const PRESENTATION = 'Allowed Verification Configs';
+const CREDENTIAL = 'Allowed Credential Types';
 const ALL_ROLES = ['clients:manage', 'issuance:manage', 'presentation:manage'];
 
 describe('ClientCreateComponent config restrictions', () => {
@@ -112,7 +112,7 @@ describe('ClientCreateComponent config restrictions', () => {
   }
 
   function retryCredentials(fixture: ComponentFixture<ClientCreateComponent>) {
-    return button(fixture, 'refresh Retry loading credential configurations');
+    return button(fixture, 'refresh Retry loading credential types');
   }
 
   function updateButton(fixture: ComponentFixture<ClientCreateComponent>): HTMLButtonElement {
@@ -185,10 +185,10 @@ describe('ClientCreateComponent config restrictions', () => {
     const fixture = await render(ALL_ROLES);
 
     expect(snackBar.open.mock.lastCall?.[0]).toBe(
-      'Failed to load credential configurations: Database unavailable'
+      'Failed to load credential types: Database unavailable'
     );
     expect(hint(fixture, CREDENTIAL)).toBe(
-      'Locked: could not load credential configurations. The client stays limited to stored-issuance-a, stored-issuance-b.'
+      'Locked: could not load credential types. The client stays limited to stored-issuance-a, stored-issuance-b.'
     );
     const credentials = select(fixture, CREDENTIAL);
     expect(credentials.getAttribute('aria-disabled')).toBe('true');
@@ -202,9 +202,7 @@ describe('ClientCreateComponent config restrictions', () => {
       'other-presentation',
       'stored-presentation',
     ]);
-    expect(hint(fixture, PRESENTATION)).toBe(
-      'Leave empty to allow all presentation configurations'
-    );
+    expect(hint(fixture, PRESENTATION)).toBe('Leave empty to allow all verification configs');
 
     expect(await submit(fixture)).toMatchObject({
       allowedPresentationConfigs: ['stored-presentation'],
@@ -274,9 +272,7 @@ describe('ClientCreateComponent config restrictions', () => {
     await vi.waitFor(() => expect(snackBar.open).toHaveBeenCalled());
     await settleRender(fixture);
 
-    expect(snackBar.open.mock.lastCall?.[0]).toBe(
-      'Failed to load credential configurations: Try later'
-    );
+    expect(snackBar.open.mock.lastCall?.[0]).toBe('Failed to load credential types: Try later');
     expect(select(fixture, CREDENTIAL).getAttribute('aria-disabled')).toBe('true');
     const retryAgain = retryCredentials(fixture);
     expect(retryAgain).toBeDefined();
@@ -297,12 +293,12 @@ describe('ClientCreateComponent config restrictions', () => {
 
     expect(snackBar.open).toHaveBeenCalledTimes(1);
     const message = snackBar.open.mock.lastCall?.[0] as string;
-    expect(message).toContain('presentation configurations');
-    expect(message).toContain('credential configurations');
+    expect(message).toContain('verification configs');
+    expect(message).toContain('credential types');
     for (const label of [PRESENTATION, CREDENTIAL]) {
       expect(select(fixture, label).getAttribute('aria-disabled')).toBe('true');
     }
-    expect(button(fixture, 'refresh Retry loading presentation configurations')).toBeDefined();
+    expect(button(fixture, 'refresh Retry loading verification configs')).toBeDefined();
     expect(retryCredentials(fixture)).toBeDefined();
   });
 
@@ -342,10 +338,10 @@ describe('ClientCreateComponent config restrictions', () => {
     expect(requests).not.toContain('GET /api/issuer/credentials');
     expect(snackBar.open).not.toHaveBeenCalled();
     expect(hint(fixture, PRESENTATION)).toBe(
-      'Locked: listing presentation configurations needs presentation:manage or presentation:request. The client stays limited to stored-presentation.'
+      'Locked: listing verification configs needs presentation:manage or presentation:request. The client stays limited to stored-presentation.'
     );
     expect(hint(fixture, CREDENTIAL)).toBe(
-      'Locked: listing credential configurations needs issuance:manage. The client stays limited to stored-issuance-a, stored-issuance-b.'
+      'Locked: listing credential types needs issuance:manage. The client stays limited to stored-issuance-a, stored-issuance-b.'
     );
     for (const label of [PRESENTATION, CREDENTIAL]) {
       expect(select(fixture, label).getAttribute('aria-disabled')).toBe('true');
@@ -373,7 +369,7 @@ describe('ClientCreateComponent config restrictions', () => {
     expect(requests).toContain('GET /api/verifier/config');
     expect(requests).not.toContain('GET /api/issuer/credentials');
     expect(hint(fixture, CREDENTIAL)).toBe(
-      'Locked: listing credential configurations needs issuance:manage. The client may use all credential configurations.'
+      'Locked: listing credential types needs issuance:manage. The client may use all credential types.'
     );
     expect(select(fixture, PRESENTATION).getAttribute('aria-disabled')).toBe('false');
   });
@@ -416,8 +412,8 @@ describe('ClientCreateComponent config restrictions', () => {
     const fixture = create(ALL_ROLES, null);
     await settleRender(fixture);
 
-    expect(hint(fixture, PRESENTATION)).toBe('Loading presentation configurations…');
-    expect(hint(fixture, CREDENTIAL)).toBe('Loading credential configurations…');
+    expect(hint(fixture, PRESENTATION)).toBe('Loading verification configs…');
+    expect(hint(fixture, CREDENTIAL)).toBe('Loading credential types…');
     for (const label of [PRESENTATION, CREDENTIAL]) {
       expect(select(fixture, label).getAttribute('aria-disabled')).toBe('true');
     }
@@ -432,7 +428,7 @@ describe('ClientCreateComponent config restrictions', () => {
     await settleRender(fixture);
 
     expect(hint(fixture, CREDENTIAL)).toBe(
-      'No credential configurations exist yet. The client may use all of them, including those created later.'
+      'No credential types exist yet. The client may use all of them, including those created later.'
     );
     expect(select(fixture, CREDENTIAL).getAttribute('aria-disabled')).toBe('false');
   });

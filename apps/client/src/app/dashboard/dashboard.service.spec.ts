@@ -297,7 +297,7 @@ describe('DashboardService', () => {
       `${part({ alg: 'ES256' })}.${part({ exp: seconds(days) })}.c2ln`;
     const notYetValid = `${part({ alg: 'ES256' })}.${part({ nbf: seconds(1), exp: seconds(60) })}.c2ln`;
 
-    it('names each presentation configuration whose certificate needs attention, with a link', async () => {
+    it('names each verification config whose certificate needs attention, with a link', async () => {
       roles = ['presentation:manage', 'registrar:manage'];
       responses['/api/trust-list'] = [{ id: 'list' }];
       responses['/api/verifier/config'] = [
@@ -317,20 +317,20 @@ describe('DashboardService', () => {
       );
       // A purpose kept without JWT is no warning: requests still work.
       expect(warnings.map((warning) => warning.message)).toEqual([
-        'Registration certificate of presentation configuration "Age check" (soon): Expiring soon — 3 days remaining; request a new one.',
-        'Registration certificate of presentation configuration old: Expired — request a new one or remove it.',
-        'Registration certificate of presentation configuration broken: Not a valid JWT — request a new one or paste a valid JWT.',
-        'Registration certificate of presentation configuration early: Not yet valid — requests fail until its start time; check the date or request a new one.',
+        'Registration certificate of verification config "Age check" (soon): Expiring soon — 3 days remaining; request a new one.',
+        'Registration certificate of verification config old: Expired — request a new one or remove it.',
+        'Registration certificate of verification config broken: Not a valid JWT — request a new one or paste a valid JWT.',
+        'Registration certificate of verification config early: Not yet valid — requests fail until its start time; check the date or request a new one.',
       ]);
       expect(warnings[0].action).toEqual({
         label: 'Open Security Tab',
         route: ['/presentation-config', 'soon'],
         fragment: 'security',
-        ariaLabel: 'Open the Security tab of presentation configuration "Age check" (soon)',
+        ariaLabel: 'Open the Security tab of verification config "Age check" (soon)',
       });
     });
 
-    it('does not warn users who can only read presentation configurations', async () => {
+    it('does not warn users who can only read verification configs', async () => {
       roles = ['presentation:request'];
       responses['/api/verifier/config'] = [
         { id: 'old', registration_cert: { jwt: certificate(-1) } },
@@ -581,14 +581,14 @@ describe('DashboardService', () => {
     expect(service.issueReadinessReason).toBe('Issuer settings could not be loaded');
   });
 
-  it('names failed presentation configs to presentation:request users', async () => {
+  it('names failed verification configs to presentation:request users', async () => {
     roles = ['presentation:request'];
     failures['/api/verifier/config'] = 500;
 
     await service.getCounters();
 
     expect(service.isReadyToVerify).toBe(false);
-    expect(service.verifyReadinessReason).toBe('Presentation configs could not be loaded');
+    expect(service.verifyReadinessReason).toBe('Verification configs could not be loaded');
   });
 
   it('does not report a missing trust list when the trust lists failed to load', async () => {
@@ -622,7 +622,7 @@ describe('DashboardService', () => {
     expect(requests).not.toContain('/api/trust-list');
   });
 
-  it('names the missing presentation config to presentation:request users', async () => {
+  it('names the missing verification config to presentation:request users', async () => {
     roles = ['presentation:request'];
     responses['/api/verifier/config'] = [];
 
@@ -630,7 +630,7 @@ describe('DashboardService', () => {
 
     expect(service.isReadyToVerify).toBe(false);
     expect(service.verifyReadinessReason).toBe(
-      'No presentation config; ask a user with presentation:manage to create one'
+      'No verification config; ask a user with presentation:manage to create one'
     );
   });
 

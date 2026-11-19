@@ -1,5 +1,11 @@
 <div class="page form-page">
-  <a class="back-link" matButton [routerLink]="['../']" [attr.aria-label]="'Back to ' + backLabel">
+  <a
+    class="back-link"
+    matButton
+    [title]="backLabel"
+    [routerLink]="['../']"
+    [attr.aria-label]="'Back to ' + backLabel"
+  >
     <mat-icon>arrow_back</mat-icon>
     {{ backLabel }}
   </a>
@@ -50,8 +56,8 @@
           <h2 id="webhook-endpoint-heading">Endpoint</h2>
           <p>
             @if (create) {
-              The ID names the endpoint in credential offers and presentation configurations. It
-              cannot be changed later.
+              The ID names the endpoint in credential offers and verification configs. It cannot be
+              changed later.
             } @else {
               The ID is fixed once the endpoint exists.
             }
@@ -93,7 +99,7 @@
                 type="url"
                 placeholder="https://example.com/webhook"
               />
-              <mat-error>{{ fieldError('url', 'URL is required') }}</mat-error>
+              <mat-error>{{ urlError }}</mat-error>
             </mat-form-field>
           </mat-card-content>
         </mat-card>

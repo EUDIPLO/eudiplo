@@ -19,6 +19,8 @@ class TestList extends BaseAsyncListComponent<string> {
 }
 
 describe('BaseAsyncListComponent', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
   it('keeps a failed load apart from an empty list and loads again on retry', async () => {
     // The base class injects, as Angular does when it creates a list component.
     TestBed.configureTestingModule({
@@ -39,11 +41,37 @@ describe('BaseAsyncListComponent', () => {
     expect(list.loadError).toBe('');
     expect(list.loaded).toEqual(['a']);
   });
+
+  it('shows the reason instead of an error when the instance offers no such items', async () => {
+    class UnavailableList extends TestList {
+      protected override unavailableReason(error: unknown): string | undefined {
+        return (error as { statusCode?: number }).statusCode === 501
+          ? 'Managed elsewhere'
+          : undefined;
+      }
+    }
+    TestBed.configureTestingModule({
+      providers: [{ provide: ElementRef, useValue: new ElementRef(document.createElement('div')) }],
+    });
+    const list = TestBed.runInInjectionContext(() => new UnavailableList());
+    list.fetch.mockRejectedValueOnce({ statusCode: 501 }).mockResolvedValueOnce(['a']);
+
+    await list.loadItems();
+
+    expect(list.unavailableMessage).toBe('Managed elsewhere');
+    expect(list.loadError).toBe('');
+    expect(list.loaded).toEqual([]);
+
+    await list.loadItems();
+
+    expect(list.unavailableMessage).toBe('');
+    expect(list.loaded).toEqual(['a']);
+  });
 });
 
 describe('BaseAsyncListComponent delete', () => {
   class DeletingList extends TestList {
-    remove(request: () => Promise<unknown>): Promise<void> {
+    remove(request: () => Promise<unknown>): Promise<boolean> {
       return this.deleteItem({
         item: 'a',
         id: 'a',
@@ -83,9 +111,9 @@ describe('BaseAsyncListComponent delete', () => {
     const first = list.remove(request);
     expect(list.deletingId).toBe('a');
     // A second click while the first delete runs sends nothing.
-    await list.remove(request);
+    expect(await list.remove(request)).toBe(false);
     finish();
-    await first;
+    expect(await first).toBe(true);
 
     expect(request).toHaveBeenCalledOnce();
     expect(window.confirm).toHaveBeenCalledOnce();
@@ -101,7 +129,7 @@ describe('BaseAsyncListComponent delete', () => {
     const { list } = render();
     const request = vi.fn();
 
-    await list.remove(request);
+    expect(await list.remove(request)).toBe(false);
 
     expect(request).not.toHaveBeenCalled();
     expect(list.deletingId).toBeUndefined();

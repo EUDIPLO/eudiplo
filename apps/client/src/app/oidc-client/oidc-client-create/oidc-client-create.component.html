@@ -1,5 +1,11 @@
 <div class="page form-page">
-  <a class="back-link" matButton [routerLink]="['../']" [attr.aria-label]="'Back to ' + backLabel">
+  <a
+    class="back-link"
+    matButton
+    [title]="backLabel"
+    [routerLink]="['../']"
+    [attr.aria-label]="'Back to ' + backLabel"
+  >
     <mat-icon>arrow_back</mat-icon>
     {{ backLabel }}
   </a>
@@ -134,7 +140,7 @@
           <h2 id="oidc-scopes-heading" #scopesTitle tabindex="-1">Scopes</h2>
           <p>
             The application requests <code>openid</code> and one of these scopes; the scope's
-            presentation config decides what the user presents.
+            verification config decides what the user presents.
           </p>
         </div>
         <mat-card appearance="outlined">
@@ -142,17 +148,17 @@
             @if (configsError) {
               <app-load-error
                 [message]="configsError"
-                hint="The scopes need the presentation configs."
+                hint="The scopes need the verification configs."
                 (retry)="loadConfigs(true)"
               />
             } @else if (configsLoading) {
-              <p><output>Loading presentation configs…</output></p>
+              <p><output>Loading verification configs…</output></p>
             } @else if (configs.length === 0) {
               <p class="hint" role="status">
-                This tenant has no presentation configs yet. A scope needs one that says what the
+                This tenant has no verification configs yet. A scope needs one that says what the
                 user presents.
                 <a [routerLink]="['/presentation-config', 'create']"
-                  >Create a presentation config</a
+                  >Create a verification config</a
                 >
               </p>
             }
@@ -166,7 +172,7 @@
                   }}</mat-error>
                 </mat-form-field>
                 <mat-form-field class="grow">
-                  <mat-label>Presentation config</mat-label>
+                  <mat-label>Verification config</mat-label>
                   <mat-select formControlName="presentationConfigId">
                     @for (config of configs; track config.id) {
                       <mat-option [value]="config.id" [disabled]="!!configProblem(config)">
@@ -194,7 +200,7 @@
                     {{
                       fieldError(
                         ['scopes', i, 'presentationConfigId'],
-                        'Choose a presentation config'
+                        'Choose a verification config'
                       )
                     }}
                   </mat-error>
@@ -279,7 +285,7 @@
                     </mat-hint>
                   } @else if (configsPending) {
                     <mat-hint
-                      >The queries are offered once the presentation configs have loaded.</mat-hint
+                      >The queries are offered once the verification configs have loaded.</mat-hint
                     >
                   } @else if (subjectCredentialIds.length === 0) {
                     <mat-hint>Choose scopes whose configs share a credential query first.</mat-hint>

@@ -1,5 +1,5 @@
 @use '@angular/material' as mat;
-@use '../../tenants/tenant-page' as page;
+@use 'page';
 
 // Back link, heading, sections and action bar, as on the tenant, client, key and federation forms
 @include page.base;

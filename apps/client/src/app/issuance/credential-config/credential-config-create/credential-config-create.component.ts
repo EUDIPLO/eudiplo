@@ -87,6 +87,7 @@ import { LoadErrorComponent } from '../../../common/load-error.component';
 import { SourceLoadState, loadSource, reportSourceFailures } from '../../../common/load-source';
 import { focusAfterRenderIfLost, focusRowAfterRemoval } from '../../../common/focus-if-lost.util';
 import { jsonViewUnavailableReason } from '../../../common/json-view';
+import { formatLifetime } from '../../../utils/duration';
 
 /** The sources of the options of the form's selects. */
 type CredentialConfigSource =
@@ -445,7 +446,7 @@ export class CredentialConfigCreateComponent implements OnInit {
         this.keyChains = response.data || [];
       }),
     presentationConfigs: () =>
-      loadSource(this.loadState, 'presentationConfigs', 'presentation configurations', async () => {
+      loadSource(this.loadState, 'presentationConfigs', 'verification configs', async () => {
         this.presentationConfigs =
           (await this.presentationManagementService.loadConfigurations()) || [];
       }),
@@ -896,17 +897,9 @@ export class CredentialConfigCreateComponent implements OnInit {
     this.form.get('docType')?.setValue(preset.value);
   }
 
-  /**
-   * Format lifetime value for display
-   */
-  formatLifetime(seconds: number): string {
-    if (seconds < 60) return `${seconds} seconds`;
-    if (seconds < 3600) return `${Math.floor(seconds / 60)} minutes`;
-    if (seconds < 86400) return `${Math.floor(seconds / 3600)} hours`;
-    if (seconds < 604800) return `${Math.floor(seconds / 86400)} days`;
-    if (seconds < 2592000) return `${Math.floor(seconds / 604800)} weeks`;
-    if (seconds < 31536000) return `${Math.floor(seconds / 2592000)} months`;
-    return `${Math.floor(seconds / 31536000)} years`;
+  /** Formats a lifetime in seconds as on the list and the configuration's page. */
+  formatLifetime(seconds?: number | null): string {
+    return formatLifetime(seconds);
   }
 
   private markControlTreeTouched(control: AbstractControl | null): void {

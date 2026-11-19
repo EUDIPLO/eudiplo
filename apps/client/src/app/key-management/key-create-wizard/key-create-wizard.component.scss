@@ -1,5 +1,5 @@
 @use '@angular/material' as mat;
-@use '../../tenants/tenant-page' as page;
+@use 'page';
 
 // Heading as on the key chain form; the steps sit below
 @include page.base;

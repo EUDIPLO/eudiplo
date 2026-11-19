@@ -2,7 +2,7 @@ import { Directive, ElementRef, inject, Injector, OnInit, ViewChild } from '@ang
 import { MatSnackBar } from '@angular/material/snack-bar';
 
 import { getApiErrorMessage } from '../utils/error-message';
-import { searchAndSort } from '../utils/search-list';
+import { SearchCache } from '../utils/search-list';
 import { confirmAndDelete, type DeleteAction } from './confirm-delete';
 import { focusAfterRenderIfLost, focusRowAfterRemoval } from './focus-if-lost.util';
 
@@ -25,6 +25,11 @@ export abstract class BaseAsyncListComponent<T> implements OnInit {
   loading = true;
   /** Set when the items could not be loaded, so the page does not show an empty list. */
   loadError = '';
+  /**
+   * Why this instance offers no such items, such as when another identity provider manages
+   * them; set from `unavailableReason`, and the page shows it instead of the list.
+   */
+  unavailableMessage = '';
 
   /** Message when loading fails, such as "Failed to load webhook endpoints". */
   protected abstract readonly loadFailedMessage: string;
@@ -40,7 +45,12 @@ export abstract class BaseAsyncListComponent<T> implements OnInit {
   /** Text to find in the items of a list with a search bar. */
   search = '';
   /** The last search result, kept until the items or the search change. */
-  private searchResult?: { items: T[]; search: string; result: T[] };
+  private readonly searchCache = new SearchCache<T>(
+    (item) => this.searchTexts?.(item) ?? [],
+    (item) => this.sortName?.(item) ?? ''
+  );
+  /** The link in each row that the focus moves to after a delete removed the row before it. */
+  protected readonly rowLinkSelector: string = 'a.item-link';
 
   ngOnInit(): void {
     void this.loadItems();
@@ -48,15 +58,28 @@ export abstract class BaseAsyncListComponent<T> implements OnInit {
 
   protected abstract fetchItems(): Promise<T[]>;
 
+  /**
+   * The reason to show when the load failed because the instance offers no such items, such as
+   * for a 501, or undefined for an error that a Retry may fix.
+   */
+  protected unavailableReason?(error: unknown): string | undefined;
+
   async loadItems(): Promise<void> {
     const retrying = this.loadError !== '';
     this.loading = true;
     this.loadError = '';
+    this.unavailableMessage = '';
     try {
       this.items = await this.fetchItems();
     } catch (error) {
-      console.error(`${this.loadFailedMessage}:`, error);
-      this.loadError = getApiErrorMessage(error, this.loadFailedMessage);
+      const unavailable = this.unavailableReason?.(error);
+      if (unavailable === undefined) {
+        console.error(`${this.loadFailedMessage}:`, error);
+        this.loadError = getApiErrorMessage(error, this.loadFailedMessage);
+      } else {
+        this.unavailableMessage = unavailable;
+        this.items = [];
+      }
     } finally {
       this.loading = false;
     }
@@ -73,16 +96,7 @@ export abstract class BaseAsyncListComponent<T> implements OnInit {
 
   /** The items that match the search, sorted by `sortName`. */
   get shownItems(): T[] {
-    if (this.searchResult?.items !== this.items || this.searchResult.search !== this.search) {
-      const result = searchAndSort(
-        this.items,
-        this.search,
-        (item) => this.searchTexts?.(item) ?? [],
-        (item) => this.sortName?.(item) ?? ''
-      );
-      this.searchResult = { items: this.items, search: this.search, result };
-    }
-    return this.searchResult.result;
+    return this.searchCache.result(this.items, this.search);
   }
 
   clearSearch(): void {
@@ -99,12 +113,12 @@ export abstract class BaseAsyncListComponent<T> implements OnInit {
   /**
    * Deletes one item after the caller confirmed it and takes its row out of the list. The
    * focused Delete left with the row, so focus moves to the row now in its place (its
-   * `.item-link`), or to the page heading when no row is left. A second click while a delete
-   * runs does nothing.
+   * `rowLinkSelector`), or to the page heading when no row is left. A second click while a
+   * delete runs does nothing. Returns whether the item was deleted.
    */
-  protected async deleteItem({ item, id, ...action }: ListItemDelete<T>): Promise<void> {
+  protected async deleteItem({ item, id, ...action }: ListItemDelete<T>): Promise<boolean> {
     if (this.deletingId !== undefined) {
-      return;
+      return false;
     }
     const deleted = await confirmAndDelete(this.snackBar, {
       ...action,
@@ -115,10 +129,11 @@ export abstract class BaseAsyncListComponent<T> implements OnInit {
       this.items = this.items.filter((other) => other !== item);
       focusRowAfterRemoval(
         this.injector,
-        () => [...this.host.nativeElement.querySelectorAll<HTMLElement>('a.item-link')],
+        () => [...this.host.nativeElement.querySelectorAll<HTMLElement>(this.rowLinkSelector)],
         index,
         () => this.listHeading?.nativeElement
       );
     }
+    return deleted;
   }
 }

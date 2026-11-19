@@ -1,14 +1,12 @@
 import { provideHttpClient, withFetch, withInterceptors } from '@angular/common/http';
 import {
   type ApplicationConfig,
-  importProvidersFrom,
   inject,
   provideAppInitializer,
   provideZoneChangeDetection,
 } from '@angular/core';
 import { MAT_FORM_FIELD_DEFAULT_OPTIONS } from '@angular/material/form-field';
 import { provideRouter } from '@angular/router';
-import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { routes } from './app.routes';
 import { provideFormlyCore } from '@ngx-formly/core';
 import { withFormlyMaterial } from '@ngx-formly/material';
@@ -199,7 +197,6 @@ export const appConfig: ApplicationConfig = {
     }),
     provideZoneChangeDetection({ eventCoalescing: true }),
     provideRouter(routes),
-    importProvidersFrom(FlexLayoutModule),
     provideHttpClient(withInterceptors([authInterceptor]), withFetch()),
     provideMonacoEditor({
       baseUrl: monacoBaseUrl,

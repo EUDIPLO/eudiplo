@@ -1,6 +1,7 @@
 @use 'sass:map';
 @use '@angular/material' as mat;
-@use '../../styles/theme-colors';
+@use 'page';
+@use 'theme-colors';
 
 $brand-blue: map.get(theme-colors.$primary-palette, 40);
 $brand-indigo: #1b2160;
@@ -133,34 +134,10 @@ mat-card mat-card-content {
 }
 
 // Status line with an icon: neutral by default, green or orange for the outcome
+@include page.status-line('.notice');
+
 .notice {
-  --tone: var(--mat-sys-on-surface-variant);
-
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
   margin: 0;
-  padding: 12px 16px;
-  border-radius: var(--mat-sys-corner-medium);
-  background: color-mix(in srgb, var(--tone) 8%, var(--mat-sys-surface));
-  font: var(--mat-sys-body-medium);
-  color: var(--mat-sys-on-surface);
-
-  > mat-icon {
-    flex: none;
-    width: 20px;
-    height: 20px;
-    font-size: 20px;
-    color: var(--tone);
-  }
-
-  &.ok {
-    --tone: var(--eudiplo-success);
-  }
-
-  &.warning {
-    --tone: var(--eudiplo-warning);
-  }
 }
 
 .kept-session {

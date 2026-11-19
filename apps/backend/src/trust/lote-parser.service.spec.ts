@@ -218,7 +218,7 @@ describe("LoteParserService.parse", () => {
             );
         });
 
-        it("leaves out any status in a PID providers list (Annex D)", () => {
+        it("reads no status and the PID notified status in a PID providers list and leaves out others (Annex D)", () => {
             const { entities } = parser.parse(
                 lote(
                     LoteTypes.PIDProviders,
@@ -226,6 +226,16 @@ describe("LoteParserService.parse", () => {
                         name: "Listed",
                         services: [
                             service(ServiceTypeIdentifiers.PIDIssuance, "a"),
+                        ],
+                    },
+                    {
+                        name: "Notified",
+                        services: [
+                            service(
+                                ServiceTypeIdentifiers.PIDIssuance,
+                                "c",
+                                ServiceStatuses.PIDNotified,
+                            ),
                         ],
                     },
                     {
@@ -242,10 +252,14 @@ describe("LoteParserService.parse", () => {
                 LIST,
             );
 
-            expect(entities.map((e) => e.entityId)).toEqual(["Listed"]);
+            expect(entities.map((e) => e.entityId)).toEqual([
+                "Listed",
+                "Notified",
+            ]);
             expect(warning()).toContain(
-                `entity "With status", type "${ServiceTypeIdentifiers.PIDIssuance}", status "${ServiceStatuses.SchemeApprovalGranted}": the list type does not use ServiceStatus`,
+                `entity "With status", type "${ServiceTypeIdentifiers.PIDIssuance}", status "${ServiceStatuses.SchemeApprovalGranted}": the list type does not approve services with this ServiceStatus`,
             );
+            expect(warning()).not.toContain("Notified");
         });
 
         it("reads absent, notified and granted statuses in other lists and leaves out unknown ones", () => {

@@ -292,7 +292,6 @@ test('issue and verify cookbook', async ({ page }) => {
     await page.getByRole('button', { name: 'Continue' }).click();
 
     // 3. Settings
-    await page.getByRole('button', { name: 'Request and verification options' }).click();
     await expect(page.getByRole('spinbutton', { name: 'Lifetime of the request' })).toHaveValue(
       '300'
     );
@@ -305,7 +304,7 @@ test('issue and verify cookbook', async ({ page }) => {
     // 4. Review
     await expect(page.getByText('name', { exact: true })).toBeVisible();
     await expect(page.getByText('member_id', { exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Create Configuration' }).click();
+    await page.getByRole('button', { name: 'Create Verification Config' }).click();
     await expect(page).toHaveURL(/\/presentation-config\/membership-check$/);
     await openNav(page, 'Verification Configs');
     await expect(page.getByText('membership-check', { exact: true })).toBeVisible();
@@ -313,7 +312,7 @@ test('issue and verify cookbook', async ({ page }) => {
 
   await test.step('chapter 3, step 5: generate and approve a request', async () => {
     await openNav(page, 'New Verification');
-    await selectOption(page, 'Presentation Configuration', 'membership-check');
+    await selectOption(page, 'Verification Config', 'membership-check');
     await page.getByRole('button', { name: 'Generate Request' }).click();
     await expect(page).toHaveURL(/\/session-management\/[^/]+$/);
     await expect(page.getByText('Presentation Request QR Code')).toBeVisible();

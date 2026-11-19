@@ -1,3 +1,8 @@
+.editor-stack {
+  display: flex;
+  flex-direction: column;
+}
+
 .editor {
   min-height: 500px;
   width: 100%;

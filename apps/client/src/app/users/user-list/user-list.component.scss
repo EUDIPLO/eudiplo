@@ -1,91 +1,17 @@
-@use '../../tenants/tenant-page' as page;
+@use 'page';
 
 // Heading, table card with search, role badges and states, as on the API client list
 @include page.base;
 @include page.list-page;
 
+@include page.linked-rows;
+
 table {
   @include page.data-table;
-
-  // The username link covers its row; the actions sit above it
-  &.linked tr.mat-mdc-row:not(.no-match) {
-    position: relative;
-    cursor: pointer;
-
-    .row-actions {
-      position: relative;
-      z-index: 1;
-    }
-
-    &:hover .user-link {
-      color: var(--mat-sys-primary);
-    }
-  }
 }
 
-.user-link {
-  font: var(--mat-sys-title-small);
-  color: var(--mat-sys-on-surface);
-  text-decoration: none;
-  overflow-wrap: anywhere;
-  transition: color 120ms ease;
-
-  &::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-  }
-
-  &:focus-visible {
-    outline: 2px solid var(--mat-sys-primary);
-    outline-offset: 2px;
-    border-radius: var(--mat-sys-corner-extra-small);
-  }
-}
-
-.user-cell {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 12px 0;
-}
-
-.user-icon {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  border-radius: var(--mat-sys-corner-full);
-  background: color-mix(in srgb, var(--mat-sys-primary) 14%, var(--mat-sys-surface));
-  color: var(--mat-sys-primary);
-
-  mat-icon {
-    width: 20px;
-    height: 20px;
-    font-size: 20px;
-  }
-}
-
-.user-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-
-  small {
-    font: var(--mat-sys-body-small);
-    color: var(--mat-sys-on-surface-variant);
-    overflow-wrap: anywhere;
-  }
-}
-
-// Narrow pages: the person icon gives its room to the username
+// Narrow pages: the search bar takes a line of its own
 @container (max-width: 600px) {
-  .user-icon {
-    display: none;
-  }
-
   .search-bar {
     flex: 1 1 100%;
   }

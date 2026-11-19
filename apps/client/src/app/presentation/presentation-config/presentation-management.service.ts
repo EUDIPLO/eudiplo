@@ -55,7 +55,7 @@ export class PresentationManagementService {
     if (!config) {
       return {
         ready: false,
-        reason: 'Presentation configuration not found',
+        reason: 'Verification config not found',
       };
     }
 
@@ -88,7 +88,7 @@ export class PresentationManagementService {
       if (!selectedKeyChain) {
         return {
           ready: false,
-          reason: 'The selected access key chain for this presentation config does not exist.',
+          reason: 'The selected access key chain for this verification config does not exist.',
         };
       }
 
