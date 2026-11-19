@@ -36,7 +36,6 @@ allowBuilds:
   sharp: true
   sqlite3: true
   ssh2: true
-  workerd: true
 
 injectWorkspacePackages: true
 
@@ -57,7 +56,6 @@ onlyBuiltDependencies:
   - sharp
   - sqlite3
   - ssh2
-  - workerd
 
 syncInjectedDepsAfterScripts:
   - build

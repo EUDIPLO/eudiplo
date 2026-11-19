@@ -54,9 +54,6 @@ SECURITY.md
 docs/
 mkdocs.yml
 
-# Other applications (exclude when not needed). Keep client included for Docker multi-stage build.
-# apps/webhook/
-
 # Development and testing
 test/
 tests/
