@@ -18,7 +18,8 @@ export function rotatesSecretsOfAnyTenant(
 }
 
 /**
- * The authorization check for acting on an existing client, shared by the
+ * The authorization check for acting on an existing client, also one that a
+ * create would take over, shared by the
  * client API and configuration bundle imports.
  */
 @Injectable()
@@ -42,6 +43,26 @@ export class ClientAccessService {
             assertMayManageRoles(callerRoles, roles, `client ${clientId}`);
         }
         return roles;
+    }
+
+    /**
+     * Refuses to create a client when the create would take over an existing
+     * client of the tenant, such as a Keycloak client the mirror lacks, that
+     * has a role the caller neither holds nor may grant: the create replaces
+     * its roles.
+     */
+    async assertMayCreate(
+        callerRoles: readonly string[],
+        tenantId: string,
+        clientId: string,
+    ): Promise<void> {
+        const roles = await this.clients.getReplacedClientRoles(
+            tenantId,
+            clientId,
+        );
+        if (roles) {
+            assertMayManageRoles(callerRoles, roles, `client ${clientId}`);
+        }
     }
 
     /**

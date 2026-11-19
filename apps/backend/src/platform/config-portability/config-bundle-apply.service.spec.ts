@@ -3,9 +3,11 @@ import {
     normalizeDocument,
     schemaUrl,
 } from "@eudiplo/config-format/config-format.js";
-import { BadRequestException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException } from "@nestjs/common";
 import * as x509 from "@peculiar/x509";
 import { describe, expect, it, vi } from "vitest";
+import type { ClientsProvider } from "../../auth/client/client.provider.js";
+import { ClientAccessService } from "../../auth/client/client-access.service.js";
 import type { KmsProviderRegistry } from "../../crypto/key/kms/kms-provider.registry.js";
 import { ConfigBundleApplyService } from "./config-bundle-apply.service.js";
 import { ConfigKmsReferenceService } from "./config-kms-reference.service.js";
@@ -761,5 +763,110 @@ describe("key chain replacement", () => {
                 rotationPolicy: { enabled: false },
             }),
         );
+    });
+});
+
+describe("assertCallerMayChangeClients", () => {
+    function setup(
+        action: "create" | "update" | "delete" | "unchanged",
+        kind = "Client",
+    ) {
+        const service = Object.create(
+            ConfigBundleApplyService.prototype,
+        ) as any;
+        service.clientAccess = {
+            assertMayManage: vi.fn(),
+            assertMayCreate: vi.fn(),
+        };
+        const plan = {
+            items: [{ kind, id: "app", action }],
+        } as unknown as ConfigImportPlan;
+        return { service, plan };
+    }
+
+    it("checks that a created client takes over no client the caller may not manage", async () => {
+        const { service, plan } = setup("create");
+
+        await service.assertCallerMayChangeClients("tenant-a", plan, [
+            "tenant:admin",
+        ]);
+
+        expect(service.clientAccess.assertMayCreate).toHaveBeenCalledWith(
+            ["tenant:admin"],
+            "tenant-a",
+            "app",
+        );
+        expect(service.clientAccess.assertMayManage).not.toHaveBeenCalled();
+    });
+
+    it.each(["update", "delete"] as const)(
+        "checks that the caller may manage a client it plans to %s",
+        async (action) => {
+            const { service, plan } = setup(action);
+
+            await service.assertCallerMayChangeClients("tenant-a", plan, [
+                "tenant:admin",
+            ]);
+
+            expect(service.clientAccess.assertMayManage).toHaveBeenCalledWith(
+                ["tenant:admin"],
+                "tenant-a",
+                "app",
+            );
+            expect(service.clientAccess.assertMayCreate).not.toHaveBeenCalled();
+        },
+    );
+
+    it("refuses the import when a created client takes over one the caller may not manage", async () => {
+        const { service, plan } = setup("create");
+        service.clientAccess = new ClientAccessService({
+            getReplacedClientRoles: vi.fn().mockResolvedValue(["tenant:admin"]),
+        } as unknown as ClientsProvider);
+
+        await expect(
+            service.assertCallerMayChangeClients("tenant-a", plan, [
+                "clients:manage",
+            ]),
+        ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it("allows the import when a created client takes over one the caller may manage", async () => {
+        const { service, plan } = setup("create");
+        service.clientAccess = new ClientAccessService({
+            getReplacedClientRoles: vi
+                .fn()
+                .mockResolvedValue(["clients:manage"]),
+        } as unknown as ClientsProvider);
+
+        await expect(
+            service.assertCallerMayChangeClients("tenant-a", plan, [
+                "clients:manage",
+            ]),
+        ).resolves.toBeUndefined();
+    });
+
+    it.each(["create", "update"] as const)(
+        "checks nothing for another kind of resource to %s",
+        async (action) => {
+            const { service, plan } = setup(action, "CredentialConfig");
+
+            await service.assertCallerMayChangeClients("tenant-a", plan, [
+                "tenant:admin",
+            ]);
+
+            expect(service.clientAccess.assertMayManage).not.toHaveBeenCalled();
+            expect(service.clientAccess.assertMayCreate).not.toHaveBeenCalled();
+        },
+    );
+
+    it("checks nothing for an unchanged client", async () => {
+        const { service, plan } = setup("unchanged");
+
+        await service.assertCallerMayChangeClients("tenant-a", plan, [
+            "tenant:admin",
+        ]);
+
+        expect(service.clientAccess.assertMayManage).not.toHaveBeenCalled();
+        expect(service.clientAccess.assertMayCreate).not.toHaveBeenCalled();
     });
 });

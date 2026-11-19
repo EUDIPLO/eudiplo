@@ -145,7 +145,8 @@ export class ConfigBundleApplyService {
 
     /**
      * Refuses an API caller's import whose plan changes or deletes a client
-     * with a role the caller neither holds nor may grant.
+     * with a role the caller neither holds nor may grant, or creates one
+     * that takes over such a client.
      */
     async assertCallerMayChangeClients(
         tenantId: string,
@@ -153,11 +154,15 @@ export class ConfigBundleApplyService {
         callerRoles: readonly string[],
     ): Promise<void> {
         for (const item of plan.items) {
-            if (
-                item.kind === "Client" &&
-                (item.action === "update" || item.action === "delete")
-            ) {
+            if (item.kind !== "Client") continue;
+            if (item.action === "update" || item.action === "delete") {
                 await this.clientAccess.assertMayManage(
+                    callerRoles,
+                    tenantId,
+                    item.id,
+                );
+            } else if (item.action === "create") {
+                await this.clientAccess.assertMayCreate(
                     callerRoles,
                     tenantId,
                     item.id,

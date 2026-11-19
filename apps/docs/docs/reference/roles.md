@@ -47,6 +47,10 @@ rotate the secret of any client, except a `file-managed` one, which answers
 `409` until a token of the client's tenant
 [detaches](../operate/configuration-as-code.md#configuration-model) it. A change may keep roles the caller cannot
 grant, such as `tenant:admin` for a `tenant:admin` caller, but not add them.
+With Keycloak, creating a client that takes over an existing Keycloak client of
+the tenant needs both: the caller must be able to manage that client, and grant
+each requested role, since none counts as one the client already has
+([Keycloak SSO](../operate/keycloak.md#4-give-people-access)).
 The same rules apply to the clients that an imported
 [configuration bundle](config-bundle-format.md) creates, changes or deletes,
 and its plan already reports a refusal. Other requests answer `403`.

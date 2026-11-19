@@ -48,6 +48,21 @@ describe("InternalClientsProvider", () => {
         ).resolves.toBeUndefined();
     });
 
+    it("reports the roles of the client of the tenant that a create replaces", async () => {
+        const { clients, repo } = provider({
+            clientId: "app",
+            roles: ["issuance:offer"],
+        });
+
+        await expect(
+            clients.getReplacedClientRoles("tenant-1", "app"),
+        ).resolves.toEqual(["issuance:offer"]);
+        expect(repo.findOneBy).toHaveBeenCalledWith({
+            clientId: "app",
+            tenant: { id: "tenant-1" },
+        });
+    });
+
     it("refuses the ID of the root client instead of overwriting it", async () => {
         const { clients, repo } = provider({
             clientId: "root",

@@ -10,7 +10,11 @@ function provider({
     serviceAccount = { id: "svc" },
 }: {
     mirror?: Partial<ClientEntity>;
-    kcClient?: { id: string; attributes?: Record<string, unknown> };
+    kcClient?: {
+        id: string;
+        attributes?: Record<string, unknown>;
+        serviceAccountsEnabled?: boolean;
+    };
     serviceAccount?: { id?: string };
 }) {
     const kc = {
@@ -201,7 +205,7 @@ describe("KeycloakClientsProvider.addClient", () => {
         },
     );
 
-    it("adopts an existing Keycloak client of the tenant", async () => {
+    it("adopts an existing Keycloak client of the tenant and replaces its EUDIPLO roles", async () => {
         const {
             provider: clients,
             kc,
@@ -210,10 +214,112 @@ describe("KeycloakClientsProvider.addClient", () => {
             kcClient: { id: "kc-app", attributes: { tenant_id: "tenant-1" } },
         });
 
-        await clients.addClient("tenant-1", dto);
+        await clients.addClient("tenant-1", {
+            clientId: "app",
+            roles: ["issuance:offer", "presentation:request"] as never,
+        });
 
         expect(kc.clients.update).toHaveBeenCalled();
-        expect(clientRepo.save).toHaveBeenCalled();
+        // clients:manage is not requested; default-roles-eudiplo stays.
+        expect(kc.users.delRealmRoleMappings).toHaveBeenCalledWith({
+            id: "svc",
+            roles: [{ id: "id-clients:manage", name: "clients:manage" }],
+        });
+        expect(kc.users.addRealmRoleMappings).toHaveBeenCalledWith({
+            id: "svc",
+            roles: [
+                {
+                    id: "id-presentation:request",
+                    name: "presentation:request",
+                },
+            ],
+        });
+        expect(clientRepo.save).toHaveBeenCalledWith(
+            expect.objectContaining({
+                roles: ["issuance:offer", "presentation:request"],
+            }),
+        );
+    });
+
+    it("gives a new client the requested roles", async () => {
+        const { provider: clients, kc } = provider({});
+        kc.clients.create.mockResolvedValue({ id: "kc-new" });
+        Object.assign(kc.clients, {
+            generateNewClientSecret: vi
+                .fn()
+                .mockResolvedValue({ value: "secret" }),
+        });
+        kc.users.listRealmRoleMappings.mockResolvedValue([
+            { id: "id-default-roles-eudiplo", name: "default-roles-eudiplo" },
+        ]);
+
+        await expect(clients.addClient("tenant-1", dto)).resolves.toEqual(
+            expect.objectContaining({ clientSecret: "secret" }),
+        );
+
+        expect(kc.users.delRealmRoleMappings).not.toHaveBeenCalled();
+        expect(kc.users.addRealmRoleMappings).toHaveBeenCalledWith({
+            id: "svc",
+            roles: [{ id: "id-issuance:offer", name: "issuance:offer" }],
+        });
+    });
+});
+
+describe("KeycloakClientsProvider.getReplacedClientRoles", () => {
+    it("returns the Keycloak roles of a client of the tenant the mirror lacks", async () => {
+        const { provider: clients } = provider({
+            kcClient: { id: "kc-app", attributes: { tenant_id: "tenant-1" } },
+        });
+
+        await expect(
+            clients.getReplacedClientRoles("tenant-1", "app"),
+        ).resolves.toEqual([
+            "issuance:offer",
+            "tenant:admin",
+            "realm-management/realm-admin",
+            "realm-management/manage-users",
+        ]);
+    });
+
+    it.each([
+        ["no such Keycloak client", undefined],
+        ["a Keycloak client without a tenant", { id: "kc-root" }],
+        [
+            "a Keycloak client of another tenant",
+            { id: "kc-app", attributes: { tenant_id: "tenant-2" } },
+        ],
+    ])("returns nothing for %s", async (_name, kcClient) => {
+        const { provider: clients } = provider({ kcClient });
+
+        await expect(
+            clients.getReplacedClientRoles("tenant-1", "app"),
+        ).resolves.toBeUndefined();
+    });
+
+    it("returns no roles for a client of the tenant when Keycloak returns no service account ID", async () => {
+        const { provider: clients } = provider({
+            kcClient: { id: "kc-app", attributes: { tenant_id: "tenant-1" } },
+            serviceAccount: {},
+        });
+
+        await expect(
+            clients.getReplacedClientRoles("tenant-1", "app"),
+        ).resolves.toEqual([]);
+    });
+
+    it("returns no roles for a client of the tenant with service accounts off, without asking Keycloak for the account", async () => {
+        const { provider: clients, kc } = provider({
+            kcClient: {
+                id: "kc-app",
+                attributes: { tenant_id: "tenant-1" },
+                serviceAccountsEnabled: false,
+            },
+        });
+
+        await expect(
+            clients.getReplacedClientRoles("tenant-1", "app"),
+        ).resolves.toEqual([]);
+        expect(kc.clients.getServiceAccountUser).not.toHaveBeenCalled();
     });
 });
 

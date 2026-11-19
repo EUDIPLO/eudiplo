@@ -40,6 +40,16 @@ export abstract class ClientsProvider {
     ): Promise<string[] | undefined>;
 
     /**
+     * Roles of the existing client of the tenant whose roles `addClient`
+     * would replace, for the authorization check before a create.
+     * @returns The roles, or `undefined` when `addClient` creates a new client
+     */
+    abstract getReplacedClientRoles(
+        tenantId: string,
+        clientId: string,
+    ): Promise<string[] | undefined>;
+
+    /**
      * Get a client by its clientId only (without tenant context).
      * Used for JWT validation where we need to fetch the client's restrictions.
      * @param clientId The client ID (may be namespaced with tenant prefix for Keycloak)

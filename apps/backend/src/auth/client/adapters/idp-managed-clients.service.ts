@@ -63,6 +63,14 @@ export class IdpManagedClientsProvider extends ClientsProvider {
         this.unsupported();
     }
 
+    getReplacedClientRoles(
+        _tenantId: string,
+        _clientId: string,
+    ): Promise<string[] | undefined> {
+        // `addClient` is not supported, so a create takes over no client.
+        return Promise.resolve(undefined);
+    }
+
     addClient(_tenantId: string, _dto: CreateClient): Promise<CreatedClient> {
         this.unsupported();
     }
