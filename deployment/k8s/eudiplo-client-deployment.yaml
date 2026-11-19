@@ -20,7 +20,7 @@ spec:
         fsGroup: 101
       initContainers:
         - name: wait-for-eudiplo
-          image: busybox:1.36
+          image: busybox:1.38
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -38,7 +38,7 @@ spec:
               echo "eudiplo is up."
       containers:
         - name: eudiplo-client
-          image: ghcr.io/eudiplo/eudiplo-client:9.0.0
+          image: ghcr.io/eudiplo/eudiplo-client:9.1.0
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
