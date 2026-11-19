@@ -167,20 +167,20 @@
       <mat-card appearance="outlined">
         <mat-card-header>
           <mat-icon mat-card-avatar>verified_user</mat-icon>
-          <mat-card-title>Referenced by Presentation Configs</mat-card-title>
+          <mat-card-title>Referenced by Verification Configs</mat-card-title>
         </mat-card-header>
         <mat-card-content>
           @if (!canReadPresentationConfigs) {
             <p class="url-description">
               You need the <code>presentation:manage</code> or
-              <code>presentation:request</code> role to see which presentation configs reference
+              <code>presentation:request</code> role to see which verification configs reference
               this trust list.
             </p>
           } @else if (relatedPresentationConfigsLoading) {
-            <p class="url-description"><output>Loading presentation configs…</output></p>
+            <p class="url-description"><output>Loading verification configs…</output></p>
           } @else if (relatedPresentationConfigsFailed) {
             <p class="url-description" role="alert">
-              Could not load the presentation configs that reference this trust list.
+              Could not load the verification configs that reference this trust list.
             </p>
           } @else if (relatedPresentationConfigs.length) {
             <div class="reference-list card-content-top">
@@ -191,8 +191,8 @@
                   <a
                     mat-icon-button
                     [routerLink]="['/presentation-config', pc.id]"
-                    matTooltip="Open presentation config"
-                    [attr.aria-label]="'Open presentation config ' + (pc.description || pc.id)"
+                    matTooltip="Open verification config"
+                    [attr.aria-label]="'Open verification config ' + (pc.description || pc.id)"
                   >
                     <mat-icon>open_in_new</mat-icon>
                   </a>
@@ -200,7 +200,7 @@
               }
             </div>
           } @else {
-            <p class="url-description">No presentation configs reference this trust list.</p>
+            <p class="url-description">No verification configs reference this trust list.</p>
           }
         </mat-card-content>
       </mat-card>

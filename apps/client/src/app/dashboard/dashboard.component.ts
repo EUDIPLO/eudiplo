@@ -194,7 +194,7 @@ export class DashboardComponent implements OnInit {
       cards.push({
         source: 'presentations',
         value: String(service.presentationConfigs),
-        label: 'Presentation Configs',
+        label: 'Verification Configs',
         icon: 'verified_user',
         iconClass: 'presentation',
         route: '/presentation-config',

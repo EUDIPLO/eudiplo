@@ -65,14 +65,14 @@ interface ConfigSourceInfo {
 const configSources: Record<ConfigSource, ConfigSourceInfo> = {
   presentationConfigs: {
     control: 'allowedPresentationConfigs',
-    title: 'Allowed Presentation Configurations',
-    label: 'presentation configurations',
+    title: 'Allowed Verification Configs',
+    label: 'verification configs',
     roles: ['presentation:manage', 'presentation:request'],
   },
   issuanceConfigs: {
     control: 'allowedIssuanceConfigs',
-    title: 'Allowed Credential Configurations',
-    label: 'credential configurations',
+    title: 'Allowed Credential Types',
+    label: 'credential types',
     roles: ['issuance:manage'],
   },
 };

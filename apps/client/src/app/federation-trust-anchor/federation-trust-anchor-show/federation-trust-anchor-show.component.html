@@ -79,7 +79,7 @@
           <mat-icon class="hint-icon" aria-hidden="true">lightbulb</mat-icon>
           <span>
             Issuance configurations name this entity ID under OpenID Federation trust anchors,
-            presentation configurations under Issuer trust of a credential query.
+            verification configs under Issuer trust of a credential query.
           </span>
         </p>
       </mat-card-content>
@@ -177,9 +177,9 @@
               configurations name this trust anchor.
             </p>
           } @else if (references.presentations.loading) {
-            <p class="hint"><output>Loading presentation configurations…</output></p>
+            <p class="hint"><output>Loading verification configs…</output></p>
           } @else if (references.presentations.failed) {
-            <p class="hint" role="alert">Could not load the presentation configurations.</p>
+            <p class="hint" role="alert">Could not load the verification configs.</p>
           } @else if (references.presentations.found.length) {
             @for (config of references.presentations.found; track config.id) {
               <div class="reference">
@@ -188,9 +188,9 @@
                 <a
                   matIconButton
                   [routerLink]="['/presentation-config', config.id]"
-                  matTooltip="Open presentation configuration"
+                  matTooltip="Open verification config"
                   [attr.aria-label]="
-                    'Open presentation configuration ' + (config.description || config.id)
+                    'Open verification config ' + (config.description || config.id)
                   "
                 >
                   <mat-icon>open_in_new</mat-icon>
@@ -198,7 +198,7 @@
               </div>
             }
           } @else {
-            <p class="hint">No presentation configuration names this trust anchor.</p>
+            <p class="hint">No verification config names this trust anchor.</p>
           }
         </mat-card-content>
       </mat-card>

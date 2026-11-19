@@ -283,7 +283,7 @@ export class TrustListShowComponent implements OnInit {
           !this.relatedCredentialConfigsFailed,
       },
       {
-        noun: 'presentation config',
+        noun: 'verification config',
         count: this.relatedPresentationConfigs.length,
         known:
           this.canReadPresentationConfigs &&

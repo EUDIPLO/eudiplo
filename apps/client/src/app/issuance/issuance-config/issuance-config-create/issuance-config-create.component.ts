@@ -346,7 +346,7 @@ export class IssuanceConfigCreateComponent implements OnInit {
         const value = server.value;
         if (value.enabled === false) continue;
         if (value.type === 'oid4vp' && !value.oid4vp?.presentationConfigId)
-          error = 'Choose a presentation configuration for each hosted presentation flow.';
+          error = 'Choose a verification config for each hosted presentation flow.';
         if (
           value.type === 'chained' &&
           (!value.chained?.issuer?.trim() || !value.chained?.clientId?.trim())
@@ -952,7 +952,7 @@ export class IssuanceConfigCreateComponent implements OnInit {
           .sort((a, b) => a.localeCompare(b));
       },
       (error) => {
-        console.error('Failed to load presentation configs:', error);
+        console.error('Failed to load verification configs:', error);
       }
     );
   }

@@ -371,9 +371,7 @@
           @for (id of configurationIds(); track id) {
             <div class="info-item">
               <dt>
-                {{
-                  isIssuanceSession() ? 'Credential configuration' : 'Presentation configuration'
-                }}
+                {{ isIssuanceSession() ? 'Credential configuration' : 'Verification config' }}
               </dt>
               <dd class="value-with-copy">
                 <span>{{ id }}</span>
