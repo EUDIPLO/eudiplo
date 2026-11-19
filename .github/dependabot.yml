@@ -57,11 +57,20 @@ updates:
         applies-to: version-updates
         patterns: ["*"]
 
-  # --- Docker base images (adjust directory if Dockerfiles live elsewhere) ---
+  # --- Docker base images and Kubernetes manifests ---
+  # Dependabot only scans the listed directories, not their subdirectories.
   - package-ecosystem: docker
-    directory: "/"
+    directories:
+      - "/"
+      - "/.devcontainer"
+      - "/deployment/k8s"
+      - "/deployment/k8s/base"
+      - "/deployment/k8s/components/postgres"
+      - "/deployment/k8s/components/rustfs"
+      - "/deployment/k8s/components/vault"
     schedule:
-      interval: monthly
+      interval: weekly
+      day: thursday
       time: "06:00"
       timezone: "Europe/Berlin"
     cooldown:
@@ -75,6 +84,11 @@ updates:
         applies-to: version-updates
         patterns: ["*"]
 
+    # Same as docker-compose: PostgreSQL majors need a data migration.
+    ignore:
+      - dependency-name: "postgres"
+        update-types: ["version-update:semver-major"]
+
   # --- Images pinned in compose files (docker does not cover these) ---
   - package-ecosystem: docker-compose
     directories:
@@ -83,7 +97,8 @@ updates:
       - "/deployment/docker-compose"
       - "/apps/cli/templates"
     schedule:
-      interval: monthly
+      interval: weekly
+      day: thursday
       time: "06:15"
       timezone: "Europe/Berlin"
     cooldown:
