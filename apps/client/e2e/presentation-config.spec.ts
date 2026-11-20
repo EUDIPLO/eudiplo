@@ -126,7 +126,7 @@ test('Import from Credential Config fills the query from a credential config of 
   await dialog.getByRole('button', { name: 'Insert DCQL' }).click();
   await expect(dialog).toBeHidden();
 
-  await expect(page.getByRole('textbox', { name: 'Credential type (VCT)' })).toHaveValue(
+  await expect(page.getByRole('combobox', { name: 'Credential type (VCT)' })).toHaveValue(
     'urn:eudi:pid:de:1'
   );
 });
