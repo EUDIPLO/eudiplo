@@ -6,7 +6,11 @@ import { Secured } from "../auth/secure.decorator.js";
 import { Token, TokenPayload } from "../auth/token.decorator.js";
 import { SessionStore } from "./application/session-store.js";
 import { SessionEventsService } from "./session-events.service.js";
-import { readOnlySessionTypes, sessionReadScope } from "./session-scope.js";
+import {
+    readOnlySessionTypes,
+    sessionConfigLimits,
+    sessionReadScope,
+} from "./session-scope.js";
 
 /**
  * Controller for Server-Sent Events (SSE) based session status updates.
@@ -88,7 +92,7 @@ export class SessionEventsController {
     @ApiResponse({
         status: 404,
         description:
-            "No session with this ID in the tenant, or a session of the other type than the client's roles cover",
+            "No session with this ID in the tenant, or a session of the other type than the client's roles cover or of a configuration outside the client's limits",
     })
     async subscribeToSessionEvents(
         @Param("id") id: string,
@@ -101,6 +105,7 @@ export class SessionEventsController {
             id,
             sessionReadScope(token),
             readOnlySessionTypes(token),
+            sessionConfigLimits(token),
         );
         this.logger.debug(`Client subscribed to session ${id} events`);
 
