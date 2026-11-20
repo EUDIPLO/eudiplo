@@ -555,6 +555,7 @@ describe('Verification config editor', () => {
   });
 
   it('counts added and removed list entries and an imported query as unsaved changes', () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
     fill();
     component.form.markAsPristine();
     component.addPurposeByUser();
@@ -801,12 +802,117 @@ describe('Verification config editor', () => {
     await vi.waitFor(() => expect(component.knownCredentials).toEqual([pid]));
   });
 
-  it('keeps entered names when choosing a template', () => {
+  function mockDialog() {
+    return TestBed.inject(MatDialog) as unknown as { open: ReturnType<typeof vi.fn> };
+  }
+
+  it('imports into a query without credentials without asking', () => {
+    const confirm = vi.spyOn(window, 'confirm');
     fill();
+    const dialog = mockDialog();
+    dialog.open.mockReturnValue({ afterClosed: () => of(query) });
+
+    for (const empty of ['', JSON.stringify({ credentials: [] })]) {
+      component.form.get('dcql_query')!.setValue(empty);
+      component.importFromCredentialConfig();
+      expect(JSON.parse(component.form.get('dcql_query')!.value)).toEqual(query);
+    }
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it('asks before the picker opens when an import would replace a query that asks for credentials', () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    fill();
+    const twoCredentials = JSON.stringify({
+      credentials: [query.credentials[0], { ...query.credentials[0], id: 'other' }],
+    });
+    component.form.get('dcql_query')!.setValue(twoCredentials);
+    const dialog = mockDialog();
+    const imported = { credentials: [{ ...query.credentials[0], id: 'imported' }] };
+    dialog.open.mockReturnValue({ afterClosed: () => of(imported) });
+
+    component.importFromIssuer();
+    expect(confirm).toHaveBeenCalledWith(
+      'Import from Issuer replaces the current query, which asks for 2 credentials. Continue?'
+    );
+    expect(dialog.open).not.toHaveBeenCalled();
+    expect(component.form.get('dcql_query')!.value).toBe(twoCredentials);
+
+    confirm.mockReturnValue(true);
+    dialog.open.mockReturnValue({ afterClosed: () => of({ dcqlQuery: imported }) });
+    component.importFromSchemaMetadata();
+    expect(dialog.open).toHaveBeenCalledOnce();
+    expect(JSON.parse(component.form.get('dcql_query')!.value)).toEqual(imported);
+  });
+
+  it('opens no schema picker on Cancel, so no suggested name is applied', () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    fill();
+    component.form.get('id')!.setValue('');
+    component.form.get('dcql_query')!.setValue(JSON.stringify(query));
+    const dialog = mockDialog();
+    dialog.open.mockReturnValue({
+      afterClosed: () => of({ dcqlQuery: query, suggestedPresentationId: 'suggested' }),
+    });
+
+    component.importFromSchemaMetadata();
+
+    expect(dialog.open).not.toHaveBeenCalled();
+    expect(component.form.get('id')!.value).toBe('');
+  });
+
+  it('names a query that does not parse when asking before an import replaces it', () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    fill();
+    component.form.get('dcql_query')!.setValue('{ "credentials": [');
+
+    component.importFromCredentialConfig();
+
+    expect(confirm).toHaveBeenCalledWith(
+      'Import from Credential Config replaces the current query, which cannot be read as DCQL. Continue?'
+    );
+    expect(component.form.get('dcql_query')!.value).toBe('{ "credentials": [');
+  });
+
+  it('asks before a template replaces settings, and keeps them on Cancel', () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    fill();
+    component.form.get('dcql_query')!.setValue('');
+    component.form.get('redirectUri')!.setValue('https://rp.example/done');
+
     component.loadPredefinedConfig({
       name: 'Example',
       config: { id: 'template', description: 'Template', dcql_query: query },
     });
+
+    expect(confirm).toHaveBeenCalledWith(
+      'Load the template "Example"? It replaces all settings except ID and Description.'
+    );
+    expect(component.form.get('redirectUri')!.value).toBe('https://rp.example/done');
+  });
+
+  it('loads a template into a form with only a name without asking', () => {
+    const confirm = vi.spyOn(window, 'confirm');
+    fill();
+    component.form.get('dcql_query')!.setValue('');
+
+    component.loadPredefinedConfig({
+      name: 'Example',
+      config: { id: 'template', description: 'Template', dcql_query: query },
+    });
+
+    expect(confirm).not.toHaveBeenCalled();
+    expect(component.form.get('dcql_query')!.value).toEqual(query);
+  });
+
+  it('keeps entered names when choosing a template', () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    fill();
+    component.loadPredefinedConfig({
+      name: 'Example',
+      config: { id: 'template', description: 'Template', dcql_query: { credentials: [] } },
+    });
+    expect(component.form.get('dcql_query')!.value).toEqual({ credentials: [] });
     expect(component.form.get('id')!.value).toBe('test');
     expect(component.form.get('description')!.value).toBe('Test request');
   });
