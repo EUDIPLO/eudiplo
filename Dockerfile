@@ -50,10 +50,27 @@ ENV CONFIG_FOLDER=/app/config/config
 WORKDIR /app
 EXPOSE 3000
 
-# --- Healthcheck dependencies ---
+# --- OS packages ---
+# Upgrade the packages of the pinned base image, so Debian security fixes
+# released after that digest was built are part of the image. Keep this step
+# below ARG REVISION: the revision changes with every commit, so the step is
+# not served from the build cache.
 # Install curl for HEALTHCHECK. The compose files in docker-compose.yml,
 # deployment/docker-compose and the CLI template also run curl in this image.
-RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+
+# --- Package managers ---
+# The app runs with node alone, so npm is removed: it comes with the base image
+# and brings its own dependencies, which nothing in this image updates. The
+# checks fail the build when a new base image ships a package manager or
+# another global package.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx \
+    && for bin in npm npx yarn yarnpkg corepack; do \
+         if command -v "$bin"; then echo "unexpected package manager in the runtime image: $bin" >&2; exit 1; fi; \
+       done \
+    && if [ -n "$(ls -A /usr/local/lib/node_modules)" ]; then \
+         echo "unexpected global packages in the runtime image:" >&2; ls -A /usr/local/lib/node_modules >&2; exit 1; \
+       fi
 
 # --- HEALTHCHECK ---
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
