@@ -126,7 +126,7 @@ export class IssuerMetadataBrowserComponent implements OnInit {
       void this.loadTenantCredentials();
     } else if (this.data?.initialUrl) {
       this.urlControl.setValue(this.data.initialUrl);
-      this.fetchMetadata();
+      void this.fetchMetadata();
     }
   }
 

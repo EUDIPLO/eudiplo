@@ -117,7 +117,7 @@ export class TenantCreateComponent implements OnInit {
     const id = this.route.snapshot.paramMap.get('id');
     if (id) {
       this.isEditMode = true;
-      this.loadTenant(id);
+      void this.loadTenant(id);
     } else {
       void this.offerAdminClientIfManagedHere();
     }

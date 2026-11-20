@@ -125,7 +125,7 @@ export class PresentationRequestComponent implements OnInit {
     this.form.get('requestId')?.valueChanges.subscribe((value) => {
       void this.evaluateReadiness(value || undefined);
     });
-    this.loadConfigurations();
+    void this.loadConfigurations();
   }
 
   async loadConfigurations(): Promise<void> {
@@ -243,11 +243,7 @@ export class PresentationRequestComponent implements OnInit {
       openErrorSnackBar(this.snackBar, this.noConfigurationReason);
       return;
     }
-    if (!this.showTransactionDataOverride) {
-      // The hidden editor no longer validates what it held, and its content is not sent,
-      // so an error it left behind must not keep the request from being generated.
-      this.form.get('transaction_data')?.setErrors(null);
-    }
+    this.dropHiddenOverrideError();
     if (this.form.invalid) {
       showFieldsToFix(this.form, {
         snackBar: this.snackBar,
@@ -326,6 +322,17 @@ export class PresentationRequestComponent implements OnInit {
       openErrorSnackBar(this.snackBar, message, 'Close', { panelClass: ['error-snackbar'] });
     } finally {
       this.generatingOffer = false;
+    }
+  }
+
+  /**
+   * With the override switched off, its editor is hidden, no longer validates what it
+   * held, and its content is not sent, so an error it left behind must not keep the
+   * request from being generated.
+   */
+  private dropHiddenOverrideError(): void {
+    if (!this.showTransactionDataOverride) {
+      this.form.get('transaction_data')?.setErrors(null);
     }
   }
 

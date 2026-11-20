@@ -162,7 +162,7 @@ export class PresentationShowComponent implements OnInit {
     if (this.route.snapshot.fragment === 'security') {
       this.selectedTab = PresentationShowComponent.SECURITY_TAB;
     }
-    this.loadPresentation();
+    void this.loadPresentation();
   }
 
   async loadPresentation(): Promise<void> {

@@ -336,7 +336,7 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
       this.usageForm.get('usage')!.setValue(requestedUsage);
     }
     this.openedFromForm = openedFromForm(this.route.snapshot.queryParamMap);
-    this.loadKmsProviders();
+    void this.loadKmsProviders();
   }
 
   /**

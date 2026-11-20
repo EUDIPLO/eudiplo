@@ -6963,7 +6963,7 @@ export type ClientControllerCreateClientData = {
 
 export type ClientControllerCreateClientErrors = {
     /**
-     * The caller may not grant one of the requested roles
+     * The caller may not grant one of the requested roles. An existing client of the tenant with this ID, whose roles the create would replace, has a role the caller neither holds nor may grant
      */
     403: unknown;
     /**

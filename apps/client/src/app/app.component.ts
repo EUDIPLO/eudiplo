@@ -142,7 +142,7 @@ export class AppComponent implements OnInit, OnDestroy {
    */
   private checkBackendVersion(): void {
     if (this.shouldShowToolbar && this.apiService.getAuthenticationStatus()) {
-      this.versionService.check(this.apiService.getBaseUrl());
+      void this.versionService.check(this.apiService.getBaseUrl());
       // Tells which accounts this instance manages.
       void this.frontendConfig.getConfig();
     }

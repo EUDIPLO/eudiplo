@@ -84,7 +84,7 @@ export class CredentialStatusCardComponent implements OnChanges {
   readonly suspended = STATUS_SUSPENDED;
 
   ngOnChanges(): void {
-    this.load();
+    void this.load();
   }
 
   async load(): Promise<void> {

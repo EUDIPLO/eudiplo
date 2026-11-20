@@ -109,7 +109,8 @@ export class KeycloakClientsProvider
     }
 
     /**
-     * Imports clients for a tenant. No-op for Keycloak as clients are managed directly in Keycloak.
+     * Imports the client files of a tenant's folder that EUDIPLO has no client
+     * for yet; `addClient` creates them in Keycloak or takes them over.
      */
     async importForTenant(tenantId: string): Promise<void> {
         await this.configImportService.importConfigsForTenant<ClientEntity>(
@@ -361,18 +362,42 @@ export class KeycloakClientsProvider
             return client.roles;
         }
         this.ensureTenantOwnership(tenantId, kcClient, "managed");
-        const svcUser = await this.kc.clients.getServiceAccountUser({
-            id: kcClient.id,
-        });
-        if (!svcUser?.id) {
-            return client.roles;
-        }
         return [
             ...new Set([
                 ...client.roles,
-                ...(await keycloakAuthorizationRoles(this.kc, svcUser.id)),
+                ...(await this.serviceAccountRoles(kcClient.id)),
             ]),
         ];
+    }
+
+    /** Roles of a Keycloak client's service account; none without one. */
+    private async serviceAccountRoles(kcClientId: string): Promise<string[]> {
+        const svcUser = await this.kc.clients.getServiceAccountUser({
+            id: kcClientId,
+        });
+        return svcUser?.id
+            ? keycloakAuthorizationRoles(this.kc, svcUser.id)
+            : [];
+    }
+
+    /**
+     * Roles of the Keycloak client of the tenant that `addClient` adopts,
+     * whether the mirror has it or not.
+     */
+    async getReplacedClientRoles(
+        tenantId: string,
+        clientId: string,
+    ): Promise<string[] | undefined> {
+        const kcClient = (await this.kc.clients.find({ clientId }))[0];
+        if (!kcClient?.id || !this.isAdoptable(tenantId, kcClient)) {
+            return undefined;
+        }
+        // Keycloak refuses to return the service account of a client that
+        // has none enabled; `addClient` enables it on the takeover.
+        if (kcClient.serviceAccountsEnabled === false) {
+            return [];
+        }
+        return this.serviceAccountRoles(kcClient.id);
     }
 
     /**
@@ -420,6 +445,15 @@ export class KeycloakClientsProvider
         }
         this.ensureTenantOwnership(tenantId, client, "updated (secret)");
         await this.kc.clients.update({ id: client.id }, { secret });
+    }
+
+    /**
+     * Whether `addClient` adopts this existing Keycloak client: only one of
+     * the tenant, never one without a tenant such as the bootstrap client or
+     * the backend's own admin client.
+     */
+    private isAdoptable(tenantId: string, kcClient: unknown): boolean {
+        return this.getTenantOwnerFromKcClient(kcClient) === tenantId;
     }
 
     async addClient(
@@ -505,10 +539,7 @@ export class KeycloakClientsProvider
             if (!existingClient?.id) {
                 throw error;
             }
-            // Adopt only a Keycloak client of this tenant, never one without a
-            // tenant such as the bootstrap client or the backend's own admin
-            // client.
-            if (this.getTenantOwnerFromKcClient(existingClient) !== tenantId) {
+            if (!this.isAdoptable(tenantId, existingClient)) {
                 throw new ClientIdTaken(dto.clientId);
             }
             id = existingClient.id;
@@ -535,19 +566,10 @@ export class KeycloakClientsProvider
               ? await this.kc.clients.generateNewClientSecret({ id })
               : { value: undefined };
 
-        // 4) Assign realm roles to the service account user
+        // 4) Give the service account the EUDIPLO roles of `dto`; an adopted
+        // client loses its other EUDIPLO roles, as the mirror below records.
         const svcUser = await this.kc.clients.getServiceAccountUser({ id });
-        const allRealmRoles = await this.kc.roles.find();
-        const toAssign = dto.roles
-            .map((r) => allRealmRoles.find((ar) => ar.name === r))
-            .filter(Boolean) as { id?: string; name?: string }[];
-
-        if (toAssign.length) {
-            await this.kc.users.addRealmRoleMappings({
-                id: svcUser.id!,
-                roles: toAssign.map((r) => ({ id: r.id!, name: r.name! })),
-            });
-        }
+        await syncEudiploRealmRoles(this.kc, svcUser.id!, dto.roles);
 
         // 5) (Optional) Put a mirror row in your DB (no secret)
         const entity = this.clientRepo.create({

@@ -279,10 +279,10 @@ test('issue and verify cookbook', async ({ page }) => {
     await page.getByRole('button', { name: 'Add credential' }).click();
     await page.getByRole('textbox', { name: 'Query ID' }).fill('membership');
     await expect(page.getByRole('combobox', { name: 'Credential format' })).toHaveText('SD-JWT VC');
-    await page.getByRole('textbox', { name: 'Credential type (VCT)' }).fill(vct);
-    await page.getByRole('textbox', { name: 'Claim path' }).fill('name');
+    await page.getByRole('combobox', { name: 'Credential type (VCT)' }).fill(vct);
+    await page.getByRole('combobox', { name: 'Claim path' }).fill('name');
     await page.getByRole('button', { name: 'Add claim' }).click();
-    await page.getByRole('textbox', { name: 'Claim path' }).nth(1).fill('member_id');
+    await page.getByRole('combobox', { name: 'Claim path' }).nth(1).fill('member_id');
     await page.getByRole('button', { name: 'Issuer trust' }).click();
     await page.getByRole('button', { name: 'Add managed trust list' }).click();
     await selectOption(page, 'Managed trust list', /\(membership-issuers\)/);

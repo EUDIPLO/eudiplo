@@ -58,7 +58,7 @@ export class SchemaBrowserComponent implements OnInit {
   ngOnInit(): void {
     if (this.data?.initialUrl) {
       this.urlControl.setValue(this.data.initialUrl);
-      this.fetchSchemaMetadata();
+      void this.fetchSchemaMetadata();
     }
   }
 
