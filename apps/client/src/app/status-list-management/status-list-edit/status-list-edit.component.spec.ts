@@ -65,7 +65,11 @@ describe('StatusListEditComponent', () => {
 describe('StatusListEditComponent Save', () => {
   async function render(
     createList: ReturnType<typeof vi.fn>,
-    { listId = null, getList = vi.fn() }: { listId?: string | null; getList?: unknown } = {}
+    {
+      listId = null,
+      getList = vi.fn(),
+      updateList = vi.fn(),
+    }: { listId?: string | null; getList?: unknown; updateList?: unknown } = {}
   ) {
     TestBed.configureTestingModule({
       imports: [StatusListEditComponent],
@@ -73,7 +77,7 @@ describe('StatusListEditComponent Save', () => {
         provideRouter([]),
         { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => listId } } } },
         { provide: MatSnackBar, useValue: { open: vi.fn() } },
-        { provide: StatusListManagementService, useValue: { createList, getList } },
+        { provide: StatusListManagementService, useValue: { createList, getList, updateList } },
         {
           provide: CredentialConfigService,
           useValue: { loadConfigurations: vi.fn().mockResolvedValue([]) },
@@ -161,6 +165,67 @@ describe('StatusListEditComponent Save', () => {
     expect(element.querySelector('h1')?.textContent).toContain('Edit Status List');
     expect(element.querySelector('.stats dd')?.textContent?.trim()).toBe('10.0K');
     expect(element.querySelector('.change-state')?.textContent?.trim()).toBe('No changes');
+  });
+
+  it('sends null for a binding changed to Shared or Default and leaves out an unchanged one', async () => {
+    const stored = {
+      id: 'list-1',
+      tenantId: 'tenant',
+      capacity: 10000,
+      usedEntries: 0,
+      availableEntries: 10000,
+      bits: 1,
+      uri: 'https://x/status/list-1',
+      credentialConfigurationId: 'pid',
+      keyChainId: 'status-keys',
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    };
+    const updateList = vi.fn().mockResolvedValue(stored);
+    const { fixture, save } = await render(vi.fn(), {
+      listId: 'list-1',
+      getList: vi.fn().mockResolvedValue(stored),
+      updateList,
+    });
+
+    fixture.componentInstance.form.patchValue({ keyChainId: null });
+    save.click();
+    await vi.waitFor(() => expect(updateList).toHaveBeenCalledOnce());
+    expect(updateList).toHaveBeenLastCalledWith('list-1', { keyChainId: null });
+
+    await vi.waitFor(() => expect(fixture.componentInstance.isSaving).toBe(false));
+    fixture.componentInstance.form.patchValue({
+      credentialConfigurationId: null,
+      keyChainId: 'status-keys',
+    });
+    save.click();
+    await vi.waitFor(() => expect(updateList).toHaveBeenCalledTimes(2));
+    expect(updateList).toHaveBeenLastCalledWith('list-1', { credentialConfigurationId: null });
+  });
+
+  it('sends no binding for a shared list on the default key chain that was not changed', async () => {
+    const updateList = vi.fn().mockResolvedValue({});
+    const { save } = await render(vi.fn(), {
+      listId: 'list-1',
+      getList: vi.fn().mockResolvedValue({
+        id: 'list-1',
+        tenantId: 'tenant',
+        capacity: 10000,
+        usedEntries: 0,
+        availableEntries: 10000,
+        bits: 1,
+        uri: 'https://x/status/list-1',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      }),
+      updateList,
+    });
+
+    save.click();
+    await vi.waitFor(() => expect(updateList).toHaveBeenCalledOnce());
+
+    // A key chain sent again, also as null, would discard the signed list.
+    expect(updateList).toHaveBeenCalledWith('list-1', {});
   });
 
   it('waits while the status list is created: a second click sends nothing', async () => {

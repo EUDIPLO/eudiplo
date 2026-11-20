@@ -53,6 +53,8 @@ import { MatStepper, MatStepperModule } from '@angular/material/stepper';
 import { STEPPER_GLOBAL_OPTIONS } from '@angular/cdk/stepper';
 import { CommonModule } from '@angular/common';
 import { getApiErrorMessage } from '../../utils/error-message';
+import { focusAfterRenderIfLost } from '../../common/focus-if-lost.util';
+import { LoadErrorComponent } from '../../common/load-error.component';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
 import {
   type FormSection,
@@ -94,6 +96,7 @@ function arrayNotEmpty(control: AbstractControl): ValidationErrors | null {
     MatDialogModule,
     MatRadioModule,
     MatStepperModule,
+    LoadErrorComponent,
   ],
   providers: [
     {
@@ -110,6 +113,7 @@ export class IssuanceOfferComponent implements OnInit {
   private readonly credentialStepElement =
     viewChild<ElementRef<HTMLFormElement>>('credentialStepElement');
   private readonly configStepElement = viewChild<ElementRef<HTMLFormElement>>('configStepElement');
+  private readonly pageHeading = viewChild<ElementRef<HTMLElement>>('pageHeading');
   private readonly injector = inject(Injector);
 
   // Step form groups
@@ -119,6 +123,8 @@ export class IssuanceOfferComponent implements OnInit {
 
   form: FormGroup;
   loading = false;
+  /** Why the credential configs or the issuer settings could not be loaded. */
+  loadErrorMessage = '';
   generatingOffer = false;
 
   formValues = new FormGroup({});
@@ -311,6 +317,16 @@ export class IssuanceOfferComponent implements OnInit {
 
   private readonly jwtService = inject(JwtService);
 
+  /**
+   * The form reads the credential configs and the issuer settings, which need
+   * `issuance:manage`; `issuance:offer` alone creates offers through the API only.
+   */
+  get loadErrorHint(): string {
+    return this.canManageCredentialConfigs
+      ? ''
+      : 'This form reads the credential configs and the issuer settings, which needs the issuance:manage role. With issuance:offer alone, create offers through the API.';
+  }
+
   /** Creating credential configurations needs `issuance:manage`. */
   get canManageCredentialConfigs(): boolean {
     return this.jwtService.hasRole('issuance:manage');
@@ -349,19 +365,60 @@ export class IssuanceOfferComponent implements OnInit {
   }
 
   async ngOnInit() {
-    // Load required data first
-    const [configs, , issuanceConfig] = await Promise.all([
-      this.credentialConfigService.loadConfigurations(),
-      this.attributeProviderService
-        .getAll()
-        .then((providers) => (this.availableAttributeProviders = providers))
-        .catch(() => {
-          this.availableAttributeProviders = [];
-          this.attributeProvidersLoadFailed = true;
-        }),
-      this.issuanceConfigService.getConfig(),
-    ]);
+    await this.load();
+  }
 
+  /** Loads the data again after a failure, then continues from the page heading. */
+  async retryLoad(): Promise<void> {
+    await this.load();
+    if (!this.loadErrorMessage) {
+      focusAfterRenderIfLost(this.injector, () => this.pageHeading()?.nativeElement);
+    }
+  }
+
+  /**
+   * Loads what the form is built from. Without the credential configs and the issuer
+   * settings the page shows the failure instead of a form that claims there are none.
+   */
+  private async load(): Promise<void> {
+    this.loading = true;
+    this.loadErrorMessage = '';
+    this.attributeProvidersLoadFailed = false;
+    let configs: CredentialConfig[];
+    let issuanceConfig: IssuanceConfig | undefined;
+    try {
+      [configs, , issuanceConfig] = await Promise.all([
+        this.credentialConfigService.loadConfigurations(),
+        this.attributeProviderService
+          .getAll()
+          .then((providers) => (this.availableAttributeProviders = providers))
+          .catch(() => {
+            this.availableAttributeProviders = [];
+            this.attributeProvidersLoadFailed = true;
+          }),
+        this.issuanceConfigService.getConfig(),
+      ]);
+    } catch (error) {
+      console.error('Error loading the issuance form:', error);
+      this.loadErrorMessage = getApiErrorMessage(
+        error,
+        'Failed to load the credential configs and issuer settings'
+      );
+      this.loading = false;
+      return;
+    }
+    this.loading = false;
+    await this.setUpForm(configs, issuanceConfig);
+  }
+
+  /**
+   * Fills the form from the loaded data and follows its changes. Runs once: Retry is
+   * only offered until a load succeeds, so the subscriptions are not made twice.
+   */
+  private async setUpForm(
+    configs: CredentialConfig[],
+    issuanceConfig: IssuanceConfig | undefined
+  ): Promise<void> {
     this.credentialConfigs = configs;
     this.issuanceConfig = issuanceConfig;
     this.availableAuthServers = ((issuanceConfig as any)?.authorizationServers || [])

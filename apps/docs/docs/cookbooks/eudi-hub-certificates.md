@@ -21,7 +21,7 @@ flowchart LR
 ## Before you start
 
 - **Starts from:** [Issue and verify](index.md): tenant `membership-demo` with the access key chain `Membership verifier access`, the credential configuration `membership` and the presentation configuration `membership-check`.
-- The client `membership-demo-admin` holds `registrar:manage`, which chapter 2, step 1 adds only if your wallet needs registrar certificates. A client cannot add a role to itself; if it is missing, a client or user that may grant it must add it ([granting roles](../reference/roles.md#granting-roles)).
+- The client `membership-demo-admin` holds `registrar:manage`, which chapter 2, step 1 adds only if your wallet needs registrar certificates. If it is missing, add it to the client under **Administration → API Clients** and sign in again. Without `tenant:admin`, a client cannot add a role to itself: a client or user that may grant it must add it ([granting roles](../reference/roles.md#granting-roles)).
 - An account in the [EUDI Hub portal](https://portal.eudi-hub.gov.de/) assigned to an organization that may request certificates in the sandbox. Create and verify the organization in the portal; EUDIPLO does not do that.
 - Your organization's official identifier (for example its EUID or Handelsregisternummer), a privacy policy URL, a support URL and a general web address.
 - If `OUTBOUND_URL_ALLOWED_HOSTS` is set, it lists `api.eudi-hub.gov.de` and the host of the EUDI Hub's issuing CA ([prerequisites](../trust/eudi-hub.md#prerequisites)).

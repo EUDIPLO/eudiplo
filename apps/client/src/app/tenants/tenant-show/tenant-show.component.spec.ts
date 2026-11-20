@@ -135,6 +135,8 @@ describe('TenantShowComponent', () => {
 
     expect(page.querySelector('app-client-list')).toBeNull();
     expect(text(page.querySelector('.empty-clients'))).toContain('This tenant has no clients yet.');
+    // The operator has no tenant, so the page names the ways that do add a client.
+    expect(text(page.querySelector('.empty-clients'))).toContain('send POST /api/tenant again');
   });
 
   it('deletes the tenant after confirmation and returns to the list', async () => {

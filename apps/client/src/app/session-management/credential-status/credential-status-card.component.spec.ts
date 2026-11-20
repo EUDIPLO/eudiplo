@@ -1,3 +1,4 @@
+import { ApplicationRef } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -64,6 +65,52 @@ describe('CredentialStatusCardComponent', () => {
 
     expect(sessions.getCredentialStatus).toHaveBeenCalledWith('session-1');
     expect(element.querySelector('mat-card')).toBeNull();
+  });
+
+  it('says that the status could not be read and shows it after a retry', async () => {
+    sessions.getCredentialStatus.mockRejectedValue({ statusCode: 503, message: 'Unavailable' });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    fixture = TestBed.createComponent(CredentialStatusCardComponent);
+    fixture.componentRef.setInput('sessionId', 'session-1');
+    fixture.componentRef.setInput('canChange', true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+
+    const error = element.querySelector('app-load-error')!;
+    expect(error.textContent).toContain('Failed to load the credential status: Unavailable');
+    expect(error.textContent).toContain('cannot be revoked, suspended or reinstated here');
+    expect(buttons(element)).toEqual(['refresh Retry']);
+
+    sessions.getCredentialStatus.mockResolvedValue([valid]);
+    const retry = element.querySelector<HTMLButtonElement>('app-load-error button')!;
+    retry.focus();
+    retry.click();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      TestBed.inject(ApplicationRef).tick();
+      expect(element.querySelector('app-load-error')).toBeNull();
+      // The focused Retry is gone with its card, so the card title takes the focus.
+      expect(document.activeElement?.textContent?.trim()).toBe('Credential Status');
+    });
+    expect(element.textContent).toContain('1 valid');
+    expect(buttons(element)).toContain('block Revoke');
+  });
+
+  it('leaves the hint about changes out for a caller that may only read the status', async () => {
+    sessions.getCredentialStatus.mockRejectedValue({ statusCode: 503, message: 'Unavailable' });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    fixture = TestBed.createComponent(CredentialStatusCardComponent);
+    fixture.componentRef.setInput('sessionId', 'session-1');
+    fixture.componentRef.setInput('canChange', false);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const error = (fixture.nativeElement as HTMLElement).querySelector('app-load-error')!;
+    expect(error.textContent).toContain('Failed to load the credential status');
+    expect(error.textContent).not.toContain('cannot be revoked');
   });
 
   it('shows the status and only the changes the list allows', async () => {

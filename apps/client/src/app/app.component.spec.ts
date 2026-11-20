@@ -7,7 +7,7 @@ import { By } from '@angular/platform-browser';
 import { provideRouter, Router, RouterLink } from '@angular/router';
 import { NEVER, of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { AppComponent } from './app.component';
+import { AppComponent, isLoginUrl } from './app.component';
 import { type AuthMode, FrontendConfigService } from './services/frontend-config.service';
 import { ApiService } from './core';
 import { VersionService } from './services/version.service';
@@ -45,6 +45,7 @@ describe('AppComponent shell height', () => {
         provideRouter([
           { path: 'login', component: EmptyPageComponent },
           { path: 'dashboard', component: EmptyPageComponent },
+          { path: 'clients/:id', component: EmptyPageComponent },
         ]),
       ],
     });
@@ -60,6 +61,11 @@ describe('AppComponent shell height', () => {
     await router.navigateByUrl('/login');
     fixture.detectChanges();
     expect(host.classList).not.toContain('app-shell');
+
+    // An item whose ID starts with "login" is not the login page.
+    await router.navigateByUrl('/clients/login-service');
+    fixture.detectChanges();
+    expect(host.classList).toContain('app-shell');
   });
 });
 
@@ -621,4 +627,20 @@ describe('AppComponent collapsible navigation', () => {
       for (const link of links) expect(sections.sectionOf(link), link).toBe(section);
     }
   });
+});
+
+describe('isLoginUrl', () => {
+  it.each(['/login', '/login?returnUrl=%2Fdashboard', '/login#top', '/login/'])(
+    'takes %s for the login page',
+    (url) => expect(isLoginUrl(url)).toBe(true)
+  );
+
+  // The shell must stay on the page of an item whose ID starts with "login".
+  it.each([
+    '/clients/login-service',
+    '/login-help',
+    '/login/unknown',
+    '/webhook-endpoints/x?from=/login',
+    '/',
+  ])('keeps the toolbar and navigation on %s', (url) => expect(isLoginUrl(url)).toBe(false));
 });

@@ -139,10 +139,10 @@
                 </mat-slide-toggle>
                 @if (tenantForm.get('createAdminClient')?.value) {
                   <p id="admin-client-hint" class="section-hint">
-                    An admin client will be automatically created for this tenant. Select the roles
-                    this client should have. It also gets clients:manage, and it can grant only
-                    these roles to other clients, unless you include tenant:admin, which lets it
-                    grant every role except tenants:manage and tenant:admin.
+                    An admin client is created for this tenant with clients:manage and the roles
+                    selected here. With tenant:admin it can grant itself and other clients every
+                    role except tenants:manage and tenant:admin. Without tenant:admin it can grant
+                    only the roles selected here, so select every role the tenant will need.
                   </p>
                   <mat-form-field appearance="outline" subscriptSizing="dynamic">
                     <mat-label>Client Roles</mat-label>
@@ -158,8 +158,10 @@
                   </mat-form-field>
                 } @else {
                   <p id="admin-client-hint" class="section-hint">
-                    No admin client is created. Create the tenant's clients afterwards under API
-                    Clients.
+                    No admin client is created, and the Web Client cannot add one to the tenant
+                    afterwards. Add its clients through the tenant's configuration folder, or send
+                    POST /api/tenant again with the same ID and name and the roles of the admin
+                    client.
                   </p>
                 }
               }

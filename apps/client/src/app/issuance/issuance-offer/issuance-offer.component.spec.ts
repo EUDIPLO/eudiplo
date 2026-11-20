@@ -1,3 +1,5 @@
+import { ApplicationRef } from '@angular/core';
+import { JwtService } from '../../services/jwt.service';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatAutocompleteTrigger } from '@angular/material/autocomplete';
 import { MatDialog } from '@angular/material/dialog';
@@ -87,6 +89,74 @@ describe('IssuanceOfferComponent', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  describe('load failure', () => {
+    async function render(): Promise<HTMLElement> {
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+      return fixture.nativeElement;
+    }
+
+    it('shows why the form could not be loaded instead of a form without credential configs, and loads it on Retry', async () => {
+      const load = vi.mocked(TestBed.inject(CredentialConfigService).loadConfigurations);
+      load.mockRejectedValue({ statusCode: 403, message: 'Forbidden resource' });
+      vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      vi.spyOn(TestBed.inject(JwtService), 'hasRole').mockReturnValue(false);
+
+      const page = await render();
+
+      const error = page.querySelector('app-load-error')!;
+      expect(error.textContent).toContain(
+        'Failed to load the credential configs and issuer settings: Forbidden resource'
+      );
+      expect(error.textContent).toContain('needs the issuance:manage role');
+      expect(page.querySelector('mat-stepper')).toBeNull();
+      expect(page.textContent).not.toContain('No credential configs available');
+
+      load.mockResolvedValue([]);
+      const retry = page.querySelector<HTMLButtonElement>('app-load-error button')!;
+      retry.focus();
+      retry.click();
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        TestBed.inject(ApplicationRef).tick();
+        expect(page.querySelector('app-load-error')).toBeNull();
+        // The focused Retry is gone with its card, so the page heading takes the focus.
+        expect(document.activeElement).toBe(page.querySelector('h1'));
+      });
+      expect(page.querySelector('mat-stepper')).not.toBeNull();
+    });
+
+    it('opens a recreated offer on its last step once the data is loaded', async () => {
+      history.replaceState(
+        { offerRequest: { flow: 'pre_authorized_code', credentialConfigurationIds: [] } },
+        ''
+      );
+      try {
+        await render();
+        // The stepper is not rendered while the data loads; the prefill must still find it.
+        await vi.waitFor(() =>
+          expect(component.stepper?.selectedIndex).toBe(component.stepper.steps.length - 1)
+        );
+      } finally {
+        history.replaceState(null, '');
+      }
+    });
+
+    it('adds no role hint for a caller with issuance:manage', async () => {
+      vi.mocked(TestBed.inject(IssuanceConfigService).getConfig).mockRejectedValue({
+        statusCode: 503,
+        message: 'Service Unavailable',
+      });
+      vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      vi.spyOn(TestBed.inject(JwtService), 'hasRole').mockReturnValue(true);
+
+      const page = await render();
+
+      expect(page.querySelector('app-load-error')!.textContent).not.toContain('issuance:manage');
+    });
   });
 
   describe('flow tiles', () => {

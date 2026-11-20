@@ -17,6 +17,9 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { focusAfterRenderIfLost } from '../../common/focus-if-lost.util';
+import { LoadErrorComponent } from '../../common/load-error.component';
+import { getApiErrorMessage } from '../../utils/error-message';
+import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { SessionManagementService } from '../session-management.service';
 import {
   groupCredentialStatus,
@@ -36,12 +39,20 @@ import {
  * Shows the status of the credentials issued in a session and, with
  * `canChange`, lets the user revoke, suspend or reinstate them per credential
  * configuration. Renders nothing while the session holds no credential with a
- * status.
+ * status. A status that could not be read is shown as such with a retry, so the
+ * session does not look like one without revocable credentials.
  */
 @Component({
   selector: 'app-credential-status-card',
   standalone: true,
-  imports: [MatCardModule, MatButtonModule, MatChipsModule, MatIconModule, MatTooltipModule],
+  imports: [
+    MatCardModule,
+    MatButtonModule,
+    MatChipsModule,
+    MatIconModule,
+    MatTooltipModule,
+    LoadErrorComponent,
+  ],
   templateUrl: './credential-status-card.component.html',
   styleUrl: './credential-status-card.component.scss',
   changeDetection: ChangeDetectionStrategy.Eager,
@@ -63,6 +74,8 @@ export class CredentialStatusCardComponent implements OnChanges {
   private readonly cardTitle?: ElementRef<HTMLElement>;
 
   groups: CredentialStatusGroup[] = [];
+  /** Why the status could not be read; the card then shows this instead of the status. */
+  loadError = '';
   updating = false;
 
   readonly statusLabel = statusLabel;
@@ -77,11 +90,28 @@ export class CredentialStatusCardComponent implements OnChanges {
   async load(): Promise<void> {
     try {
       this.groups = groupCredentialStatus(await this.sessions.getCredentialStatus(this.sessionId));
+      this.loadError = '';
     } catch (error) {
       console.error('Error loading credential status:', error);
       this.groups = [];
+      this.loadError = getApiErrorMessage(error, 'Failed to load the credential status');
     }
     this.changeDetector.markForCheck();
+  }
+
+  /** Reads the status again after a failure, then continues from the card title. */
+  async retryLoad(): Promise<void> {
+    await this.load();
+    if (!this.loadError) {
+      focusAfterRenderIfLost(this.injector, () => this.cardTitle?.nativeElement);
+    }
+  }
+
+  /** What the failed read keeps the caller from, for a caller who could change the status. */
+  get loadErrorHint(): string {
+    return this.canChange
+      ? 'Until it is loaded, the credentials of this session cannot be revoked, suspended or reinstated here.'
+      : '';
   }
 
   /** A change the lists allow, which the caller's roles do not. */
@@ -138,10 +168,12 @@ export class CredentialStatusCardComponent implements OnChanges {
           this.snackBar.open(`Credentials ${statusLabel(status)}`, 'Close', { duration: 3000 });
         } catch (error) {
           console.error('Error changing credential status:', error);
-          this.snackBar.open(`The status could not be changed: ${errorMessage(error)}`, 'Close', {
-            duration: 5000,
-            panelClass: ['error-snackbar'],
-          });
+          openErrorSnackBar(
+            this.snackBar,
+            getApiErrorMessage(error, 'The status could not be changed'),
+            'Close',
+            { panelClass: ['error-snackbar'] }
+          );
         } finally {
           // The actions wait until the new status is shown, so none acts on the old one.
           await this.load();
@@ -151,9 +183,4 @@ export class CredentialStatusCardComponent implements OnChanges {
         }
       });
   }
-}
-
-function errorMessage(error: unknown): string {
-  const message = (error as { message?: unknown } | null)?.message;
-  return typeof message === 'string' ? message : 'please try again';
 }

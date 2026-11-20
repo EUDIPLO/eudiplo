@@ -98,7 +98,9 @@ export class TenantCreateComponent implements OnInit {
       description: [''],
       // Off when the identity provider manages the clients (OIDC_PROVIDER=generic).
       createAdminClient: [true],
-      roles: new FormControl<Role[]>(['clients:manage'], [Validators.required]),
+      // tenant:admin lets the client grant itself and others the roles the tenant needs;
+      // with clients:manage alone it could grant nothing and the tenant could not be set up.
+      roles: new FormControl<Role[]>(['clients:manage', 'tenant:admin'], [Validators.required]),
     });
     // A disabled control is not validated, so no roles are needed without the client.
     this.tenantForm.get('createAdminClient')!.valueChanges.subscribe((create: boolean) => {
