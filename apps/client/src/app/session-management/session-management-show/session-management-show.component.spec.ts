@@ -786,3 +786,127 @@ describe('SessionManagementShowComponent load error', () => {
     expect(snackBar.open.mock.lastCall?.[0]).toBe('Failed to load session: Unavailable');
   });
 });
+
+describe('SessionManagementShowComponent live updates', () => {
+  let getSession: ReturnType<typeof vi.fn>;
+  let snackBar: { open: ReturnType<typeof vi.fn> };
+
+  beforeEach(async () => {
+    getSession = vi.fn().mockResolvedValue({ id: 'session-1', status: 'active' });
+    snackBar = { open: vi.fn() };
+    await TestBed.configureTestingModule({
+      imports: [SessionManagementShowComponent],
+      providers: [
+        provideRouter([]),
+        { provide: ActivatedRoute, useValue: { snapshot: { params: { id: 'session-1' } } } },
+        {
+          provide: SessionManagementService,
+          useValue: { getSession, getSessionLogs: vi.fn().mockResolvedValue([]) },
+        },
+        { provide: JwtService, useValue: { hasRole: () => true } },
+      ],
+    })
+      .overrideProvider(MatSnackBar, { useValue: snackBar })
+      .compileComponents();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    TestBed.resetTestingModule();
+  });
+
+  async function render() {
+    const fixture = TestBed.createComponent(SessionManagementShowComponent);
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(fixture.componentInstance.session).toBeDefined());
+    fixture.detectChanges();
+    return {
+      fixture,
+      component: fixture.componentInstance,
+      page: fixture.nativeElement as HTMLElement,
+    };
+  }
+
+  /** The indicator's text without its icon's ligature. */
+  const indicator = (page: HTMLElement) => {
+    const element = page.querySelector('.polling-indicator')?.cloneNode(true) as
+      HTMLElement | undefined;
+    element?.querySelectorAll('mat-icon').forEach((icon) => icon.remove());
+    return element?.textContent?.replace(/\s+/g, ' ').trim();
+  };
+
+  it('says updates paused, with Refresh, once polling a pending session reaches its time limit', async () => {
+    const { fixture, component, page } = await render();
+
+    vi.useFakeTimers();
+    component.startPolling('session-1');
+    vi.advanceTimersByTime(component.MAX_POLLING_DURATION_MS + component.POLLING_INTERVAL_MS);
+    fixture.detectChanges();
+
+    expect(component.isPolling()).toBe(false);
+    expect(component.updatesPaused).toBe(true);
+    expect(indicator(page)).toBe('Updates paused: the status may be out of date.');
+    expect(page.querySelector('.polling-indicator')?.getAttribute('role')).toBe('status');
+    expect(findButton(page, 'Refresh')).toBeTruthy();
+  });
+
+  it('loads the session on Refresh and follows it again while it is pending', async () => {
+    const { fixture, component, page } = await render();
+    component.stopPolling();
+    component.updatesPaused = true;
+    fixture.detectChanges();
+    getSession.mockClear();
+
+    findButton(page, 'Refresh').click();
+    await vi.waitFor(() => expect(component.refreshing).toBe(false));
+    fixture.detectChanges();
+
+    expect(getSession).toHaveBeenCalledWith('session-1');
+    expect(component.isPolling()).toBe(true);
+    expect(component.updatesPaused).toBe(false);
+    expect(indicator(page)).toContain('Live updates');
+    component.stopPolling();
+  });
+
+  it('stops saying paused when Refresh finds the session finished', async () => {
+    const { component } = await render();
+    component.stopPolling();
+    component.updatesPaused = true;
+    getSession.mockResolvedValue({ id: 'session-1', status: 'completed' });
+
+    await component.refreshSession();
+
+    expect(component.isPolling()).toBe(false);
+    expect(component.updatesPaused).toBe(false);
+  });
+
+  it('says when polls fail instead of "Live updates", and goes back once one succeeds', async () => {
+    const { fixture, component, page } = await render();
+    getSession.mockRejectedValue({ statusCode: 503, message: 'Unavailable' });
+
+    await component.fetchSessionStatus('session-1');
+    fixture.detectChanges();
+
+    expect(component.isPolling()).toBe(true);
+    expect(indicator(page)).toBe('Updates failing: Unavailable. Retrying.');
+    expect(page.querySelector('.polling-indicator')?.getAttribute('role')).toBe('status');
+    expect(snackBar.open).not.toHaveBeenCalled();
+
+    getSession.mockResolvedValue({ id: 'session-1', status: 'active' });
+    await component.fetchSessionStatus('session-1');
+    fixture.detectChanges();
+
+    expect(component.pollFailure).toBe('');
+    expect(indicator(page)).toContain('Live updates');
+    component.stopPolling();
+  });
+
+  it('says nothing about paused updates for a session that finished', async () => {
+    getSession.mockResolvedValue({ id: 'session-1', status: 'completed' });
+    const { component, page } = await render();
+
+    expect(component.isPolling()).toBe(false);
+    expect(component.updatesPaused).toBe(false);
+    expect(page.querySelector('.polling-indicator')).toBeNull();
+  });
+});

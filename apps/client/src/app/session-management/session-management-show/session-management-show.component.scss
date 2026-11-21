@@ -47,6 +47,19 @@ mat-card mat-card-content {
   }
 }
 
+// Polls fail or stopped: the indicator takes the warning tone
+.polling-indicator.failing,
+.polling-indicator.paused {
+  color: var(--mat-sys-on-surface);
+
+  mat-icon {
+    width: 16px;
+    height: 16px;
+    font-size: 16px;
+    color: var(--eudiplo-warning);
+  }
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);

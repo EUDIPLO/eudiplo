@@ -123,6 +123,15 @@ export class SessionManagementShowComponent implements OnInit, OnDestroy {
   readonly POLLING_INTERVAL_MS = 3000; // Poll every 3 seconds
   readonly MAX_POLLING_DURATION_MS = 300000; // Stop polling after 5 minutes
   pollingStartTime: number | null = null;
+  /**
+   * Set when polling stopped at its time limit while the session was still pending, so the page
+   * says that what it shows may be out of date and offers Refresh.
+   */
+  updatesPaused = false;
+  /** Why the last poll failed; empty while polls succeed. The indicator shows it. */
+  pollFailure = '';
+  /** True while Refresh reloads the session. */
+  refreshing = false;
   offerUri: string | null = null;
 
   constructor(
@@ -481,6 +490,8 @@ export class SessionManagementShowComponent implements OnInit, OnDestroy {
   startPolling(sessionId: string): void {
     this.stopPolling();
     this.pollingStartTime = Date.now();
+    this.updatesPaused = false;
+    this.pollFailure = '';
 
     // Set up interval
     this.pollingInterval = setInterval(() => {
@@ -488,6 +499,8 @@ export class SessionManagementShowComponent implements OnInit, OnDestroy {
 
       if (elapsed >= this.MAX_POLLING_DURATION_MS) {
         this.stopPolling();
+        // The session may still change; the page says it no longer follows it.
+        this.updatesPaused = true;
         return;
       }
 
@@ -509,6 +522,7 @@ export class SessionManagementShowComponent implements OnInit, OnDestroy {
       const currentStatus = this.getSessionStatusValue(updatedSession);
 
       this.session = updatedSession;
+      this.pollFailure = '';
       void this.loadSessionLogs(sessionId);
 
       // The result card says how the session ended; its live region announces it.
@@ -517,7 +531,32 @@ export class SessionManagementShowComponent implements OnInit, OnDestroy {
       }
     } catch (error) {
       console.error('Error fetching session status:', error);
-      // Don't show error to user for polling failures, just log them
+      // The indicator says so instead of "Live updates"; the next poll tries again.
+      if (this.isPolling()) this.pollFailure = getApiErrorMessage(error, 'Updates failing');
+    }
+  }
+
+  /**
+   * Reloads the session after updates paused, and follows it again while it is pending. A failed
+   * reload says why and keeps the session on the page.
+   */
+  async refreshSession(): Promise<void> {
+    const sessionId = this.session?.id;
+    // `disabledInteractive` keeps Refresh clickable while it waits.
+    if (!sessionId || this.refreshing) return;
+    this.refreshing = true;
+    try {
+      await this.loadSession(sessionId);
+      void this.loadSessionLogs(sessionId);
+      if (this.session && !isFinishedSession(this.getSessionStatusValue(this.session))) {
+        this.startPolling(sessionId);
+      } else {
+        this.updatesPaused = false;
+      }
+    } finally {
+      this.refreshing = false;
+      // Refresh left with the paused notice.
+      focusAfterRenderIfLost(this.injector, () => this.pageHeading?.nativeElement);
     }
   }
 
