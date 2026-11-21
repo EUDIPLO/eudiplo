@@ -69,12 +69,26 @@
             @if (detectedMode === 'local') {
               <mat-hint>This instance accepts client credentials.</mat-hint>
             }
+            @if (detectedMode === 'unreachable') {
+              <mat-hint class="unreachable-hint">Could not check this instance.</mat-hint>
+            }
             @if (loginForm.get('apiUrl')?.invalid && loginForm.get('apiUrl')?.touched) {
               <mat-error>
                 {{ getErrorMessage('apiUrl') }}
               </mat-error>
             }
           </mat-form-field>
+
+          @if (detectedMode === 'unreachable') {
+            <div class="notice mode-hint warning instance-problem">
+              <mat-icon aria-hidden="true">cloud_off</mat-icon>
+              <span role="alert">{{ instanceProblem }}</span>
+              <button matButton type="button" (click)="retryInstanceCheck()">
+                <mat-icon>refresh</mat-icon>
+                Retry
+              </button>
+            </div>
+          }
 
           <!-- Without the slide, the other tab's fields exist at once, so a submit can focus them. -->
           <mat-tab-group
@@ -107,6 +121,13 @@
                   <p class="notice mode-hint">
                     <mat-icon aria-hidden="true">info</mat-icon>
                     <span>Enter the instance URL to check whether it offers SSO login.</span>
+                  </p>
+                }
+
+                @if (detectedMode === 'unreachable') {
+                  <p class="notice mode-hint">
+                    <mat-icon aria-hidden="true">info</mat-icon>
+                    <span>Whether this instance offers SSO is known once it can be reached.</span>
                   </p>
                 }
 
