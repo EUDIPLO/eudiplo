@@ -19,10 +19,34 @@
             {{ getStatusDisplayText(session.status) }}
           </span>
           @if (isPolling()) {
-            <span class="polling-indicator">
-              <mat-icon class="spinning" aria-hidden="true">refresh</mat-icon>
-              Live updates
+            @if (pollFailure) {
+              <span class="polling-indicator failing" role="status">
+                <mat-icon aria-hidden="true">sync_problem</mat-icon>
+                {{ pollFailure }}. Retrying.
+              </span>
+            } @else {
+              <span class="polling-indicator">
+                <mat-icon class="spinning" aria-hidden="true">refresh</mat-icon>
+                Live updates
+              </span>
+            }
+          } @else if (updatesPaused) {
+            <span class="polling-indicator paused" role="status">
+              <mat-icon aria-hidden="true">pause_circle</mat-icon>
+              Updates paused: the status may be out of date.
             </span>
+            <button
+              matButton
+              type="button"
+              class="refresh-session"
+              (click)="refreshSession()"
+              [disabled]="refreshing"
+              disabledInteractive
+              [matTooltip]="refreshing ? 'Refreshing the session…' : 'Load the current status'"
+            >
+              <mat-icon>refresh</mat-icon>
+              Refresh
+            </button>
           }
         </div>
         <p class="hero-description">
