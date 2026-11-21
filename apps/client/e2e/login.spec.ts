@@ -31,6 +31,33 @@ test('asks before a link signs in at an instance the console does not know', asy
   await expect(page.getByLabel('EUDIPLO Instance')).toBeFocused();
 });
 
+test('says an instance could not be reached and checks it again on Retry', async ({ page }) => {
+  // The instance does not answer at first, as when it is restarting or the address has a typo.
+  let down = true;
+  await page.route('**/.well-known/oauth-authorization-server', (route) =>
+    down ? route.abort('connectionrefused') : route.fallback()
+  );
+  await page.goto('/login');
+  const instance = page.getByLabel('EUDIPLO Instance');
+  await instance.fill(resolvedE2EConfig.apiBaseUrl);
+  await instance.blur();
+
+  const problem = page.locator('.instance-problem');
+  await expect(problem.getByRole('alert')).toContainText('Could not reach');
+  await expect(page.getByText('SSO is not available')).toHaveCount(0);
+  await expect(page.getByText('This instance accepts client credentials.')).toHaveCount(0);
+  await expect(page.getByRole('tab', { name: 'SSO' })).not.toHaveAttribute('aria-disabled', 'true');
+
+  down = false;
+  await problem.getByRole('button', { name: 'Retry' }).click();
+  await expect(problem).toHaveCount(0);
+  await expect(
+    page.getByText(
+      /SSO is available for this instance\.|This instance accepts client credentials\./
+    )
+  ).toBeVisible();
+});
+
 test('login with client credentials redirects to dashboard', async ({ page }) => {
   test.skip(
     !hasAuthCredentials,

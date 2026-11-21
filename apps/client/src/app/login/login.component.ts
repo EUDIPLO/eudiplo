@@ -36,6 +36,7 @@ import { ApiService, withoutTrailingSlashes } from '../core';
 import { type OidcProvider, OidcService, oidcProviderOf } from '../core/oidc.service';
 import { DiploLogoComponent } from '../common/diplo-logo.component';
 import { focusFieldToFix, showFieldsToFix } from '../common/field-to-fix.util';
+import { focusAfterRenderIfLost } from '../common/focus-if-lost.util';
 import { apiErrorDetail, asSentence } from '../utils/error-message';
 import { KEEP_CALLER_FAILURE } from '../services/jwt.service';
 import { openErrorSnackBar } from '../utils/error-snackbar';
@@ -82,6 +83,25 @@ const TOKEN_ERROR_HINTS = new Map<string, string>([
  * wrong secret with a Nest body (`error: "Unauthorized"`), another identity
  * provider with an RFC 6749 error code, so the status decides first.
  */
+/**
+ * Why the instance check could not tell whether `url` offers SSO. Every EUDIPLO instance serves
+ * its authorization server metadata, with or without SSO, so a failed request means the instance
+ * was not reached or is not one.
+ */
+export function instanceCheckFailure(error: unknown, url: string): string {
+  const status = (error as { status?: unknown } | undefined)?.status;
+  if (status === 404) {
+    return `${url} answered, but it is not an EUDIPLO instance. Check the address.`;
+  }
+  if (typeof status === 'number' && status >= 500) {
+    return `${url} failed with status ${status}. It may be starting; try again in a moment.`;
+  }
+  if (typeof status === 'number' && status > 0) {
+    return `${url} answered with status ${status}. Check the address.`;
+  }
+  return `Could not reach ${url}. Check the address, that the instance is running and that it allows this console's address (CORS).`;
+}
+
 function signInFailure(error: unknown): string {
   const http = error instanceof OAuth2HttpError ? error : undefined;
   const other = error as { status?: unknown; message?: unknown; name?: unknown } | undefined;
@@ -198,7 +218,10 @@ export class LoginComponent implements OnInit, OnDestroy {
   isLoading = false;
   hideClientSecret = true;
   isDevelopmentMode = false;
-  detectedMode: null | 'loading' | 'local' | 'oidc' = null;
+  /** What the instance check found; `unreachable` when it could not tell, see `instanceProblem`. */
+  detectedMode: null | 'loading' | 'local' | 'oidc' | 'unreachable' = null;
+  /** Why the last instance check could not tell whether the instance offers SSO. */
+  instanceProblem = '';
   selectedLoginMode: 'sso' | 'client' = 'sso';
   private discoveredIssuer?: string;
   private discoveredUiClientId?: string;
@@ -535,7 +558,10 @@ export class LoginComponent implements OnInit, OnDestroy {
    */
   private async instanceInFieldChecked(): Promise<void> {
     const url = withoutTrailingSlashes(this.apiUrlControl.value);
-    if (this.instanceCheck?.url !== url) void this.detectMode(url);
+    // An instance that could not be reached is checked again.
+    if (this.instanceCheck?.url !== url || this.detectedMode === 'unreachable') {
+      void this.detectMode(url);
+    }
     const check = this.instanceCheck;
     await check?.done;
     // A newer check started meanwhile, for an edited URL or after leaving the field again.
@@ -545,6 +571,7 @@ export class LoginComponent implements OnInit, OnDestroy {
   private async checkInstance(check: InstanceCheck): Promise<void> {
     const normalizedUrl = check.url;
     this.detectedMode = 'loading';
+    this.instanceProblem = '';
 
     try {
       const discovery = await this.apiService.fetchDiscovery(normalizedUrl);
@@ -565,15 +592,26 @@ export class LoginComponent implements OnInit, OnDestroy {
         this.discoveredIssuer = undefined;
         this.discoveredUiClientId = undefined;
       }
-    } catch {
+    } catch (error) {
       if (this.instanceCheck !== check) return;
-      this.detectedMode = 'local';
-      this.selectedLoginMode = 'client';
+      // Not knowing whether the instance offers SSO is not the same as it offering none: the
+      // tabs stay as they are, and the page says what failed.
+      this.detectedMode = 'unreachable';
+      this.instanceProblem = instanceCheckFailure(error, normalizedUrl);
       this.discoveredIssuer = undefined;
       this.discoveredUiClientId = undefined;
     }
 
     this.syncLoginModeState();
+  }
+
+  /** Checks the instance in the field again after it could not be reached. */
+  async retryInstanceCheck(): Promise<void> {
+    const url = this.apiUrlControl.value;
+    if (!url) return;
+    await this.detectMode(url);
+    // The Retry button left with the problem it belonged to.
+    focusAfterRenderIfLost(this.injector, () => this.apiUrlInput()?.nativeElement);
   }
 
   get isSsoAvailable(): boolean {
@@ -633,6 +671,11 @@ export class LoginComponent implements OnInit, OnDestroy {
       }
       if (this.apiUrlControl.invalid) {
         this.showFieldsToFix(this.apiUrlControl);
+        return;
+      }
+      if (this.detectedMode === 'unreachable') {
+        openErrorSnackBar(this.snackBar, this.instanceProblem);
+        this.apiUrlInput()?.nativeElement.focus();
         return;
       }
       if (this.selectedLoginMode !== 'sso') {

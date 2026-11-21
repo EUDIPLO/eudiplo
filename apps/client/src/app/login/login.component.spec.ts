@@ -19,7 +19,7 @@ import { ApiService, type EndedSession } from '../core';
 import { OidcService } from '../core/oidc.service';
 import { expectAvailable, expectUnavailable } from '../common/unavailable-action.testing';
 import { EnvironmentService } from '../services/environment.service';
-import { LoginComponent } from './login.component';
+import { LoginComponent, instanceCheckFailure } from './login.component';
 
 describe('LoginComponent with a kept session', () => {
   const rejectedText =
@@ -1319,6 +1319,103 @@ describe('LoginComponent with a kept session', () => {
     });
   });
 
+  describe('an instance that cannot be checked', () => {
+    const unreachable = { status: 0, message: 'Http failure response: 0 Unknown Error' };
+    const retryButton = () =>
+      [...page().querySelectorAll<HTMLButtonElement>('.instance-problem button')].find((b) =>
+        b.textContent?.includes('Retry')
+      );
+    let redirectToLogin: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+      api.kept = false;
+      queryParams['apiUrl'] = 'http://down.test';
+      api.discoveryAnswer = Promise.reject(unreachable);
+      // Unobserved until the page asks; Vitest would report the rejection otherwise.
+      api.discoveryAnswer.catch(() => undefined);
+      redirectToLogin = vi.fn(() => new Promise<void>(() => undefined));
+      Object.assign(TestBed.inject(OidcService), { redirectToLogin });
+    });
+
+    it('says the instance could not be reached instead of that it offers no SSO', async () => {
+      render();
+      const component = fixture.componentInstance;
+      await vi.waitFor(() => expect(component.detectedMode).toBe('unreachable'));
+      fixture.detectChanges();
+
+      expect(page().querySelector('.instance-problem [role="alert"]')?.textContent).toContain(
+        'Could not reach http://down.test.'
+      );
+      expect(page().querySelector('mat-hint')?.textContent).toContain(
+        'Could not check this instance.'
+      );
+      expect(page().textContent).not.toContain('SSO is not available');
+      expect(page().textContent).not.toContain('accepts client credentials');
+      // The SSO tab stays usable and chosen.
+      expect(component.isSsoTabDisabled).toBe(false);
+      expect(component.selectedLoginMode).toBe('sso');
+      expect(retryButton()).toBeDefined();
+    });
+
+    it('checks the instance again on Retry', async () => {
+      render();
+      const component = fixture.componentInstance;
+      await vi.waitFor(() => expect(component.detectedMode).toBe('unreachable'));
+      fixture.detectChanges();
+
+      api.discoveryAnswer = Promise.resolve({ issuer: 'http://idp.test', ui_client_id: 'ui' });
+      retryButton()!.click();
+      await vi.waitFor(() => expect(component.detectedMode).toBe('oidc'));
+      fixture.detectChanges();
+
+      expect(api.discoveryRequests).toEqual(['http://down.test', 'http://down.test']);
+      expect(page().querySelector('.instance-problem')).toBeNull();
+      expect(component.instanceProblem).toBe('');
+    });
+
+    it('checks again on an SSO sign-in and says why it cannot sign in while it fails', async () => {
+      render();
+      const component = fixture.componentInstance;
+      await vi.waitFor(() => expect(component.detectedMode).toBe('unreachable'));
+
+      await component.onSubmit();
+
+      expect(api.discoveryRequests).toEqual(['http://down.test', 'http://down.test']);
+      expect(snackTexts()).toEqual([
+        "Could not reach http://down.test. Check the address, that the instance is running and that it allows this console's address (CORS).",
+      ]);
+      expect(component.selectedLoginMode).toBe('sso');
+      expect(redirectToLogin).not.toHaveBeenCalled();
+    });
+
+    it('signs in with SSO when the check on sign-in reaches the instance', async () => {
+      render();
+      const component = fixture.componentInstance;
+      await vi.waitFor(() => expect(component.detectedMode).toBe('unreachable'));
+
+      api.discoveryAnswer = Promise.resolve({ issuer: 'http://idp.test', ui_client_id: 'ui' });
+      void component.onSubmit();
+
+      await vi.waitFor(() => expect(redirectToLogin).toHaveBeenCalledOnce());
+      expect(snackTexts()).toEqual([]);
+    });
+
+    it('names what answered when the instance answered with an error', () => {
+      expect(instanceCheckFailure({ status: 404 }, 'http://x.test')).toBe(
+        'http://x.test answered, but it is not an EUDIPLO instance. Check the address.'
+      );
+      expect(instanceCheckFailure({ status: 503 }, 'http://x.test')).toBe(
+        'http://x.test failed with status 503. It may be starting; try again in a moment.'
+      );
+      expect(instanceCheckFailure({ status: 403 }, 'http://x.test')).toBe(
+        'http://x.test answered with status 403. Check the address.'
+      );
+      expect(instanceCheckFailure(new TypeError('Failed to fetch'), 'http://x.test')).toContain(
+        'Could not reach http://x.test.'
+      );
+    });
+  });
+
   describe('layout', () => {
     /** The SSO tab's status line, with the class that sets its tone. */
     function ssoNotice(mode: LoginComponent['detectedMode']): HTMLElement | null {
@@ -1364,6 +1461,13 @@ describe('LoginComponent with a kept session', () => {
       expect(notice?.classList).toContain('warning');
     });
 
+    it('says SSO is known once the instance can be reached, without a warning, after a failed check', () => {
+      const notice = ssoNotice('unreachable');
+
+      expect(notice?.textContent).toContain('known once it can be reached');
+      expect(notice?.classList).not.toContain('warning');
+    });
+
     it('asks for the instance URL instead of a warning before any instance check ran', () => {
       const notice = ssoNotice(null);
 
@@ -1374,7 +1478,7 @@ describe('LoginComponent with a kept session', () => {
     });
 
     it('hides the status line icons from assistive technology', () => {
-      for (const mode of [null, 'loading', 'oidc', 'local'] as const) {
+      for (const mode of [null, 'loading', 'oidc', 'local', 'unreachable'] as const) {
         const icon = ssoNotice(mode)?.querySelector('mat-icon');
 
         expect(icon?.getAttribute('aria-hidden'), String(mode)).toBe('true');
