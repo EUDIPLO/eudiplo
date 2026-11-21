@@ -563,6 +563,9 @@ describe('SessionManagementListComponent', () => {
 
     await component.deleteSelectedSessions();
     expect(confirm.mock.calls[0][0]).toContain('Delete 2 sessions?');
+    // The question names the sessions and says what happens to their credentials.
+    expect(confirm.mock.calls[0][0]).toContain('• s-1\n• s-2');
+    expect(confirm.mock.calls[0][0]).toContain('the Web Client can no longer revoke');
     expect(deleteSession).not.toHaveBeenCalled();
 
     confirm.mockReturnValue(true);

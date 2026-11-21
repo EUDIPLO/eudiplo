@@ -123,6 +123,16 @@
               }
             </mat-form-field>
 
+            @if (configForm.get('cleanupMode')?.value === 'full') {
+              <div class="info-box warning">
+                <mat-icon aria-hidden="true">warning</mat-icon>
+                <span>
+                  <strong>Full Delete</strong> removes the whole session record.
+                  {{ deletedSessionCredentials }}
+                </span>
+              </div>
+            }
+
             @if (configForm.get('cleanupMode')?.value === 'anonymize') {
               <div class="info-box">
                 <mat-icon aria-hidden="true">info</mat-icon>
