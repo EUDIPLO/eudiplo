@@ -91,6 +91,7 @@ import { SourceLoadState, loadSource, reportSourceFailures } from '../../../comm
 import { focusAfterRenderIfLost, focusRowAfterRemoval } from '../../../common/focus-if-lost.util';
 import { jsonViewUnavailableReason } from '../../../common/json-view';
 import { formatLifetime } from '../../../utils/duration';
+import type { PageWithUnsavedChanges } from '../../../services/unsaved-changes.service';
 
 /** The sources of the options of the form's selects. */
 type CredentialConfigSource =
@@ -130,7 +131,7 @@ type CredentialConfigSource =
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './credential-config-create.component.scss',
 })
-export class CredentialConfigCreateComponent implements OnInit {
+export class CredentialConfigCreateComponent implements OnInit, PageWithUnsavedChanges {
   readonly defaultProofTypesSupported: ('attestation' | 'jwt')[] = ['attestation', 'jwt'];
   readonly proofTypeOptions: { value: 'attestation' | 'jwt'; label: string }[] = [
     { value: 'attestation', label: 'Attestation (preferred)' },
@@ -576,6 +577,7 @@ export class CredentialConfigCreateComponent implements OnInit {
       savePromise
         .then(
           () => {
+            this.form.markAsPristine();
             if (this.createdForAnotherTab) {
               this.returnToForm(formValue.id);
               return;
@@ -604,6 +606,10 @@ export class CredentialConfigCreateComponent implements OnInit {
       });
       this.loading = false;
     }
+  }
+
+  hasUnsavedChanges(): boolean {
+    return this.form.dirty;
   }
 
   /** A form in another tab opened this page to get a credential config it misses. */
@@ -1090,6 +1096,8 @@ export class CredentialConfigCreateComponent implements OnInit {
   removeDisplayConfig(index: number): void {
     if (this.displayConfigs.length > 1) {
       this.displayConfigs.removeAt(index);
+      // A row button changes the form without marking it dirty.
+      this.displayConfigs.markAsDirty();
       focusRowAfterRemoval(
         this.injector,
         () => this.displayTitles?.map((title) => title.nativeElement),
@@ -1226,6 +1234,8 @@ export class CredentialConfigCreateComponent implements OnInit {
 
   removeField(index: number): void {
     this.fields.removeAt(index);
+    // A row button changes the form without marking it dirty.
+    this.fields.markAsDirty();
     focusRowAfterRemoval(
       this.injector,
       () => this.claimHeaders?.map((header) => header.nativeElement),
@@ -1245,6 +1255,8 @@ export class CredentialConfigCreateComponent implements OnInit {
 
   removeFieldDisplay(fieldIndex: number, displayIndex: number): void {
     this.getFieldDisplayArray(fieldIndex).removeAt(displayIndex);
+    // A row button changes the form without marking it dirty.
+    this.getFieldDisplayArray(fieldIndex).markAsDirty();
     focusRowAfterRemoval(
       this.injector,
       () =>
@@ -1301,6 +1313,8 @@ export class CredentialConfigCreateComponent implements OnInit {
 
   removeIaeAction(index: number): void {
     this.iaeActions.removeAt(index);
+    // A row button changes the form without marking it dirty.
+    this.iaeActions.markAsDirty();
     focusRowAfterRemoval(
       this.injector,
       () => this.iaeStepTitles?.map((title) => title.nativeElement),
@@ -1316,6 +1330,8 @@ export class CredentialConfigCreateComponent implements OnInit {
     const action = this.iaeActions.at(index);
     this.iaeActions.removeAt(index);
     this.iaeActions.insert(newIndex, action);
+    // A row button changes the form without marking it dirty.
+    this.iaeActions.markAsDirty();
 
     // The card moves with its step, which can take focus off the pressed button. That button
     // stays focusable at the first or last position, so pressing it again does not move back.
@@ -1341,6 +1357,8 @@ export class CredentialConfigCreateComponent implements OnInit {
             label: currentLabel,
           };
     this.iaeActions.insert(index, this.createIaeActionGroup(newAction));
+    // A row button changes the form without marking it dirty.
+    this.iaeActions.markAsDirty();
   }
 
   dropIaeAction(event: CdkDragDrop<FormGroup[]>): void {

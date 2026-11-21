@@ -39,6 +39,7 @@ import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { showFieldsToFix } from '../../common/field-to-fix.util';
 import { focusAfterRenderIfLost } from '../../common/focus-if-lost.util';
 import { LoadErrorComponent } from '../../common/load-error.component';
+import type { PageWithUnsavedChanges } from '../../services/unsaved-changes.service';
 
 @Component({
   selector: 'app-tenant-create',
@@ -60,7 +61,7 @@ import { LoadErrorComponent } from '../../common/load-error.component';
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './tenant-create.component.scss',
 })
-export class TenantCreateComponent implements OnInit {
+export class TenantCreateComponent implements OnInit, PageWithUnsavedChanges {
   tenantForm: FormGroup;
   isSubmitting = false;
   isEditMode = false;
@@ -207,6 +208,7 @@ export class TenantCreateComponent implements OnInit {
           path: { id },
           body,
         });
+        this.tenantForm.markAsPristine();
         this.snackBar.open('Tenant updated successfully', 'Close', { duration: 3000 });
         await this.router.navigate(['../'], { relativeTo: this.route });
       } else {
@@ -220,6 +222,7 @@ export class TenantCreateComponent implements OnInit {
         };
         const result = await tenantControllerInitTenant<true>({ body });
 
+        this.tenantForm.markAsPristine();
         // Cast to expected type since SDK returns generic response
         // The backend returns { ...tenant, client: { clientId, clientSecret } } on creation
         const tenantData = result.data as typeof result.data & {
@@ -255,6 +258,10 @@ export class TenantCreateComponent implements OnInit {
     } finally {
       this.isSubmitting = false;
     }
+  }
+
+  hasUnsavedChanges(): boolean {
+    return this.tenantForm.dirty;
   }
 
   /**
