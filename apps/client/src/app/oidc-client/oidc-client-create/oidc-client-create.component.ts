@@ -50,6 +50,7 @@ import {
   scopeNameValidator,
   uniqueValuesValidator,
 } from './oidc-client-form';
+import type { PageWithUnsavedChanges } from '../../services/unsaved-changes.service';
 
 type ScopeGroup = FormGroup<{
   scope: FormControl<string>;
@@ -75,7 +76,7 @@ type ScopeGroup = FormGroup<{
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './oidc-client-create.component.scss',
 })
-export class OidcClientCreateComponent implements OnInit {
+export class OidcClientCreateComponent implements OnInit, PageWithUnsavedChanges {
   readonly maxRedirectUris = MAX_REDIRECT_URIS;
   readonly maxScopes = MAX_SCOPES;
   readonly profileLabels = PROFILE_LABELS;
@@ -361,6 +362,10 @@ export class OidcClientCreateComponent implements OnInit {
     return fieldErrorMessage(target, own ?? localMessage);
   }
 
+  hasUnsavedChanges(): boolean {
+    return this.form.dirty;
+  }
+
   onSubmit(): void {
     // `disabledInteractive` keeps Save clickable while it looks disabled.
     if (this.saving || this.loading || this.loadError) return;
@@ -389,6 +394,7 @@ export class OidcClientCreateComponent implements OnInit {
         .create(body)
         .then(
           ({ clientSecret, id, issuer }) => {
+            this.form.markAsPristine();
             this.snackBar.open('OIDC client created', 'Close', { duration: 3000 });
             const data: OidcClientSecretDialogData = { clientId: id, clientSecret, issuer };
             const showSecret = () =>
@@ -412,6 +418,7 @@ export class OidcClientCreateComponent implements OnInit {
         .update(id, body)
         .then(
           () => {
+            this.form.markAsPristine();
             this.snackBar.open('OIDC client updated', 'Close', { duration: 3000 });
             return this.router.navigate(['../../', id], { relativeTo: this.route });
           },

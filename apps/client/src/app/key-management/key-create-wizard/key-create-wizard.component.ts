@@ -40,6 +40,7 @@ import { type CreatedForForm, openedFromForm } from '../../common/return-to-form
 import { ReturnToFormComponent } from '../../common/return-to-form.component';
 import { showFieldsToFix } from '../../common/field-to-fix.util';
 import { keyUsages, type KeyUsageType } from '../key-usage';
+import type { PageWithUnsavedChanges } from '../../services/unsaved-changes.service';
 
 export type KeyChainTypeSelection = 'internalChain' | 'externalCaChain' | 'standalone';
 export type AccessSourceSelection = 'selfSigned' | 'external';
@@ -85,7 +86,7 @@ function requiredText(control: AbstractControl): ValidationErrors | null {
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './key-create-wizard.component.scss',
 })
-export class KeyCreateWizardComponent implements OnInit, OnDestroy {
+export class KeyCreateWizardComponent implements OnInit, OnDestroy, PageWithUnsavedChanges {
   @ViewChild('stepper') stepper!: MatStepper;
 
   /** Set when the user left the wizard, so a running request does not pull them back. */
@@ -306,6 +307,11 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.destroyed = true;
+  }
+
+  /** The steps before Configure hold choices only; Configure holds what was typed or pasted. */
+  hasUnsavedChanges(): boolean {
+    return this.configForm.dirty;
   }
 
   /** Requires the pasted key and certificate chain while the Configure step shows them. */
@@ -551,6 +557,7 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
       const createDto = this.createRequest(usage, description);
 
       const result = await this.keyChainService.create(createDto);
+      this.configForm.markAsPristine();
 
       // The key cannot sign before its certificate is stored, which its page requests.
       if (this.requestsCertificate) {
@@ -608,6 +615,7 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
       rotationPolicy: this.isExternalCaChain ? this.rotationPolicy() : undefined,
     };
     const result = await this.keyChainService.import(importDto);
+    this.configForm.markAsPristine();
     if (this.openedFromForm) {
       this.returnToForm(result.id, `Key chain "${importDto.description}" imported`);
       return;

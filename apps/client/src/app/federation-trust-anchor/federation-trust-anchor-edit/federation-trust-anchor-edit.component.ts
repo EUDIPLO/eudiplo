@@ -43,6 +43,7 @@ import {
   isFederationEntityId,
 } from '../federation-trust-anchor.service';
 import { FederationTrustAnchorReferences } from '../federation-trust-anchor-references';
+import type { PageWithUnsavedChanges } from '../../services/unsaved-changes.service';
 
 /** Accepts an Entity Identifier as the backend does; an empty value passes. */
 function entityIdValidator(control: AbstractControl): ValidationErrors | null {
@@ -75,7 +76,7 @@ type JwksValue = CreateFederationTrustAnchorDto['jwks'];
   styleUrl: './federation-trust-anchor-edit.component.scss',
   providers: [FederationTrustAnchorReferences],
 })
-export class FederationTrustAnchorEditComponent implements OnInit {
+export class FederationTrustAnchorEditComponent implements OnInit, PageWithUnsavedChanges {
   readonly jwksSchema = federationTrustAnchorJwksSchema;
   readonly editorOptions = { language: 'json', automaticLayout: true, minimap: { enabled: false } };
 
@@ -178,6 +179,10 @@ export class FederationTrustAnchorEditComponent implements OnInit {
     return this.saving ? 'Saving the trust anchor…' : '';
   }
 
+  hasUnsavedChanges(): boolean {
+    return this.form.dirty;
+  }
+
   async onSubmit(): Promise<void> {
     // `disabledInteractive` keeps Save clickable while it looks disabled.
     if (this.saving) return;
@@ -214,6 +219,7 @@ export class FederationTrustAnchorEditComponent implements OnInit {
       const saved = this.anchorId
         ? await this.service.update(this.anchorId, body)
         : await this.service.create({ id: value.id.trim(), ...body });
+      this.form.markAsPristine();
       // The configuration screen waits in its own tab; this one does not move elsewhere.
       if (this.openedFromForm) {
         const heading = `Trust anchor "${saved.description || saved.id}" registered`;

@@ -1,4 +1,5 @@
 import type { Routes } from '@angular/router';
+import { unsavedChangesGuard } from '../guards/unsaved-changes.guard';
 
 export const keyManagementRoutes: Routes = [
   {
@@ -19,6 +20,7 @@ export const keyManagementRoutes: Routes = [
       import('./key-create-wizard/key-create-wizard.component').then(
         (m) => m.KeyCreateWizardComponent
       ),
+    canDeactivate: [unsavedChangesGuard],
   },
   {
     path: ':id',
@@ -33,5 +35,6 @@ export const keyManagementRoutes: Routes = [
       import('./key-management-create/key-management-create.component').then(
         (m) => m.KeyManagementCreateComponent
       ),
+    canDeactivate: [unsavedChangesGuard],
   },
 ];

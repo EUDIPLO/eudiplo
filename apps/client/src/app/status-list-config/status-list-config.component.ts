@@ -29,6 +29,7 @@ import { resetDefaultsTooltip, WAIT_FOR_CHANGE } from '../common/reset-defaults'
 import { getApiErrorMessage } from '../utils/error-message';
 import { openErrorSnackBar } from '../utils/error-snackbar';
 import { wholeNumberValidator } from '../utils/whole-number-validator';
+import type { PageWithUnsavedChanges } from '../services/unsaved-changes.service';
 
 const listFormat = new Intl.ListFormat('en', { type: 'conjunction' });
 
@@ -66,7 +67,7 @@ const newListsOnly = new Set<keyof StatusListConfig>(['capacity', 'bits']);
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './status-list-config.component.scss',
 })
-export class StatusListConfigComponent implements OnInit {
+export class StatusListConfigComponent implements OnInit, PageWithUnsavedChanges {
   configForm: FormGroup;
   isLoading = true;
   isSaving = false;
@@ -157,6 +158,10 @@ export class StatusListConfigComponent implements OnInit {
   }
 
   /** Save stays focusable while another change runs, so its tooltip says why it waits. */
+  hasUnsavedChanges(): boolean {
+    return this.configForm.dirty;
+  }
+
   get saveTooltip(): string {
     return this.isSaving ? WAIT_FOR_CHANGE : '';
   }

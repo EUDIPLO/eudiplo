@@ -20,6 +20,7 @@ import { ConfigOwnershipNoticeComponent } from '../../config-portability/config-
 import { getApiErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { keyUsages, type KeyUsageType } from '../key-usage';
+import type { PageWithUnsavedChanges } from '../../services/unsaved-changes.service';
 
 @Component({
   selector: 'app-key-management-create',
@@ -45,7 +46,7 @@ import { keyUsages, type KeyUsageType } from '../key-usage';
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './key-management-create.component.scss',
 })
-export class KeyManagementCreateComponent implements OnInit {
+export class KeyManagementCreateComponent implements OnInit, PageWithUnsavedChanges {
   public form: FormGroup;
   public keyChainId?: string;
   public keyChain?: KeyChainResponseDto;
@@ -112,6 +113,10 @@ export class KeyManagementCreateComponent implements OnInit {
     return this.keyChain?.type === 'internalChain';
   }
 
+  hasUnsavedChanges(): boolean {
+    return this.form.dirty;
+  }
+
   async onSubmit(): Promise<void> {
     try {
       const updateDto: KeyChainUpdateDto = {
@@ -124,6 +129,7 @@ export class KeyManagementCreateComponent implements OnInit {
       }
 
       await this.keyChainService.update(this.keyChainId!, updateDto);
+      this.form.markAsPristine();
       this.snackBar.open('Key chain updated successfully', 'Close', {
         duration: 3000,
       });
