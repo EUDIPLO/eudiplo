@@ -22,6 +22,7 @@ import { NavigationEnd, Router, RouterModule, RouterOutlet } from '@angular/rout
 import { Subscription } from 'rxjs';
 import { filter } from 'rxjs/operators';
 import { JwtService, Role } from './services/jwt.service';
+import { SignedInAccountService } from './services/signed-in-account.service';
 import { ThemeService } from './services/theme.service';
 import { VersionService } from './services/version.service';
 import { FrontendConfigService } from './services/frontend-config.service';
@@ -148,9 +149,12 @@ export class AppComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** First letter of the signed-in client, shown in the account button. */
+  /** Who is signed in and for which tenant, for the account menu. */
+  readonly account = inject(SignedInAccountService);
+
+  /** First letter of the signed-in client or user, shown in the account button. */
   get accountInitial(): string {
-    return (this.apiService.getClientId() ?? '').charAt(0).toUpperCase() || '?';
+    return (this.account.name ?? '').charAt(0).toUpperCase() || '?';
   }
 
   /** Whether the Administration section has an entry for the caller on this instance. */
