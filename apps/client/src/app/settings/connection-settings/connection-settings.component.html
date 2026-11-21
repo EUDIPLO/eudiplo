@@ -1,7 +1,7 @@
 <div class="settings-page">
   <header class="page-header">
     <h1>Connection Settings</h1>
-    <p>The instance, client and build this Web Client is connected to.</p>
+    <p>The instance, account, tenant and build this Web Client is connected to.</p>
   </header>
 
   <mat-card appearance="outlined">
@@ -45,41 +45,94 @@
 
   <mat-card appearance="outlined">
     <mat-card-header>
-      <mat-icon mat-card-avatar>key</mat-icon>
-      <h2 mat-card-title>Client</h2>
-      <mat-card-subtitle>The credentials this tab signed in with</mat-card-subtitle>
+      <mat-icon mat-card-avatar>{{ account.isSso ? 'person' : 'key' }}</mat-icon>
+      <h2 mat-card-title>{{ account.isSso ? 'Account' : 'Client' }}</h2>
+      <mat-card-subtitle>{{
+        account.isSso
+          ? 'The user this tab signed in as with SSO, and the tenant its actions apply to'
+          : 'The credentials this tab signed in with, and the tenant its actions apply to'
+      }}</mat-card-subtitle>
     </mat-card-header>
     <mat-card-content>
       <div class="field-grid">
-        <mat-form-field appearance="outline" subscriptSizing="dynamic">
-          <mat-label>Client ID</mat-label>
-          <input matInput [value]="currentClientId" readonly aria-label="Client ID" />
-          <button
-            mat-icon-button
-            matSuffix
-            (click)="copyField(currentClientId, 'Client ID')"
-            matTooltip="Copy to clipboard"
-            aria-label="Copy Client ID to clipboard"
-          >
-            <mat-icon>content_copy</mat-icon>
-          </button>
-        </mat-form-field>
+        @if (account.isSso) {
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>User</mat-label>
+            <input matInput [value]="currentUser" readonly aria-label="User" />
+          </mat-form-field>
 
-        <mat-form-field appearance="outline" subscriptSizing="dynamic">
-          <mat-label>Client Secret</mat-label>
-          @if (currentClientSecret; as secret) {
-            <input matInput [value]="secret" readonly type="password" aria-label="Client Secret" />
-          } @else {
-            <input matInput [value]="missingSecretText" readonly aria-label="Client Secret" />
-          }
-          <!-- Own @if: a block with one root node lets matSuffix project the button. -->
-          @if (currentClientSecret; as secret) {
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>Subject</mat-label>
+            <input matInput [value]="currentSubject" readonly aria-label="Subject" />
             <button
               mat-icon-button
               matSuffix
-              (click)="copySecret(secret)"
+              (click)="copyField(currentSubject, 'Subject')"
               matTooltip="Copy to clipboard"
-              aria-label="Copy Client Secret to clipboard"
+              aria-label="Copy Subject to clipboard"
+            >
+              <mat-icon>content_copy</mat-icon>
+            </button>
+          </mat-form-field>
+        } @else {
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>Client ID</mat-label>
+            <input matInput [value]="currentClientId" readonly aria-label="Client ID" />
+            <button
+              mat-icon-button
+              matSuffix
+              (click)="copyField(currentClientId, 'Client ID')"
+              matTooltip="Copy to clipboard"
+              aria-label="Copy Client ID to clipboard"
+            >
+              <mat-icon>content_copy</mat-icon>
+            </button>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>Client Secret</mat-label>
+            @if (currentClientSecret; as secret) {
+              <input
+                matInput
+                [value]="secret"
+                readonly
+                type="password"
+                aria-label="Client Secret"
+              />
+            } @else {
+              <input
+                matInput
+                value="Not available in this tab"
+                readonly
+                aria-label="Client Secret"
+              />
+            }
+            <!-- Own @if: a block with one root node lets matSuffix project the button. -->
+            @if (currentClientSecret; as secret) {
+              <button
+                mat-icon-button
+                matSuffix
+                (click)="copySecret(secret)"
+                matTooltip="Copy to clipboard"
+                aria-label="Copy Client Secret to clipboard"
+              >
+                <mat-icon>content_copy</mat-icon>
+              </button>
+            }
+          </mat-form-field>
+        }
+
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Tenant</mat-label>
+          <input matInput [value]="currentTenant" readonly aria-label="Tenant" />
+          <!-- Own @if: a block with one root node lets matSuffix project the button. -->
+          @if (account.tenantId; as tenantId) {
+            <button
+              mat-icon-button
+              matSuffix
+              (click)="copyField(tenantId, 'Tenant ID')"
+              matTooltip="Copy to clipboard"
+              aria-label="Copy Tenant ID to clipboard"
             >
               <mat-icon>content_copy</mat-icon>
             </button>

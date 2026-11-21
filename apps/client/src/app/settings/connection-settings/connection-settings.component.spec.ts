@@ -3,10 +3,10 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { provideRouter } from '@angular/router';
 
 import { ApiService } from '../../core';
-import { OidcService } from '../../core/oidc.service';
 import type { ConfigImportMode } from '../../services/frontend-config.service';
 import { FrontendConfigService } from '../../services/frontend-config.service';
 import { VersionService } from '../../services/version.service';
+import { SignedInAccountService } from '../../services/signed-in-account.service';
 import { ConnectionSettingsComponent } from './connection-settings.component';
 
 describe('ConnectionSettingsComponent', () => {
@@ -17,6 +17,8 @@ describe('ConnectionSettingsComponent', () => {
   let secret: string | undefined;
   let rejected: boolean;
   let oidcMode: 'local' | 'oidc';
+  /** Who is signed in, as the account service says. */
+  let account: Partial<SignedInAccountService>;
   let fixture: ComponentFixture<ConnectionSettingsComponent>;
 
   async function render(): Promise<HTMLElement> {
@@ -42,7 +44,7 @@ describe('ConnectionSettingsComponent', () => {
             areCredentialsRejected: () => rejected,
           },
         },
-        { provide: OidcService, useValue: { mode: oidcMode } },
+        { provide: SignedInAccountService, useValue: { isSso: oidcMode === 'oidc', ...account } },
         { provide: VersionService, useValue: version },
         { provide: FrontendConfigService, useValue: frontendConfig },
       ],
@@ -62,6 +64,7 @@ describe('ConnectionSettingsComponent', () => {
     secret = undefined;
     rejected = false;
     oidcMode = 'local';
+    account = { name: 'demo', subject: 'demo', tenant: 'acme', tenantId: 'acme' };
     version = {
       check: () => Promise.resolve(),
       client: { version: '10.0.0', revision: 'abcdef0123' },
@@ -125,13 +128,42 @@ describe('ConnectionSettingsComponent', () => {
     expect(page.textContent).not.toContain('keeps the client secret only until');
   });
 
-  it('says that SSO uses no client secret', async () => {
+  it('shows the tenant of a client credentials sign-in next to the client', async () => {
+    const page = await render();
+
+    expect(value(page, 'Client ID')).toBe('demo');
+    expect(value(page, 'Tenant')).toBe('acme');
+    expect(page.querySelector('[aria-label="Copy Tenant ID to clipboard"]')).not.toBeNull();
+    expect(page.querySelector('input[aria-label="User"]')).toBeNull();
+  });
+
+  it('shows the SSO user, its subject and tenant instead of client credentials', async () => {
     oidcMode = 'oidc';
+    account = {
+      name: 'alice',
+      subject: '3f2a9c1e-user',
+      tenant: 'acme',
+      tenantId: 'acme',
+    };
 
     const page = await render();
 
-    expect(value(page, 'Client Secret')).toBe('Not used with SSO');
+    expect([...page.querySelectorAll('h2')].map((h) => h.textContent?.trim())).toContain('Account');
+    expect(value(page, 'User')).toBe('alice');
+    expect(value(page, 'Subject')).toBe('3f2a9c1e-user');
+    expect(value(page, 'Tenant')).toBe('acme');
+    expect(page.querySelector('input[aria-label="Client ID"]')).toBeNull();
+    expect(page.querySelector('input[aria-label="Client Secret"]')).toBeNull();
     expect(page.textContent).toContain('Automatic token refresh: enabled');
+  });
+
+  it('says that a caller without a tenant has none, with nothing to copy', async () => {
+    account = { name: 'root', subject: 'root', tenant: 'No tenant', tenantId: undefined };
+
+    const page = await render();
+
+    expect(value(page, 'Tenant')).toBe('No tenant');
+    expect(page.querySelector('[aria-label="Copy Tenant ID to clipboard"]')).toBeNull();
   });
 
   it('says when client and backend come from different builds', async () => {
