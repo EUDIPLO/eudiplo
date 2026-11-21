@@ -169,6 +169,8 @@ describe('SessionConfigComponent', () => {
   it('shows the backend message when saving is rejected', async () => {
     responses['GET /api/session-config'] = { status: 200, body: {} };
     responses['PUT /api/session-config'] = { status: 409, body: conflict };
+    // A first TTL may be shorter than SESSION_TTL, so the save asks first.
+    vi.stubGlobal('confirm', () => true);
     const element = await render();
     fixture.componentInstance.configForm.patchValue({ ttlSeconds: 3600 });
     fixture.detectChanges();
@@ -210,6 +212,94 @@ describe('SessionConfigComponent', () => {
     await clickAndWait(element, 'Save Configuration');
 
     expect(putBodies).toEqual([{ ttlSeconds: 3600 }]);
+  });
+
+  it('asks before a save switches to Full Delete, and saves nothing when declined', async () => {
+    responses['GET /api/session-config'] = { status: 200, body: { ttlSeconds: 86400 } };
+    responses['PUT /api/session-config'] = {
+      status: 200,
+      body: { ttlSeconds: 86400, cleanupMode: 'full' },
+    };
+    const confirm = vi.fn<(message?: string) => boolean>(() => false);
+    vi.stubGlobal('confirm', confirm);
+    const element = await render();
+
+    fixture.componentInstance.configForm.patchValue({ cleanupMode: 'full' });
+    fixture.detectChanges();
+    expect(element.querySelector('.info-box.warning')?.textContent).toContain(
+      'the Web Client can no longer revoke, suspend or reinstate them'
+    );
+    button(element, 'Save Configuration').click();
+    await new Promise((resolve) => setTimeout(resolve));
+
+    expect(confirm.mock.lastCall?.[0]).toContain(
+      'From the next cleanup run, sessions older than 1 day are deleted completely.'
+    );
+    expect(confirm.mock.lastCall?.[0]).toContain(
+      'only POST /api/session/revoke with the session ID'
+    );
+    expect(confirm.mock.lastCall?.[0]).toContain('This cannot be undone.');
+    expect(putBodies).toEqual([]);
+
+    confirm.mockReturnValue(true);
+    await clickAndWait(element, 'Save Configuration');
+
+    expect(putBodies).toEqual([{ ttlSeconds: 86400, cleanupMode: 'full' }]);
+  });
+
+  it('asks before a shorter TTL while cleanup deletes, but not for a longer one', async () => {
+    responses['GET /api/session-config'] = {
+      status: 200,
+      body: { ttlSeconds: 86400, cleanupMode: 'full' },
+    };
+    responses['PUT /api/session-config'] = {
+      status: 200,
+      body: { ttlSeconds: 3600, cleanupMode: 'full' },
+    };
+    const confirm = vi.fn<(message?: string) => boolean>(() => true);
+    vi.stubGlobal('confirm', confirm);
+    const element = await render();
+
+    fixture.componentInstance.configForm.patchValue({ ttlSeconds: 3600 });
+    fixture.detectChanges();
+    await clickAndWait(element, 'Save Configuration');
+
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(confirm.mock.lastCall?.[0]).toContain(
+      'sessions older than 1 hour are deleted completely'
+    );
+
+    responses['PUT /api/session-config'] = {
+      status: 200,
+      body: { ttlSeconds: 604800, cleanupMode: 'full' },
+    };
+    fixture.componentInstance.configForm.patchValue({ ttlSeconds: 604800 });
+    fixture.detectChanges();
+    await clickAndWait(element, 'Save Configuration');
+
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(putBodies).toHaveLength(2);
+  });
+
+  it('does not ask when cleanup anonymizes, which keeps the sessions', async () => {
+    responses['GET /api/session-config'] = {
+      status: 200,
+      body: { ttlSeconds: 86400, cleanupMode: 'anonymize' },
+    };
+    responses['PUT /api/session-config'] = {
+      status: 200,
+      body: { ttlSeconds: 3600, cleanupMode: 'anonymize' },
+    };
+    const confirm = vi.fn<(message?: string) => boolean>(() => true);
+    vi.stubGlobal('confirm', confirm);
+    const element = await render();
+
+    fixture.componentInstance.configForm.patchValue({ ttlSeconds: 3600 });
+    fixture.detectChanges();
+    await clickAndWait(element, 'Save Configuration');
+
+    expect(confirm).not.toHaveBeenCalled();
+    expect(putBodies).toHaveLength(1);
   });
 
   it('sends a chosen cleanup mode and leaves an empty TTL out', async () => {
@@ -324,6 +414,7 @@ describe('SessionConfigComponent', () => {
   it('keeps Save focusable while saving and gives focus back to it once saving has finished', async () => {
     responses['GET /api/session-config'] = { status: 200, body: {} };
     responses['PUT /api/session-config'] = { status: 200, body: { ttlSeconds: 3600 } };
+    vi.stubGlobal('confirm', () => true);
     const element = await render();
     fixture.componentInstance.configForm.patchValue({ ttlSeconds: 3600 });
     fixture.detectChanges();

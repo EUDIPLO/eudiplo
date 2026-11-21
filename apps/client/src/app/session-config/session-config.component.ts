@@ -25,6 +25,7 @@ import { focusAfterRenderIfLost } from '../common/focus-if-lost.util';
 import { LoadErrorComponent } from '../common/load-error.component';
 import { showFieldsToFix } from '../common/field-to-fix.util';
 import { resetDefaultsTooltip, WAIT_FOR_CHANGE } from '../common/reset-defaults';
+import { DELETED_SESSION_CREDENTIALS } from '../session-management/session-delete-question';
 import { getApiErrorMessage } from '../utils/error-message';
 import { openErrorSnackBar } from '../utils/error-snackbar';
 import { wholeNumberValidator } from '../utils/whole-number-validator';
@@ -178,6 +179,8 @@ export class SessionConfigComponent implements OnInit {
     }
 
     const update = this.buildUpdate();
+    const question = this.saveConfirmation(update);
+    if (question && !confirm(question)) return;
     this.isSaving = true;
     try {
       this.currentConfig = await this.sessionConfigService.updateConfig(update);
@@ -216,6 +219,38 @@ export class SessionConfigComponent implements OnInit {
     this.snackBar.open('Session configuration reset to defaults', 'Close', {
       duration: 3000,
     });
+  }
+
+  /** Shown beside "Full Delete": what deleting a session means for its credentials. */
+  readonly deletedSessionCredentials = DELETED_SESSION_CREDENTIALS;
+
+  /**
+   * What to confirm before a save that lets cleanup delete sessions sooner or completely:
+   * switching to Full Delete, or a shorter TTL (or a first one, whose length against the global
+   * SESSION_TTL is not known here) while cleanup may delete. Anonymize keeps the sessions, so
+   * their credentials can still be revoked. Undefined when the save needs no confirmation.
+   */
+  private saveConfirmation(update: UpdateSessionConfigDto): string | undefined {
+    const storedMode = this.currentConfig?.cleanupMode;
+    const mode = update.cleanupMode ?? storedMode;
+    if (mode === 'anonymize') return undefined;
+    const storedTtl = this.currentConfig?.ttlSeconds;
+    const toFullDelete = update.cleanupMode === 'full' && storedMode !== 'full';
+    const shorterTtl =
+      typeof update.ttlSeconds === 'number' && (!storedTtl || update.ttlSeconds < storedTtl);
+    if (!toFullDelete && !shorterTtl) return undefined;
+
+    let age = 'SESSION_TTL';
+    if (typeof update.ttlSeconds === 'number') age = this.formatTtl(update.ttlSeconds);
+    else if (storedTtl) age = this.formatTtl(storedTtl);
+    const cleanup =
+      mode === 'full'
+        ? `sessions older than ${age} are deleted completely`
+        : `sessions older than ${age} are cleaned up with SESSION_CLEANUP_MODE, which can delete them completely`;
+    return (
+      `Save the session settings? From the next cleanup run, ${cleanup}. ` +
+      `${DELETED_SESSION_CREDENTIALS} This cannot be undone.`
+    );
   }
 
   private resetConfirmation(): string {
