@@ -139,8 +139,9 @@ describe('TenantShowComponent', () => {
     expect(text(page.querySelector('.empty-clients'))).toContain('send POST /api/tenant again');
   });
 
-  it('deletes the tenant after confirmation and returns to the list', async () => {
-    vi.stubGlobal('confirm', () => true);
+  it('deletes the tenant once its ID is typed and returns to the list', async () => {
+    const prompt = vi.fn<typeof globalThis.prompt>(() => 'acme');
+    vi.stubGlobal('prompt', prompt);
     const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
     await render();
     // The component imports MatSnackBarModule, which gives it its own MatSnackBar
@@ -156,15 +157,52 @@ describe('TenantShowComponent', () => {
       duration: 3000,
     });
     expect(navigate).toHaveBeenCalledWith(['../'], expect.anything());
+    expect(prompt.mock.lastCall?.[0]).toContain(
+      'Delete tenant "ACME Corp" (acme) and all its data?'
+    );
+    expect(prompt.mock.lastCall?.[0]).toContain('Type the tenant ID "acme" to confirm.');
   });
 
-  it('keeps the tenant when the deletion is not confirmed', async () => {
-    vi.stubGlobal('confirm', () => false);
+  it('keeps the tenant when the deletion is cancelled', async () => {
+    vi.stubGlobal('prompt', () => null);
     await render();
 
     await fixture.componentInstance.deleteTenant();
 
     expect(requests).not.toContain('DELETE /api/tenant/acme');
+  });
+
+  it('keeps the tenant and says so when another ID, such as its name, is typed', async () => {
+    vi.stubGlobal('prompt', () => 'ACME Corp');
+    await render();
+    const snackBar = vi.spyOn(
+      (fixture.componentInstance as unknown as { snackBar: MatSnackBar }).snackBar,
+      'open'
+    );
+
+    await fixture.componentInstance.deleteTenant();
+
+    expect(requests).not.toContain('DELETE /api/tenant/acme');
+    expect(snackBar.mock.lastCall?.[0]).toBe(
+      'The ID you typed is not "acme". The tenant was not deleted.'
+    );
+  });
+
+  it('sends one delete when Delete tenant is selected twice, and disables it meanwhile', async () => {
+    const prompt = vi.fn<typeof globalThis.prompt>(() => 'acme');
+    vi.stubGlobal('prompt', prompt);
+    vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    await render();
+    const component = fixture.componentInstance;
+
+    const first = component.deleteTenant();
+    expect(component.deleting).toBe(true);
+    await component.deleteTenant();
+    await first;
+
+    expect(prompt).toHaveBeenCalledOnce();
+    expect(requests.filter((r) => r === 'DELETE /api/tenant/acme')).toHaveLength(1);
+    expect(component.deleting).toBe(false);
   });
 
   it('says why the tenant could not be loaded instead of staying empty', async () => {
