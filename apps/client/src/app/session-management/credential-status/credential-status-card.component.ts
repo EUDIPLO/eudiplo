@@ -89,6 +89,8 @@ export class CredentialStatusCardComponent implements OnChanges {
   readonly suspended = STATUS_SUSPENDED;
 
   ngOnChanges(): void {
+    // Another session: its card is hidden while it has no status entries, as on a first load.
+    this.emptyAfterRetry = false;
     void this.load();
   }
 

@@ -123,6 +123,16 @@ describe('CredentialStatusCardComponent', () => {
       'No credential of this session is in a status list.'
     );
     expect(buttons(element)).toEqual([]);
+
+    // Another session without status entries hides the card, as on a first load.
+    fixture.componentRef.setInput('sessionId', 'session-2');
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(sessions.getCredentialStatus).toHaveBeenLastCalledWith('session-2');
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(element.querySelector('.no-status')).toBeNull();
   });
 
   it('leaves the hint about changes out for a caller that may only read the status', async () => {
