@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type {
     CredentialBoundToWalletUnit,
     CredentialStatusEntry,
+    WalletUnitRecordKey,
 } from "../ports/wallet-unit-revocation.ports.js";
 import { CheckWalletUnitStatus } from "./check-wallet-unit-status.js";
 
@@ -21,6 +22,7 @@ function record(
         tenantId: TENANT,
         statusListId: "list-1",
         index,
+        attestationKind: "key",
         sessionId: "session-1",
         credentialConfigurationId: "pid",
         walletUnit: { statusUri: URI, statusIdx: walletUnitIdx, certificates },
@@ -28,8 +30,8 @@ function record(
     };
 }
 
-const key = (entry: CredentialStatusEntry) =>
-    `${entry.statusListId}:${String(entry.index).padStart(6, "0")}`;
+const key = (entry: WalletUnitRecordKey) =>
+    `${entry.statusListId}:${String(entry.index).padStart(6, "0")}:${entry.attestationKind}`;
 const valueKey = (entry: CredentialStatusEntry) =>
     `${entry.statusListId}:${entry.index}`;
 
@@ -53,7 +55,7 @@ function setup(options: {
                 _tenant: string,
                 _uri: string,
                 _now: Date,
-                page: { after?: CredentialStatusEntry; limit: number },
+                page: { after?: WalletUnitRecordKey; limit: number },
             ) => {
                 const start = page.after
                     ? sorted.findIndex((r) => key(r) === key(page.after!)) + 1
@@ -172,6 +174,53 @@ describe("CheckWalletUnitStatus", () => {
         ]);
     });
 
+    it("revokes a credential when its wallet attestation is revoked", async () => {
+        // The key attestation (7) is valid, the wallet instance (1337) is
+        // revoked; both are in this list.
+        const keyRecord = record(0);
+        const walletRecord = record(0, { attestationKind: "wallet" }, 1337, [
+            "wia-leaf",
+        ]);
+        const { check, credentials, notifier, reader } = setup({
+            records: [keyRecord, walletRecord],
+            walletUnitStatus: { 1337: 1 },
+        });
+
+        await check.execute();
+
+        // Each attestation is read under its own certificates.
+        expect(reader.read.mock.calls.map((call) => call[2])).toEqual(
+            expect.arrayContaining([["leaf"], ["wia-leaf"]]),
+        );
+        expect(credentials.revoke).toHaveBeenCalledWith(TENANT, [walletRecord]);
+        expect(notifier.credentialsRevoked).toHaveBeenCalledWith(
+            expect.objectContaining({
+                statusEntries: [{ uri: LIST_URI, idx: 0 }],
+            }),
+        );
+    });
+
+    it("revokes a credential once when both of its attestations are revoked", async () => {
+        const { check, credentials, store, notifier } = setup({
+            records: [
+                record(0),
+                record(0, { attestationKind: "wallet" }, 1337, ["wia-leaf"]),
+            ],
+            walletUnitStatus: { 7: 1, 1337: 1 },
+        });
+
+        await check.execute();
+
+        expect(credentials.revoke).toHaveBeenCalledTimes(1);
+        expect(credentials.revoke.mock.calls[0][1]).toHaveLength(1);
+        expect(store.delete.mock.calls[0][1]).toHaveLength(1);
+        expect(notifier.credentialsRevoked).toHaveBeenCalledWith(
+            expect.objectContaining({
+                statusEntries: [{ uri: LIST_URI, idx: 0 }],
+            }),
+        );
+    });
+
     it("reads the list once per provider and revokes only revoked wallet units", async () => {
         const valid = record(0, {}, 7);
         const revoked = record(1, {}, 8);
@@ -219,7 +268,14 @@ describe("CheckWalletUnitStatus", () => {
             TENANT,
             URI,
             NOW,
-            { after: { statusListId: "list-1", index: 3 }, limit: 2 },
+            {
+                after: {
+                    statusListId: "list-1",
+                    index: 3,
+                    attestationKind: "key",
+                },
+                limit: 2,
+            },
         );
         expect(credentials.revoke.mock.calls).toEqual([
             [TENANT, [records[1]]],

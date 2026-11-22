@@ -45,7 +45,14 @@ const kmsProviderDescriptions = {
  */
 export const schemaDocs: SchemaDoc[] = [
     { name: "presentation-request", schema: PresentationRequestSchema },
-    { name: "credential-configuration", schema: CredentialConfigCreateSchema },
+    {
+        name: "credential-configuration",
+        schema: CredentialConfigCreateSchema,
+        descriptions: {
+            revokeWithWalletUnit:
+                "Revoke issued credentials when a wallet unit attestation they were bound to is revoked: the key attestation of the proof, or the wallet attestation accepted at the token endpoint of the built-in authorization server. Requires statusManagement and config.keyAttestationsRequired.",
+        },
+    },
     // One entry of `fields[]`; recursive (`children`), so it gets its own table.
     { name: "credential-field", schema: CredentialConfigCreateSchema.shape.fields.element },
     { name: "offer-request", schema: OfferRequestSchema },

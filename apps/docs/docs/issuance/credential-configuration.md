@@ -123,7 +123,7 @@ How the fingerprints and the revocation sequence work is described in [Issuance 
 
 ### Revoke credentials with their wallet unit
 
-`revokeWithWalletUnit: true` revokes a credential when the wallet provider revokes the wallet unit attestation (the key attestation of the proof) it was issued to. It requires `statusManagement: true` and `config.keyAttestationsRequired`. See [Revoke credentials with their wallet unit](../trust/attestation.md#revoke-credentials-with-their-wallet-unit).
+`revokeWithWalletUnit: true` revokes a credential when the wallet provider revokes a wallet unit attestation it was issued under: the key attestation of the proof, or the wallet attestation presented at the token endpoint of the built-in authorization server. It requires `statusManagement: true` and `config.keyAttestationsRequired`. See [Revoke credentials with their wallet unit](../trust/attestation.md#revoke-credentials-with-their-wallet-unit).
 
 ## 7. Publish EUDI policies (optional)
 

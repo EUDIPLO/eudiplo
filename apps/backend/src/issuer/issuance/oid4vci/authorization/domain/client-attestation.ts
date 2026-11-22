@@ -41,7 +41,7 @@ export function clientAttestationLogDetail(
  */
 export async function verifyClientAttestation(
     endpoint: "par" | "token",
-    verify: () => Promise<void>,
+    verify: () => Promise<unknown>,
     context: string,
 ): Promise<void> {
     try {

@@ -4,6 +4,7 @@ import type {
     CredentialBoundToWalletUnit,
     CredentialStatusEntry,
     CredentialWalletUnitStore,
+    WalletUnitRecordKey,
 } from "../ports/wallet-unit-revocation.ports.js";
 
 /** Records per delete statement, below the parameter limits of both drivers. */
@@ -39,7 +40,7 @@ export class TypeOrmCredentialWalletUnitStore
         tenantId: string,
         uri: string,
         now: Date,
-        page: { after?: CredentialStatusEntry; limit: number },
+        page: { after?: WalletUnitRecordKey; limit: number },
     ): Promise<CredentialBoundToWalletUnit[]> {
         const query = this.repository
             .createQueryBuilder("record")
@@ -48,31 +49,50 @@ export class TypeOrmCredentialWalletUnitStore
             .andWhere(this.notExpired(now));
         const { after } = page;
         if (after) {
+            // After (statusListId, index, attestationKind) in that order:
+            // both attestations of a credential can name the same list.
             query.andWhere(
                 new Brackets((q) => {
                     q.where("record.statusListId > :afterList", {
                         afterList: after.statusListId,
-                    }).orWhere(
-                        new Brackets((same) => {
-                            same.where("record.statusListId = :afterList", {
-                                afterList: after.statusListId,
-                            }).andWhere("record.index > :afterIndex", {
-                                afterIndex: after.index,
-                            });
-                        }),
-                    );
+                    })
+                        .orWhere(
+                            new Brackets((same) => {
+                                same.where("record.statusListId = :afterList", {
+                                    afterList: after.statusListId,
+                                }).andWhere("record.index > :afterIndex", {
+                                    afterIndex: after.index,
+                                });
+                            }),
+                        )
+                        .orWhere(
+                            new Brackets((same) => {
+                                same.where("record.statusListId = :afterList", {
+                                    afterList: after.statusListId,
+                                })
+                                    .andWhere("record.index = :afterIndex", {
+                                        afterIndex: after.index,
+                                    })
+                                    .andWhere(
+                                        "record.attestationKind > :afterKind",
+                                        { afterKind: after.attestationKind },
+                                    );
+                            }),
+                        );
                 }),
             );
         }
         const records = await query
             .orderBy("record.statusListId", "ASC")
             .addOrderBy("record.index", "ASC")
+            .addOrderBy("record.attestationKind", "ASC")
             .take(page.limit)
             .getMany();
         return records.map((record) => ({
             tenantId: record.tenantId,
             statusListId: record.statusListId,
             index: record.index,
+            attestationKind: record.attestationKind,
             sessionId: record.sessionId,
             credentialConfigurationId: record.credentialConfigurationId,
             walletUnit: {
@@ -89,13 +109,27 @@ export class TypeOrmCredentialWalletUnitStore
     ): Promise<void> {
         for (let i = 0; i < entries.length; i += DELETE_CHUNK_SIZE) {
             const chunk = entries.slice(i, i + DELETE_CHUNK_SIZE);
-            await this.repository.delete(
-                chunk.map((entry) => ({
-                    tenantId,
-                    statusListId: entry.statusListId,
-                    index: entry.index,
-                })),
-            );
+            // Every attestation kind of each entry. An array passed to
+            // `repository.delete` would be read as primary keys, which
+            // include the attestation kind.
+            await this.repository
+                .createQueryBuilder()
+                .delete()
+                .where(`"tenantId" = :tenantId`, { tenantId })
+                .andWhere(
+                    new Brackets((q) => {
+                        chunk.forEach((entry, n) => {
+                            q.orWhere(
+                                `("statusListId" = :list${n} AND "index" = :index${n})`,
+                                {
+                                    [`list${n}`]: entry.statusListId,
+                                    [`index${n}`]: entry.index,
+                                },
+                            );
+                        });
+                    }),
+                )
+                .execute();
         }
     }
 

@@ -3,13 +3,18 @@ import { type Jwk } from "@owf/jose";
 import type { CryptoService } from "../../../../../crypto/crypto.service.js";
 import { toPublicJwk } from "../../../../../crypto/key/domain/public-jwk.js";
 import type { KeyChainService } from "../../../../../crypto/key/key-chain.service.js";
+import type { WalletInstanceStatus } from "../../../../../session/domain/session-data.js";
 import type { SessionConfigService } from "../../../../../session/session-config.service.js";
 import type {
     RevocationCheckMode,
     TrustListRef,
 } from "../../../../../trust/types.js";
-import type { WalletAttestationService } from "../../../../../trust/wallet-attestation.service.js";
+import type {
+    WalletAttestationService,
+    WalletAttestationStatusReference,
+} from "../../../../../trust/wallet-attestation.service.js";
 import type { IssuanceService } from "../../../../configuration/issuance/issuance.service.js";
+import { MAX_WALLET_UNIT_STATUS_INDEX } from "../../../../status-list/domain/wallet-unit-reference.js";
 import type { StatusListConfigService } from "../../../../status-list/status-list-config.service.js";
 import type { AccessTokenSigningKeys } from "../ports/access-token-signing-keys.js";
 import type { BuiltInAuthorizationServerConfiguration } from "../ports/built-in-authorization-server-configuration.js";
@@ -68,13 +73,32 @@ export class ConfiguredBuiltInAuthorizationServerConfiguration
     }
 }
 
+/**
+ * The status entry of an accepted wallet attestation as the session keeps
+ * it, or undefined without one or with an index that cannot be recorded
+ * (reachable only when the status check is disabled; the check rejects an
+ * index outside the list).
+ */
+function toWalletInstanceStatus(
+    reference: WalletAttestationStatusReference | undefined,
+): WalletInstanceStatus | undefined {
+    if (!reference || reference.idx > MAX_WALLET_UNIT_STATUS_INDEX) {
+        return undefined;
+    }
+    return {
+        statusUri: reference.uri,
+        statusIdx: reference.idx,
+        certificates: reference.certificates,
+    };
+}
+
 /** Wallet attestation verification of the trust capability. */
 export class WalletAttestationClientVerifier
     implements ClientAttestationVerifier
 {
     constructor(private readonly walletAttestation: WalletAttestationService) {}
 
-    verify(
+    async verify(
         tenantId: string,
         attestation: ClientAttestation | undefined,
         expectedAudience: string,
@@ -82,13 +106,15 @@ export class WalletAttestationClientVerifier
         trustLists: TrustListRef[],
         statusCheckMode: RevocationCheckMode,
     ) {
-        return this.walletAttestation.verifyWalletAttestation(
-            tenantId,
-            attestation,
-            expectedAudience,
-            required,
-            trustLists,
-            statusCheckMode,
+        return toWalletInstanceStatus(
+            await this.walletAttestation.verifyWalletAttestation(
+                tenantId,
+                attestation,
+                expectedAudience,
+                required,
+                trustLists,
+                statusCheckMode,
+            ),
         );
     }
 }

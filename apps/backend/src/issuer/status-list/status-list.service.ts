@@ -39,6 +39,7 @@ import {
     ImportPhase,
 } from "../../platform/config-import/config-import-orchestrator.service.js";
 import type { SessionData as Session } from "../../session/domain/session-data.js";
+import type { AttestationKind } from "../../trust/domain/attestation-status-claims.js";
 import type { CredentialConfiguration } from "../configuration/credentials/domain/credential-configuration.js";
 import {
     assertStatusTransitionAllowed,
@@ -695,7 +696,7 @@ export class StatusListService implements OnApplicationBootstrap {
             "Could not allocate status entry after maximum retries",
         );
 
-        if (walletUnit && credentialConfiguration?.revokeWithWalletUnit) {
+        if (credentialConfiguration?.revokeWithWalletUnit) {
             await this.recordWalletUnit(
                 session,
                 credentialConfigurationId,
@@ -716,28 +717,38 @@ export class StatusListService implements OnApplicationBootstrap {
     }
 
     /**
-     * Record the wallet unit attestation of a new status entry, so that the
-     * background check revokes the entry when the wallet unit is revoked,
-     * until the credential expires.
+     * Record the wallet unit attestations of a new status entry, so that the
+     * background check revokes the entry when either is revoked, until the
+     * credential expires: the key attestation of the proof, and the wallet
+     * attestation the session's token endpoint accepted (TS3 1.5 section
+     * 2.4.3: "If either is revoked, the PID Provider SHALL revoke the PID").
      */
     private async recordWalletUnit(
         session: Session,
         credentialConfigurationId: string,
         entry: AllocatedStatusEntry,
-        walletUnit: WalletUnitReference,
+        keyAttestation: WalletUnitReference | undefined,
         credentialExpiresAt: Date | undefined,
     ): Promise<void> {
-        await this.credentialWalletUnitRepository.insert({
-            tenantId: session.tenantId,
-            statusListId: entry.statusListId,
-            index: entry.index,
-            sessionId: session.id,
-            credentialConfigurationId,
-            walletUnitStatusUri: walletUnit.statusUri,
-            walletUnitStatusIdx: walletUnit.statusIdx,
-            walletUnitCertificates: walletUnit.certificates,
-            credentialExpiresAt: credentialExpiresAt ?? null,
-        });
+        const followed: [AttestationKind, WalletUnitReference][] = [];
+        if (keyAttestation) followed.push(["key", keyAttestation]);
+        if (session.walletInstanceStatus)
+            followed.push(["wallet", session.walletInstanceStatus]);
+        if (followed.length === 0) return;
+        await this.credentialWalletUnitRepository.insert(
+            followed.map(([attestationKind, reference]) => ({
+                tenantId: session.tenantId,
+                statusListId: entry.statusListId,
+                index: entry.index,
+                attestationKind,
+                sessionId: session.id,
+                credentialConfigurationId,
+                walletUnitStatusUri: reference.statusUri,
+                walletUnitStatusIdx: reference.statusIdx,
+                walletUnitCertificates: reference.certificates,
+                credentialExpiresAt: credentialExpiresAt ?? null,
+            })),
+        );
     }
 
     private async allocateAndClaimEntry(params: {

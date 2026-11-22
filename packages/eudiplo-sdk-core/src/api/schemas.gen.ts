@@ -5326,7 +5326,7 @@ export const CredentialConfigSchema = {
         },
         revokeWithWalletUnit: {
             type: 'boolean',
-            description: 'Revoke issued credentials when the wallet unit attestation they were\nbound to is revoked: the key attestation of the proof (OpenID4VCI 1.0,\nAppendix D.1), whose status list entry is recorded with each\ncredential and checked every `WALLET_UNIT_STATUS_CHECK_INTERVAL`\nseconds until the credential is revoked or expires.\n\nRequires `statusManagement` and `config.keyAttestationsRequired`.\nApplies to credentials issued while it is enabled.'
+            description: 'Revoke issued credentials when a wallet unit attestation they were\nbound to is revoked: the key attestation of the proof (OpenID4VCI 1.0,\nAppendix D.1) or the wallet attestation the built-in authorization\nserver accepted (Appendix E), whose status list entries are recorded\nwith each credential and checked every `WALLET_UNIT_STATUS_CHECK_INTERVAL`\nseconds until the credential is revoked or expires.\n\nRequires `statusManagement` and `config.keyAttestationsRequired`.\nApplies to credentials issued while it is enabled.'
         },
         sdJwtTrustFormat: {
             description: 'For SD-JWT credentials: determines whether to include certificate chain (x5c)\nor use federation-based trust (iss claim).\nDefault: "x5c" (federation must be explicitly selected)',
@@ -5479,7 +5479,7 @@ export const CredentialConfigCreateSchema = {
         },
         revokeWithWalletUnit: {
             type: 'boolean',
-            description: 'Revoke issued credentials when the wallet unit attestation they were\nbound to is revoked: the key attestation of the proof (OpenID4VCI 1.0,\nAppendix D.1), whose status list entry is recorded with each\ncredential and checked every `WALLET_UNIT_STATUS_CHECK_INTERVAL`\nseconds until the credential is revoked or expires.\n\nRequires `statusManagement` and `config.keyAttestationsRequired`.\nApplies to credentials issued while it is enabled.'
+            description: 'Revoke issued credentials when a wallet unit attestation they were\nbound to is revoked: the key attestation of the proof (OpenID4VCI 1.0,\nAppendix D.1) or the wallet attestation the built-in authorization\nserver accepted (Appendix E), whose status list entries are recorded\nwith each credential and checked every `WALLET_UNIT_STATUS_CHECK_INTERVAL`\nseconds until the credential is revoked or expires.\n\nRequires `statusManagement` and `config.keyAttestationsRequired`.\nApplies to credentials issued while it is enabled.'
         },
         sdJwtTrustFormat: {
             description: 'For SD-JWT credentials: determines whether to include certificate chain (x5c)\nor use federation-based trust (iss claim).\nDefault: "x5c" (federation must be explicitly selected)',
@@ -5631,7 +5631,7 @@ export const CredentialConfigUpdateSchema = {
         },
         revokeWithWalletUnit: {
             type: 'boolean',
-            description: 'Revoke issued credentials when the wallet unit attestation they were\nbound to is revoked: the key attestation of the proof (OpenID4VCI 1.0,\nAppendix D.1), whose status list entry is recorded with each\ncredential and checked every `WALLET_UNIT_STATUS_CHECK_INTERVAL`\nseconds until the credential is revoked or expires.\n\nRequires `statusManagement` and `config.keyAttestationsRequired`.\nApplies to credentials issued while it is enabled.'
+            description: 'Revoke issued credentials when a wallet unit attestation they were\nbound to is revoked: the key attestation of the proof (OpenID4VCI 1.0,\nAppendix D.1) or the wallet attestation the built-in authorization\nserver accepted (Appendix E), whose status list entries are recorded\nwith each credential and checked every `WALLET_UNIT_STATUS_CHECK_INTERVAL`\nseconds until the credential is revoked or expires.\n\nRequires `statusManagement` and `config.keyAttestationsRequired`.\nApplies to credentials issued while it is enabled.'
         },
         sdJwtTrustFormat: {
             description: 'For SD-JWT credentials: determines whether to include certificate chain (x5c)\nor use federation-based trust (iss claim).\nDefault: "x5c" (federation must be explicitly selected)',
