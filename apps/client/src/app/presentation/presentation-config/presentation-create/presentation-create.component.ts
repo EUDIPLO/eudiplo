@@ -509,18 +509,18 @@ export class PresentationCreateComponent implements OnInit, PageWithUnsavedChang
         (keyChain) => keyChain.id === this.defaultAccess?.keyChainId
       );
       if (!chain) {
-        return 'The default access key chain of the tenant does not exist. Choose another one under Key Management, or select an access key chain here.';
+        return 'The default access key chain of the tenant does not exist. Choose another one under Keys, or select an access key chain here.';
       }
       return chain.activeCertificate?.pem
         ? null
-        : 'The default access key chain has no active access certificate. Create or refresh it under Key Management, or select another access key chain here.';
+        : 'The default access key chain has no active access certificate. Create or refresh it under Keys, or select another access key chain here.';
     }
     const chains = selected
       ? this.keyChains.filter((chain) => chain.id === selected)
       : this.keyChains;
     return chains.some((chain) => chain.activeCertificate?.pem)
       ? null
-      : 'An access key chain with an active certificate is needed to create presentation requests.';
+      : 'An access key chain with an active certificate is needed to create verification requests.';
   }
 
   get hasAdvancedQuery(): boolean {
@@ -724,7 +724,7 @@ export class PresentationCreateComponent implements OnInit, PageWithUnsavedChang
             // In copy mode, navigate up two levels (past :id/copy), otherwise one level
             const navigatePath = this.copyMode ? ['../../', res.id] : ['../', res.id];
             this.router.navigate(navigatePath, { relativeTo: this.route });
-            this.snackBar.open('Verification config created', 'Close', {
+            this.snackBar.open('Verification config created successfully', 'Close', {
               duration: 3000,
             });
           },
@@ -744,7 +744,7 @@ export class PresentationCreateComponent implements OnInit, PageWithUnsavedChang
           () => {
             this.form.markAsPristine();
             this.router.navigate(['../'], { relativeTo: this.route });
-            this.snackBar.open('Verification config saved', 'Close', {
+            this.snackBar.open('Verification config updated successfully', 'Close', {
               duration: 3000,
             });
           },

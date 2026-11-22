@@ -53,7 +53,7 @@ test('opens a session from its row, selects rows without opening them, and goes 
   // force: Playwright refuses a click whose target the link covers; the click lands on the link.
   await row.locator('.type-label').click({ force: true });
   await expect(page).toHaveURL(new RegExp(`/session-management/${session}$`));
-  await expect(page.getByRole('heading', { name: 'Presentation Session', level: 1 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Verification Session', level: 1 })).toBeVisible();
 
   await page.getByRole('link', { name: 'Back to Sessions' }).click();
   await expect(page).toHaveURL(/\/session-management$/);

@@ -152,7 +152,7 @@ On **3. Settings**:
 
 ## Step 6: Inspect the verified session
 
-Open **Sessions → All Sessions** and open the new presentation session. Its status chip shows **Completed** and the result card reads **Presentation verified**. The **Presented credentials** card lists the verified claims for query `membership`:
+Open **Sessions → All Sessions** and open the new presentation session. Its status chip shows **Completed** and the result card reads **Verification succeeded**. The **Presented credentials** card lists the verified claims for query `membership`:
 
 | Claim       | Expected value |
 | ----------- | -------------- |

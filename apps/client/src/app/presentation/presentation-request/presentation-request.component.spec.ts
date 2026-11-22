@@ -104,7 +104,7 @@ describe('PresentationRequestComponent', () => {
       fixture.detectChanges();
 
       expect(service.getOffer).toHaveBeenCalledOnce();
-      expectUnavailable(fixture, generate, 'Generating the presentation request…');
+      expectUnavailable(fixture, generate, 'Generating the verification request…');
     });
 
     it('says while the configuration is checked that it waits for the check', async () => {
@@ -412,7 +412,7 @@ describe('PresentationRequestComponent', () => {
     await component.onSubmit();
 
     expect(open).toHaveBeenCalledWith(
-      "Failed to generate presentation request: No key chain found with usage type 'access' for tenant demo",
+      "Failed to generate verification request: No key chain found with usage type 'access' for tenant demo",
       'Close',
       expect.anything()
     );

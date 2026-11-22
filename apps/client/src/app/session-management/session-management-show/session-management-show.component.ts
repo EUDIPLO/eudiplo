@@ -231,7 +231,12 @@ export class SessionManagementShowComponent implements OnInit, OnDestroy {
     this.dialog
       .open<CancelSessionDialogComponent, CancelSessionDialogData, CancelSessionDialogResult>(
         CancelSessionDialogComponent,
-        { data: { count: 1 }, width: '480px' }
+        {
+          data: isPresentationSession(session)
+            ? { offers: 0, requests: 1 }
+            : { offers: 1, requests: 0 },
+          width: '480px',
+        }
       )
       .afterClosed()
       .subscribe(async (result) => {

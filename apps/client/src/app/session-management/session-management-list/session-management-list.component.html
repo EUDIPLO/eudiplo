@@ -91,7 +91,7 @@
               </mat-optgroup>
             }
             @if (presentationConfigOptions.length) {
-              <mat-optgroup label="Presentation">
+              <mat-optgroup label="Verification">
                 @for (option of presentationConfigOptions; track option.value) {
                   <mat-option [value]="option.value">{{ option.label }}</mat-option>
                 }
@@ -308,7 +308,7 @@
                 <mat-icon aria-hidden="true">{{
                   isPresentationSession(session) ? 'verified_user' : 'badge'
                 }}</mat-icon>
-                {{ isPresentationSession(session) ? 'Presentation' : 'Issuance' }}
+                {{ isPresentationSession(session) ? 'Verification' : 'Issuance' }}
               </span>
             </td>
           </ng-container>
@@ -354,7 +354,7 @@
                     <strong>No sessions yet</strong>
                     @if (canOfferIssuance || canRequestPresentation) {
                       <p>
-                        A session starts with an issuance offer or a presentation request to a
+                        A session starts with an issuance offer or a verification request to a
                         wallet.
                       </p>
                       <span class="empty-actions">
@@ -405,7 +405,7 @@
   @if (canRequestPresentation) {
     <a matButton="tonal" [routerLink]="['/offer/presentation']">
       <mat-icon>add</mat-icon>
-      Presentation Request
+      Verification Request
     </a>
   }
 </ng-template>

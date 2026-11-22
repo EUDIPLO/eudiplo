@@ -102,7 +102,7 @@ interface ExternalEntityForm extends EntityInfoForm {
  */
 type TrustListKeyChainUsage = 'attestation' | 'statusList' | 'trustList';
 
-/** How hints and options name the key chains a select accepts, in the words of Key Management. */
+/** How hints and options name the key chains a select accepts, in the words of the Keys pages. */
 const KEY_CHAIN_USAGE_NAMES: Record<TrustListKeyChainUsage, string> = {
   attestation: 'credential signing',
   statusList: 'status list or credential signing',
@@ -521,7 +521,7 @@ export class TrustListEditComponent implements OnInit, PageWithUnsavedChanges {
 
   /** Why a select for `usage` has no options, and where to create one. */
   private noKeyChainsMessage(usage: TrustListKeyChainUsage): string {
-    return `No ${KEY_CHAIN_USAGE_NAMES[usage]} key chains. Create one in Key Management.`;
+    return `No ${KEY_CHAIN_USAGE_NAMES[usage]} key chains. Create one in Keys.`;
   }
 
   /**

@@ -12,7 +12,7 @@
       </span>
       <div class="hero-copy">
         <h1 #pageHeading tabindex="-1">
-          {{ isIssuanceSession() ? 'Issuance' : 'Presentation' }} Session
+          {{ isIssuanceSession() ? 'Issuance' : 'Verification' }} Session
         </h1>
         <div class="hero-meta">
           <span class="badge status-badge" [class]="statusClass(session.status)">
@@ -236,10 +236,10 @@
             }}</mat-icon>
             <h2 mat-card-title>
               @if (session.useDcApi) {
-                {{ isIssuanceSession() ? 'Issuance Offer' : 'Presentation Request' }}
+                {{ isIssuanceSession() ? 'Issuance Offer' : 'Verification Request' }}
               } @else {
                 {{
-                  isIssuanceSession() ? 'Issuance Offer QR Code' : 'Presentation Request QR Code'
+                  isIssuanceSession() ? 'Issuance Offer QR Code' : 'Verification Request QR Code'
                 }}
               }
             </h2>

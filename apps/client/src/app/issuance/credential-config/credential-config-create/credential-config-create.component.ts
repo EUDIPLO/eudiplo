@@ -598,7 +598,7 @@ export class CredentialConfigCreateComponent implements OnInit, PageWithUnsavedC
               return;
             }
             this.snackBar.open(
-              `Configuration ${this.create ? 'created' : 'updated'} successfully`,
+              `Credential config ${this.create ? 'created' : 'updated'} successfully`,
               'Close',
               { duration: 3000 }
             );

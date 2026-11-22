@@ -25,6 +25,7 @@ import { StatusListManagementService } from '../status-list-management.service';
 import { formatCapacity, getUsageColor, getUsagePercentage } from '../status-list-usage';
 import { CredentialConfigService } from '../../issuance/credential-config/credential-config.service';
 import { KeyChainService } from '../../key-management/key-chain.service';
+import { keyUsages, type KeyUsageType } from '../../key-management/key-usage';
 import { ConfigOwnershipDirective } from '../../config-portability/config-ownership.directive';
 import { ConfigOwnershipNoticeComponent } from '../../config-portability/config-ownership-notice.component';
 import { LabelledFailure, getApiErrorMessage } from '../../utils/error-message';
@@ -369,5 +370,10 @@ export class StatusListEditComponent implements OnInit, PageWithUnsavedChanges {
     } finally {
       this.isSaving = false;
     }
+  }
+
+  /** The usage of a key chain as the key pages name it, such as "Status List". */
+  usageLabel(keyChain: KeyChainResponseDto): string {
+    return keyUsages[keyChain.usageType as KeyUsageType]?.short ?? keyChain.usageType;
   }
 }

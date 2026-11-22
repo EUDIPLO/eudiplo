@@ -202,7 +202,7 @@ describe('DashboardComponent', () => {
     expect(row.getAttribute('href')).toBe(
       '/session-management/9c100000-0000-4000-8000-000000000004'
     );
-    expect(text(row.querySelector('strong'))).toBe('Presentation failed');
+    expect(text(row.querySelector('strong'))).toBe('Verification failed');
     expect(text(row.querySelector('small'))).toBe(
       'age-check · case-42 · trust_chain_not_trusted · 9c100000'
     );

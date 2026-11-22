@@ -377,3 +377,23 @@ describe('StatusListEditComponent Save', () => {
     expect(createList).not.toHaveBeenCalled();
   });
 });
+
+describe('StatusListEditComponent key chain options', () => {
+  it('names the usage of a key chain as the key pages do', () => {
+    const component = TestBed.runInInjectionContext(
+      () =>
+        new StatusListEditComponent(
+          {} as never,
+          {} as never,
+          {} as never,
+          {} as never,
+          {} as never,
+          {} as never
+        )
+    );
+
+    expect(component.usageLabel({ usageType: 'statusList' } as never)).toBe('Status List');
+    expect(component.usageLabel({ usageType: 'attestation' } as never)).toBe('Credential Signing');
+    expect(component.usageLabel({ usageType: 'future' } as never)).toBe('future');
+  });
+});

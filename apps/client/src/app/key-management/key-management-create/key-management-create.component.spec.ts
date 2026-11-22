@@ -56,6 +56,39 @@ describe('KeyManagementCreateComponent', () => {
     return { fixture, component: fixture.componentInstance, page, navigate };
   }
 
+  it.each([
+    ['an internal chain', keyChain(), 'Internal Chain (Root CA + Signing Key)'],
+    [
+      'a self-signed standalone key',
+      keyChain({
+        type: 'standalone',
+        activeCertificate: { subject: 'CN=Signing', issuer: 'CN=Signing' },
+      } as Partial<KeyChainResponseDto>),
+      'Standalone (Self-signed)',
+    ],
+    [
+      'a standalone key with a CA-issued certificate',
+      keyChain({
+        type: 'standalone',
+        activeCertificate: { subject: 'CN=Signing', issuer: 'CN=Example CA' },
+      } as Partial<KeyChainResponseDto>),
+      'Standalone (CA-issued certificate)',
+    ],
+    [
+      'a standalone key without a certificate',
+      keyChain({ type: 'standalone', usageType: 'federation' }),
+      'Standalone',
+    ],
+  ])('names the type of %s', async (_, loaded, label) => {
+    keyChainService.getById.mockResolvedValue(loaded);
+    const { page } = await render();
+
+    const type = [...page.querySelectorAll('.info-grid div')].find(
+      (row) => row.querySelector('dt')?.textContent?.trim() === 'Type'
+    );
+    expect(type?.querySelector('dd')?.textContent?.trim()).toBe(label);
+  });
+
   it('clears the stored description when the field is emptied', async () => {
     const { component } = await render();
     component.form.patchValue({ description: '' });

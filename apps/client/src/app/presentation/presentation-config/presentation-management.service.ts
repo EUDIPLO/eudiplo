@@ -116,7 +116,7 @@ export class PresentationManagementService {
         return {
           ready: false,
           reason:
-            'The default access key chain of the tenant does not exist. Choose another one under Key Management.',
+            'The default access key chain of the tenant does not exist. Choose another one under Keys.',
         };
       }
       if (!hasActiveCertificate(defaultKeyChain)) {

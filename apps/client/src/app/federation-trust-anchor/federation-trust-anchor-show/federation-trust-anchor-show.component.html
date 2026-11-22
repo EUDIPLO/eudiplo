@@ -173,8 +173,8 @@
 
           @if (!references.canReadPresentationConfigs) {
             <p class="hint">
-              You need the <code>presentation:manage</code> role to see which presentation
-              configurations name this trust anchor.
+              You need the <code>presentation:manage</code> role to see which verification configs
+              name this trust anchor.
             </p>
           } @else if (references.presentations.loading) {
             <p class="hint"><output>Loading verification configs…</output></p>

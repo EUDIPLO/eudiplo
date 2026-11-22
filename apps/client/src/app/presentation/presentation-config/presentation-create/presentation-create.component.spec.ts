@@ -652,7 +652,7 @@ describe('Verification config editor', () => {
     component.submitPresentation();
     await vi.waitFor(() => expect(component.saving).toBe(false));
     expect(TestBed.inject(MatSnackBar).open).toHaveBeenCalledWith(
-      'Verification config created',
+      'Verification config created successfully',
       'Close',
       { duration: 3000 }
     );
@@ -989,7 +989,7 @@ describe('Verification config editor', () => {
     );
     await vi.waitFor(() =>
       expect(TestBed.inject(MatSnackBar).open).toHaveBeenCalledWith(
-        'Verification config saved',
+        'Verification config updated successfully',
         'Close',
         { duration: 3000 }
       )
