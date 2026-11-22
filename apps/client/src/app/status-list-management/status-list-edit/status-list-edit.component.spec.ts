@@ -130,6 +130,32 @@ describe('StatusListEditComponent Save', () => {
     expect(element.querySelector('.change-state')?.textContent?.trim()).toBe('Unsaved changes');
   });
 
+  it('stays on the page with Retry when the status list cannot be loaded', async () => {
+    const list = { id: 'list-1', uri: 'https://issuer/status/list-1', capacity: 10000, bits: 1 };
+    const getList = vi
+      .fn()
+      .mockRejectedValueOnce({ statusCode: 500, message: 'Database unavailable' })
+      .mockResolvedValueOnce(list);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { fixture } = await render(vi.fn(), { listId: 'list-1', getList });
+    const element = fixture.nativeElement as HTMLElement;
+    const navigate = TestBed.inject(Router).navigate as ReturnType<typeof vi.fn>;
+
+    expect(navigate).not.toHaveBeenCalled();
+    expect(element.querySelector('form')).toBeNull();
+    const error = element.querySelector('app-load-error');
+    expect(error?.textContent).toContain('Failed to load status list: Database unavailable');
+    expect(error?.querySelector('a')?.getAttribute('href')).toBe('/status-lists');
+
+    [...error!.querySelectorAll('button')].find((b) => b.textContent?.includes('Retry'))!.click();
+    await vi.waitFor(() => expect(fixture.componentInstance.statusList).toEqual(list));
+    fixture.detectChanges();
+
+    expect(getList).toHaveBeenCalledTimes(2);
+    expect(element.querySelector('app-load-error')).toBeNull();
+    expect(element.querySelector('form')).not.toBeNull();
+  });
+
   it('marks the chosen capacity preset as pressed', async () => {
     const { fixture } = await render(vi.fn());
     const element = fixture.nativeElement as HTMLElement;
