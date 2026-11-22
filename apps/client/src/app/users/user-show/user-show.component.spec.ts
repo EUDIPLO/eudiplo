@@ -1,3 +1,4 @@
+import { ApplicationRef } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { provideRouter, Router } from '@angular/router';
@@ -179,33 +180,52 @@ describe('UserShowComponent', () => {
     expect(page.textContent).toContain('This user has no roles.');
   });
 
-  it('returns to the list and says why when the user cannot be loaded', async () => {
-    const open = vi.spyOn(MatSnackBar.prototype, 'open');
-    client.setConfig({
-      fetch: vi.fn<typeof fetch>(
-        async () =>
-          new Response(JSON.stringify({ statusCode: 404, message: 'User not found' }), {
-            status: 404,
+  it('stays on the page and offers Retry when the user cannot be loaded', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    let fail = true;
+    const fetchStub = vi.fn<typeof fetch>(async () =>
+      fail
+        ? new Response(JSON.stringify({ statusCode: 503, message: 'Keycloak down' }), {
+            status: 503,
             headers: { 'Content-Type': 'application/json' },
           })
-      ),
-    });
+        : new Response(JSON.stringify(user), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+    );
+    client.setConfig({ fetch: fetchStub });
     await TestBed.configureTestingModule({
       providers: [
         provideRouter([{ path: 'users', children: userRoutes }]),
-        { provide: MatSnackBar, useValue: { open: vi.fn() } },
         { provide: JwtService, useValue: { getRoles: () => ['tenant:admin'] } },
       ],
     }).compileComponents();
     const harness = await RouterTestingHarness.create();
-    await harness.navigateByUrl('/users/u-1');
+    await harness.navigateByUrl('/users/u-1', UserShowComponent);
+    const page = harness.routeNativeElement as HTMLElement;
     const router = TestBed.inject(Router);
 
-    await vi.waitFor(() => expect(router.url).toBe('/users'));
-    expect(open).toHaveBeenCalledWith(
-      'Failed to load user: User not found',
-      'Close',
-      expect.anything()
-    );
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(page.querySelector('app-load-error')).not.toBeNull();
+    });
+    expect(router.url).toBe('/users/u-1');
+    const error = page.querySelector('app-load-error')!;
+    expect(text(error)).toContain('Failed to load user: Keycloak down');
+    expect(error.querySelector('a')?.getAttribute('href')).toBe('/users');
+
+    fail = false;
+    const retry = button(page, 'Retry');
+    retry.focus();
+    retry.click();
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(text(page.querySelector('h1'))).toBe('alice');
+    });
+    TestBed.inject(ApplicationRef).tick();
+    expect(page.querySelector('app-load-error')).toBeNull();
+    expect(document.activeElement).toBe(page.querySelector('h1'));
+    expect(fetchStub).toHaveBeenCalledTimes(2);
   });
 });

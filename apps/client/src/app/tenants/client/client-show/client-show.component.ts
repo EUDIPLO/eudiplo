@@ -1,4 +1,13 @@
-import { Component, OnInit, ChangeDetectionStrategy, DestroyRef } from '@angular/core';
+import {
+  Component,
+  OnInit,
+  ChangeDetectionStrategy,
+  DestroyRef,
+  ElementRef,
+  Injector,
+  ViewChild,
+  inject,
+} from '@angular/core';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import type { ClientEntity } from '@eudiplo/sdk-core';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
@@ -13,6 +22,8 @@ import { ConfigOwnershipNoticeComponent } from '../../../config-portability/conf
 import { JwtService } from '../../../services/jwt.service';
 import { roleChoices } from '../../../services/role-grants';
 import { RoleLockNoticeComponent } from '../../../common/role-lock-notice.component';
+import { focusAfterRenderIfLost } from '../../../common/focus-if-lost.util';
+import { LoadErrorComponent } from '../../../common/load-error.component';
 import { getApiErrorMessage } from '../../../utils/error-message';
 import { ApiService } from '../../../core';
 import { clientDeleteConfirmation } from '../client-delete-confirmation';
@@ -34,6 +45,7 @@ import { groupRoles, type RoleGroup, uniqueRoles } from '../../../services/role-
     ConfigOwnershipDirective,
     ConfigOwnershipNoticeComponent,
     RoleLockNoticeComponent,
+    LoadErrorComponent,
   ],
   templateUrl: './client-show.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
@@ -43,6 +55,13 @@ export class ClientShowComponent implements OnInit {
   client?: ClientEntity;
   /** True while the delete request runs and, once it succeeded, until the page is left; disables Edit and Delete. */
   deleting = false;
+  /** Set when the client could not be loaded; the page then offers Retry instead of the client. */
+  loadError = '';
+
+  /** Takes the focus after a successful Retry, which removed the focused Retry button. */
+  @ViewChild('pageHeading') private readonly pageHeading?: ElementRef<HTMLElement>;
+  private readonly injector = inject(Injector);
+
   constructor(
     private readonly route: ActivatedRoute,
     private readonly snackBar: MatSnackBar,
@@ -95,12 +114,24 @@ export class ClientShowComponent implements OnInit {
   }
 
   ngOnInit() {
+    this.load();
+  }
+
+  /** Loads the client; on failure the page stays and says why, with Retry. */
+  load(): void {
     const clientId = this.route.snapshot.paramMap.get('id')!;
+    const retrying = this.loadError !== '';
+    this.loadError = '';
     this.clientService.getById(clientId).then(
-      (client) => (this.client = client),
+      (client) => {
+        this.client = client;
+        if (retrying) {
+          focusAfterRenderIfLost(this.injector, () => this.pageHeading?.nativeElement);
+        }
+      },
       (err) => {
-        openErrorSnackBar(this.snackBar, getApiErrorMessage(err, 'Failed to load client'));
-        this.router.navigate(['..'], { relativeTo: this.route });
+        console.error('Error loading client:', err);
+        this.loadError = getApiErrorMessage(err, 'Failed to load client');
       }
     );
   }

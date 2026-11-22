@@ -13,7 +13,7 @@
     <div class="heading">
       <span class="form-avatar" aria-hidden="true"><mat-icon>format_list_bulleted</mat-icon></span>
       <div>
-        <h1>{{ isEditMode ? 'Edit' : 'Create' }} Status List</h1>
+        <h1 #pageHeading tabindex="-1">{{ isEditMode ? 'Edit' : 'Create' }} Status List</h1>
         <p>A token status list in which EUDIPLO tracks the status of issued credentials.</p>
       </div>
     </div>
@@ -21,6 +21,14 @@
 
   @if (isLoading) {
     <p class="loading-state"><output>Loading status list…</output></p>
+  } @else if (loadError) {
+    <app-load-error
+      [message]="loadError"
+      hint="The status list can only be edited after it has been loaded."
+      (retry)="retryLoad()"
+    >
+      <a matButton routerLink="/status-lists">Back to the list</a>
+    </app-load-error>
   } @else {
     <form #formElement [formGroup]="form" (ngSubmit)="onSubmit()">
       <!-- Each section: what it is for on the left, its fields on the right -->
