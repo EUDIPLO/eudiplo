@@ -1,4 +1,4 @@
-import { Component, OnInit, ChangeDetectionStrategy } from '@angular/core';
+import { Component, OnInit, ChangeDetectionStrategy, inject } from '@angular/core';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import {
   tenantControllerDeleteTenant,
@@ -21,6 +21,7 @@ import { formatDuration } from '../../utils/duration';
 import { getApiErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { confirmTenantDelete } from '../tenant-delete-confirmation';
+import { FrontendConfigService } from '../../services/frontend-config.service';
 
 /** One setting of the tenant; without a value of its own, the instance's default applies. */
 interface Setting {
@@ -64,6 +65,8 @@ export class TenantShowComponent implements OnInit {
   /** The tenant's settings, built once it has loaded. */
   settingGroups: SettingGroup[] = [];
 
+  private readonly frontendConfig = inject(FrontendConfigService);
+
   constructor(
     private readonly route: ActivatedRoute,
     private readonly router: Router,
@@ -72,6 +75,17 @@ export class TenantShowComponent implements OnInit {
 
   ngOnInit(): void {
     void this.loadTenant();
+    // Tells who adds the clients of a tenant without any.
+    void this.frontendConfig.getConfig();
+  }
+
+  /**
+   * Whether the identity provider manages the tenant's clients (`OIDC_PROVIDER=generic`), so the
+   * configuration folder and `POST /api/tenant` do not add them; null until the mode is known.
+   */
+  get clientsInIdentityProvider(): boolean | null {
+    const mode = this.frontendConfig.authMode;
+    return mode === null ? null : mode === 'generic';
   }
 
   async loadTenant(): Promise<void> {

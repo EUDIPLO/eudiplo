@@ -5,6 +5,7 @@ import { client, type TenantResponseDto } from '@eudiplo/sdk-core';
 import { vi } from 'vitest';
 
 import { buildSettingGroups, TenantShowComponent } from './tenant-show.component';
+import { FrontendConfigService } from '../../services/frontend-config.service';
 
 describe('TenantShowComponent', () => {
   let fixture: ComponentFixture<TenantShowComponent>;
@@ -137,6 +138,26 @@ describe('TenantShowComponent', () => {
     expect(text(page.querySelector('.empty-clients'))).toContain('This tenant has no clients yet.');
     // The operator has no tenant, so the page names the ways that do add a client.
     expect(text(page.querySelector('.empty-clients'))).toContain('send POST /api/tenant again');
+  });
+
+  it.each([
+    // The identity provider manages the clients: only that applies.
+    ['generic', ['create them there, with the tenant ID acme'], ['POST /api/tenant']],
+    // EUDIPLO adds them: the identity provider sentence does not apply.
+    ['builtin', ['send POST /api/tenant again'], ['identity provider']],
+    // Not known yet: both.
+    [null, ['send POST /api/tenant again', 'Where an identity provider manages'], []],
+  ] as const)('names who adds the clients with auth mode %s', async (mode, shown, left) => {
+    vi.spyOn(TestBed.inject(FrontendConfigService), 'authMode', 'get').mockReturnValue(mode);
+    tenantResponse = {
+      status: 200,
+      body: { id: 'acme', name: 'ACME Corp', status: 'active', clients: [] },
+    };
+
+    const hint = text((await render()).querySelector('.empty-clients'));
+
+    for (const part of shown) expect(hint).toContain(part);
+    for (const part of left) expect(hint).not.toContain(part);
   });
 
   it('deletes the tenant once its ID is typed and returns to the list', async () => {

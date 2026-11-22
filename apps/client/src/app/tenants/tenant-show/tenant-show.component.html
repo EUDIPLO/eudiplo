@@ -77,12 +77,26 @@
           <div class="empty-clients">
             <mat-icon aria-hidden="true">person_off</mat-icon>
             <p>This tenant has no clients yet.</p>
-            <p>
-              The Web Client cannot add one from here. Add its clients through the tenant's
-              configuration folder, or send POST /api/tenant again with the same ID and name and the
-              roles of the admin client. Where an identity provider manages the clients, create them
-              there instead.
-            </p>
+            @if (clientsInIdentityProvider === true) {
+              <p>
+                The identity provider manages the clients of this tenant: create them there, with
+                the tenant ID <code>{{ tenant.id }}</code> in their tenant claim (<a
+                  href="https://docs.eudiplo.dev/operate/oidc-provider"
+                  target="_blank"
+                  rel="noopener"
+                  >Other OIDC providers</a
+                >).
+              </p>
+            } @else {
+              <p>
+                The Web Client cannot add one from here. Add its clients through the tenant's
+                configuration folder, or send POST /api/tenant again with the same ID and name and
+                the roles of the admin client.
+                @if (clientsInIdentityProvider === null) {
+                  Where an identity provider manages the clients, create them there instead.
+                }
+              </p>
+            }
           </div>
         }
       </mat-card>
