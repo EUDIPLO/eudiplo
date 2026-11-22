@@ -32,13 +32,13 @@ async function createRequest(request: APIRequestContext, reference?: string): Pr
   return ((await response.json()) as { session: string }).session;
 }
 
-/** Records the reasons sent with each cancellation, by session ID. */
-function recordCancellations(page: Page): Map<string, unknown> {
-  const cancelled = new Map<string, unknown>();
+/** Records every cancellation sent, in order, so a stray or doubled one shows up. */
+function recordCancellations(page: Page): { session: string; reason: unknown }[] {
+  const cancelled: { session: string; reason: unknown }[] = [];
   page.on('request', (request) => {
     const match = /\/api\/session\/([^/]+)\/cancel$/.exec(new URL(request.url()).pathname);
     if (request.method() === 'POST' && match) {
-      cancelled.set(match[1], request.postDataJSON()?.reason);
+      cancelled.push({ session: match[1], reason: request.postDataJSON()?.reason });
     }
   });
   return cancelled;
@@ -69,7 +69,7 @@ test('cancels an issuance offer from its page with a reason', async ({ page, req
   await confirmWithReason(page, 'sent to the wrong recipient');
 
   await expect(page.getByText('Offer cancelled')).toBeVisible();
-  expect(cancelled.get(session)).toBe('sent to the wrong recipient');
+  expect(cancelled).toEqual([{ session, reason: 'sent to the wrong recipient' }]);
   await expect(page.getByRole('heading', { name: 'Session cancelled' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Cancel Offer' })).toHaveCount(0);
 });
@@ -86,13 +86,14 @@ test('cancels a verification request from its page; Back sends nothing', async (
   await cancel.click();
   await page.getByRole('dialog').getByRole('button', { name: 'Back' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  expect(cancelled.size).toBe(0);
+  expect(cancelled).toEqual([]);
 
   await cancel.click();
   await confirmWithReason(page, 'customer left');
 
   await expect(page.getByText('Request cancelled')).toBeVisible();
-  expect(cancelled.get(session)).toBe('customer left');
+  // Only the confirmed cancellation was sent: Back sent nothing, not even late.
+  expect(cancelled).toEqual([{ session, reason: 'customer left' }]);
   await expect(page.getByRole('heading', { name: 'Session cancelled' })).toBeVisible();
 });
 
@@ -116,8 +117,10 @@ test('cancels the selected sessions with one reason', async ({ page, request }) 
   await expect(page.getByRole('dialog').getByRole('heading')).toHaveText(/^Cancel 2 \w+\?$/);
   await confirmWithReason(page, 'campaign ended');
 
-  await expect.poll(() => [...cancelled.keys()].sort()).toEqual([...sessions].sort());
-  expect([...cancelled.values()]).toEqual(['campaign ended', 'campaign ended']);
+  await expect
+    .poll(() => cancelled.map(({ session }) => session).sort())
+    .toEqual([...sessions].sort());
+  expect(cancelled.map(({ reason }) => reason)).toEqual(['campaign ended', 'campaign ended']);
   for (const session of sessions) {
     const response = await request.get(`${api}/api/session/${session}`, {
       headers: { Authorization: `Bearer ${await tenantToken(request)}` },

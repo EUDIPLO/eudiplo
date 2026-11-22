@@ -66,6 +66,8 @@ test('recreates an offer with the same parameters, sent only on Generate Offer',
   await page.getByRole('button', { name: 'Generate Offer' }).click();
   await expect(page).toHaveURL(/\/session-management\/[^/]+$/);
   expect(created).toHaveLength(1);
+  // The defaults filled the claims, so the comparison below is not of two empty offers.
+  expect(created[0]['credentialClaims']).toMatchObject({ 'pid-mdoc': { type: 'inline' } });
 
   await page.getByRole('button', { name: 'Recreate Offer' }).click();
   await expect(page).toHaveURL(/\/offer\/issuance$/);
