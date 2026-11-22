@@ -358,6 +358,62 @@ describe("StatusListService SQLite concurrency", () => {
         expect(list.elements).toEqual([1, 1, 0, 0]);
     });
 
+    test("changes no status of a credential configuration outside the caller's limit", async () => {
+        await dataSource
+            .getRepository(StatusListEntity)
+            .update(
+                { id: "list-1", tenantId: "tenant-1" },
+                { elements: [0, 0, 0, 0], stack: [2, 3] },
+            );
+        const entry = (index: number, credentialConfigurationId: string) => ({
+            tenantId: "tenant-1",
+            // No session row: status entries outlive their session.
+            sessionId: "cleaned-up-session",
+            statusListId: "list-1",
+            index,
+            list: "https://issuer.example/issuers/tenant-1/status-management/status-list/list-1",
+            credentialConfigurationId,
+        });
+        await dataSource
+            .getRepository(StatusMapping)
+            .insert([entry(0, "pid"), entry(1, "mdl")]);
+        Object.assign(service as object, {
+            statusListConfigService: {
+                getEffectiveConfig: vi.fn().mockResolvedValue({
+                    immediateUpdate: false,
+                }),
+            },
+        });
+        const update = (credentialConfigurationId?: string) =>
+            ({
+                sessionId: "cleaned-up-session",
+                credentialConfigurationId,
+                status: 1,
+            }) as never;
+        const elements = async () =>
+            (
+                await dataSource
+                    .getRepository(StatusListEntity)
+                    .findOneByOrFail({ id: "list-1", tenantId: "tenant-1" })
+            ).elements;
+
+        // The whole session and the other configuration are outside the limit.
+        await expect(
+            service.updateStatus(update(), "tenant-1", ["pid"]),
+        ).rejects.toThrow("No status mapping found");
+        await expect(
+            service.updateStatus(update("mdl"), "tenant-1", ["pid"]),
+        ).rejects.toThrow("No status mapping found");
+        expect(await elements()).toEqual([0, 0, 0, 0]);
+
+        await service.updateStatus(update("pid"), "tenant-1", ["pid"]);
+        expect(await elements()).toEqual([1, 0, 0, 0]);
+
+        // An empty list is no limit.
+        await service.updateStatus(update(), "tenant-1", []);
+        expect(await elements()).toEqual([1, 1, 0, 0]);
+    });
+
     describe("deleting a status list", () => {
         const mapping = (sessionId: string, index: number) => ({
             tenantId: "tenant-1",
