@@ -23,6 +23,10 @@ import { mdocContext } from "../../../../../verifier/presentations/mdoc-context.
 import type { WalletUnitReference } from "../../../../status-list/domain/wallet-unit-reference.js";
 import { StatusListService } from "../../../../status-list/status-list.service.js";
 import type { CredentialConfiguration } from "../../domain/credential-configuration.js";
+import {
+    boundCredentialExpiry,
+    maintenancePeriodEnd,
+} from "../../domain/maintenance-period.js";
 import { formattedClaimFields } from "../../utils/derive.js";
 import { buildClaimsByNamespace } from "../../utils/index.js";
 import {
@@ -159,6 +163,17 @@ export class MdocIssuerService {
                 `mDOC issuance failed for key chain ${certificate.keyId}: ${(error as Error).message}`,
             );
         }
+        // End before the status maintenance period of the attestations the
+        // credential follows.
+        expiresAt =
+            boundCredentialExpiry(
+                expiresAt,
+                maintenancePeriodEnd(
+                    credentialConfiguration.revokeWithWalletUnit,
+                    walletUnit,
+                    session.walletInstanceStatus,
+                ),
+            ) ?? expiresAt;
         const signed = new Date(issuedAt * 1000);
         const validFrom = new Date(signed);
         const validUntil = new Date(expiresAt * 1000);

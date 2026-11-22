@@ -108,3 +108,38 @@ export function attestationStatusReferences(
     }
     return references;
 }
+
+/** 9999-12-31T23:59:59Z; a later NumericDate is not a usable date. */
+const MAX_NUMERIC_DATE = 253_402_300_799;
+
+/**
+ * The end of the period in which the wallet provider maintains the status
+ * of a TS3 1.5 attestation: `client_status.exp` or `key_storage_status.exp`,
+ * a NumericDate (TS3 1.5 section 2.4.1). It is independent of the token's
+ * own `exp`, and a PID must expire before it (section 2.4.3).
+ *
+ * @returns Epoch seconds, or undefined when the claim or its `exp` is absent
+ * @throws MalformedStatusReferenceError if `exp` is present but not a
+ * non-negative number
+ */
+export function attestationMaintenanceEnd(
+    payload: Record<string, unknown>,
+    kind: AttestationKind,
+): number | undefined {
+    const claim = TS3_STATUS_CLAIM[kind];
+    const value = payload[claim];
+    if (!isJsonObject(value) || value.exp === undefined) {
+        return undefined;
+    }
+    if (
+        typeof value.exp !== "number" ||
+        !Number.isFinite(value.exp) ||
+        value.exp < 0 ||
+        value.exp > MAX_NUMERIC_DATE
+    ) {
+        throw new MalformedStatusReferenceError(
+            `The ${claim}.exp claim is not a NumericDate`,
+        );
+    }
+    return value.exp;
+}

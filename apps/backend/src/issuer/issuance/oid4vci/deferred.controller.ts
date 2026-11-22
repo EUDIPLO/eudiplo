@@ -13,6 +13,7 @@ import { Secured } from "../../../auth/secure.decorator.js";
 import { Token, TokenPayload } from "../../../auth/token.decorator.js";
 import { CompleteDeferredCredential } from "./application/complete-deferred-credential.js";
 import { FailDeferredCredential } from "./application/fail-deferred-credential.js";
+import { DeferredTransactionStatus } from "./domain/deferred-transaction-status.js";
 import {
     CompleteDeferredDto,
     DeferredOperationResponse,
@@ -89,7 +90,13 @@ export class DeferredController {
         return {
             transactionId: transaction.transactionId,
             status: transaction.status,
-            message: "Credential generated and ready for retrieval",
+            // Failed instead of issued when the attestations' status
+            // maintenance period ended while the transaction was pending.
+            message:
+                transaction.status === DeferredTransactionStatus.Failed
+                    ? (transaction.errorMessage ??
+                      "The credential could not be issued")
+                    : "Credential generated and ready for retrieval",
         };
     }
 

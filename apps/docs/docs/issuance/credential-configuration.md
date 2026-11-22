@@ -95,7 +95,7 @@ Images use `uri`. To host them in EUDIPLO, see [Object storage](../operate/objec
 
 ## 5. Set the lifetime and signing key
 
-- `lifeTime` (seconds) sets the expiry. SD-JWT VCs without `lifeTime` have no `exp`. mDOCs default to one year and never outlive the signing certificate. Issuance and expiry times are rounded to the hour so that credentials of one batch cannot be linked by their timestamps.
+- `lifeTime` (seconds) sets the expiry. SD-JWT VCs without `lifeTime` have no `exp`, unless `revokeWithWalletUnit` bounds it. mDOCs default to one year and never outlive the signing certificate. Issuance and expiry times are rounded to the hour so that credentials of one batch cannot be linked by their timestamps. With `revokeWithWalletUnit`, the expiry also ends before the status maintenance period of the wallet and key attestations ([Expiry within the status maintenance period](../trust/attestation.md#expiry-within-the-status-maintenance-period)).
 - `keyChainId` selects the signing key chain. Without it, the tenant's default attestation key chain signs the credential.
 
 ## 6. Enable revocation

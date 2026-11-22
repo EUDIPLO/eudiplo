@@ -273,6 +273,49 @@ describe("DeferredCredentialService.createDeferredTransaction", () => {
         );
     });
 
+    it("refuses a transaction whose key attestation's maintenance period has ended, with revokeWithWalletUnit", async () => {
+        const holderKey = { kty: "EC", crv: "P-256", x: "x", y: "y" };
+        const walletUnit = {
+            statusUri: "https://wp.example/wua-status",
+            statusIdx: 7,
+            certificates: ["leaf"],
+            maintainedUntil: Math.floor(Date.now() / 1000) - 60,
+        };
+        const ended = () =>
+            setup({
+                holderKeys: [holderKey],
+                keyAttestation: { attestedKeys: [holderKey], walletUnit },
+            });
+        const request = (service: DeferredCredentialService, follow: boolean) =>
+            service.createDeferredTransaction({
+                parsedCredentialRequest: {
+                    proofs: {
+                        proofType: "jwt",
+                        values: [proof({ nonce: "n-1" })],
+                    },
+                    credentialConfigurationId: "pid",
+                },
+                session: { id: "session" } as SessionData,
+                tenantId: "tenant",
+                issuanceSetId: "set",
+                keyAttestationsRequired: {},
+                revokeWithWalletUnit: follow,
+            });
+
+        const refused = ended();
+        expect(await protocolError(request(refused.service, true))).toEqual({
+            error: "credential_request_denied",
+            error_description: expect.stringContaining(
+                "key_storage_status.exp",
+            ),
+        });
+        expect(refused.transactions.create).not.toHaveBeenCalled();
+
+        const unbounded = ended();
+        await request(unbounded.service, false);
+        expect(unbounded.transactions.create).toHaveBeenCalledOnce();
+    });
+
     it("answers invalid_proof for a key attestation whose status rejects it", async () => {
         const { service, verify, transactions } = setup();
         verify.mockRejectedValueOnce(

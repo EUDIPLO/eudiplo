@@ -26,4 +26,11 @@ export interface WalletUnitReference {
      * wallet-provider trust lists and check who signed the status list.
      */
     certificates: string[];
+    /**
+     * End of the provider's status maintenance period, epoch seconds
+     * (`key_storage_status.exp` or `client_status.exp`, TS3 1.5 section
+     * 2.4.1), when the attestation has one. Credentials that follow the
+     * attestation expire before it.
+     */
+    maintainedUntil?: number;
 }

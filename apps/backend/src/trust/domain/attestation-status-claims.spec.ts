@@ -1,6 +1,53 @@
 import { describe, expect, it } from "vitest";
-import { attestationStatusReferences } from "./attestation-status-claims.js";
+import {
+    attestationMaintenanceEnd,
+    attestationStatusReferences,
+} from "./attestation-status-claims.js";
 import { MalformedStatusReferenceError } from "./status-list-reference.js";
+
+describe("attestationMaintenanceEnd", () => {
+    it("reads client_status.exp of a wallet attestation and key_storage_status.exp of a key attestation", () => {
+        expect(
+            attestationMaintenanceEnd(
+                { client_status: { exp: 1_900_000_000 } },
+                "wallet",
+            ),
+        ).toBe(1_900_000_000);
+        expect(
+            attestationMaintenanceEnd(
+                { key_storage_status: { exp: 1_900_000_001 } },
+                "key",
+            ),
+        ).toBe(1_900_000_001);
+    });
+
+    it("ignores the token's own exp and the claim of the other kind", () => {
+        expect(
+            attestationMaintenanceEnd(
+                { exp: 1, key_storage_status: { exp: 2 } },
+                "wallet",
+            ),
+        ).toBeUndefined();
+    });
+
+    it.each([
+        ["no TS3 claim", {}],
+        ["a TS3 claim without exp", { client_status: { status: {} } }],
+    ])("is undefined for %s", (_case, payload) => {
+        expect(attestationMaintenanceEnd(payload, "wallet")).toBeUndefined();
+    });
+
+    it.each([
+        ["a string", "1900000000"],
+        ["negative", -1],
+        ["null", null],
+        ["after the year 9999", 253_402_300_800],
+    ])("throws for an exp that is %s", (_case, exp) => {
+        expect(() =>
+            attestationMaintenanceEnd({ client_status: { exp } }, "wallet"),
+        ).toThrow(MalformedStatusReferenceError);
+    });
+});
 
 const TS3 = { uri: "https://wp.example/wia", idx: 1337 };
 const TOP = { uri: "https://wp.example/token", idx: 7 };

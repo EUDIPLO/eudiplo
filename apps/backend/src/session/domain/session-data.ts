@@ -88,6 +88,8 @@ export interface WalletInstanceStatus {
     statusIdx: number;
     /** `x5c` of the wallet attestation, leaf first. */
     certificates: string[];
+    /** `client_status.exp` of the wallet attestation, epoch seconds. */
+    maintainedUntil?: number;
 }
 
 /** Session data shared by issuance and verification, independent of persistence/DTOs. */
