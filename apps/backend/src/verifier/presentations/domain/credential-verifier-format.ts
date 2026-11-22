@@ -78,6 +78,12 @@ export type CredentialVerificationResult =
           /** Disclosed claims handed to the relying party. */
           claims: Record<string, unknown>;
           docType?: string;
+          /**
+           * Type of the verified credential, compared with the query's
+           * `meta`: the SD-JWT VC `vct` or the mdoc docType. Undefined when
+           * the credential carries none.
+           */
+          credentialType?: string;
           provenance?: VerificationProvenance;
           /** Requested claims (dotted paths) that are not disclosed. Only checked without `claimSets`. */
           missingClaims: string[];

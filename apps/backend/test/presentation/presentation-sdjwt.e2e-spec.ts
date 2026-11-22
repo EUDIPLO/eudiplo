@@ -775,4 +775,63 @@ describe("Presentation - SD-JWT Credential", () => {
             },
         ]);
     });
+
+    test("should reject a trusted credential whose vct is not in vct_values", async () => {
+        const res = await createPresentationRequest(app, authToken, {
+            response_type: ResponseType.URI,
+            requestId: "pid-no-hook",
+        });
+        const authRequest = client.parseOpenid4vpAuthorizationRequest({
+            authorizationRequest: res.body.uri,
+        });
+        const resolved = await client.resolveOpenid4vpAuthorizationRequest({
+            authorizationRequestPayload: authRequest.params,
+            responseMode: { type: "direct_post" },
+        });
+
+        // Signed by the trusted issuer, but of another type.
+        const vp_token = await preparePresentation(
+            {
+                iat: Math.floor(Date.now() / 1000),
+                aud: resolved.authorizationRequestPayload.client_id as string,
+                nonce: resolved.authorizationRequestPayload.nonce,
+            },
+            privateIssuerKey,
+            issuerCertChain,
+            statusListService,
+            credentialConfigId,
+            "type-mismatch",
+            "ES256",
+            { claims: { vct: "urn:eudi:other:1" } },
+        );
+        const jwt = await encryptVpToken(vp_token, "pid", resolved);
+        const authorizationResponse =
+            await client.createOpenid4vpAuthorizationResponse({
+                authorizationRequestPayload: authRequest.params,
+                authorizationResponsePayload: { response: jwt },
+                ...callbacks,
+            });
+        const submitRes = await client.submitOpenid4vpAuthorizationResponse({
+            authorizationResponsePayload:
+                authorizationResponse.authorizationResponsePayload,
+            authorizationRequestPayload:
+                resolved.authorizationRequestPayload as Openid4vpAuthorizationRequest,
+        });
+        expect(submitRes.response.status).toBe(400);
+
+        const sessionRes = await request(app.getHttpServer())
+            .get(`/session/${res.body.session}`)
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .expect(200);
+        expect(sessionRes.body.status).toBe("failed");
+        expect(sessionRes.body.failureCode).toBe("credential_type_mismatch");
+        expect(sessionRes.body.credentials).toBeNull();
+        expect(sessionRes.body.outcome).toMatchObject({
+            result: "failed",
+            source: "verifier",
+            error: "credential_type_mismatch",
+            message: `Credential 'pid' is not of a requested type: vct_values accepts ${host}/issuers/root/credentials-metadata/vct/pid, urn:eudi:pid:1`,
+        });
+    });
 });
