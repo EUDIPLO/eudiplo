@@ -426,20 +426,22 @@ export class X509ValidationService {
     }
 
     /**
-     * Whether the validated certificate path of a status list ends at one of
-     * the {@link statusListSigners} of `matched`, by the rule credentials are
-     * matched with: a CA certificate must be the path end, a pinned one the
-     * leaf, or the path end in `pathEnd` mode. Entities are told apart by
-     * certificate, not by `entityId`, which is optional and not unique.
+     * How the validated certificate path of a status list matches one of the
+     * {@link statusListSigners} of `matched`, or null, by the rule
+     * credentials are matched with: a CA certificate must be the path end, a
+     * pinned one the leaf, or the path end in `pathEnd` mode. Entities are
+     * told apart by certificate, not by `entityId`, which is optional and not
+     * unique. The mode decides which part of the path the trust decision
+     * rests on.
      */
-    async matchesStatusListSigner(
+    async statusListSignerMatchMode(
         path: x509.X509Certificate[],
         matched: MatchedTrustedEntity,
         pinnedMode: "leaf" | "pathEnd",
-    ): Promise<boolean> {
+    ): Promise<MatchedTrustedEntity["matchMode"] | null> {
         return (
-            (await this.statusListSignerMatch(path, matched, pinnedMode)) !==
-            null
+            (await this.statusListSignerMatch(path, matched, pinnedMode))
+                ?.matchMode ?? null
         );
     }
 
@@ -504,7 +506,7 @@ export class X509ValidationService {
 
     /**
      * How `path` matches the {@link statusListSigners} of `matched`, or null;
-     * see {@link matchesStatusListSigner}. A pinned signing certificate
+     * see {@link statusListSignerMatchMode}. A pinned signing certificate
      * matches before a listed CA at the path end: the pin is the narrower
      * trust decision, which {@link matchAttestationStatusListSigner} then
      * checks alone.

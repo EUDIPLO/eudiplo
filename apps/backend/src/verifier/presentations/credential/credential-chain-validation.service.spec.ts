@@ -960,14 +960,14 @@ describe("CredentialChainValidationService — status list signer", () => {
             const policy = { pinnedCertMode: "pathEnd" as const };
             const matched = await credentialMatch(
                 service,
-                [b64(await issuedBy(pinned, "Credential"))],
+                [b64(pinned)],
                 policy,
             );
             expect(matched?.matchMode).toBe("pathEnd-pinned");
 
             await expect(
                 service.verifyStatusListSignature(
-                    [b64(await issuedBy(pinned, "Status List"))],
+                    [b64(pinned)],
                     matched,
                     LOTE_SOURCE,
                     policy,
@@ -979,6 +979,196 @@ describe("CredentialChainValidationService — status list signer", () => {
                     matched,
                     LOTE_SOURCE,
                     policy,
+                ),
+            ).resolves.toBe(false);
+        });
+
+        it("rejects a credential and a status list issued by the pinned certificate, which is no CA", async () => {
+            const pinned = await selfSigned("Pinned Issuer", false);
+            const service = serviceWith([
+                {
+                    entityId: "issuer",
+                    services: [
+                        { serviceTypeIdentifier: ISSUANCE, cert: pinned },
+                    ],
+                },
+            ]);
+            const policy = { pinnedCertMode: "pathEnd" as const };
+
+            const result = await service.validateChain(
+                [b64(await issuedBy(pinned, "Credential"))],
+                LOTE_SOURCE,
+                policy,
+            );
+
+            expect(result).toMatchObject({
+                verified: false,
+                error: "certificate_path_invalid",
+            });
+            expect(result.errorDetails).toContain("is not a CA");
+
+            const matched = await credentialMatch(
+                service,
+                [b64(pinned)],
+                policy,
+            );
+            await expect(
+                service.verifyStatusListSignature(
+                    [b64(await issuedBy(pinned, "Status List"))],
+                    matched,
+                    LOTE_SOURCE,
+                    policy,
+                ),
+            ).resolves.toBe(false);
+        });
+    });
+
+    describe("RFC 5280 path constraints", () => {
+        async function issuedWith(
+            issuer: Cert,
+            name: string,
+            extensions: x509.Extension[],
+        ): Promise<Cert> {
+            const keys = await generateKeys();
+            const cert = await x509.X509CertificateGenerator.create({
+                serialNumber: String(serial++).padStart(2, "0"),
+                subject: `CN=${name}`,
+                issuer: issuer.cert.subject,
+                notBefore: new Date(Date.now() - 60_000),
+                notAfter: new Date(Date.now() + 3_600_000),
+                publicKey: keys.publicKey,
+                signingKey: issuer.keys.privateKey,
+                signingAlgorithm: algorithm,
+                extensions,
+            });
+            return { cert, keys };
+        }
+
+        it("rejects a signer issued under an intermediate without cA, as in RP_WS_SM_IssuerIntegrity_034a_UF", async () => {
+            const anchor = await selfSigned("CA-PP-I", true);
+            const service = serviceWith([
+                {
+                    entityId: "PP-I",
+                    services: [
+                        { serviceTypeIdentifier: ISSUANCE, cert: anchor },
+                    ],
+                },
+            ]);
+            const notCa = await issuedWith(anchor, "Not a CA", [
+                new x509.BasicConstraintsExtension(false, undefined, true),
+                new x509.KeyUsagesExtension(
+                    x509.KeyUsageFlags.keyCertSign | x509.KeyUsageFlags.cRLSign,
+                    true,
+                ),
+            ]);
+            const signer = await issuedBy(notCa, "Signer");
+
+            const result = await service.validateChain(
+                [b64(signer), b64(notCa)],
+                LOTE_SOURCE,
+            );
+
+            expect(result).toMatchObject({
+                verified: false,
+                matchedEntity: null,
+                error: "certificate_path_invalid",
+            });
+            expect(result.errorDetails).toContain('subject="CN=Not a CA"');
+        });
+
+        it("rejects a signer with an unknown critical extension, as in RP_WS_SM_IssuerIntegrity_037a_UF", async () => {
+            const anchor = await selfSigned("CA-PP-A", true);
+            const service = serviceWith([
+                {
+                    entityId: "PP-A",
+                    services: [
+                        { serviceTypeIdentifier: ISSUANCE, cert: anchor },
+                    ],
+                },
+            ]);
+            const signer = await issuedWith(anchor, "Signer", [
+                new x509.Extension(
+                    "1.3.6.1.4.1.55555.1.1",
+                    true,
+                    new Uint8Array([0x05, 0x00]),
+                ),
+            ]);
+
+            const result = await service.validateChain(
+                [b64(signer)],
+                LOTE_SOURCE,
+            );
+
+            expect(result).toMatchObject({
+                verified: false,
+                error: "certificate_path_invalid",
+            });
+            expect(result.errorDetails).toContain(
+                "unsupported critical extension 1.3.6.1.4.1.55555.1.1",
+            );
+        });
+
+        it("checks only the signing certificate when it is pinned", async () => {
+            const notCa = await selfSigned("Not a CA", false);
+            const pinned = await issuedBy(notCa, "Pinned Signer");
+            const service = serviceWith([
+                {
+                    entityId: "issuer",
+                    services: [
+                        { serviceTypeIdentifier: ISSUANCE, cert: pinned },
+                    ],
+                },
+            ]);
+
+            const result = await service.validateChain(
+                [b64(pinned), b64(notCa)],
+                LOTE_SOURCE,
+            );
+
+            expect(result.verified).toBe(true);
+            expect(result.matchedEntity?.matchMode).toBe("leaf-pinned");
+        });
+
+        it("checks the status list path up to the revocation CA it matched, also when another entity pins its signer", async () => {
+            const issuerCa = await selfSigned("Issuer CA", true);
+            const revocationCa = await selfSigned("Revocation CA", true);
+            const notCa = await issuedWith(revocationCa, "Not a CA", [
+                new x509.BasicConstraintsExtension(false, undefined, true),
+            ]);
+            const statusSigner = await issuedBy(notCa, "Status List");
+            const service = serviceWith([
+                // Listed first: pins the status list signer, so the status
+                // list's path matches this entity before the issuer's.
+                {
+                    entityId: "other",
+                    services: [
+                        {
+                            serviceTypeIdentifier: REVOCATION,
+                            cert: statusSigner,
+                        },
+                    ],
+                },
+                {
+                    entityId: "issuer",
+                    services: [
+                        { serviceTypeIdentifier: ISSUANCE, cert: issuerCa },
+                        {
+                            serviceTypeIdentifier: REVOCATION,
+                            cert: revocationCa,
+                        },
+                    ],
+                },
+            ]);
+            const matched = await credentialMatch(service, [
+                b64(await issuedBy(issuerCa, "Credential")),
+            ]);
+            expect(matched?.entity.entityId).toBe("issuer");
+
+            await expect(
+                service.verifyStatusListSignature(
+                    [b64(statusSigner), b64(notCa)],
+                    matched,
+                    LOTE_SOURCE,
                 ),
             ).resolves.toBe(false);
         });
@@ -1044,7 +1234,7 @@ describe("CredentialChainValidationService — status list signer", () => {
             ).resolves.toBe(false);
         });
 
-        it("accepts a pinned revocation certificate as leaf, or as path end in pathEnd mode", async () => {
+        it("accepts a pinned revocation certificate as leaf, not as the issuer of the status list signer", async () => {
             const pinnedRevocation = await selfSigned(
                 "Pinned Revocation",
                 false,
@@ -1078,11 +1268,13 @@ describe("CredentialChainValidationService — status list signer", () => {
             await expect(
                 service.verifyStatusListSignature(below, matched, LOTE_SOURCE),
             ).resolves.toBe(false);
+            // In pathEnd mode the path ends at the pinned certificate, but a
+            // certificate that is no CA issues no certificates.
             await expect(
                 service.verifyStatusListSignature(below, matched, LOTE_SOURCE, {
                     pinnedCertMode: "pathEnd",
                 }),
-            ).resolves.toBe(true);
+            ).resolves.toBe(false);
         });
     });
 

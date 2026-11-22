@@ -34,6 +34,7 @@ export function mapChainErrorToFailureType(
         case "x5c_required":
             return "x5c_missing";
         case "chain_build_failed":
+        case "certificate_path_invalid":
             return "no_trust_chain_to_root";
         case "no_trusted_entity_match":
             return "trust_chain_not_trusted";
