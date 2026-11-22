@@ -53,6 +53,22 @@ export interface ClientAttestation {
     clientAttestationPopJwt?: string;
 }
 
+/**
+ * The status list entry of an accepted wallet attestation, to follow the
+ * wallet instance after issuance (TS3 1.5 section 2.4.3).
+ */
+export interface WalletAttestationStatusReference {
+    /** `status_list.uri` the attestation names. */
+    uri: string;
+    /** `status_list.idx` the attestation names. */
+    idx: number;
+    /**
+     * `x5c` of the attestation, leaf first, to match its provider again and
+     * check who signs the status list.
+     */
+    certificates: string[];
+}
+
 /** Answer when the wallet-provider trust lists cannot be loaded. */
 const WALLET_PROVIDER_TRUST_LISTS_UNAVAILABLE =
     "Wallet provider trust lists could not be loaded";
@@ -109,6 +125,10 @@ export class WalletAttestationService {
      * @param statusCheckMode How to handle the attestation's status list:
      * strict rejects on any status check failure, best_effort accepts when the
      * list cannot be fetched, disabled skips the check
+     * @returns The status list entry of the attestation
+     * (`client_status.status`, else `status`) with its `x5c`, also when the
+     * check is disabled or the list could not be fetched in best_effort;
+     * undefined without attestation or without entry
      * @throws UnauthorizedException if attestation is required but not provided, or if provided but invalid;
      * message and cause as the `ClientAttestationVerifier` port describes
      */
@@ -120,14 +140,14 @@ export class WalletAttestationService {
         walletAttestationRequired: boolean,
         walletProviderTrustLists: TrustListRef[],
         statusCheckMode: RevocationCheckMode,
-    ): Promise<void> {
+    ): Promise<WalletAttestationStatusReference | undefined> {
         if (!clientAttestation) {
             if (walletAttestationRequired) {
                 throw new UnauthorizedException(
                     "Wallet attestation is required but not provided",
                 );
             }
-            return;
+            return undefined;
         }
 
         try {
@@ -152,7 +172,7 @@ export class WalletAttestationService {
             }
 
             // Then validate the X.509 certificate against trust lists and get the matched entity
-            const { matchedEntity, trustStore } =
+            const { matchedEntity, trustStore, certificates } =
                 await this.validateWalletSolutionCertificate(
                     clientAttestation.clientAttestationJwt,
                     walletProviderTrustLists,
@@ -161,7 +181,7 @@ export class WalletAttestationService {
 
             // Check the status list if present in the attestation JWT
             // Pass the matched entity and trust store for signature verification
-            await this.validateAttestationStatus(
+            const statusEntry = await this.validateAttestationStatus(
                 tenantId,
                 clientAttestation.clientAttestationJwt,
                 matchedEntity,
@@ -170,6 +190,7 @@ export class WalletAttestationService {
             );
 
             this.logger.debug("Wallet attestation verified successfully");
+            return statusEntry && { ...statusEntry, certificates };
         } catch (err) {
             if (err instanceof UnauthorizedException) {
                 throw err;
@@ -222,6 +243,8 @@ export class WalletAttestationService {
     ): Promise<{
         matchedEntity: MatchedTrustedEntity | null;
         trustStore: BuiltTrustStore | null;
+        /** The attestation's `x5c`, leaf first. */
+        certificates: string[];
     }> {
         const trustListRefs = normalizeTrustListRefs(trustListInputs);
 
@@ -277,7 +300,7 @@ export class WalletAttestationService {
                 `Wallet attestation validated against trusted entity: ${match.entity.entityId ?? "unknown"}`,
             );
 
-            return { matchedEntity: match, trustStore };
+            return { matchedEntity: match, trustStore, certificates: x5c };
         } catch (err) {
             if (err instanceof UnauthorizedException) {
                 throw err;

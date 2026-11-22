@@ -1,15 +1,17 @@
 import { Column, Entity, Index, JoinColumn, ManyToOne } from "typeorm";
 import { TenantEntity } from "../../../auth/tenant/entities/tenant.entity.js";
 import { epochMilliseconds } from "../../../database/epoch-milliseconds.transformer.js";
+import type { AttestationKind } from "../../../trust/domain/attestation-status-claims.js";
 import { StatusListEntity } from "./status-list.entity.js";
 
 /**
- * The wallet unit attestation an issued credential was bound to, for a
- * credential configuration with `revokeWithWalletUnit`. One row per status
- * entry of such a credential: the background check reads the attestation's
- * status list and revokes the entry once the wallet unit is revoked, then
- * deletes the row. A row is also deleted once the credential is revoked
- * otherwise or has expired.
+ * A wallet unit attestation an issued credential was bound to, for a
+ * credential configuration with `revokeWithWalletUnit`. Up to two rows per
+ * status entry of such a credential, one for the key attestation of its
+ * proof and one for the wallet attestation of its access token: the
+ * background check reads each attestation's status list and revokes the
+ * entry once either is revoked, then deletes the rows of the entry. The rows
+ * are also deleted once the credential is revoked otherwise or has expired.
  */
 @Entity()
 @Index("IDX_credential_wallet_unit_status", ["tenantId", "walletUnitStatusUri"])
@@ -34,6 +36,15 @@ export class CredentialWalletUnit {
     /** Index of the credential's status entry. */
     @Column({ type: "int", primary: true })
     index!: number;
+
+    /**
+     * Which attestation the row follows: `key` for the key attestation of
+     * the proof, `wallet` for the wallet attestation (WIA) presented at the
+     * token endpoint. Rows written before wallet attestations were followed
+     * are `key`.
+     */
+    @Column({ type: "varchar", primary: true, default: "key" })
+    attestationKind!: AttestationKind;
 
     /** Issuance session of the credential, named in the webhook. */
     @Column({ type: "varchar" })

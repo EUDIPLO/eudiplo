@@ -2271,10 +2271,11 @@ export type CredentialConfig = {
      */
     activeCredentials?: ActiveCredentialPolicy | null;
     /**
-     * Revoke issued credentials when the wallet unit attestation they were
+     * Revoke issued credentials when a wallet unit attestation they were
      * bound to is revoked: the key attestation of the proof (OpenID4VCI 1.0,
-     * Appendix D.1), whose status list entry is recorded with each
-     * credential and checked every `WALLET_UNIT_STATUS_CHECK_INTERVAL`
+     * Appendix D.1) or the wallet attestation the built-in authorization
+     * server accepted (Appendix E), whose status list entries are recorded
+     * with each credential and checked every `WALLET_UNIT_STATUS_CHECK_INTERVAL`
      * seconds until the credential is revoked or expires.
      *
      * Requires `statusManagement` and `config.keyAttestationsRequired`.
@@ -2347,10 +2348,11 @@ export type CredentialConfigCreate = {
      */
     activeCredentials?: ActiveCredentialPolicy | null;
     /**
-     * Revoke issued credentials when the wallet unit attestation they were
+     * Revoke issued credentials when a wallet unit attestation they were
      * bound to is revoked: the key attestation of the proof (OpenID4VCI 1.0,
-     * Appendix D.1), whose status list entry is recorded with each
-     * credential and checked every `WALLET_UNIT_STATUS_CHECK_INTERVAL`
+     * Appendix D.1) or the wallet attestation the built-in authorization
+     * server accepted (Appendix E), whose status list entries are recorded
+     * with each credential and checked every `WALLET_UNIT_STATUS_CHECK_INTERVAL`
      * seconds until the credential is revoked or expires.
      *
      * Requires `statusManagement` and `config.keyAttestationsRequired`.
@@ -2423,10 +2425,11 @@ export type CredentialConfigUpdate = {
      */
     activeCredentials?: ActiveCredentialPolicy | null;
     /**
-     * Revoke issued credentials when the wallet unit attestation they were
+     * Revoke issued credentials when a wallet unit attestation they were
      * bound to is revoked: the key attestation of the proof (OpenID4VCI 1.0,
-     * Appendix D.1), whose status list entry is recorded with each
-     * credential and checked every `WALLET_UNIT_STATUS_CHECK_INTERVAL`
+     * Appendix D.1) or the wallet attestation the built-in authorization
+     * server accepted (Appendix E), whose status list entries are recorded
+     * with each credential and checked every `WALLET_UNIT_STATUS_CHECK_INTERVAL`
      * seconds until the credential is revoked or expires.
      *
      * Requires `statusManagement` and `config.keyAttestationsRequired`.

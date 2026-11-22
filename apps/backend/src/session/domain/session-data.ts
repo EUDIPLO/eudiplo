@@ -75,6 +75,21 @@ interface SessionTenant {
     defaultKeyChains?: { access?: string } | null;
 }
 
+/**
+ * The status list entry of the wallet attestation (WIA) a token endpoint
+ * accepted for the session: `client_status.status` in TS3 1.5, else the
+ * top-level `status`. Issued credentials are recorded with it, so that they
+ * are revoked with the wallet instance (TS3 1.5 section 2.4.3).
+ */
+export interface WalletInstanceStatus {
+    /** `status_list.uri` the wallet attestation names. */
+    statusUri: string;
+    /** `status_list.idx` the wallet attestation names. */
+    statusIdx: number;
+    /** `x5c` of the wallet attestation, leaf first. */
+    certificates: string[];
+}
+
 /** Session data shared by issuance and verification, independent of persistence/DTOs. */
 export interface SessionData {
     id: string;
@@ -94,6 +109,8 @@ export interface SessionData {
     authorization_code_expires_at?: Date;
     dpop_jkt?: string;
     client_key_jkt?: string;
+    /** Status list entry of the latest accepted wallet attestation. */
+    walletInstanceStatus?: WalletInstanceStatus | null;
     /** SHA-256 hash of the refresh token; the token itself is not stored. */
     refresh_token?: string;
     refresh_token_expires_at?: Date;

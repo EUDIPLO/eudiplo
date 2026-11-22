@@ -8,7 +8,10 @@ import type {
 } from "../../../../trust/types.js";
 import type { WalletAttestationService } from "../../../../trust/wallet-attestation.service.js";
 import type { X509ValidationService } from "../../../../trust/x509-validation.service.js";
-import type { WalletUnitReference } from "../../../status-list/domain/wallet-unit-reference.js";
+import {
+    MAX_WALLET_UNIT_STATUS_INDEX,
+    type WalletUnitReference,
+} from "../../../status-list/domain/wallet-unit-reference.js";
 import type { BuildIssuerMetadata } from "../application/build-issuer-metadata.js";
 import {
     type AttestationProofTrust,
@@ -25,9 +28,6 @@ import type {
     CredentialProofVerifier,
     IssuanceProofType,
 } from "../ports/credential-proof-verifier.js";
-
-/** Largest `status_list.idx` of a wallet unit that can be stored (int4). */
-const MAX_WALLET_UNIT_STATUS_INDEX = 2_147_483_647;
 
 export class OpenIdCredentialProofVerifier implements CredentialProofVerifier {
     constructor(

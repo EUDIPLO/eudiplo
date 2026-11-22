@@ -92,6 +92,91 @@ describe("WalletAttestationService trust requirements", () => {
             ).rejects.toThrow("No wallet provider trust lists configured");
         },
     );
+
+    describe("returns the status entry of an accepted attestation with its x5c", () => {
+        const entry = { uri: "https://wp.example/wia", idx: 1337 };
+        const attestationJwt = [
+            Buffer.from(
+                JSON.stringify({ alg: "ES256", x5c: ["leaf", "ca"] }),
+            ).toString("base64url"),
+            Buffer.from(
+                JSON.stringify({
+                    client_status: { status: { status_list: entry } },
+                }),
+            ).toString("base64url"),
+            "c2ln",
+        ].join(".");
+
+        function accepting(fetchError?: Error) {
+            return Object.assign(
+                Object.create(WalletAttestationService.prototype),
+                {
+                    getIssuer: () => ({ verifyWalletAttestation: vi.fn() }),
+                    settings: { cryptoToleranceSeconds: 0 },
+                    logger: { debug: vi.fn(), warn: vi.fn() },
+                    validateWalletSolutionCertificate: vi.fn(async () => ({
+                        matchedEntity: null,
+                        trustStore: null,
+                        certificates: ["leaf", "ca"],
+                    })),
+                    statusListVerifierService: {
+                        getAttestationStatusEntries:
+                            StatusListVerifierService.prototype
+                                .getAttestationStatusEntries,
+                        getStatusListJwt: vi.fn(async () => {
+                            if (fetchError) throw fetchError;
+                            return "status-list-jwt";
+                        }),
+                        getStatusFromStatusListJwt: vi.fn(() => ({
+                            isValid: true,
+                            description: "VALID",
+                        })),
+                    },
+                    verifyStatusListSignature: vi.fn(async () => true),
+                },
+            ) as WalletAttestationService;
+        }
+
+        const verify = (
+            service: WalletAttestationService,
+            mode: RevocationCheckMode,
+            jwt = attestationJwt,
+        ) =>
+            service.verifyWalletAttestation(
+                "tenant",
+                { clientAttestationJwt: jwt, clientAttestationPopJwt: "pop" },
+                "https://as.example",
+                true,
+                [{ trustListId: "providers" }],
+                mode,
+            );
+
+        it.each([
+            ["strict, after the check", RevocationCheckMode.Strict, undefined],
+            [
+                "disabled, without a check",
+                RevocationCheckMode.Disabled,
+                undefined,
+            ],
+            [
+                "best_effort, when the list cannot be fetched",
+                RevocationCheckMode.BestEffort,
+                new RevocationListUnavailableError("timeout"),
+            ],
+        ])("%s", async (_case, mode, fetchError) => {
+            await expect(verify(accepting(fetchError), mode)).resolves.toEqual({
+                ...entry,
+                certificates: ["leaf", "ca"],
+            });
+        });
+
+        it("returns nothing for an attestation without status entry", async () => {
+            const withoutStatus = `${attestationJwt.split(".")[0]}.e30.c2ln`;
+            await expect(
+                verify(accepting(), RevocationCheckMode.Strict, withoutStatus),
+            ).resolves.toBeUndefined();
+        });
+    });
 });
 
 // The built-in token endpoint returns the message as error_description, so
