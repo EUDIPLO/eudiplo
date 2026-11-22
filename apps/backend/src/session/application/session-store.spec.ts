@@ -182,6 +182,83 @@ describe("SessionStore", () => {
         ).resolves.toMatchObject({ requestId: "age-check" });
     });
 
+    it("reads a session of another configuration than the caller's limits as missing", async () => {
+        const { store, context } = createStore({
+            findForTenant: vi
+                .fn()
+                .mockResolvedValue({ ...session, requestId: "mdl" }),
+        });
+
+        await expect(
+            store.getForTenant("tenant-1", "session-1", undefined, {
+                presentation: ["pid"],
+            }),
+        ).rejects.toBeInstanceOf(SessionNotFound);
+        await expect(
+            store.getForReader("tenant-1", "session-1", undefined, [], {
+                presentation: ["pid"],
+            }),
+        ).rejects.toBeInstanceOf(SessionNotFound);
+        expect(context.bind).not.toHaveBeenCalled();
+        await expect(
+            store.getForTenant("tenant-1", "session-1", undefined, {
+                presentation: ["pid", "mdl"],
+            }),
+        ).resolves.toMatchObject({ requestId: "mdl" });
+    });
+
+    it("deletes no session of another configuration than the caller's limits", async () => {
+        const { store, repository } = createStore({
+            findForTenant: vi
+                .fn()
+                .mockResolvedValue({ ...session, requestId: "mdl" }),
+        });
+
+        await store.deleteForTenant("tenant-1", "session-1", "presentation", {
+            presentation: ["pid"],
+        });
+        expect(repository.deleteForTenant).not.toHaveBeenCalled();
+
+        await store.deleteForTenant("tenant-1", "session-1", "presentation", {
+            presentation: ["mdl"],
+        });
+        expect(repository.deleteForTenant).toHaveBeenCalledExactlyOnceWith(
+            "tenant-1",
+            "session-1",
+            "presentation",
+        );
+    });
+
+    it.each([
+        ["a missing session", null],
+        [
+            "an offer that includes another configuration",
+            { ...session, credentialConfigurationIds: ["pid", "mdl"] },
+        ],
+        ["an issuance session without stored configurations", session],
+    ])("deletes nothing for %s under an issuance limit", async (_, found) => {
+        const { store, repository } = createStore({
+            findForTenant: vi.fn().mockResolvedValue(found),
+        });
+
+        await store.deleteForTenant("tenant-1", "session-1", "issuance", {
+            issuance: ["pid"],
+        });
+
+        expect(repository.deleteForTenant).not.toHaveBeenCalled();
+    });
+
+    it("deletes without reading first for a caller without limits", async () => {
+        const { store, repository } = createStore();
+
+        await store.deleteForTenant("tenant-1", "session-1", undefined, {
+            presentation: [],
+        });
+
+        expect(repository.findForTenant).not.toHaveBeenCalled();
+        expect(repository.deleteForTenant).toHaveBeenCalledOnce();
+    });
+
     it("rejects an absent session ID without querying", async () => {
         const { store, repository } = createStore();
 
@@ -371,6 +448,31 @@ describe("SessionStore", () => {
 
         expect(Object.keys(stats)).toEqual(["presentation"]);
         const scoped = { ...range, type: "presentation" };
+        expect(repository.countForTenant).toHaveBeenCalledExactlyOnceWith(
+            "tenant-a",
+            scoped,
+        );
+        expect(
+            repository.topFailureCodesForTenant,
+        ).toHaveBeenCalledExactlyOnceWith("tenant-a", scoped, 10);
+        expect(repository.lastUpdatedForTenant).toHaveBeenCalledExactlyOnceWith(
+            "tenant-a",
+            { ...scoped, status: SessionStatus.Completed },
+        );
+    });
+
+    it("counts only the sessions within the caller's limits", async () => {
+        const { store, repository } = createStore();
+        const configLimits = { presentation: ["pid"] };
+
+        await store.statsForTenant(
+            "tenant-a",
+            "presentation",
+            {},
+            configLimits,
+        );
+
+        const scoped = { configLimits, type: "presentation" };
         expect(repository.countForTenant).toHaveBeenCalledExactlyOnceWith(
             "tenant-a",
             scoped,

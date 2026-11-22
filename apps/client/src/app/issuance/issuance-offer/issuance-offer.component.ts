@@ -129,7 +129,11 @@ export class IssuanceOfferComponent implements OnInit {
 
   formValues = new FormGroup({});
   fields: FormlyFieldConfig<FormlyFieldProps & Record<string, any>>[] = [];
-  model: any = {};
+  /**
+   * The formly model of each credential config's claim form, by config ID. Each form has its own,
+   * so claims with the same name in two credential configs do not share a value.
+   */
+  models: Record<string, Record<string, unknown>> = {};
 
   elements: {
     id: string;
@@ -548,6 +552,8 @@ export class IssuanceOfferComponent implements OnInit {
 
     this.elements = [];
     this.fields = [];
+    // Keep the models of configs that stay selected, drop the others.
+    this.models = Object.fromEntries(credentialConfigIds.map((id) => [id, this.models[id] ?? {}]));
 
     for (const id of credentialConfigIds) {
       const config = this.credentialConfigs.find((cred) => cred.id === id);
@@ -1097,15 +1103,15 @@ export class IssuanceOfferComponent implements OnInit {
     this.configStepForm.get('claims')?.patchValue({ [form.id]: form.defaultClaims });
   }
 
-  importClaims() {
-    const currentConfig = this.configStepForm.get('claims')?.value;
-
-    const key = Object.keys(currentConfig)[0];
+  /** Opens the claims of one credential config as JSON and writes the edited JSON back to it. */
+  importClaims(element: { id: string }) {
+    const claims = this.getForm(element.id);
+    if (!claims) return;
 
     const dialogRef = this.dialog.open(JsonViewDialogComponent, {
       data: {
-        title: 'Complete Configuration JSON',
-        jsonData: Object.values(currentConfig)[0],
+        title: `Claims JSON: ${element.id}`,
+        jsonData: claims.value,
         readonly: false,
       },
       disableClose: true,
@@ -1116,7 +1122,7 @@ export class IssuanceOfferComponent implements OnInit {
 
     dialogRef.afterClosed().subscribe((result) => {
       if (result) {
-        this.configStepForm.get('claims')?.patchValue({ [key]: result });
+        this.configStepForm.get('claims')?.patchValue({ [element.id]: result });
       }
     });
   }
@@ -1127,6 +1133,7 @@ export class IssuanceOfferComponent implements OnInit {
     this.configStepForm.reset({ tx_code: '', authorization_server: '' });
     this.elements = [];
     this.fields = [];
+    this.models = {};
     this.selectedConfigsIaeStatus.clear();
     if (this.stepper) {
       this.stepper.reset();

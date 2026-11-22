@@ -60,6 +60,9 @@
             <button
               mat-icon-button
               (click)="rotateKey()"
+              [disabled]="rotating"
+              [attr.aria-busy]="rotating"
+              disabledInteractive
               matTooltip="Rotate key now"
               aria-label="Rotate key now"
               appConfigManaged

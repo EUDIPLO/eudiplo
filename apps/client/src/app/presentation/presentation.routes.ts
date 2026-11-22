@@ -1,4 +1,5 @@
 import type { Routes } from '@angular/router';
+import { unsavedChangesGuard } from '../guards/unsaved-changes.guard';
 
 export const presentationOfferRoutes: Routes = [
   {
@@ -31,6 +32,7 @@ export const presentationConfigRoutes: Routes = [
       import('./presentation-config/presentation-create/presentation-create.component').then(
         (m) => m.PresentationCreateComponent
       ),
+    canDeactivate: [unsavedChangesGuard],
   },
   {
     path: ':id',
@@ -45,6 +47,7 @@ export const presentationConfigRoutes: Routes = [
       import('./presentation-config/presentation-create/presentation-create.component').then(
         (m) => m.PresentationCreateComponent
       ),
+    canDeactivate: [unsavedChangesGuard],
   },
   {
     path: ':id/copy',
@@ -52,5 +55,6 @@ export const presentationConfigRoutes: Routes = [
       import('./presentation-config/presentation-create/presentation-create.component').then(
         (m) => m.PresentationCreateComponent
       ),
+    canDeactivate: [unsavedChangesGuard],
   },
 ];

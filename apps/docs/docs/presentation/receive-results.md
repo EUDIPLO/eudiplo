@@ -55,11 +55,11 @@ const subscription = await client.subscribeToSession(sessionId, {
 - The first event carries the current status, so a late subscriber does not miss a result.
 - Each event has the form `{ "id": "<session id>", "status": "fetched", "updatedAt": "<ISO timestamp>" }`; every status is sent once.
 - The stream ends after `completed`, `failed` or `expired`. Changes processed by another replica arrive within a few seconds.
-- A missing or invalid token returns `401`, a token without a session role `403`, an unknown session or one of the other type than the client's roles cover `404`.
+- A missing or invalid token returns `401`, a token without a session role `403`, an unknown session, one of the other type than the client's roles cover or one of a configuration outside the [client's limits](../operate/tenants-and-access.md#api-clients-with-least-privilege) `404`.
 
 ## Polling
 
-Read the session with `GET /api/session/{id}`. The caller needs the `presentation:request` role, or `sessions:read` to read results without creating requests; a client with only issuance roles gets `404` for presentation sessions. With `sessions:read` but without `presentation:request`, the session answers `404` until the wallet answered and then comes without `responseCode`, so polling and the [same-device check](#same-device-redirect) need `presentation:request`. Poll every one or two seconds until `status` is `completed`, `failed` or `expired`:
+Read the session with `GET /api/session/{id}`. The caller needs the `presentation:request` role, or `sessions:read` to read results without creating requests; a client with only issuance roles gets `404` for presentation sessions, as does a client [limited to other presentation configurations](../operate/tenants-and-access.md#api-clients-with-least-privilege). With `sessions:read` but without `presentation:request`, the session answers `404` until the wallet answered and then comes without `responseCode`, so polling and the [same-device check](#same-device-redirect) need `presentation:request`. Poll every one or two seconds until `status` is `completed`, `failed` or `expired`:
 
 ```json
 {

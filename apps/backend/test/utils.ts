@@ -36,6 +36,7 @@ import {
 } from "jose";
 import request from "supertest";
 import { App } from "supertest/types";
+import { AllExceptionsFilter } from "../src/all-exceptions.filter.js";
 import { AppModule } from "../src/app.module.js";
 import { Role } from "../src/auth/roles/role.enum.js";
 import {
@@ -607,11 +608,16 @@ export interface IssuanceTestContext {
  * This is a shared setup for all issuance-related e2e tests.
  * @param extraRoles - Roles of the tenant client besides the issuance and
  * presentation roles, for example to grant them to other clients
+ * @param exceptionFilter - Registers the exception filter of bootstrap.ts,
+ * so domain errors such as a missing session answer with their status
+ * instead of 500
  */
 export async function setupIssuanceTestApp({
     extraRoles = [],
+    exceptionFilter = false,
 }: {
     extraRoles?: Role[];
+    exceptionFilter?: boolean;
 } = {}): Promise<IssuanceTestContext> {
     // Delete the database
     rmSync("../../tmp/service.db", { force: true });
@@ -623,6 +629,7 @@ export async function setupIssuanceTestApp({
     const app = moduleFixture.createNestApplication<NestExpressApplication>();
     configureBodyParsers(app);
     app.useGlobalPipes(createAppValidationPipe());
+    if (exceptionFilter) app.useGlobalFilters(new AllExceptionsFilter());
 
     const configService = app.get(ConfigService);
     configService.set("CONFIG_IMPORT_MODE", "disabled");

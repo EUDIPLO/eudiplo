@@ -247,6 +247,24 @@ describe('KeyCreateWizardComponent imports', () => {
     snackBar = { open: vi.fn() };
   });
 
+  it('counts a key or certificate read from a selected file as unsaved changes', async () => {
+    const component = create();
+    const selected = (...files: File[]) => ({ target: { files } }) as unknown as Event;
+
+    component.configForm.markAsPristine();
+    expect(component.hasUnsavedChanges()).toBe(false);
+    await component.onPrivateKeyFileSelected(selected(new File([`${key}\n`], 'key.pem')));
+    expect(component.configForm.value.externalPrivateKey).toBe(`${key}\n`);
+    expect(component.hasUnsavedChanges()).toBe(true);
+
+    component.configForm.markAsPristine();
+    await component.onCertificateFilesSelected(
+      selected(new File([certificate], 'leaf.pem'), new File([certificate], 'ca.pem'))
+    );
+    expect(component.configForm.value.externalCertificate).toBe(`${certificate}\n${certificate}`);
+    expect(component.hasUnsavedChanges()).toBe(true);
+  });
+
   it('imports an External CA Chain as an internal chain with rotation', async () => {
     await externalCaChain().createKey();
 

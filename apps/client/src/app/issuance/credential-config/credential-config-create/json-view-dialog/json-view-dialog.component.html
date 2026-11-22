@@ -17,9 +17,16 @@
 </mat-dialog-content>
 
 <mat-dialog-actions class="dialog-actions">
-  <button mat-button (click)="cancel()">Cancel</button>
+  <button mat-button (click)="cancel()" [disabled]="saving">Cancel</button>
   @if (!data.readonly) {
-    <button mat-flat-button (click)="save()">
+    <button
+      mat-flat-button
+      (click)="save()"
+      [disabled]="saving"
+      [attr.aria-busy]="saving"
+      disabledInteractive
+      [matTooltip]="saving ? 'Wait until the changes have been saved' : ''"
+    >
       <mat-icon>save</mat-icon>
       Apply Changes
     </button>
