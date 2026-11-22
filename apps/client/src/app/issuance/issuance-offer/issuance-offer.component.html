@@ -2,9 +2,11 @@
   <header class="page-header">
     <div>
       <h1 #pageHeading tabindex="-1">Generate Issuance Offer</h1>
-      <p>
-        Choose how and what to issue, fill in the claims, and get a credential offer for a wallet.
-      </p>
+      @if (!formLockedReason) {
+        <p>
+          Choose how and what to issue, fill in the claims, and get a credential offer for a wallet.
+        </p>
+      }
     </div>
   </header>
 

@@ -164,7 +164,7 @@ the transaction code. Changing credential status
 In the web client, **New Issuance** needs `issuance:manage` besides
 `issuance:offer`: its form reads the credential configurations, the issuer
 settings and the attribute providers. With `issuance:offer` alone, the
-navigation leaves it out, Issuance Offer on the session list and Recreate Offer
+navigation leaves out the **Credential Issuance** section, Issuance Offer on the session list and Recreate Offer
 on a session are locked with that reason, and the page itself says so instead of
 loading. Create offers through the API in that case. **New Verification** needs
 only `presentation:request`. The Configuration filter of the session list offers
@@ -174,15 +174,15 @@ says which it leaves out.
 
 Typical role sets:
 
-| Caller                                   | Roles                                                         |
-| ---------------------------------------- | ------------------------------------------------------------- |
-| Your application backend                 | `issuance:offer`, `presentation:request`; also `credentials:status` if it revokes or suspends credentials |
-| Support staff who look up sessions and revoke credentials | `sessions:read`, `credentials:status`        |
-| Auditor                                  | `audit:read`, `sessions:read`                                 |
-| Key custodian                            | `keys:manage`                                                 |
-| CI pipeline that imports configuration   | `tenant:admin`                                                |
-| Person who configures a tenant           | `issuance:manage`, `presentation:manage`, `clients:manage`, `users:manage`, and the roles they hand out; `tenant:admin` instead also allows key export and KMS settings |
-| Platform operator                        | `tenants:manage`, on a client without a tenant                |
+| Caller                                                    | Roles                                                                                                                                                                   |
+| --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Your application backend                                  | `issuance:offer`, `presentation:request`; also `credentials:status` if it revokes or suspends credentials                                                               |
+| Support staff who look up sessions and revoke credentials | `sessions:read`, `credentials:status`                                                                                                                                   |
+| Auditor                                                   | `audit:read`, `sessions:read`                                                                                                                                           |
+| Key custodian                                             | `keys:manage`                                                                                                                                                           |
+| CI pipeline that imports configuration                    | `tenant:admin`                                                                                                                                                          |
+| Person who configures a tenant                            | `issuance:manage`, `presentation:manage`, `clients:manage`, `users:manage`, and the roles they hand out; `tenant:admin` instead also allows key export and KMS settings |
+| Platform operator                                         | `tenants:manage`, on a client without a tenant                                                                                                                          |
 
 `issuance:manage`, `presentation:manage` and `keys:manage` create, import,
 rotate and delete key chains, but exporting a key chain with its private key

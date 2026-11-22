@@ -7,7 +7,7 @@ import type { Role } from '../../services/jwt.service';
  * are hidden or locked with this reason instead of leading to a page that cannot load.
  */
 export const ISSUANCE_FORM_LOCKED_REASON =
-  'New Issuance also needs the issuance:manage role: the form reads the credential configs and the issuer settings. With issuance:offer alone, create offers through the API.';
+  'Creating offers in the Web Client also needs the issuance:manage role: the issuance form reads the credential configs and the issuer settings. With issuance:offer alone, create offers through the API.';
 
 /** Whether the caller can use New Issuance: create offers and read what the form needs. */
 export function canUseIssuanceForm(hasRole: (role: Role) => boolean): boolean {

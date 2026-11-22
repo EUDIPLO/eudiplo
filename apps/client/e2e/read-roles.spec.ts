@@ -195,7 +195,7 @@ test.describe('read and status roles', () => {
     // A deep link says why instead of offering a Retry that cannot succeed.
     await page.goto('/offer/issuance');
     await expect(page.getByRole('status')).toContainText(
-      'New Issuance also needs the issuance:manage role'
+      'Creating offers in the Web Client also needs the issuance:manage role'
     );
     await expect(page.getByRole('button', { name: 'Retry' })).toHaveCount(0);
     expect(credentialConfigRequests).toEqual([]);

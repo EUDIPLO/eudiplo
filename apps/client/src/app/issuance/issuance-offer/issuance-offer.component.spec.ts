@@ -156,10 +156,14 @@ describe('IssuanceOfferComponent', () => {
 
       const notice = page.querySelector('.form-locked')!;
       expect(notice.getAttribute('role')).toBe('status');
-      expect(notice.textContent).toContain('New Issuance also needs the issuance:manage role');
+      expect(notice.textContent).toContain(
+        'Creating offers in the Web Client also needs the issuance:manage role'
+      );
       expect(notice.querySelector('a')?.textContent?.trim()).toBe('Back to Sessions');
       expect(page.querySelector('app-load-error')).toBeNull();
       expect(page.querySelector('mat-stepper')).toBeNull();
+      // The header does not invite the caller to fill in a form they cannot use.
+      expect(page.querySelector('.page-header')?.textContent).not.toContain('fill in the claims');
       expect(TestBed.inject(CredentialConfigService).loadConfigurations).not.toHaveBeenCalled();
       expect(TestBed.inject(IssuanceConfigService).getConfig).not.toHaveBeenCalled();
       expect(TestBed.inject(AttributeProviderService).getAll).not.toHaveBeenCalled();
