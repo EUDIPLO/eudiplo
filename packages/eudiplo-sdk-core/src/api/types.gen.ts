@@ -8416,7 +8416,7 @@ export type SessionControllerDeleteSessionData = {
 
 export type SessionControllerDeleteSessionResponses = {
     /**
-     * Session deleted
+     * Session deleted. A missing session, a session of another type than the client's roles cover and a session of a configuration outside the client's limits are left untouched and answer 204 as well.
      */
     204: void;
 };
@@ -8433,6 +8433,13 @@ export type SessionControllerGetSessionData = {
     };
     query?: never;
     url: '/api/session/{id}';
+};
+
+export type SessionControllerGetSessionErrors = {
+    /**
+     * No session with this ID in the tenant, or a session of another type than the client's roles cover or of a configuration outside the client's limits
+     */
+    404: unknown;
 };
 
 export type SessionControllerGetSessionResponses = {
@@ -8455,7 +8462,7 @@ export type SessionControllerCancelData = {
 
 export type SessionControllerCancelErrors = {
     /**
-     * Session not found
+     * No session with this ID in the tenant, or a session of another type than the client's roles cover or of a configuration outside the client's limits
      */
     404: unknown;
     /**
@@ -8485,6 +8492,13 @@ export type SessionControllerGetSessionLogsData = {
     url: '/api/session/{id}/logs';
 };
 
+export type SessionControllerGetSessionLogsErrors = {
+    /**
+     * No session with this ID in the tenant, or a session of another type than the client's roles cover or of a configuration outside the client's limits
+     */
+    404: unknown;
+};
+
 export type SessionControllerGetSessionLogsResponses = {
     200: Array<SessionLogEntryResponseDto>;
 };
@@ -8505,7 +8519,7 @@ export type SessionControllerGetCredentialStatusData = {
 
 export type SessionControllerGetCredentialStatusErrors = {
     /**
-     * Session not found
+     * No session with this ID in the tenant, or a session of another type than the client's roles cover or of a configuration outside the client's limits
      */
     404: unknown;
 };
@@ -8533,7 +8547,7 @@ export type SessionControllerRevokeAllErrors = {
      */
     403: unknown;
     /**
-     * No status entry for the session, or a revoked credential would be reinstated or suspended
+     * No status entry for the session, one of a credential configuration outside the client's limits, or a revoked credential would be reinstated or suspended
      */
     409: unknown;
 };
@@ -8609,7 +8623,7 @@ export type SessionEventsControllerSubscribeToSessionEventsData = {
 
 export type SessionEventsControllerSubscribeToSessionEventsErrors = {
     /**
-     * No session with this ID in the tenant, or a session of the other type than the client's roles cover
+     * No session with this ID in the tenant, or a session of the other type than the client's roles cover or of a configuration outside the client's limits
      */
     404: unknown;
 };

@@ -1,9 +1,12 @@
 import type { SessionData, SessionUpdate } from "../domain/session-data.js";
 import {
+    hasConfigLimits,
+    type SessionConfigLimits,
     type SessionListQuery,
     type SessionPage,
     type SessionType,
     typeOfSession,
+    withinConfigLimits,
 } from "../domain/session-list.js";
 import { isOpenForWallet, SessionStatus } from "../domain/session-state.js";
 import {
@@ -53,7 +56,9 @@ type SessionStoreRepository = Pick<
  * Every resolved session is bound to the current request's context.
  *
  * The management methods take an optional `scope`: the only session type the
- * caller may access. Sessions of the other type then read as missing.
+ * caller may access. Sessions of the other type then read as missing. With
+ * `limits`, the client's allowed configurations, so do the sessions of other
+ * configurations.
  */
 export class SessionStore {
     constructor(
@@ -65,24 +70,38 @@ export class SessionStore {
         tenantId: string,
         sessionId: string | undefined,
         scope?: SessionType,
+        limits?: SessionConfigLimits,
     ): Promise<SessionData> {
-        return this.lookup(sessionId, (id) =>
-            this.sessions.findForTenant(tenantId, id, scope),
-        );
+        return this.lookup(sessionId, async (id) => {
+            const session = await this.sessions.findForTenant(
+                tenantId,
+                id,
+                scope,
+            );
+            return session && withinConfigLimits(session, limits)
+                ? session
+                : null;
+        });
     }
 
     /**
      * A session for a management read: within `scope`, and missing when it is
-     * of a type in `hideOpen` and still open for a wallet, like the list with
-     * the same `hideOpen`.
+     * outside `limits`, or of a type in `hideOpen` and still open for a
+     * wallet, like the list with the same `hideOpen` and `configLimits`.
      */
     async getForReader(
         tenantId: string,
         sessionId: string,
         scope?: SessionType,
         hideOpen: readonly SessionType[] = [],
+        limits?: SessionConfigLimits,
     ): Promise<SessionData> {
-        const session = await this.getForTenant(tenantId, sessionId, scope);
+        const session = await this.getForTenant(
+            tenantId,
+            sessionId,
+            scope,
+            limits,
+        );
         if (
             hideOpen.includes(typeOfSession(session)) &&
             isOpenForWallet(session)
@@ -208,12 +227,17 @@ export class SessionStore {
         };
     }
 
-    /** Session counts per type, status and failure code, for the types in `scope` only. */
+    /**
+     * Session counts per type, status and failure code, for the types in
+     * `scope` and the configurations in `configLimits` only.
+     */
     async statsForTenant(
         tenantId: string,
         scope?: SessionType,
-        filter: SessionStatsFilter = {},
+        range: SessionStatsFilter = {},
+        configLimits?: SessionConfigLimits,
     ): Promise<SessionStats> {
+        const filter = { ...range, configLimits };
         const types: SessionType[] = scope
             ? [scope]
             : ["issuance", "presentation"];
@@ -252,12 +276,26 @@ export class SessionStore {
         );
     }
 
-    /** Missing sessions, other tenants' sessions and sessions outside `scope` are no-ops. */
-    deleteForTenant(
+    /**
+     * Missing sessions, other tenants' sessions and sessions outside `scope`
+     * or `limits` are no-ops.
+     */
+    async deleteForTenant(
         tenantId: string,
         sessionId: string,
         scope?: SessionType,
+        limits?: SessionConfigLimits,
     ): Promise<void> {
+        if (hasConfigLimits(limits)) {
+            // The configurations of a session never change, so reading
+            // before deleting cannot race.
+            const session = await this.sessions.findForTenant(
+                tenantId,
+                sessionId,
+                scope,
+            );
+            if (!session || !withinConfigLimits(session, limits)) return;
+        }
         return this.sessions.deleteForTenant(tenantId, sessionId, scope);
     }
 

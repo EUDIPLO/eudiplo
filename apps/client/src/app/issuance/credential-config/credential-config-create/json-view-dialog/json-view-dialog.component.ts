@@ -20,6 +20,12 @@ export interface JsonViewDialogData {
   jsonData: any;
   readonly?: boolean;
   schema: SchemaValidation;
+  /**
+   * Saves the applied JSON before the dialog closes, and resolves to whether it was saved. When
+   * it was not, the dialog stays open with the edited JSON; the caller says why. Without it,
+   * Apply Changes closes the dialog with the JSON and the caller saves it.
+   */
+  save?: (json: unknown) => Promise<boolean>;
 }
 
 @Component({
@@ -45,6 +51,8 @@ export interface JsonViewDialogData {
 export class JsonViewDialogComponent {
   jsonControl = new FormControl('');
   formattedJson: string;
+  /** True while `data.save` runs; the dialog cannot be closed or applied again meanwhile. */
+  saving = false;
 
   editorOptions = {
     language: 'json',
@@ -82,7 +90,8 @@ export class JsonViewDialogComponent {
     this.dialogRef.close();
   }
 
-  save(): void {
+  async save(): Promise<void> {
+    if (this.saving) return;
     const problem = this.jsonProblem();
     if (problem) {
       this.jsonControl.markAsTouched();
@@ -90,18 +99,24 @@ export class JsonViewDialogComponent {
       if (this.jsonEditor) focusField(this.jsonEditor.nativeElement);
       return;
     }
-    if (this.jsonControl.valid && this.jsonControl.value) {
+    if (!this.jsonControl.valid || !this.jsonControl.value) return;
+    let json: unknown;
+    try {
+      const value: unknown = this.jsonControl.value;
+      json = typeof value === 'string' ? JSON.parse(value) : value;
+    } catch {
+      this.snackBar.open('Invalid JSON format', 'OK', { duration: 3000 });
+      return;
+    }
+    if (this.data.save) {
+      this.saving = true;
       try {
-        if (typeof this.jsonControl.value !== 'string') {
-          this.dialogRef.close(this.jsonControl.value);
-          return;
-        }
-        const parsedJson = JSON.parse(this.jsonControl.value);
-        this.dialogRef.close(parsedJson);
-      } catch {
-        this.snackBar.open('Invalid JSON format', 'OK', { duration: 3000 });
+        if (!(await this.data.save(json))) return;
+      } finally {
+        this.saving = false;
       }
     }
+    this.dialogRef.close(json);
   }
 
   /** Why the JSON in the editor cannot be applied, as the editor says under it; '' when it can. */
