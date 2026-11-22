@@ -1,5 +1,6 @@
 import {
     BadRequestException,
+    ForbiddenException,
     Inject,
     Injectable,
     Logger,
@@ -27,6 +28,7 @@ import {
     activeCredentialsLackStatusManagement,
 } from "../domain/active-credential-policy.js";
 import type { CredentialConfiguration as CredentialConfig } from "../domain/credential-configuration.js";
+import { disclosurePolicyChanged } from "../domain/disclosure-policy-change.js";
 import {
     type WalletUnitRevocationSettings,
     walletUnitRevocationProblems,
@@ -38,7 +40,27 @@ import {
     CREDENTIAL_CONFIGURATION_REPOSITORY,
     type CredentialConfigurationRepository,
 } from "../ports/credential-configuration.repository.js";
+import {
+    ISSUED_CREDENTIAL_REVOCATION,
+    type IssuedCredentialRevocation,
+} from "../ports/issued-credential-revocation.js";
 import { CredentialConfigCreateSchema } from "../schemas/credential-config.schema.js";
+
+/** Options of {@link CredentialConfigService.update}. */
+export interface CredentialConfigUpdateOptions {
+    /**
+     * Revoke the credentials issued under the configuration when the update
+     * adds, changes or deletes its embedded disclosure policy (ARF Annex 2,
+     * EDP_11). Not stored; without it the update revokes nothing.
+     */
+    revokeOnDisclosurePolicyChange?: boolean;
+    /**
+     * The credential configurations the caller is limited to
+     * (`allowedIssuanceConfigs`); none or an empty list is no limit. A
+     * limited caller may not revoke the credentials of another configuration.
+     */
+    allowedCredentialConfigurationIds?: readonly string[] | null;
+}
 
 /**
  * Service for managing credential configurations.
@@ -60,6 +82,8 @@ export class CredentialConfigService {
         private readonly configImportOrchestrator: ConfigImportOrchestratorService,
         private readonly presentationConfigService: PresentationConfigService,
         private readonly tenantActionLogService: AuditLogService,
+        @Inject(ISSUED_CREDENTIAL_REVOCATION)
+        private readonly issuedCredentials: IssuedCredentialRevocation,
     ) {
         this.configImportOrchestrator.register(
             "credentials",
@@ -298,26 +322,67 @@ export class CredentialConfigService {
     }
 
     /**
-     * Updates a credential configuration for a given tenant.
-     * Only updates fields that are provided in the config.
-     * Set fields to null to clear them.
-     * Automatically replaces image references with public URLs.
-     * Validates IAE action references.
-     * @param tenantId - The ID of the tenant.
-     * @param id - The ID of the CredentialConfig entity to update.
-     * @param config - The partial CredentialConfig to update.
-     * @returns A promise that resolves to the updated CredentialConfig entity.
+     * Refuses the revocation opt-in for a caller limited to other credential
+     * configurations (`allowedIssuanceConfigs`).
      */
-    async update(
+    private assertMayRevokeIssued(
+        id: string,
+        options: CredentialConfigUpdateOptions,
+    ): void {
+        const limit = options.allowedCredentialConfigurationIds;
+        if (
+            options.revokeOnDisclosurePolicyChange &&
+            limit?.length &&
+            !limit.includes(id)
+        ) {
+            throw new ForbiddenException(
+                `Client is not authorized to revoke credentials of credential configuration ${id}`,
+            );
+        }
+    }
+
+    /**
+     * The second revocation pass of a disclosure policy change, after the new
+     * policy is stored. Credentials issued while the policy was being stored
+     * were issued under the old policy too. Entries carry no allocation time,
+     * so one issued under the new policy in this short window is revoked as
+     * well. Best effort: the new policy is stored by now, so a repeated
+     * request would not revoke again, and failing here would only drop the
+     * audit record.
+     * @param revokedBefore - The entries the first pass revoked, for the log.
+     */
+    private async revokeIssuedDuringSave(
         tenantId: string,
         id: string,
+        revokedBefore: number,
+    ): Promise<void> {
+        let revoked = revokedBefore;
+        try {
+            revoked += await this.issuedCredentials.revokeIssuedUnder(
+                tenantId,
+                id,
+            );
+        } catch (error) {
+            this.logger.error(
+                `[${tenantId}] Could not revoke credentials of credential configuration ${id} issued while its embedded disclosure policy changed: ${
+                    error instanceof Error ? error.message : String(error)
+                }`,
+            );
+        }
+        this.logger.log(
+            `[${tenantId}] Revoked ${revoked} credential(s) of credential configuration ${id} after its embedded disclosure policy changed`,
+        );
+    }
+
+    /**
+     * Checks the rules that tie active credentials and wallet unit revocation
+     * to status management, with the values the update leaves unchanged taken
+     * from the stored configuration.
+     */
+    private assertUpdateEnforceable(
         config: CredentialConfigUpdate,
-        actorToken?: TokenPayload,
-        requestMeta?: AuditLogRequestMeta,
-    ) {
-        await this.replaceImageReferences(tenantId, config);
-        await this.validateIaeActions(tenantId, config);
-        const existing = await this.getById(tenantId, id);
+        existing: CredentialConfig,
+    ): void {
         // Checked only when the update touches the policy, so that partial
         // updates of other fields (e.g. registrar schema metadata) keep working
         // for configurations stored before the rule was enforced.
@@ -356,17 +421,59 @@ export class CredentialConfigService {
                         : existing.config,
             });
         }
+    }
+
+    /**
+     * Updates a credential configuration for a given tenant.
+     * Only updates fields that are provided in the config.
+     * Set fields to null to clear them.
+     * Automatically replaces image references with public URLs.
+     * Validates IAE action references.
+     * @param tenantId - The ID of the tenant.
+     * @param id - The ID of the CredentialConfig entity to update.
+     * @param config - The partial CredentialConfig to update.
+     * @param options - Whether a change of the embedded disclosure policy
+     * revokes the credentials issued under the configuration.
+     * @returns A promise that resolves to the updated CredentialConfig entity.
+     */
+    async update(
+        tenantId: string,
+        id: string,
+        config: CredentialConfigUpdate,
+        actorToken?: TokenPayload,
+        requestMeta?: AuditLogRequestMeta,
+        options: CredentialConfigUpdateOptions = {},
+    ) {
+        this.assertMayRevokeIssued(id, options);
+        await this.replaceImageReferences(tenantId, config);
+        await this.validateIaeActions(tenantId, config);
+        const existing = await this.getById(tenantId, id);
+        this.assertUpdateEnforceable(config, existing);
         const keyChainId =
             config.keyChainId !== undefined
                 ? (config.keyChainId ?? undefined)
                 : existing.keyChainId;
         await this.validateAttestationKeyChain(tenantId, keyChainId);
+        const revoke =
+            options.revokeOnDisclosurePolicyChange === true &&
+            disclosurePolicyChanged(
+                existing.embeddedDisclosurePolicy,
+                config.embeddedDisclosurePolicy,
+            );
+        // Revoked before the new policy is stored, so that a failed revocation
+        // leaves the policy unchanged and repeating the request finishes it.
+        const revoked = revoke
+            ? await this.issuedCredentials.revokeIssuedUnder(tenantId, id)
+            : 0;
         const saved = await this.credentialConfigRepository.save({
             ...existing,
             ...config,
             id,
             tenantId,
         });
+        if (revoke) {
+            await this.revokeIssuedDuringSave(tenantId, id, revoked);
+        }
 
         if (actorToken) {
             await this.tenantActionLogService.record({

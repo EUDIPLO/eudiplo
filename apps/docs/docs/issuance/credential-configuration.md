@@ -174,6 +174,24 @@ How the fingerprints and the revocation sequence work is described in [Issuance 
 }
 ```
 
+#### Revoke credentials when the policy changes
+
+The EUDI Wallet ARF (Annex 2, EDP_11) requires an attestation provider to revoke the attestations whose embedded disclosure policy is added, changed or deleted. EUDIPLO does this only when you ask for it in the update, with the query parameter `revokeOnDisclosurePolicyChange=true`:
+
+```bash
+curl -X PATCH "$EUDIPLO_URL/api/issuer/credentials/membership?revokeOnDisclosurePolicyChange=true" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"embeddedDisclosurePolicy": {"policy": "allowList", "values": ["https://verifier-b.example.com"]}}'
+```
+
+- Without the parameter (or with `false`), an update changes the policy and revokes nothing. The parameter is not stored, and any other value is rejected with `400`.
+- With it, the update revokes every credential the tenant issued under this credential configuration that has a [status list entry](revocation.md), in the same status lists that `POST /api/session/revoke` changes, so verifiers see the change as described in [Check the result](revocation.md#3-check-the-result). Credentials issued without status management have no entry and stay valid. Revocation is final.
+- It revokes only when `embeddedDisclosurePolicy` is in the body and differs from the stored one. Policies are compared by value: key order and `$schema` do not count, the order of `values` does. Sending the stored policy again, or an update without the field, revokes nothing.
+- The credentials are revoked before the new policy is stored. If revoking fails, the update answers with an error and the stored policy is unchanged; send the same request again to finish. After storing the policy, EUDIPLO revokes once more the credentials issued while the update ran. That second pass is best effort: if it fails, the update still succeeds and the failure is logged. A credential issued under the new policy in that short window is revoked too, and an issuance that read the old policy but gets its status entry only after the second pass is not covered.
+- It needs no role beyond `issuance:manage`, which already allows `POST /api/session/revoke`. With the parameter, a client [limited to some credential configurations](../operate/tenants-and-access.md#api-clients-with-least-privilege) gets `403` for any other configuration, even if the policy does not change.
+- Imports from the configuration folder and configuration bundles never revoke credentials, and neither does the Web Client's edit form. Use the API to revoke.
+
 Issuer registration certificates are covered in [Registration certificates](../trust/registration-certificates.md#issuer-registration-certificate). TS11 schema metadata (`schemaMeta`) is stored with the configuration; EUDIPLO currently publishes it nowhere ([field reference](../reference/credential-configuration.md)).
 
 ## 8. Create the configuration

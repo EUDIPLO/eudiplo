@@ -90,7 +90,7 @@ This page lists every standard and feature EUDIPLO implements, grouped by area, 
 | Access certificates                      | ✅     | X.509 certificate of the access key chain signs requests and signed metadata and determines the `client_id`                  | [Keys and certificates](../trust/keys-and-certificates.md)         |
 | Registration certificates                | ✅     | For verifiers (`verifier_info`) and issuers (`issuer_info`), issued by a registrar                                          | [Registration certificates](../trust/registration-certificates.md) |
 | Credential reuse policy                  | ✅     | `credentialReusePolicy` published in the credential metadata                                                                | [Credential configuration](../issuance/credential-configuration.md) |
-| Embedded disclosure policy               | ✅     | `embeddedDisclosurePolicy`: `none`, `allowList`, `rootOfTrust` or `attestationBased`                                         | [Credential configuration](../issuance/credential-configuration.md) |
+| Embedded disclosure policy               | ✅     | `embeddedDisclosurePolicy`: `none`, `allowList`, `rootOfTrust` or `attestationBased`. Revoking the credentials issued under a changed policy (ARF EDP_11) is opt-in per update (`revokeOnDisclosurePolicyChange`) | [Credential configuration](../issuance/credential-configuration.md#revoke-credentials-when-the-policy-changes) |
 
 ## Conformance
 

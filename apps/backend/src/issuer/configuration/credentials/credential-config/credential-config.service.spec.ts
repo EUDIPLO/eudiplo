@@ -1,4 +1,4 @@
-import { BadRequestException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException } from "@nestjs/common";
 import { describe, expect, test, vi } from "vitest";
 import type { CredentialConfigCreate } from "../dto/credential-config-create.dto.js";
 import { CredentialConfigService } from "./credential-config.service.js";
@@ -20,6 +20,10 @@ function setup(stored: Record<string, unknown> = {}) {
         }),
         save: vi.fn(async (config: unknown) => config),
     };
+    const issuedCredentials = {
+        revokeIssuedUnder: vi.fn().mockResolvedValue(0),
+    };
+    const auditLog = { record: vi.fn() };
     const service = new CredentialConfigService(
         repository as never,
         { find: vi.fn() } as never,
@@ -27,9 +31,10 @@ function setup(stored: Record<string, unknown> = {}) {
         {} as never,
         { register: vi.fn() } as never,
         { getPresentationConfig: vi.fn() } as never,
-        { record: vi.fn() } as never,
+        auditLog as never,
+        issuedCredentials,
     );
-    return { service, repository };
+    return { service, repository, issuedCredentials, auditLog };
 }
 
 async function rejection(promise: Promise<unknown>): Promise<unknown> {
@@ -169,5 +174,153 @@ describe("CredentialConfigService revokeWithWalletUnit", () => {
         });
         await service.update("tenant", "pid", { revokeWithWalletUnit: true });
         expect(repository.save).toHaveBeenCalledOnce();
+    });
+});
+
+describe("CredentialConfigService disclosure policy change revocation", () => {
+    const oldPolicy = { policy: "allowList", values: ["https://rp-a.example"] };
+    const newPolicy = { policy: "allowList", values: ["https://rp-b.example"] };
+    const revokeOption = { revokeOnDisclosurePolicyChange: true };
+
+    test("revokes nothing without the opt-in, even when the policy changes", async () => {
+        const { service, repository, issuedCredentials } = setup({
+            embeddedDisclosurePolicy: oldPolicy,
+        });
+        await service.update("tenant", "pid", {
+            embeddedDisclosurePolicy: newPolicy,
+        } as never);
+        expect(repository.save).toHaveBeenCalledOnce();
+        expect(issuedCredentials.revokeIssuedUnder).not.toHaveBeenCalled();
+    });
+
+    test.each([
+        ["the update leaves the policy out", { description: "updated" }],
+        [
+            "the same policy is set again",
+            { embeddedDisclosurePolicy: oldPolicy },
+        ],
+    ])("revokes nothing with the opt-in when %s", async (_case, update) => {
+        const { service, repository, issuedCredentials } = setup({
+            embeddedDisclosurePolicy: oldPolicy,
+        });
+        await service.update(
+            "tenant",
+            "pid",
+            update as never,
+            undefined,
+            undefined,
+            revokeOption,
+        );
+        expect(repository.save).toHaveBeenCalledOnce();
+        expect(issuedCredentials.revokeIssuedUnder).not.toHaveBeenCalled();
+    });
+
+    test.each([
+        ["added", null, newPolicy],
+        ["changed", oldPolicy, newPolicy],
+        ["deleted", oldPolicy, null],
+    ])(
+        "revokes the tenant's credentials of the configuration when the policy is %s",
+        async (_case, stored, requested) => {
+            const { service, repository, issuedCredentials } = setup({
+                embeddedDisclosurePolicy: stored,
+            });
+            const order: string[] = [];
+            issuedCredentials.revokeIssuedUnder.mockImplementation(async () => {
+                order.push("revoke");
+                return 1;
+            });
+            repository.save.mockImplementation(async (config: unknown) => {
+                order.push("save");
+                return config;
+            });
+            await service.update(
+                "tenant",
+                "pid",
+                { embeddedDisclosurePolicy: requested } as never,
+                undefined,
+                undefined,
+                revokeOption,
+            );
+            expect(issuedCredentials.revokeIssuedUnder).toHaveBeenCalledWith(
+                "tenant",
+                "pid",
+            );
+            // Before the new policy is stored, and once more for credentials
+            // issued while it was stored.
+            expect(order).toEqual(["revoke", "save", "revoke"]);
+        },
+    );
+
+    test("keeps the old policy when revoking fails", async () => {
+        const { service, repository, issuedCredentials } = setup({
+            embeddedDisclosurePolicy: oldPolicy,
+        });
+        issuedCredentials.revokeIssuedUnder.mockRejectedValue(
+            new Error("unavailable"),
+        );
+        await expect(
+            service.update(
+                "tenant",
+                "pid",
+                { embeddedDisclosurePolicy: newPolicy } as never,
+                undefined,
+                undefined,
+                revokeOption,
+            ),
+        ).rejects.toThrow("unavailable");
+        expect(repository.save).not.toHaveBeenCalled();
+    });
+
+    test("keeps the stored update and its audit record when the revocation after storing fails", async () => {
+        const { service, repository, issuedCredentials, auditLog } = setup({
+            embeddedDisclosurePolicy: oldPolicy,
+        });
+        issuedCredentials.revokeIssuedUnder
+            .mockResolvedValueOnce(2)
+            .mockRejectedValueOnce(new Error("unavailable"));
+        await service.update(
+            "tenant",
+            "pid",
+            { embeddedDisclosurePolicy: newPolicy } as never,
+            { subject: "admin" } as never,
+            undefined,
+            revokeOption,
+        );
+        expect(repository.save).toHaveBeenCalledOnce();
+        expect(auditLog.record).toHaveBeenCalledOnce();
+    });
+
+    test("refuses a client limited to other configurations, changing nothing", async () => {
+        const { service, repository, issuedCredentials } = setup({
+            embeddedDisclosurePolicy: oldPolicy,
+        });
+        await expect(
+            service.update(
+                "tenant",
+                "pid",
+                { embeddedDisclosurePolicy: newPolicy } as never,
+                undefined,
+                undefined,
+                { ...revokeOption, allowedCredentialConfigurationIds: ["mdl"] },
+            ),
+        ).rejects.toBeInstanceOf(ForbiddenException);
+        expect(repository.save).not.toHaveBeenCalled();
+        expect(issuedCredentials.revokeIssuedUnder).not.toHaveBeenCalled();
+    });
+
+    test("lets a client limited to the configuration revoke", async () => {
+        const { service, issuedCredentials } = setup({
+            embeddedDisclosurePolicy: oldPolicy,
+        });
+        await service.update(
+            "tenant",
+            "pid",
+            { embeddedDisclosurePolicy: newPolicy } as never,
+            undefined,
+            undefined,
+            { ...revokeOption, allowedCredentialConfigurationIds: ["pid"] },
+        );
+        expect(issuedCredentials.revokeIssuedUnder).toHaveBeenCalledTimes(2);
     });
 });
