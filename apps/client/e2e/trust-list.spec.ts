@@ -132,7 +132,8 @@ test.describe('entities', () => {
     const save = page.getByRole('button', { name: 'Save Changes' });
     await expect(save).not.toHaveAttribute('aria-busy', 'true');
     await save.click();
-    await expect(page).toHaveURL(/\/trust-list$/);
+    // Saving opens the saved list's page.
+    await expect(page).toHaveURL(/\/trust-list\/rows$/);
 
     const stored = await fetch(`${api}/rows`, { headers });
     expect(stored.ok).toBe(true);
@@ -317,7 +318,7 @@ test.describe('edit page', () => {
     const save = page.getByRole('button', { name: 'Save Changes' });
     await expect(save).not.toHaveAttribute('aria-busy', 'true');
     await save.click();
-    await expect(page).toHaveURL(/\/trust-list$/);
+    await expect(page).toHaveURL(new RegExp(`/trust-list/${id}$`));
 
     // The backend accepted it for revocation, and the stored list names it there.
     const stored = await fetch(`${resolvedE2EConfig.apiBaseUrl}/api/trust-list/${id}`, {
@@ -459,7 +460,7 @@ test.describe('create page', () => {
     await expect(signing).toBeFocused();
     await expect(signing).toContainText('Any trust list key chain of the tenant');
     await save.click();
-    await expect(page).toHaveURL(/\/trust-list$/);
+    await expect(page).toHaveURL(/\/trust-list\/own-issuers$/);
 
     const stored = await fetch(`${resolvedE2EConfig.apiBaseUrl}/api/trust-list/own-issuers`, {
       headers: { Authorization: `Bearer ${tenant.token}` },

@@ -611,6 +611,11 @@ test('loading a template over existing claims shows and edits the loaded claims'
   await page.getByRole('button', { name: 'Add Field' }).click();
   await page.getByRole('textbox', { name: 'Path' }).fill('custom_claim');
 
+  // The template replaces the entered claim, so it asks first.
+  page.once('dialog', (dialog) => {
+    expect(dialog.message()).toContain('It replaces all settings except ID and Description.');
+    void dialog.accept();
+  });
   await page.getByRole('button', { name: 'Templates' }).click();
   await page
     .getByRole('menuitem', {
