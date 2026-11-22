@@ -590,7 +590,7 @@ describe("StatusListVerifierService.getStatusFromStatusListJwt", () => {
     });
 });
 
-describe("StatusListVerifierService.getStatusEntryFromJwt", () => {
+describe("StatusListVerifierService.getAttestationStatusEntries", () => {
     const statusLists = new StatusListVerifierService({} as TrustFetchService);
     const jwtWith = (payload: Record<string, unknown>) =>
         [
@@ -601,14 +601,15 @@ describe("StatusListVerifierService.getStatusEntryFromJwt", () => {
 
     it("reads the status_list reference", () => {
         expect(
-            statusLists.getStatusEntryFromJwt(
+            statusLists.getAttestationStatusEntries(
                 jwtWith({
                     status: {
                         status_list: { uri: "https://wp.example/s", idx: 4 },
                     },
                 }),
+                "wallet",
             ),
-        ).toEqual({ uri: "https://wp.example/s", idx: 4 });
+        ).toEqual([{ uri: "https://wp.example/s", idx: 4 }]);
     });
 
     it.each([
@@ -617,10 +618,10 @@ describe("StatusListVerifierService.getStatusEntryFromJwt", () => {
             case: "a status claim of another mechanism",
             payload: { status: { identifier_list: { id: "1", uri: "x" } } },
         },
-    ])("returns undefined for $case", ({ payload }) => {
+    ])("returns no reference for $case", ({ payload }) => {
         expect(
-            statusLists.getStatusEntryFromJwt(jwtWith(payload)),
-        ).toBeUndefined();
+            statusLists.getAttestationStatusEntries(jwtWith(payload), "key"),
+        ).toEqual([]);
     });
 
     it.each([
@@ -665,11 +666,16 @@ describe("StatusListVerifierService.getStatusEntryFromJwt", () => {
         },
     ])("throws for $case", ({ status }) => {
         expect(() =>
-            statusLists.getStatusEntryFromJwt(jwtWith({ status })),
+            statusLists.getAttestationStatusEntries(
+                jwtWith({ status }),
+                "wallet",
+            ),
         ).toThrow(MalformedStatusReferenceError);
     });
 
     it("throws for a token that cannot be decoded", () => {
-        expect(() => statusLists.getStatusEntryFromJwt("not-a-jwt")).toThrow();
+        expect(() =>
+            statusLists.getAttestationStatusEntries("not-a-jwt", "wallet"),
+        ).toThrow();
     });
 });

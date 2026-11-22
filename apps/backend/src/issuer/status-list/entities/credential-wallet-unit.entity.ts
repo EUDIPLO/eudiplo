@@ -42,11 +42,11 @@ export class CredentialWalletUnit {
     @Column({ type: "varchar" })
     credentialConfigurationId!: string;
 
-    /** `status.status_list.uri` of the wallet unit attestation. */
+    /** `status_list.uri` the wallet unit attestation names (`key_storage_status.status`, else `status`). */
     @Column({ type: "varchar" })
     walletUnitStatusUri!: string;
 
-    /** `status.status_list.idx` of the wallet unit attestation. */
+    /** `status_list.idx` the wallet unit attestation names (`key_storage_status.status`, else `status`). */
     @Column({ type: "int" })
     walletUnitStatusIdx!: number;
 
