@@ -1,4 +1,5 @@
 import type { Routes } from '@angular/router';
+import { unsavedChangesGuard } from '../guards/unsaved-changes.guard';
 
 export const federationTrustAnchorRoutes: Routes = [
   {
@@ -14,6 +15,7 @@ export const federationTrustAnchorRoutes: Routes = [
       import('./federation-trust-anchor-edit/federation-trust-anchor-edit.component').then(
         (m) => m.FederationTrustAnchorEditComponent
       ),
+    canDeactivate: [unsavedChangesGuard],
   },
   {
     path: ':id',
@@ -28,5 +30,6 @@ export const federationTrustAnchorRoutes: Routes = [
       import('./federation-trust-anchor-edit/federation-trust-anchor-edit.component').then(
         (m) => m.FederationTrustAnchorEditComponent
       ),
+    canDeactivate: [unsavedChangesGuard],
   },
 ];

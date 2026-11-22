@@ -12,6 +12,7 @@ function fakeKeycloak() {
     token: undefined as string | undefined,
     refreshToken: undefined as string | undefined,
     idToken: undefined as string | undefined,
+    tokenParsed: undefined as Record<string, unknown> | undefined,
     onAuthRefreshSuccess: undefined as (() => void) | undefined,
     onTokenExpired: undefined as (() => void) | undefined,
   };
@@ -44,6 +45,29 @@ describe('OidcService token expiry', () => {
   afterEach(() => {
     localStorage.clear();
     vi.restoreAllMocks();
+  });
+
+  it('names the signed-in user by the user name, else the email, in the access token', () => {
+    keycloak.token = 'token';
+    keycloak.authenticated = true;
+    keycloak.tokenParsed = { sub: '3f2a', preferred_username: 'alice', email: 'a@x.test' };
+    expect(service.userName).toBe('alice');
+
+    keycloak.tokenParsed = { sub: '3f2a', email: 'a@x.test' };
+    expect(service.userName).toBe('a@x.test');
+
+    keycloak.tokenParsed = { sub: '3f2a' };
+    expect(service.userName).toBeUndefined();
+  });
+
+  it('names no user once the session ended', () => {
+    keycloak.token = 'token';
+    keycloak.authenticated = true;
+    keycloak.tokenParsed = { preferred_username: 'alice' };
+
+    keycloak.onTokenExpired?.();
+
+    expect(service.userName).toBeUndefined();
   });
 
   it('ends a session without a refresh token when its token expires, keeping its config for the next sign-in', () => {

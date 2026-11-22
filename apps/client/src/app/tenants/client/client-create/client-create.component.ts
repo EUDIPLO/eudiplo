@@ -41,6 +41,7 @@ import {
   reportSourceFailures,
 } from '../../../common/load-source';
 import { focusAfterRenderIfLost } from '../../../common/focus-if-lost.util';
+import type { PageWithUnsavedChanges } from '../../../services/unsaved-changes.service';
 
 /** The config lists a client can be restricted to. */
 export type ConfigSource = 'presentationConfigs' | 'issuanceConfigs';
@@ -94,7 +95,7 @@ const configSources: Record<ConfigSource, ConfigSourceInfo> = {
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './client-create.component.scss',
 })
-export class ClientCreateComponent implements OnInit {
+export class ClientCreateComponent implements OnInit, PageWithUnsavedChanges {
   clientForm: FormGroup;
   isSubmitting = false;
   hasPermission = false;
@@ -459,6 +460,7 @@ export class ClientCreateComponent implements OnInit {
         const payload = this.buildUpdateClientPayload();
 
         await this.clientService.update(this.id!, payload);
+        this.clientForm.markAsPristine();
         this.snackBar.open('Client updated successfully', 'Close', {
           duration: 3000,
         });
@@ -474,6 +476,7 @@ export class ClientCreateComponent implements OnInit {
 
         const clientData = await this.clientService.create(payload);
 
+        this.clientForm.markAsPristine();
         // Show secret dialog for new clients
         if (clientData?.clientSecret) {
           const dialogRef = this.dialog.open(SecretDialogComponent, {
@@ -505,6 +508,10 @@ export class ClientCreateComponent implements OnInit {
     } finally {
       this.isSubmitting = false;
     }
+  }
+
+  hasUnsavedChanges(): boolean {
+    return this.clientForm.dirty;
   }
 
   onCancel(): void {

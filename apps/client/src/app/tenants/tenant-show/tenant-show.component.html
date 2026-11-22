@@ -51,7 +51,8 @@
           matIconButton
           [matMenuTriggerFor]="moreMenu"
           aria-label="More actions for this tenant"
-          matTooltip="More actions"
+          [attr.aria-busy]="deleting"
+          [matTooltip]="deleting ? 'Deleting the tenant…' : 'More actions'"
         >
           <mat-icon>more_vert</mat-icon>
         </button>
@@ -123,8 +124,8 @@
     <span>Copy tenant ID</span>
   </button>
   <mat-divider></mat-divider>
-  <button mat-menu-item class="danger" (click)="deleteTenant()">
+  <button mat-menu-item class="danger" (click)="deleteTenant()" [disabled]="deleting">
     <mat-icon>delete_outline</mat-icon>
-    <span>Delete tenant</span>
+    <span>{{ deleting ? 'Deleting tenant…' : 'Delete tenant' }}</span>
   </button>
 </mat-menu>
