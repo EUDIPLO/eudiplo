@@ -13,3 +13,11 @@ reason = "@azure/msal-node is fixed in 7.1.0, but @azure/identity 4.14.0 still r
 [[IgnoredVulns]]
 id = "GHSA-gcqx-w48m-w2h4"
 reason = "deepmerge <= 4.3.1 has no patched release. At runtime it is only reached through nestjs-zod, which merges Zod schemas and OpenAPI documents defined in the code, never request data. The other paths are build tooling (Docusaurus SVGR, Nest CLI type checker)."
+
+[[IgnoredVulns]]
+id = "GHSA-3g3m-2fjr-6pw4"
+reason = "glob is fixed only in 14.0.2; the 10.x line used by archiver-utils (testcontainers, tests only) and rimraf (gaxios, through the OpenTelemetry GCP detector) has no patched release. Nothing in the repository passes an AbortSignal to glob, and every pattern comes from code, never from request data. Drop this entry once those parents accept a fixed glob."
+
+[[IgnoredVulns]]
+id = "GHSA-g3hv-75wg-m249"
+reason = "minimatch is fixed only in 11.0.1; the 9.x and 10.x lines used by glob 10, @swc/cli, typescript-eslint, markdownlint-cli and docusaurus-plugin-llms have no patched release. Every pattern they match comes from code or repository configuration, never from request data. Drop this entry once those parents accept a fixed minimatch."
