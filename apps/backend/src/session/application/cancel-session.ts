@@ -1,5 +1,8 @@
 import type { SessionData } from "../domain/session-data.js";
-import type { SessionType } from "../domain/session-list.js";
+import type {
+    SessionConfigLimits,
+    SessionType,
+} from "../domain/session-list.js";
 import {
     isTerminalStatus,
     SessionStatus,
@@ -58,6 +61,8 @@ export interface CancelSessionCommand {
     sessionId: string;
     /** The only session type the caller may change, see `sessionChangeScope`. */
     scope?: SessionType;
+    /** The configurations the caller is limited to, see `sessionConfigLimits`. */
+    limits?: SessionConfigLimits;
     /** Why the offer was cancelled, stored on the session and in the logs and sent to the webhook. */
     reason?: string;
     /** The client or user that cancelled the session. */
@@ -94,7 +99,7 @@ export class CancelSession {
     ) {}
 
     /**
-     * @throws SessionNotFound when the session does not exist or is outside the scope
+     * @throws SessionNotFound when the session does not exist or is outside the scope or the limits
      * @throws SessionNotCancellable when the session is redeemed, expired or no longer open
      */
     async execute(command: CancelSessionCommand): Promise<void> {
@@ -102,6 +107,7 @@ export class CancelSession {
             command.tenantId,
             command.sessionId,
             command.scope,
+            command.limits,
         );
 
         // The same conditional update as the token exchange and the
@@ -120,6 +126,7 @@ export class CancelSession {
                 command.tenantId,
                 command.sessionId,
                 command.scope,
+                command.limits,
             );
             throw new SessionNotCancellable(notCancellableReason(current));
         }

@@ -468,6 +468,21 @@ describe('issuer settings guided setup', () => {
     expect(service.saveConfiguration).not.toHaveBeenCalled();
   });
 
+  it('counts a moved authorization server as unsaved changes', async () => {
+    await component.loadConfigForEdit();
+    component.addAuthorizationServer();
+    const first = component.authorizationServers.at(0);
+
+    component.form.markAsPristine();
+    // The first server cannot move up, so nothing changes.
+    component.moveAuthorizationServer(0, 'up');
+    expect(component.hasUnsavedChanges()).toBe(false);
+
+    component.moveAuthorizationServer(0, 'down');
+    expect(component.authorizationServers.at(1)).toBe(first);
+    expect(component.hasUnsavedChanges()).toBe(true);
+  });
+
   it('defaults the built-in token lifetime to 300 s and keeps explicit values', async () => {
     await component.loadConfigForEdit();
     expect(component.authorizationServers.at(0).get('token.lifetimeSeconds')!.value).toBe(300);
@@ -837,7 +852,7 @@ describe('issuer settings Save', () => {
     expect(backLink.getAttribute('aria-label')).toBe('Back to Issuer Settings');
     expect(backLink.getAttribute('href')).toBe('/');
     expect(cancel.getAttribute('href')).toBe(backLink.getAttribute('href'));
-    // Row buttons do not mark the form dirty, so the bar never claims there are no changes.
+    // An added, empty row does not mark the form dirty, so the bar never claims there are no changes.
     expect(page.querySelector('.change-state')?.textContent?.trim()).toBe('');
 
     component.form.markAsDirty();

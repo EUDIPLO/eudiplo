@@ -1,4 +1,5 @@
 import type { Routes } from '@angular/router';
+import { unsavedChangesGuard } from '../guards/unsaved-changes.guard';
 
 export const tenantRoutes: Routes = [
   {
@@ -10,6 +11,7 @@ export const tenantRoutes: Routes = [
     path: 'create',
     loadComponent: () =>
       import('./tenant-create/tenant-create.component').then((m) => m.TenantCreateComponent),
+    canDeactivate: [unsavedChangesGuard],
   },
   {
     path: ':id',
@@ -20,6 +22,7 @@ export const tenantRoutes: Routes = [
     path: ':id/edit',
     loadComponent: () =>
       import('./tenant-create/tenant-create.component').then((m) => m.TenantCreateComponent),
+    canDeactivate: [unsavedChangesGuard],
   },
 ];
 
@@ -33,6 +36,7 @@ export const clientRoutes: Routes = [
     path: 'create',
     loadComponent: () =>
       import('./client/client-create/client-create.component').then((m) => m.ClientCreateComponent),
+    canDeactivate: [unsavedChangesGuard],
   },
   {
     path: ':id',
@@ -43,5 +47,6 @@ export const clientRoutes: Routes = [
     path: ':id/edit',
     loadComponent: () =>
       import('./client/client-create/client-create.component').then((m) => m.ClientCreateComponent),
+    canDeactivate: [unsavedChangesGuard],
   },
 ];

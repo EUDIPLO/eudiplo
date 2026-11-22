@@ -48,7 +48,12 @@ import {
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { decodeJwt } from 'jose';
-import { getApiErrorMessage, getHttpErrorMessage } from '../../utils/error-message';
+import {
+  asSentence,
+  getApiErrorMessage,
+  getHttpErrorMessage,
+  hasHttpStatus,
+} from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { focusAfterRenderIfLost } from '../../common/focus-if-lost.util';
 import { LoadErrorComponent } from '../../common/load-error.component';
@@ -123,6 +128,20 @@ export class SessionManagementShowComponent implements OnInit, OnDestroy {
   readonly POLLING_INTERVAL_MS = 3000; // Poll every 3 seconds
   readonly MAX_POLLING_DURATION_MS = 300000; // Stop polling after 5 minutes
   pollingStartTime: number | null = null;
+  /**
+   * Set when polling stopped while the session was still pending, so the page says that what it
+   * shows may be out of date and offers Refresh. Never set for a finished session.
+   */
+  updatesPaused = false;
+  /**
+   * With `updatesPaused`: polling stopped because the backend no longer returns the session
+   * (404 or 403), not at its time limit.
+   */
+  sessionUnavailable = false;
+  /** Why the last poll failed, as a sentence; empty while polls succeed. The indicator shows it. */
+  pollFailure = '';
+  /** True while Refresh reloads the session. */
+  refreshing = false;
   offerUri: string | null = null;
 
   constructor(
@@ -195,7 +214,8 @@ export class SessionManagementShowComponent implements OnInit, OnDestroy {
         try {
           await this.sessionManagementService.cancelSession(session.id, result.reason);
           this.stopPolling();
-          await this.loadSession(session.id);
+          // Cancelled, but the page still shows the session as pending: offer Refresh.
+          if (!(await this.loadSession(session.id))) this.updatesPaused = true;
           void this.loadSessionLogs(session.id);
           this.snackBar.open(
             isPresentationSession(session) ? 'Request cancelled' : 'Offer cancelled',
@@ -254,17 +274,21 @@ export class SessionManagementShowComponent implements OnInit, OnDestroy {
     this.stopPolling();
   }
 
-  async loadSession(sessionId: string): Promise<void> {
+  /** Loads the session; false when the load failed, which keeps what the page shows. */
+  async loadSession(sessionId: string): Promise<boolean> {
     this.loading = true;
     try {
       this.session = await this.sessionManagementService.getSession(sessionId);
       void this.generateQRCode(this.session.offerUrl || this.session.requestUrl!);
+      if (isFinishedSession(this.getSessionStatusValue(this.session))) this.stopFollowing();
+      return true;
     } catch (error) {
       console.error('Error loading session:', error);
       const message = getApiErrorMessage(error, 'Failed to load session');
       // A failed refresh keeps the session on the page; a failed first load shows why.
       if (this.session) openErrorSnackBar(this.snackBar, message);
       else this.loadError = message;
+      return false;
     } finally {
       this.loading = false;
     }
@@ -481,6 +505,9 @@ export class SessionManagementShowComponent implements OnInit, OnDestroy {
   startPolling(sessionId: string): void {
     this.stopPolling();
     this.pollingStartTime = Date.now();
+    this.updatesPaused = false;
+    this.sessionUnavailable = false;
+    this.pollFailure = '';
 
     // Set up interval
     this.pollingInterval = setInterval(() => {
@@ -488,6 +515,8 @@ export class SessionManagementShowComponent implements OnInit, OnDestroy {
 
       if (elapsed >= this.MAX_POLLING_DURATION_MS) {
         this.stopPolling();
+        // The session may still change; the page says it no longer follows it.
+        this.updatesPaused = true;
         return;
       }
 
@@ -503,21 +532,63 @@ export class SessionManagementShowComponent implements OnInit, OnDestroy {
     }
   }
 
+  /** A finished session does not change any more: no polls, and nothing is out of date. */
+  private stopFollowing(): void {
+    this.stopPolling();
+    this.updatesPaused = false;
+    this.sessionUnavailable = false;
+    this.pollFailure = '';
+  }
+
   async fetchSessionStatus(sessionId: string): Promise<void> {
     try {
       const updatedSession = await this.sessionManagementService.getSession(sessionId);
       const currentStatus = this.getSessionStatusValue(updatedSession);
 
       this.session = updatedSession;
+      this.pollFailure = '';
       void this.loadSessionLogs(sessionId);
 
       // The result card says how the session ended; its live region announces it.
       if (isFinishedSession(currentStatus)) {
-        this.stopPolling();
+        this.stopFollowing();
       }
     } catch (error) {
       console.error('Error fetching session status:', error);
-      // Don't show error to user for polling failures, just log them
+      if (!this.isPolling()) return;
+      if (hasHttpStatus(error, 404) || hasHttpStatus(error, 403)) {
+        // The session was deleted or is no longer the caller's: another poll says the same.
+        this.stopPolling();
+        this.pollFailure = '';
+        this.updatesPaused = true;
+        this.sessionUnavailable = true;
+        return;
+      }
+      // The indicator says so instead of "Live updates"; the next poll tries again.
+      this.pollFailure = asSentence(getApiErrorMessage(error, 'Updates failing'));
+    }
+  }
+
+  /**
+   * Reloads the session after updates paused, and follows it again while it is pending. A failed
+   * reload says why in a snackbar and leaves the page paused, with Refresh to try again.
+   */
+  async refreshSession(): Promise<void> {
+    const sessionId = this.session?.id;
+    // `disabledInteractive` keeps Refresh clickable while it waits.
+    if (!sessionId || this.refreshing) return;
+    this.refreshing = true;
+    try {
+      if (!(await this.loadSession(sessionId)) || !this.session) return;
+      void this.loadSessionLogs(sessionId);
+      // A finished session is no longer paused: `loadSession` saw to that.
+      if (!isFinishedSession(this.getSessionStatusValue(this.session))) {
+        this.startPolling(sessionId);
+      }
+    } finally {
+      this.refreshing = false;
+      // After a reload, Refresh left with the paused notice; after a failed one it keeps the focus.
+      focusAfterRenderIfLost(this.injector, () => this.pageHeading?.nativeElement);
     }
   }
 

@@ -8,6 +8,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { Router } from '@angular/router';
 import { provideFormlyCore } from '@ngx-formly/core';
 import { withFormlyMaterial } from '@ngx-formly/material';
+import { of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { IssuanceOfferComponent } from './issuance-offer.component';
@@ -521,6 +522,99 @@ describe('IssuanceOfferComponent', () => {
           option.textContent!.replace(/\s+/g, ' ').trim()
         );
       }
+
+      /** Renders the claim cards of two credential configs that both have a `name` claim. */
+      async function renderSameNamedClaims(): Promise<void> {
+        await render();
+        // ngOnInit loaded the (empty) configs of the service; these replace them.
+        component.credentialConfigs = ['alpha', 'beta'].map((id) => ({
+          id,
+          config: { format: 'dc+sd-jwt' },
+          fields: [{ path: ['name'], type: 'string' }],
+        })) as any;
+        component.credentialStepForm.patchValue(
+          { credentialConfigurationIds: ['alpha', 'beta'] },
+          { emitEvent: false }
+        );
+        await component.setClaimFormFields(['alpha', 'beta']);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+      }
+
+      const cards = () =>
+        Array.from(
+          fixture.nativeElement.querySelectorAll('.credential-claims-card')
+        ) as HTMLElement[];
+
+      it('keeps same-named claims of two credential configs apart', async () => {
+        await renderSameNamedClaims();
+
+        const [alpha, beta] = cards().map(
+          (card) => card.querySelector('formly-form input') as HTMLInputElement
+        );
+        alpha.value = 'Ada';
+        alpha.dispatchEvent(new Event('input'));
+        fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        expect(beta.value).toBe('');
+
+        // The forms are built again when the selection changes, from their models.
+        await component.setClaimFormFields(['alpha', 'beta']);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        const rebuilt = cards().map(
+          (card) => card.querySelector('formly-form input') as HTMLInputElement
+        );
+        expect(rebuilt[1].value).toBe('');
+        expect(component.configStepForm.get('claims')?.value).toEqual({
+          alpha: { name: 'Ada' },
+          beta: { name: undefined },
+        });
+        expect(component.models['alpha']).not.toBe(component.models['beta']);
+      });
+
+      it('imports claims JSON into the credential config whose card it was opened from', async () => {
+        await renderSameNamedClaims();
+        component.configStepForm.get('claims')?.patchValue({ alpha: { name: 'Ada' } });
+        const dialog = fixture.debugElement.injector.get(MatDialog);
+        const open = vi
+          .spyOn(dialog, 'open')
+          .mockReturnValue({ afterClosed: () => of({ name: 'Bob' }) } as never);
+
+        const imports = cards().map((card) =>
+          card.querySelector<HTMLButtonElement>('button[aria-label^="Import claims JSON for"]')
+        );
+        expect(imports.map((button) => button?.getAttribute('aria-label'))).toEqual([
+          'Import claims JSON for alpha',
+          'Import claims JSON for beta',
+        ]);
+        imports[1]!.click();
+
+        expect(open.mock.lastCall?.[1]?.data).toMatchObject({
+          title: 'Claims JSON: beta',
+          jsonData: {},
+        });
+        expect(component.configStepForm.get('claims')?.value).toEqual({
+          alpha: { name: 'Ada' },
+          beta: { name: 'Bob' },
+        });
+      });
+
+      it('offers no claims import for a credential config that uses its attribute provider', async () => {
+        await renderSameNamedClaims();
+        component.elements[0].attributeProviderId = 'hr';
+        component.onClaimSourceChange('alpha', 'attributeProvider');
+        component.elements[0].claimSource = 'attributeProvider';
+        fixture.detectChanges();
+
+        expect(cards()[0].querySelector('button[aria-label^="Import claims JSON"]')).toBeNull();
+        expect(cards()[1].querySelector('button[aria-label^="Import claims JSON"]')).not.toBeNull();
+      });
 
       it('removes a chip with its remove button and shows the required error', async () => {
         await render(['pid']);

@@ -18,7 +18,13 @@
       >
       <div>
         <h1>Edit Key Chain</h1>
-        <p>Change the description, and the rotation of a key chain with its own root CA.</p>
+        <p>
+          {{
+            showsRotation
+              ? 'Change the description and the rotation policy.'
+              : 'Change the description. A standalone key chain has no rotation to set here.'
+          }}
+        </p>
       </div>
     </div>
   </header>
@@ -27,8 +33,12 @@
     <div class="loading-state">
       <mat-spinner diameter="40" aria-label="Loading key chain"></mat-spinner>
     </div>
+  } @else if (loadError) {
+    <app-load-error [message]="loadError" (retry)="load()">
+      <a matButton [routerLink]="['/keys']">Back to the list</a>
+    </app-load-error>
   } @else if (keyChain) {
-    <form [formGroup]="form" (ngSubmit)="onSubmit()">
+    <form #formElement [formGroup]="form" (ngSubmit)="onSubmit()">
       <!-- Each section: what it is for on the left, its fields on the right -->
       <section class="form-section" aria-labelledby="key-info-heading">
         <div class="section-intro">
@@ -82,7 +92,7 @@
         </mat-card>
       </section>
 
-      @if (isInternalChain) {
+      @if (showsRotation) {
         <section class="form-section" aria-labelledby="key-rotation-heading">
           <div class="section-intro">
             <h2 id="key-rotation-heading">Rotation Policy</h2>
@@ -90,6 +100,16 @@
           </div>
           <mat-card appearance="outlined">
             <mat-card-content class="field-stack">
+              @if (!isInternalChain) {
+                <p class="rotation-warning" role="note">
+                  <mat-icon aria-hidden="true">warning</mat-icon>
+                  <span>
+                    Each rotation of this standalone key creates a new key with a self-signed
+                    certificate, which replaces a certificate issued by a CA. Turn rotation off to
+                    keep that certificate.
+                  </span>
+                </p>
+              }
               <mat-slide-toggle formControlName="rotationEnabled" color="primary">
                 Enable automatic key rotation
               </mat-slide-toggle>
@@ -103,9 +123,12 @@
                       type="number"
                       formControlName="rotationIntervalDays"
                       min="1"
+                      max="3650"
+                      step="1"
                       placeholder="30"
                     />
                     <mat-hint>How often the signing key will be rotated</mat-hint>
+                    <mat-error>{{ rotationDaysError }}</mat-error>
                   </mat-form-field>
 
                   <mat-form-field appearance="outline" subscriptSizing="dynamic">
@@ -115,9 +138,12 @@
                       type="number"
                       formControlName="certValidityDays"
                       min="1"
+                      max="3650"
+                      step="1"
                       placeholder="365"
                     />
                     <mat-hint>Validity period for generated certificates</mat-hint>
+                    <mat-error>{{ rotationDaysError }}</mat-error>
                   </mat-form-field>
                 </div>
               }
@@ -135,6 +161,9 @@
         <button
           matButton="filled"
           type="submit"
+          [disabled]="saving"
+          disabledInteractive
+          [matTooltip]="saveTooltip"
           appConfigManaged
           managedKind="KeyChain"
           [managedResourceId]="keyChainId || ''"

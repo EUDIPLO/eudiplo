@@ -136,6 +136,12 @@
   overflow-wrap: anywhere;
 }
 
+.account-summary-tenant {
+  font: var(--mat-sys-body-medium);
+  color: var(--mat-sys-on-surface);
+  overflow-wrap: anywhere;
+}
+
 .account-summary-instance {
   font: var(--mat-sys-body-small);
   color: var(--mat-sys-on-surface-variant);

@@ -314,6 +314,45 @@ describe("Read and status roles (e2e)", () => {
                 .expect(204),
         );
 
+        test("a client limited to other credential configurations changes no status", async () => {
+            const limited = async (
+                clientId: string,
+                allowedIssuanceConfigs: string[],
+            ) => {
+                const client = await as(adminToken)
+                    .post("/client", {
+                        clientId,
+                        roles: [Role.CredentialStatus],
+                        allowedIssuanceConfigs,
+                    })
+                    .expect(201);
+                const token = await request(app.getHttpServer())
+                    .post("/api/oauth2/token")
+                    .send({
+                        client_id: clientId,
+                        client_secret: client.body.clientSecret,
+                        grant_type: "client_credentials",
+                    })
+                    .expect(201);
+                return token.body.access_token as string;
+            };
+            const update = { sessionId: issuanceSession, status: 2 };
+
+            await as(await limited("roles-status-other", ["other-config"]))
+                .post("/session/revoke", update)
+                .expect(409);
+            const unchanged = await as(adminToken)
+                .get(`/session/${issuanceSession}/credential-status`)
+                .expect(200);
+            expect(unchanged.body).toEqual([
+                expect.objectContaining({ status: 0 }),
+            ]);
+
+            await as(await limited("roles-status-own", [STATUS_CONFIG]))
+                .post("/session/revoke", update)
+                .expect(204);
+        });
+
         test("issuance:offer reads the credential status but no longer changes it", async () => {
             const status = await as(offerOnly)
                 .get(`/session/${issuanceSession}/credential-status`)

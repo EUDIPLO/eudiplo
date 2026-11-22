@@ -39,6 +39,15 @@
   }
 }
 
+// Full Delete: what it removes for good
+.info-box.warning {
+  background: color-mix(in srgb, var(--eudiplo-warning) 10%, var(--mat-sys-surface));
+
+  mat-icon {
+    color: var(--eudiplo-warning);
+  }
+}
+
 .mode-option {
   display: flex;
   align-items: center;
