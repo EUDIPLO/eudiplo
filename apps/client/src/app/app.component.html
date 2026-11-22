@@ -457,9 +457,15 @@
         </div>
       }
       <!-- Top Toolbar -->
-      <router-outlet></router-outlet>
+      <router-outlet
+        (activate)="unsavedChanges.shown($event)"
+        (deactivate)="unsavedChanges.hidden($event)"
+      ></router-outlet>
     </mat-sidenav-content>
   </mat-sidenav-container>
 } @else {
-  <router-outlet></router-outlet>
+  <router-outlet
+    (activate)="unsavedChanges.shown($event)"
+    (deactivate)="unsavedChanges.hidden($event)"
+  ></router-outlet>
 }

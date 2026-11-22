@@ -29,6 +29,7 @@ import { FrontendConfigService } from './services/frontend-config.service';
 import { RoleChangeService } from './services/role-change.service';
 import { TokenExpiryService } from './services/token-expiry.service';
 import { NavSectionsService } from './services/nav-sections.service';
+import { UnsavedChangesService } from './services/unsaved-changes.service';
 import { NavSectionComponent } from './common/nav-section/nav-section.component';
 import { DiploLogoComponent } from './common/diplo-logo.component';
 import { ApiService } from './core';
@@ -70,6 +71,8 @@ export function isLoginUrl(url: string): boolean {
 })
 export class AppComponent implements OnInit, OnDestroy {
   logout() {
+    // Single sign-on leaves the client at once, so the question comes before the logout.
+    if (!this.unsavedChanges.confirmLeave()) return;
     this.apiService.logout();
     this.router.navigate(['/login']);
   }
@@ -81,6 +84,7 @@ export class AppComponent implements OnInit, OnDestroy {
   private breakpointSubscription?: Subscription;
 
   private readonly frontendConfig = inject(FrontendConfigService);
+  readonly unsavedChanges = inject(UnsavedChangesService);
 
   constructor(
     private router: Router,

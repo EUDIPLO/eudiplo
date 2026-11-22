@@ -28,6 +28,7 @@ import { ConfigOwnershipNoticeComponent } from '../../config-portability/config-
 import { getApiErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { keyUsages, type KeyUsageType } from '../key-usage';
+import type { PageWithUnsavedChanges } from '../../services/unsaved-changes.service';
 import { LoadErrorComponent } from '../../common/load-error.component';
 import { showFieldsToFix } from '../../common/field-to-fix.util';
 import { ROTATION_DAYS_ERROR, rotationDaysValidators } from '../rotation-days';
@@ -57,7 +58,7 @@ import { ROTATION_DAYS_ERROR, rotationDaysValidators } from '../rotation-days';
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './key-management-create.component.scss',
 })
-export class KeyManagementCreateComponent implements OnInit {
+export class KeyManagementCreateComponent implements OnInit, PageWithUnsavedChanges {
   public form: FormGroup;
   public keyChainId?: string;
   public keyChain?: KeyChainResponseDto;
@@ -137,6 +138,10 @@ export class KeyManagementCreateComponent implements OnInit {
     return this.keyChain?.type === 'internalChain';
   }
 
+  hasUnsavedChanges(): boolean {
+    return this.form.dirty;
+  }
+
   /**
    * Whether the page offers the rotation policy: for a key chain with its own root CA, and for
    * any other key chain whose rotation is on (set through the API, the CLI or an import), so
@@ -190,6 +195,7 @@ export class KeyManagementCreateComponent implements OnInit {
     this.saving = true;
     try {
       await this.keyChainService.update(this.keyChainId!, updateDto);
+      this.form.markAsPristine();
       this.snackBar.open('Key chain updated successfully', 'Close', {
         duration: 3000,
       });

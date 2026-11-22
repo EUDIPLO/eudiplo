@@ -29,6 +29,7 @@ import { DELETED_SESSION_CREDENTIALS } from '../session-management/session-delet
 import { getApiErrorMessage } from '../utils/error-message';
 import { openErrorSnackBar } from '../utils/error-snackbar';
 import { wholeNumberValidator } from '../utils/whole-number-validator';
+import type { PageWithUnsavedChanges } from '../services/unsaved-changes.service';
 
 @Component({
   selector: 'app-session-config',
@@ -51,7 +52,7 @@ import { wholeNumberValidator } from '../utils/whole-number-validator';
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './session-config.component.scss',
 })
-export class SessionConfigComponent implements OnInit {
+export class SessionConfigComponent implements OnInit, PageWithUnsavedChanges {
   configForm: FormGroup;
   isLoading = true;
   isSaving = false;
@@ -148,6 +149,10 @@ export class SessionConfigComponent implements OnInit {
       this.formTtl() !== (this.currentConfig?.ttlSeconds ?? null) ||
       cleanupMode !== (this.currentConfig?.cleanupMode ?? null)
     );
+  }
+
+  hasUnsavedChanges(): boolean {
+    return this.hasChanges;
   }
 
   /** The TTL field as a number, null while it is empty. */

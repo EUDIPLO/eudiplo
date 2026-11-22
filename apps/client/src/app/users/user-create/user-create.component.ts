@@ -29,6 +29,7 @@ import { UserTemporaryPasswordDialogComponent } from '../user-temporary-password
 import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { showFieldsToFix } from '../../common/field-to-fix.util';
 import { focusAfterRenderIfLost } from '../../common/focus-if-lost.util';
+import type { PageWithUnsavedChanges } from '../../services/unsaved-changes.service';
 
 @Component({
   selector: 'app-user-create',
@@ -51,7 +52,7 @@ import { focusAfterRenderIfLost } from '../../common/focus-if-lost.util';
   templateUrl: './user-create.component.html',
   styleUrl: './user-create.component.scss',
 })
-export class UserCreateComponent implements OnInit {
+export class UserCreateComponent implements OnInit, PageWithUnsavedChanges {
   private readonly jwtService = inject(JwtService);
   private readonly userService = inject(UserService);
 
@@ -172,10 +173,12 @@ export class UserCreateComponent implements OnInit {
 
       if (this.loaded) {
         await this.userService.update(this.id!, payload);
+        this.userForm.markAsPristine();
         this.snackBar.open('User updated successfully', 'Close', { duration: 3000 });
         await this.router.navigate(['..'], { relativeTo: this.route });
       } else {
         const created = await this.userService.create(payload);
+        this.userForm.markAsPristine();
         const temporaryPassword = created?.temporaryPassword;
         if (temporaryPassword) {
           const dialogRef = this.dialog.open(UserTemporaryPasswordDialogComponent, {
@@ -203,6 +206,10 @@ export class UserCreateComponent implements OnInit {
     } finally {
       this.isSubmitting = false;
     }
+  }
+
+  hasUnsavedChanges(): boolean {
+    return this.userForm.dirty;
   }
 
   onCancel(): void {

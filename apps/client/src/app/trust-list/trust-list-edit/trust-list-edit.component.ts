@@ -60,6 +60,7 @@ import {
   readElectronicAddress,
 } from './trust-list-electronic-address';
 import { fromFormQueryParams } from '../../common/return-to-form';
+import type { PageWithUnsavedChanges } from '../../services/unsaved-changes.service';
 
 /** The message set of each electronic address control. */
 const ELECTRONIC_ADDRESS_FIELDS = {
@@ -141,7 +142,7 @@ const CREATED_KEY_CHAIN_NAMES: Record<TrustListKeyChainUsage, string> = {
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './trust-list-edit.component.scss',
 })
-export class TrustListEditComponent implements OnInit {
+export class TrustListEditComponent implements OnInit, PageWithUnsavedChanges {
   trustListId?: string | null;
   trustList?: TrustList;
   form!: FormGroup;
@@ -808,12 +809,18 @@ export class TrustListEditComponent implements OnInit {
 
   removeEntity(index: number): void {
     this.entitiesArray.removeAt(index);
+    // A row button changes the form without marking it dirty.
+    this.entitiesArray.markAsDirty();
     focusRowAfterRemoval(
       this.injector,
       () => this.entityHeaders?.map((header) => header.nativeElement),
       index,
       () => this.addEntityButton?.nativeElement
     );
+  }
+
+  hasUnsavedChanges(): boolean {
+    return this.form.dirty;
   }
 
   getEntityType(index: number): 'internal' | 'external' {
@@ -892,6 +899,7 @@ export class TrustListEditComponent implements OnInit {
         await trustListControllerCreateTrustList({ body });
       }
 
+      this.form.markAsPristine();
       this.snackBar.open(
         this.trustListId ? 'Trust list updated successfully' : 'Trust list created successfully',
         'Close',
