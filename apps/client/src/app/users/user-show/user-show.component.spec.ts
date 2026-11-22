@@ -1,3 +1,4 @@
+import { ApplicationRef } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { provideRouter, Router } from '@angular/router';
@@ -215,12 +216,16 @@ describe('UserShowComponent', () => {
     expect(error.querySelector('a')?.getAttribute('href')).toBe('/users');
 
     fail = false;
-    button(page, 'Retry').click();
+    const retry = button(page, 'Retry');
+    retry.focus();
+    retry.click();
     await vi.waitFor(() => {
       harness.detectChanges();
       expect(text(page.querySelector('h1'))).toBe('alice');
     });
+    TestBed.inject(ApplicationRef).tick();
     expect(page.querySelector('app-load-error')).toBeNull();
+    expect(document.activeElement).toBe(page.querySelector('h1'));
     expect(fetchStub).toHaveBeenCalledTimes(2);
   });
 });

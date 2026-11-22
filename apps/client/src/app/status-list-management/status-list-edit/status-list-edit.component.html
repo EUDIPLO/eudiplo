@@ -22,7 +22,11 @@
   @if (isLoading) {
     <p class="loading-state"><output>Loading status list…</output></p>
   } @else if (loadError) {
-    <app-load-error [message]="loadError" (retry)="retryLoad()">
+    <app-load-error
+      [message]="loadError"
+      hint="The status list can only be edited after it has been loaded."
+      (retry)="retryLoad()"
+    >
       <a matButton routerLink="/status-lists">Back to the list</a>
     </app-load-error>
   } @else {

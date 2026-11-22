@@ -1,3 +1,4 @@
+import { ApplicationRef } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, provideRouter, Router } from '@angular/router';
@@ -147,11 +148,22 @@ describe('StatusListEditComponent Save', () => {
     expect(error?.textContent).toContain('Failed to load status list: Database unavailable');
     expect(error?.querySelector('a')?.getAttribute('href')).toBe('/status-lists');
 
-    [...error!.querySelectorAll('button')].find((b) => b.textContent?.includes('Retry'))!.click();
+    const heading = element.querySelector<HTMLElement>('h1')!;
+    expect(document.activeElement).not.toBe(heading);
+    const retry = [...error!.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Retry')
+    )!;
+    retry.focus();
+    retry.click();
     await vi.waitFor(() => expect(fixture.componentInstance.statusList).toEqual(list));
     fixture.detectChanges();
+    TestBed.inject(ApplicationRef).tick();
 
     expect(getList).toHaveBeenCalledTimes(2);
+    // Retry loads the status list alone and keeps the options loaded before.
+    expect(TestBed.inject(CredentialConfigService).loadConfigurations).toHaveBeenCalledOnce();
+    expect(TestBed.inject(KeyChainService).getAll).toHaveBeenCalledOnce();
+    expect(document.activeElement).toBe(heading);
     expect(element.querySelector('app-load-error')).toBeNull();
     expect(element.querySelector('form')).not.toBeNull();
   });

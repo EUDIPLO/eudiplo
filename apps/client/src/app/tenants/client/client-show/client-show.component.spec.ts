@@ -1,3 +1,4 @@
+import { ApplicationRef } from '@angular/core';
 import { NEVER } from 'rxjs';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -421,14 +422,18 @@ describe('ClientShowComponent load failure', () => {
     );
 
     fail = false;
-    [...page.querySelectorAll('app-load-error button')]
-      .find((b) => b.textContent?.includes('Retry'))!
-      .dispatchEvent(new MouseEvent('click'));
+    const retry = [...page.querySelectorAll<HTMLElement>('app-load-error button')].find((b) =>
+      b.textContent?.includes('Retry')
+    )!;
+    retry.focus();
+    retry.dispatchEvent(new MouseEvent('click'));
     await vi.waitFor(() => expect(fixture.componentInstance.client?.clientId).toBe('shop'));
     fixture.detectChanges();
+    TestBed.inject(ApplicationRef).tick();
 
     expect(page.querySelector('app-load-error')).toBeNull();
     expect(page.querySelector('h1')?.textContent).toContain('shop');
+    expect(document.activeElement).toBe(page.querySelector('h1'));
     expect(fetchStub).toHaveBeenCalledTimes(2);
   });
 });
