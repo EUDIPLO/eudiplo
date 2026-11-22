@@ -177,7 +177,6 @@ const config: Config = {
           // `eudiplo upgrade` prints /migration/<from>.x-to-<to>.0 for every major it crosses.
           {from: '/migration/8.x-to-9.0', to: '/upgrade/8.x-to-9.0'},
           {from: '/migration/9.x-to-10.0', to: '/upgrade/9.x-to-10.0'},
-          {from: '/migration/10.x-to-11.0', to: '/upgrade/10.x-to-11.0'},
           // Older URLs from earlier restructures (getting-started/, architecture/,
           // api/ and development/ sections).
           {from: '/getting-started/first-steps', to: '/cookbooks/first-credential'},
