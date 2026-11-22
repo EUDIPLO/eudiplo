@@ -322,6 +322,59 @@ export class CredentialConfigService {
     }
 
     /**
+     * Refuses the revocation opt-in for a caller limited to other credential
+     * configurations (`allowedIssuanceConfigs`).
+     */
+    private assertMayRevokeIssued(
+        id: string,
+        options: CredentialConfigUpdateOptions,
+    ): void {
+        const limit = options.allowedCredentialConfigurationIds;
+        if (
+            options.revokeOnDisclosurePolicyChange &&
+            limit?.length &&
+            !limit.includes(id)
+        ) {
+            throw new ForbiddenException(
+                `Client is not authorized to revoke credentials of credential configuration ${id}`,
+            );
+        }
+    }
+
+    /**
+     * The second revocation pass of a disclosure policy change, after the new
+     * policy is stored. Credentials issued while the policy was being stored
+     * were issued under the old policy too. Entries carry no allocation time,
+     * so one issued under the new policy in this short window is revoked as
+     * well. Best effort: the new policy is stored by now, so a repeated
+     * request would not revoke again, and failing here would only drop the
+     * audit record.
+     * @param revokedBefore - The entries the first pass revoked, for the log.
+     */
+    private async revokeIssuedDuringSave(
+        tenantId: string,
+        id: string,
+        revokedBefore: number,
+    ): Promise<void> {
+        let revoked = revokedBefore;
+        try {
+            revoked += await this.issuedCredentials.revokeIssuedUnder(
+                tenantId,
+                id,
+            );
+        } catch (error) {
+            this.logger.error(
+                `[${tenantId}] Could not revoke credentials of credential configuration ${id} issued while its embedded disclosure policy changed: ${
+                    error instanceof Error ? error.message : String(error)
+                }`,
+            );
+        }
+        this.logger.log(
+            `[${tenantId}] Revoked ${revoked} credential(s) of credential configuration ${id} after its embedded disclosure policy changed`,
+        );
+    }
+
+    /**
      * Updates a credential configuration for a given tenant.
      * Only updates fields that are provided in the config.
      * Set fields to null to clear them.
@@ -342,16 +395,7 @@ export class CredentialConfigService {
         requestMeta?: AuditLogRequestMeta,
         options: CredentialConfigUpdateOptions = {},
     ) {
-        const limit = options.allowedCredentialConfigurationIds;
-        if (
-            options.revokeOnDisclosurePolicyChange &&
-            limit?.length &&
-            !limit.includes(id)
-        ) {
-            throw new ForbiddenException(
-                `Client is not authorized to revoke credentials of credential configuration ${id}`,
-            );
-        }
+        this.assertMayRevokeIssued(id, options);
         await this.replaceImageReferences(tenantId, config);
         await this.validateIaeActions(tenantId, config);
         const existing = await this.getById(tenantId, id);
@@ -406,7 +450,7 @@ export class CredentialConfigService {
             );
         // Revoked before the new policy is stored, so that a failed revocation
         // leaves the policy unchanged and repeating the request finishes it.
-        let revoked = revoke
+        const revoked = revoke
             ? await this.issuedCredentials.revokeIssuedUnder(tenantId, id)
             : 0;
         const saved = await this.credentialConfigRepository.save({
@@ -416,27 +460,7 @@ export class CredentialConfigService {
             tenantId,
         });
         if (revoke) {
-            // Credentials issued while the policy was being stored were
-            // issued under the old policy too. Entries carry no allocation
-            // time, so one issued under the new policy in this short window
-            // is revoked as well. Best effort: the new policy is
-            // stored by now, so a repeated request would not revoke again,
-            // and failing here would only drop the audit record.
-            try {
-                revoked += await this.issuedCredentials.revokeIssuedUnder(
-                    tenantId,
-                    id,
-                );
-            } catch (error) {
-                this.logger.error(
-                    `[${tenantId}] Could not revoke credentials of credential configuration ${id} issued while its embedded disclosure policy changed: ${
-                        error instanceof Error ? error.message : String(error)
-                    }`,
-                );
-            }
-            this.logger.log(
-                `[${tenantId}] Revoked ${revoked} credential(s) of credential configuration ${id} after its embedded disclosure policy changed`,
-            );
+            await this.revokeIssuedDuringSave(tenantId, id, revoked);
         }
 
         if (actorToken) {
