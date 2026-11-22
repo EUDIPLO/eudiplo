@@ -27,6 +27,19 @@ describe('UserTemporaryPasswordDialogComponent', () => {
     delete (navigator as { clipboard?: Clipboard }).clipboard;
   });
 
+  it('says how to recover a lost password, which the Web Client cannot', () => {
+    createDialog();
+    const fixture = TestBed.createComponent(UserTemporaryPasswordDialogComponent);
+    fixture.detectChanges();
+    const text = (fixture.nativeElement as HTMLElement).textContent?.replace(/\s+/g, ' ');
+
+    expect(text).toContain(
+      'If this password is lost, the Web Client can neither show nor reset it.'
+    );
+    expect(text).toContain('Keycloak admin console');
+    expect(text).toContain('PATCH /api/user/{id}');
+  });
+
   it('confirms copied login details', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     const { dialog, snackBar } = createDialog({ writeText });
