@@ -99,6 +99,13 @@ ENV VERSION=$VERSION
 ARG REVISION=
 ENV REVISION=$REVISION
 
+# --- OS packages ---
+# Upgrade the packages of the pinned base image, so Alpine security fixes
+# released after that digest was built are part of the image. Keep this step
+# below ARG REVISION: the revision changes with every commit, so the step is
+# not served from the build cache.
+RUN apk upgrade --no-cache
+
 # Environment variables with defaults
 ENV API_BASE_URL=http://localhost:3000
 
