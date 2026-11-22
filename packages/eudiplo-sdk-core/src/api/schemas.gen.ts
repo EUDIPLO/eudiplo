@@ -4948,6 +4948,14 @@ export const ClaimFieldDefinitionDtoSchema = {
             ],
             description: 'Claim value type'
         },
+        format: {
+            type: 'string',
+            enum: [
+                'date',
+                'date-time'
+            ],
+            description: 'JSON Schema format of a "string" claim. "date" requires an RFC 3339 full-date (YYYY-MM-DD) and "date-time" an RFC 3339 date-time; claims that do not match are refused at issuance. mDOC credentials encode the claim as full-date (CBOR tag 1004, RFC 8943) or tdate (CBOR tag 0, in UTC with whole seconds), SD-JWT VC credentials issue the string unchanged. Without a format, mDOC credentials issue the claim as a text string.'
+        },
         defaultValue: {
             description: 'Default value',
             oneOf: [
@@ -5012,7 +5020,7 @@ export const ClaimFieldDefinitionDtoSchema = {
             $ref: '#/components/schemas/ClaimConstraints',
             type: 'object',
             additionalProperties: true,
-            description: 'JSON Schema 2020-12 validation keywords for this field. Only the JSON Schema keywords listed under Constraints in the claims documentation are accepted (validation keywords such as pattern, minLength or enum, subschemas such as items or properties, and annotations); other keys, such as format or $ref, are refused.'
+            description: 'JSON Schema 2020-12 validation keywords for this field. Only the JSON Schema keywords listed under Constraints in the claims documentation are accepted (validation keywords such as pattern, minLength or enum, subschemas such as items or properties, and annotations); other keys, such as $ref or format (use the field\'s format instead), are refused.'
         },
         children: {
             items: {

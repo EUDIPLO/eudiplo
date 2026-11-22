@@ -79,6 +79,31 @@ Configurations without `fields` are not validated.
 
 At the top level of `constraints`, the field's own `type` and its display name, as `title`, win over these keywords; inside subschemas they apply as written.
 
-Other keys, such as `format`, `$ref` or `x-` extensions, are refused with HTTP `400`; the error names the field and the keyword. This also keeps form hints like formly's `widget` out of the offer form in the Web Client. Configurations stored before 10.0 may still carry such keys: EUDIPLO ignores them when it validates claims, builds the offer form and exports the configuration, and sending its `fields` again answers `400` until you remove them.
+Other keys, such as `format` (declare dates with the field's own [`format`](#dates)), `$ref` or `x-` extensions, are refused with HTTP `400`; the error names the field and the keyword. This also keeps form hints like formly's `widget` out of the offer form in the Web Client. Configurations stored before 10.0 may still carry such keys: EUDIPLO ignores them when it validates claims, builds the offer form and exports the configuration, and sending its `fields` again answers `400` until you remove them.
 
 Regular expressions in `constraints` (`pattern`, the keys of `patternProperties`, and `pattern` inside `propertyNames`) are matched with [RE2](https://github.com/google/re2/wiki/Syntax), which runs in linear time, so a pattern cannot stall issuance. `\s`, `\S` and `.` keep their JavaScript meaning. A configuration is rejected when it is saved or imported if a pattern uses lookarounds such as `(?=…)`, backreferences such as `\1`, inline flags, unknown escapes such as `\e`, `\S` inside a character class, the empty classes `[]` and `[^]`, long Unicode property names such as `\p{Letter}` (use `\p{L}`), is longer than 1000 characters or has too many or too large repetitions. A configuration stored before 10.0 with such a pattern fails at issuance until the pattern is replaced.
+
+### Dates
+
+A field of `type: "string"` can declare a JSON Schema `format`:
+
+| `format` | Claim value | mDOC (`mso_mdoc`) | SD-JWT VC |
+| --- | --- | --- | --- |
+| `date` | RFC 3339 `full-date`, for example `1964-08-12` | `full-date`, CBOR tag 1004 ([RFC 8943](https://www.rfc-editor.org/rfc/rfc8943)) | the string as given |
+| `date-time` | RFC 3339 `date-time`, for example `2026-11-20T10:00:00+01:00` | `tdate`, CBOR tag 0, in UTC with whole seconds (`2026-11-20T09:00:00Z`) | the string as given |
+
+```json
+{
+    "namespace": "eu.europa.ec.eudi.pid.1",
+    "path": ["birth_date"],
+    "type": "string",
+    "format": "date",
+    "mandatory": true
+}
+```
+
+The PID Rulebook gives the PID's `birth_date` the encoding `full-date`, and `issuance_date` and `expiry_date` `tdate` or `full-date`; ISO/IEC 18013-5 does the same for the mDL's `birth_date`, `issue_date` and `expiry_date`. Wallets and verifiers that follow them may refuse such an element issued as a text string, so declare a `format` on every date element of an mDOC credential. The demo `pid-mdoc` configuration declares `date` on all three.
+
+A claim that is not a calendar date or not a valid RFC 3339 date-time (for example `1964-02-30`, or a date-time without an offset) fails validation like any other claim, with `409` when an offer with inline claims is created and `credential_request_denied` at the credential request; the message names the path, for example `/birth_date: must match format "date"`. A `format` on a field of another type is refused with `400` when the configuration is saved. Fields without `format` are issued as before: an mDOC date stays a text string.
+
+When EUDIPLO verifies an mDOC presentation, `full-date` and `tdate` data elements are released as strings, a `full-date` as issued (`1964-08-12`) and a `tdate` in UTC with milliseconds (`2026-11-20T09:00:00.000Z`), so DCQL `values` and claim mappings compare them as strings. Dates nested inside arrays or maps are not converted.

@@ -23,11 +23,13 @@ import { mdocContext } from "../../../../../verifier/presentations/mdoc-context.
 import type { WalletUnitReference } from "../../../../status-list/domain/wallet-unit-reference.js";
 import { StatusListService } from "../../../../status-list/status-list.service.js";
 import type { CredentialConfiguration } from "../../domain/credential-configuration.js";
+import { formattedClaimFields } from "../../utils/derive.js";
 import { buildClaimsByNamespace } from "../../utils/index.js";
 import {
     clampCredentialValidityToCertificate,
     roundedCredentialValidity,
 } from "../credential-time.util.js";
+import { encodeMdocDateClaims } from "./mdoc-date-claims.js";
 
 export interface MdocIssueOptions {
     credentialConfiguration: CredentialConfiguration;
@@ -271,13 +273,39 @@ export class MdocIssuerService {
         return docType;
     }
 
+    /**
+     * Adds the claims per namespace. Claims of fields with a `format` are
+     * encoded as `full-date` (tag 1004) or `tdate` (tag 0); fields without
+     * one keep their JSON value, so a date stays a text string.
+     * @throws InvalidCredentialClaims when a date claim is not a valid date
+     */
     private addClaimsToIssuer(
         issuer: Issuer,
         fields: any,
         defaultNamespace: string,
-        claims: Record<string, any>,
+        inputClaims: Record<string, any>,
     ): void {
         const claimsByNamespace = buildClaimsByNamespace(fields);
+        const dateFields = formattedClaimFields(fields ?? []);
+        let claims = inputClaims;
+        if (dateFields.length > 0) {
+            // The caller's claims stay JSON: other credentials of the same
+            // request may be issued from them.
+            claims = structuredClone(inputClaims);
+            encodeMdocDateClaims(claims, dateFields, (field) => field.path);
+            for (const field of dateFields) {
+                if (
+                    field.namespace !== undefined &&
+                    Object.hasOwn(claimsByNamespace, field.namespace)
+                ) {
+                    encodeMdocDateClaims(
+                        claimsByNamespace[field.namespace],
+                        [field],
+                        (dateField) => dateField.namespacePath,
+                    );
+                }
+            }
+        }
         const namespaceNames = new Set(Object.keys(claimsByNamespace));
         const defaultNamespaceClaims =
             claims && typeof claims === "object" && !Array.isArray(claims)

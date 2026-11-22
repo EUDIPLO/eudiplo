@@ -3,6 +3,10 @@ import * as x509 from "@peculiar/x509";
 import { PinoLogger } from "nestjs-pino";
 import { CertificateChainTooLong } from "../../../shared/utils/certificate-chain-length.util.js";
 import { CertificatePathLimitExceeded } from "../../../shared/utils/certificate-path.util.js";
+import {
+    assertCertificatePathConstraints,
+    CertificatePathConstraintViolation,
+} from "../../../shared/utils/certificate-path-constraints.util.js";
 import { getRevocationServices } from "../../../trust/domain/status-list-signers.js";
 import {
     describeDiscardedTrustLists,
@@ -63,6 +67,27 @@ function invalidX5cDetail(error: any): string {
     return error instanceof CertificateChainTooLong
         ? error.message
         : `Failed to parse x5c chain: ${error?.message ?? error}`;
+}
+
+/**
+ * Why the part of `path` a trust decision in `matchMode` rests on breaks an
+ * RFC 5280 constraint ({@link assertCertificatePathConstraints}), or
+ * undefined: up to the listed certificate at the path end, only the signing
+ * certificate when it is pinned.
+ */
+function pathConstraintViolation(
+    path: x509.X509Certificate[],
+    matchMode: MatchedTrustedEntity["matchMode"],
+): CertificatePathConstraintViolation | undefined {
+    try {
+        assertCertificatePathConstraints(
+            matchMode === "leaf-pinned" ? path.slice(0, 1) : path,
+        );
+        return undefined;
+    } catch (error) {
+        if (error instanceof CertificatePathConstraintViolation) return error;
+        throw error;
+    }
 }
 
 /**
@@ -292,6 +317,20 @@ export class CredentialChainValidationService {
             };
         }
 
+        // 8) RFC 5280 constraints of the trusted part of the path
+        const violation = pathConstraintViolation(
+            path,
+            matchedEntity.matchMode,
+        );
+        if (violation) {
+            return {
+                verified: false,
+                matchedEntity: null,
+                error: "certificate_path_invalid",
+                errorDetails: violation.message,
+            };
+        }
+
         this.logger.debug(
             `Certificate chain validated successfully. Matched entity: ${matchedEntity.entity.entityId ?? "unknown"}, mode: ${matchedEntity.matchMode}`,
         );
@@ -465,13 +504,25 @@ export class CredentialChainValidationService {
 
         // Same rule as for credentials: a CA certificate must be the path
         // end, a pinned one the leaf or path end per pinnedCertMode.
-        if (
-            await this.x509v.matchesStatusListSigner(
+        const signerMatchMode = await this.x509v.statusListSignerMatchMode(
+            result.path,
+            matchedEntity,
+            policy.pinnedCertMode ?? "leaf",
+        );
+        if (signerMatchMode) {
+            // The constraints were checked for the first entity the path
+            // matched, which can be another one that pins the signing
+            // certificate; check the part this signer's match rests on.
+            const violation = pathConstraintViolation(
                 result.path,
-                matchedEntity,
-                policy.pinnedCertMode ?? "leaf",
-            )
-        ) {
+                signerMatchMode,
+            );
+            if (violation) {
+                this.logger.warn(
+                    `Status list chain validation failed for TrustedEntity ${entityId}: ${violation.message}`,
+                );
+                return false;
+            }
             return true;
         }
 

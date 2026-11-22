@@ -41,7 +41,7 @@ export const CONFIG_FORMATS = {
     CredentialConfig: {
         slug: "credential-config",
         file: "CredentialConfigFile",
-        version: 4,
+        version: 5,
     },
     PresentationConfig: {
         slug: "presentation-config",
@@ -154,7 +154,9 @@ function hasTrustListFormat(spec: Record<string, unknown>): boolean {
  * v4 moved it to `key-chain-defaults.json`), and a presentation configuration
  * with `allowedOrigins` or an `etsi_tl` value with `format`, which
  * PresentationConfig v4 added, or with `registration_cert.purpose` or
- * `registration_cert.privacy_policy`, which PresentationConfig v5 added.
+ * `registration_cert.privacy_policy`, which PresentationConfig v5 added, and a
+ * credential configuration with `format` on a claim field, which
+ * CredentialConfig v5 added.
  */
 export function bareFileVersion(
     kind: ConfigResourceKind,
@@ -166,6 +168,7 @@ export function bareFileVersion(
         return "type" in spec ? 2 : 1;
     }
     if (kind === "KeyChainDefaults") return "authorizationServer" in spec ? 2 : 1;
+    if (kind === "CredentialConfig") return hasClaimFieldFormat(spec.fields) ? 5 : 1;
     if (kind === "PresentationConfig") {
         const certificate = spec.registration_cert;
         if (
@@ -191,6 +194,17 @@ export function bareFileVersion(
             : 1;
     }
     return 1;
+}
+/** Whether a claim field, nested ones included, declares a `format` (CredentialConfig v5). */
+function hasClaimFieldFormat(fields: unknown): boolean {
+    return (
+        Array.isArray(fields) &&
+        fields.some(
+            (field) =>
+                object(field) &&
+                ("format" in field || hasClaimFieldFormat(field.children)),
+        )
+    );
 }
 export interface ConfigMigrationIssue {
     severity: "warning" | "required-input" | "error";
@@ -939,6 +953,16 @@ const CONFIG_MIGRATIONS: readonly ConfigMigration[] = [
     },
     credentialConfigV2ToV3,
     credentialConfigV3ToV4,
+    {
+        id: "credential-config-v5-claim-date-format",
+        kind: "CredentialConfig",
+        from: 4,
+        to: 5,
+        // v5 only adds the optional `format` (`date`, `date-time`) on string
+        // claim fields: a v4 spec is a valid v5 spec, and fields without it
+        // issue as before (mDOC dates as text strings).
+        migrate: (spec) => ({ spec }),
+    },
     presentationConfigV1ToV2,
     {
         id: "presentation-config-v3-typed-claim-values",

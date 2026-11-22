@@ -238,6 +238,9 @@ function buildLeafSchema(field: ClaimFieldDefinition): JsonSchema {
         ...sanitizeClaimConstraints(field.constraints).constraints,
         type: field.type,
     };
+    if (field.format) {
+        leafSchema.format = field.format;
+    }
 
     const title = getDisplayTitle(field.display);
     if (title) {
@@ -603,6 +606,17 @@ export function buildJsonSchema(fields: ClaimFieldDefinition[]): JsonSchema {
     return root;
 }
 
+/** The path of a field's value within its namespace: without a leading namespace segment. */
+function namespaceRelativePath(
+    field: ClaimFieldDefinition,
+    namespace: string,
+): Segment[] {
+    return field.path.length > 0 &&
+        segmentToKey(field.path[0] ?? "") === namespace
+        ? field.path.slice(1)
+        : field.path;
+}
+
 export function buildClaimsByNamespace(
     fields: ClaimFieldDefinition[],
 ): Record<string, Record<string, unknown>> {
@@ -626,11 +640,7 @@ export function buildClaimsByNamespace(
             setOwn(byNamespace, namespace, namespaceTarget);
         }
 
-        const normalizedPath =
-            field.path.length > 0 &&
-            segmentToKey(field.path[0] ?? "") === namespace
-                ? field.path.slice(1)
-                : field.path;
+        const normalizedPath = namespaceRelativePath(field, namespace);
 
         if (normalizedPath.length === 0) {
             continue;
@@ -640,4 +650,36 @@ export function buildClaimsByNamespace(
     }
 
     return byNamespace;
+}
+
+/** A claim field that declares a `format`, with where its value is found. */
+export interface FormattedClaimField {
+    format: NonNullable<ClaimFieldDefinition["format"]>;
+    /** Path of the value in the claims, as validated against {@link buildJsonSchema}. */
+    path: Segment[];
+    /** Namespace of the value in {@link buildClaimsByNamespace}, if the field has one. */
+    namespace?: string;
+    /** Path of the value within that namespace. */
+    namespacePath: Segment[];
+}
+
+/** Every field, nested ones included, that declares a `format`. */
+export function formattedClaimFields(
+    fields: ClaimFieldDefinition[],
+): FormattedClaimField[] {
+    const result: FormattedClaimField[] = [];
+    for (const field of flattenFields(fields)) {
+        if (!field.format || field.path.length === 0) continue;
+        const namespace = getFieldNamespace(field);
+        result.push({
+            format: field.format,
+            path: field.path,
+            namespace,
+            namespacePath:
+                namespace === undefined
+                    ? field.path
+                    : namespaceRelativePath(field, namespace),
+        });
+    }
+    return result;
 }
