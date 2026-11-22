@@ -897,9 +897,13 @@
   border: 1px solid var(--mat-sys-outline-variant);
 }
 
-.pre-config-button {
+// Fill the form from the config's defaults, or from JSON
+.claim-actions {
+  flex-wrap: wrap;
   margin-top: 16px;
+}
 
+.pre-config-button {
   mat-icon {
     margin-right: 8px;
   }

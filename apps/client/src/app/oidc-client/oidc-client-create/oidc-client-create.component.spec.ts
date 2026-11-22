@@ -359,6 +359,21 @@ describe('OidcClientCreateComponent', () => {
     expect(component.scopes.length).toBe(20);
   });
 
+  it('counts a removed redirect URI or scope as unsaved changes', async () => {
+    const { component } = await render(null, {});
+    component.addRedirectUri();
+    component.addScope();
+
+    component.form.markAsPristine();
+    component.removeRedirectUri(1);
+    expect(component.hasUnsavedChanges()).toBe(true);
+
+    component.form.markAsPristine();
+    expect(component.hasUnsavedChanges()).toBe(false);
+    component.removeScope(1);
+    expect(component.hasUnsavedChanges()).toBe(true);
+  });
+
   it('marks a top-level claims query that no scope has any more', async () => {
     const { component } = await render('c7d1', { getById: vi.fn().mockResolvedValue(stored) });
     expect(component.staleClaimsFrom).toBe('');

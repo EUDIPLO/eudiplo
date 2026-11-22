@@ -21,7 +21,7 @@ describe("Client Resource-Level Access Control (e2e)", () => {
 
     beforeAll(async () => {
         // Use the shared test setup that creates tenant, keys, certs, and configs
-        ctx = await setupIssuanceTestApp();
+        ctx = await setupIssuanceTestApp({ exceptionFilter: true });
         adminToken = ctx.authToken;
 
         // Add some presentation configs that are needed for the tests
@@ -233,6 +233,144 @@ describe("Client Resource-Level Access Control (e2e)", () => {
                 });
 
             expect(res2.status).toBe(201);
+        });
+    });
+
+    describe("Session Access", () => {
+        const get = (path: string, token: string) =>
+            request(ctx.app.getHttpServer())
+                .get(path)
+                .set("Authorization", `Bearer ${token}`);
+        const post = (path: string, token: string, body: object = {}) =>
+            request(ctx.app.getHttpServer())
+                .post(path)
+                .set("Authorization", `Bearer ${token}`)
+                .send(body);
+        const presentation = (token: string, requestId: string) =>
+            post("/verifier/offer", token, {
+                response_type: ResponseType.URI,
+                requestId,
+            })
+                .expect(201)
+                .then((res) => res.body.session as string);
+        const issuance = (token: string, id: string) =>
+            post("/issuer/offer", token, {
+                response_type: ResponseType.URI,
+                credentialConfigurationIds: [id],
+                flow: "pre_authorized_code",
+            })
+                .expect(201)
+                .then((res) => res.body.session as string);
+
+        let allowed: string[];
+        let other: string[];
+
+        beforeAll(async () => {
+            allowed = [
+                await presentation(restrictedClientToken, "pid-no-hook"),
+                await issuance(restrictedClientToken, "pid-no-key"),
+            ];
+            other = [
+                await presentation(unrestrictedClientToken, "pid"),
+                await issuance(unrestrictedClientToken, "citizen"),
+            ];
+        });
+
+        test("restricted client lists and counts only sessions of its allowed configs", async () => {
+            const list = await get(
+                "/session?pageSize=100",
+                restrictedClientToken,
+            ).expect(200);
+            const ids = list.body.items.map((item: { id: string }) => item.id);
+            expect(ids).toEqual(expect.arrayContaining(allowed));
+            for (const id of other) expect(ids).not.toContain(id);
+
+            const stats = await get(
+                "/session/stats",
+                restrictedClientToken,
+            ).expect(200);
+            expect(
+                stats.body.presentation.total + stats.body.issuance.total,
+            ).toBe(list.body.total);
+        });
+
+        test("restricted client reads, cancels and deletes no session of another config", async () => {
+            for (const id of other) {
+                await get(`/session/${id}`, restrictedClientToken).expect(404);
+                await get(`/session/${id}/logs`, restrictedClientToken).expect(
+                    404,
+                );
+                await get(
+                    `/session/${id}/events`,
+                    restrictedClientToken,
+                ).expect(404);
+                await get(
+                    `/session/${id}/credential-status`,
+                    restrictedClientToken,
+                ).expect(404);
+                await post(
+                    `/session/${id}/cancel`,
+                    restrictedClientToken,
+                ).expect(404);
+                await request(ctx.app.getHttpServer())
+                    .delete(`/session/${id}`)
+                    .set("Authorization", `Bearer ${restrictedClientToken}`)
+                    .expect(204);
+                // Still there, and still open.
+                const session = await get(
+                    `/session/${id}`,
+                    unrestrictedClientToken,
+                ).expect(200);
+                expect(session.body.status).toBe("active");
+            }
+        });
+
+        test("restricted client reads the sessions of its allowed configs", async () => {
+            for (const id of allowed) {
+                await get(`/session/${id}`, restrictedClientToken).expect(200);
+                await get(`/session/${id}/logs`, restrictedClientToken).expect(
+                    200,
+                );
+            }
+            await get(
+                `/session/${allowed[1]}/credential-status`,
+                restrictedClientToken,
+            ).expect(200);
+        });
+
+        test("restricted client cancels and deletes the sessions of its allowed configs", async () => {
+            const cancelled = await presentation(
+                restrictedClientToken,
+                "pid-no-hook",
+            );
+            await post(
+                `/session/${cancelled}/cancel`,
+                restrictedClientToken,
+            ).expect(204);
+            const session = await get(
+                `/session/${cancelled}`,
+                restrictedClientToken,
+            ).expect(200);
+            expect(session.body.status).toBe("cancelled");
+
+            const deleted = await issuance(restrictedClientToken, "pid-no-key");
+            await request(ctx.app.getHttpServer())
+                .delete(`/session/${deleted}`)
+                .set("Authorization", `Bearer ${restrictedClientToken}`)
+                .expect(204);
+            await get(`/session/${deleted}`, unrestrictedClientToken).expect(
+                404,
+            );
+        });
+
+        test("unrestricted client sees the sessions of all configs", async () => {
+            const list = await get(
+                "/session?pageSize=100",
+                unrestrictedClientToken,
+            ).expect(200);
+            expect(
+                list.body.items.map((item: { id: string }) => item.id),
+            ).toEqual(expect.arrayContaining([...allowed, ...other]));
         });
     });
 

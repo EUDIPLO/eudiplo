@@ -8,6 +8,7 @@ import { provideRouter, Router, RouterLink } from '@angular/router';
 import { NEVER, of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppComponent, isLoginUrl } from './app.component';
+import { SignedInAccountService } from './services/signed-in-account.service';
 import { type AuthMode, FrontendConfigService } from './services/frontend-config.service';
 import { ApiService } from './core';
 import { VersionService } from './services/version.service';
@@ -339,11 +340,15 @@ describe('AppComponent help menu', () => {
 });
 
 describe('AppComponent account menu', () => {
-  function openAccountMenu(clientId: string | undefined) {
+  function openAccountMenu(
+    clientId: string | undefined,
+    account?: Partial<SignedInAccountService>
+  ) {
     TestBed.configureTestingModule({
       imports: [AppComponent],
       providers: [
         provideRouter([]),
+        ...(account ? [{ provide: SignedInAccountService, useValue: account }] : []),
         {
           provide: ApiService,
           useValue: {
@@ -391,6 +396,34 @@ describe('AppComponent account menu', () => {
   it('shows a placeholder initial while the client is unknown', () => {
     const { fixture, trigger } = openAccountMenu(undefined);
     expect(trigger.textContent?.trim()).toBe('?');
+    fixture.destroy();
+  });
+
+  it('names the tenant the signed-in client acts in', () => {
+    const { fixture, panel } = openAccountMenu('local-admin', {
+      isSso: false,
+      name: 'local-admin',
+      tenant: 'acme',
+    });
+
+    expect(panel.querySelector('.account-summary-tenant')?.textContent?.trim()).toBe(
+      'Tenant: acme'
+    );
+    fixture.destroy();
+  });
+
+  it('names a user signed in with SSO, who has no client ID', () => {
+    const { fixture, trigger, panel } = openAccountMenu(undefined, {
+      isSso: true,
+      name: 'alice',
+      tenant: 'acme',
+    });
+
+    expect(trigger.textContent?.trim()).toBe('A');
+    expect(panel.querySelector('.account-summary-client')?.textContent?.trim()).toBe('User: alice');
+    expect(panel.querySelector('.account-summary-tenant')?.textContent?.trim()).toBe(
+      'Tenant: acme'
+    );
     fixture.destroy();
   });
 });

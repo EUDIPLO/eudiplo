@@ -60,6 +60,20 @@ export class OidcService {
   }
 
   /**
+   * A name of the signed-in user from the access token (`preferred_username`, `email` or
+   * `name`), for the account menu; undefined without an SSO session or such a claim.
+   */
+  get userName(): string | undefined {
+    if (!this.authenticated) return undefined;
+    const claims = this.keycloak?.tokenParsed as Record<string, unknown> | undefined;
+    for (const claim of ['preferred_username', 'email', 'name']) {
+      const value = claims?.[claim];
+      if (typeof value === 'string' && value.trim()) return value;
+    }
+    return undefined;
+  }
+
+  /**
    * Called from APP_INITIALIZER on every page load.
    * Restores an OIDC session (including handling the PKCE callback code) if config is stored.
    */

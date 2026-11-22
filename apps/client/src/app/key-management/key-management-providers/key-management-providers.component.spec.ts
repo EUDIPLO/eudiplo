@@ -3,8 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { provideRouter } from '@angular/router';
-import { of } from 'rxjs';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ConfigOwnershipService } from '../../config-portability/config-ownership.service';
 import { expectAvailable, expectUnavailable } from '../../common/unavailable-action.testing';
@@ -17,14 +16,23 @@ describe('KeyManagementProvidersComponent tenant KMS configuration', () => {
   let snackBar: { open: ReturnType<typeof vi.fn> };
   let roles: string[];
 
+  let dialog: { open: ReturnType<typeof vi.fn> };
+
   function create(): KeyManagementProvidersComponent {
     return new KeyManagementProvidersComponent(
       keyChainService as never,
       snackBar as never,
-      { open: vi.fn() } as never,
+      dialog as never,
       { hasRole: (role: string[]) => role.some((r) => roles.includes(r)) } as never
     );
   }
+
+  /** The save the editor runs on Apply Changes before it closes. */
+  function editorSave(): (json: unknown) => Promise<boolean> {
+    return dialog.open.mock.lastCall?.[1]?.data.save;
+  }
+
+  const tenantProviders = { providers: [{ id: 'vault', type: 'vault' }] };
 
   beforeEach(() => {
     keyChainService = {
@@ -38,7 +46,12 @@ describe('KeyManagementProvidersComponent tenant KMS configuration', () => {
       deleteTenantKmsConfig: vi.fn(),
     };
     snackBar = { open: vi.fn() };
+    dialog = { open: vi.fn() };
     roles = [];
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('lists providers without loading the tenant configuration for key managers', async () => {
@@ -97,9 +110,82 @@ describe('KeyManagementProvidersComponent tenant KMS configuration', () => {
     roles = ['tenant:admin'];
     keyChainService['updateTenantKmsConfig'].mockRejectedValue({ statusCode: 403 });
 
-    await create().saveTenantConfig({ providers: [] } as never);
+    expect(await create().saveTenantConfig({ providers: [] } as never)).toBe(false);
 
     expect(snackBar.open.mock.lastCall?.[0]).toContain('tenant:admin');
+  });
+
+  it('saves from the editor and keeps the edit there when the save fails', async () => {
+    roles = ['tenant:admin'];
+    keyChainService['getTenantKmsConfig'].mockResolvedValue({
+      tenantConfig: tenantProviders,
+      effectiveConfig: tenantProviders,
+    });
+    keyChainService['updateTenantKmsConfig'].mockRejectedValue({
+      statusCode: 400,
+      message: 'providers.0.type must be one of db, vault',
+    });
+    const component = create();
+    await component.refresh();
+
+    await component.openTenantConfigEditor();
+    const edited = { providers: [{ id: 'vault', type: 'nope' }] };
+
+    // false keeps the editor open with the edited JSON.
+    expect(await editorSave()(edited)).toBe(false);
+    expect(keyChainService['updateTenantKmsConfig']).toHaveBeenCalledWith(edited);
+    expect(snackBar.open.mock.lastCall?.[0]).toBe(
+      'Failed to save tenant KMS configuration: providers.0.type must be one of db, vault'
+    );
+    expect(component.tenantConfig).toEqual(tenantProviders);
+    expect(component.isSavingConfig).toBe(false);
+  });
+
+  it('closes the editor once the configuration is saved and reloads the providers', async () => {
+    roles = ['tenant:admin'];
+    keyChainService['updateTenantKmsConfig'].mockResolvedValue({
+      tenantConfig: tenantProviders,
+      effectiveConfig: tenantProviders,
+    });
+    const component = create();
+    await component.refresh();
+    await component.openTenantConfigEditor();
+    keyChainService['getProviders'].mockClear();
+
+    expect(await editorSave()(tenantProviders)).toBe(true);
+
+    expect(component.hasTenantConfig).toBe(true);
+    expect(component.tenantConfig).toEqual(tenantProviders);
+    expect(snackBar.open.mock.lastCall?.[0]).toBe('Tenant KMS configuration saved');
+    expect(keyChainService['getProviders']).toHaveBeenCalledOnce();
+  });
+
+  it('asks before resetting to the global configuration and resets only when confirmed', async () => {
+    roles = ['tenant:admin'];
+    keyChainService['getTenantKmsConfig'].mockResolvedValue({
+      tenantConfig: tenantProviders,
+      effectiveConfig: tenantProviders,
+    });
+    keyChainService['deleteTenantKmsConfig'].mockResolvedValue(undefined);
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const component = create();
+    await component.refresh();
+
+    await component.resetTenantConfig();
+
+    expect(confirm.mock.lastCall?.[0]).toContain(
+      "Delete the tenant KMS configuration and use the global configuration? The tenant's providers and their stored credentials are removed."
+    );
+    expect(confirm.mock.lastCall?.[0]).toContain('This cannot be undone.');
+    expect(keyChainService['deleteTenantKmsConfig']).not.toHaveBeenCalled();
+
+    confirm.mockReturnValue(true);
+    await component.resetTenantConfig();
+
+    expect(keyChainService['deleteTenantKmsConfig']).toHaveBeenCalledOnce();
+    expect(snackBar.open.mock.lastCall?.[0]).toBe(
+      'Tenant KMS configuration reset to global defaults'
+    );
   });
 
   it("shows the backend's reason when saving or resetting fails for another reason", async () => {
@@ -107,7 +193,13 @@ describe('KeyManagementProvidersComponent tenant KMS configuration', () => {
     const conflict = { statusCode: 409, message: 'The KMS configuration is file-managed.' };
     keyChainService['updateTenantKmsConfig'].mockRejectedValue(conflict);
     keyChainService['deleteTenantKmsConfig'].mockRejectedValue(conflict);
+    keyChainService['getTenantKmsConfig'].mockResolvedValue({
+      tenantConfig: tenantProviders,
+      effectiveConfig: tenantProviders,
+    });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
     const component = create();
+    await component.refresh();
 
     await component.saveTenantConfig({ providers: [] } as never);
     expect(snackBar.open.mock.lastCall?.[0]).toBe(
@@ -172,9 +264,15 @@ describe('KeyManagementProvidersComponent tenant KMS configuration', () => {
     });
     const fixture = TestBed.createComponent(KeyManagementProvidersComponent);
     // MatDialogModule in the component's imports provides its own MatDialog.
+    // Stands in for Apply Changes: the editor saves before it closes.
     const openDialog = vi
       .spyOn(fixture.debugElement.injector.get(MatDialog), 'open')
-      .mockReturnValue({ afterClosed: () => of({ providers: [] }) } as never);
+      .mockImplementation((_component, config) => {
+        void (config?.data as { save: (json: unknown) => Promise<boolean> }).save({
+          providers: [],
+        });
+        return {} as never;
+      });
     fixture.detectChanges();
     const button = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
       'button[aria-label="Show tenant config JSON"]'
@@ -284,6 +382,31 @@ describe('KeyManagementProvidersComponent tenant KMS configuration', () => {
     );
     button.click();
     expect(openDialog).not.toHaveBeenCalled();
+  });
+
+  it('offers to use the global configuration only while tenant providers are set', async () => {
+    roles = ['tenant:admin'];
+    const { fixture, button } = render();
+    await ownershipAnswered(fixture, button);
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(fixture.componentInstance.tenantConfigLoaded).toBe(true);
+    });
+    const page = fixture.nativeElement as HTMLElement;
+    const reset = () =>
+      [...page.querySelectorAll('button')].find((b) =>
+        b.textContent?.includes('Use global configuration')
+      );
+    expect(reset()).toBeUndefined();
+
+    keyChainService['getTenantKmsConfig'].mockResolvedValue({
+      tenantConfig: tenantProviders,
+      effectiveConfig: tenantProviders,
+    });
+    await fixture.componentInstance.refresh();
+    fixture.detectChanges();
+
+    expect(reset()).toBeDefined();
   });
 
   it('locks the editor again when a refresh fails after a successful load', async () => {

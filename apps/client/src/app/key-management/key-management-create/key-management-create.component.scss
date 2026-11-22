@@ -61,3 +61,21 @@ app-config-ownership-notice {
   justify-content: center;
   padding: 48px;
 }
+
+// Warns that rotating a standalone key replaces a certificate issued by a CA
+.rotation-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 0;
+  padding: 12px 16px;
+  border-radius: var(--mat-sys-corner-medium);
+  background: color-mix(in srgb, var(--eudiplo-warning) 10%, var(--mat-sys-surface));
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-body-medium);
+
+  mat-icon {
+    flex: none;
+    color: var(--eudiplo-warning);
+  }
+}

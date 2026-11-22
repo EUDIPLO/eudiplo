@@ -52,12 +52,21 @@ import {
     credentialStatusScope,
     readOnlySessionTypes,
     sessionChangeScope,
+    sessionConfigLimits,
     sessionReadScope,
 } from "./session-scope.js";
 
 /** How the session reads treat a client with only `sessions:read` for a type. */
 const READ_ONLY_NOTE =
     "A client that reads sessions of a type through `sessions:read` but cannot cancel or delete them (that needs `issuance:offer` or `presentation:request`, and `issuance:offer` or `issuance:manage` for issuance sessions, `presentation:request` or `presentation:manage` for presentation sessions) does not get the sessions of that type that a wallet can still redeem or answer (open status, not consumed): they are left out of the list and answer 404, since their ID is enough to redeem or answer them.";
+
+/** How the session endpoints treat a client with `allowedIssuanceConfigs` or `allowedPresentationConfigs`. */
+const CONFIG_LIMITS_NOTE =
+    "A client limited to some configurations (`allowedIssuanceConfigs`, `allowedPresentationConfigs`) gets only the sessions of those configurations: the others are left out of the list and the counts and answer 404.";
+
+/** The 404 of a session the caller may not access. */
+const NOT_FOUND_NOTE =
+    "No session with this ID in the tenant, or a session of another type than the client's roles cover or of a configuration outside the client's limits";
 
 /** The fields `readOnlySessionView` leaves out, for the OpenAPI description. */
 const OMITTED_FIELDS = [...BEARER_FIELDS, "credentialPayload.tx_code"]
@@ -81,7 +90,7 @@ export class SessionController {
      */
     @ApiOperation({
         summary: "Get sessions (paginated)",
-        description: READ_ONLY_NOTE,
+        description: `${READ_ONLY_NOTE} ${CONFIG_LIMITS_NOTE}`,
     })
     @ApiResponse({ status: 200, type: PaginatedSessionResponseDto })
     @Get()
@@ -91,7 +100,11 @@ export class SessionController {
     ): Promise<PaginatedSessionResponseDto> {
         return this.sessions.listForTenant(
             token.entity!.id,
-            { ...query, hideOpen: readOnlySessionTypes(token) },
+            {
+                ...query,
+                hideOpen: readOnlySessionTypes(token),
+                configLimits: sessionConfigLimits(token),
+            },
             sessionReadScope(token),
         );
     }
@@ -102,7 +115,7 @@ export class SessionController {
     @ApiOperation({
         summary: "Get session counts per type and status",
         description:
-            "Counts all stored sessions of the tenant, not one page, optionally only those created in a time range. Only the session types the caller may read are included.",
+            "Counts all stored sessions of the tenant, not one page, optionally only those created in a time range. Only the session types and, for a client limited to some configurations, the configurations the caller may read are included.",
     })
     @ApiResponse({ status: 200, type: SessionStatsResponseDto })
     @Get("stats")
@@ -116,6 +129,7 @@ export class SessionController {
                 tenantId,
                 sessionReadScope(token),
                 query,
+                sessionConfigLimits(token),
             ),
             this.sessionConfig.getEffectiveConfig(tenantId),
         ]);
@@ -129,9 +143,10 @@ export class SessionController {
     @ApiParam({ name: "id", description: "The session ID", type: String })
     @ApiOperation({
         summary: "Get a session",
-        description: `${READ_ONLY_NOTE} It gets the other sessions of that type without ${OMITTED_FIELDS}.`,
+        description: `${READ_ONLY_NOTE} It gets the other sessions of that type without ${OMITTED_FIELDS}. ${CONFIG_LIMITS_NOTE}`,
     })
     @ApiResponse({ status: 200, type: Session })
+    @ApiResponse({ status: 404, description: NOT_FOUND_NOTE })
     @Get(":id")
     async getSession(
         @Param("id") id: string,
@@ -142,6 +157,7 @@ export class SessionController {
             id,
             sessionReadScope(token),
             readOnlySessionTypes(token),
+            sessionConfigLimits(token),
         );
         // API keys of the webhooks the session calls are write-only.
         const redacted = redactSecrets(
@@ -163,7 +179,11 @@ export class SessionController {
     @Delete(":id")
     // sessions:read only reads sessions.
     @Secured([Role.IssuanceOffer, Role.PresentationRequest])
-    @ApiResponse({ status: 204, description: "Session deleted" })
+    @ApiResponse({
+        status: 204,
+        description:
+            "Session deleted. A missing session, a session of another type than the client's roles cover and a session of a configuration outside the client's limits are left untouched and answer 204 as well.",
+    })
     @HttpCode(204)
     deleteSession(
         @Param("id") id: string,
@@ -173,6 +193,7 @@ export class SessionController {
             user.entity!.id,
             id,
             sessionChangeScope(user),
+            sessionConfigLimits(user),
         );
     }
 
@@ -190,7 +211,7 @@ export class SessionController {
     })
     @ApiBody({ type: CancelSessionDto, required: false })
     @ApiResponse({ status: 204, description: "Session cancelled" })
-    @ApiResponse({ status: 404, description: "Session not found" })
+    @ApiResponse({ status: 404, description: NOT_FOUND_NOTE })
     @ApiResponse({
         status: 409,
         description:
@@ -208,6 +229,7 @@ export class SessionController {
                 tenantId: token.entity!.id,
                 sessionId: id,
                 scope: sessionChangeScope(token),
+                limits: sessionConfigLimits(token),
                 reason: body.reason,
                 actor: resolveAuditActor(token),
                 requestMeta,
@@ -227,6 +249,7 @@ export class SessionController {
     @ApiParam({ name: "id", description: "The session ID", type: String })
     @ApiOperation({ summary: "Get session log entries" })
     @ApiResponse({ status: 200, type: [SessionLogEntryResponseDto] })
+    @ApiResponse({ status: 404, description: NOT_FOUND_NOTE })
     @Get(":id/logs")
     async getSessionLogs(
         @Param("id") id: string,
@@ -237,6 +260,7 @@ export class SessionController {
             id,
             sessionReadScope(token),
             readOnlySessionTypes(token),
+            sessionConfigLimits(token),
         );
         return this.logStoreService.findBySessionId(id);
     }
@@ -260,7 +284,7 @@ export class SessionController {
             "Lists one entry per issued credential that carries a status, with its current value in the status list and the list's bits per entry. The list is empty when no credential of the session carries a status. Change the status with `POST /session/revoke`.",
     })
     @ApiResponse({ status: 200, type: [CredentialStatusDto] })
-    @ApiResponse({ status: 404, description: "Session not found" })
+    @ApiResponse({ status: 404, description: NOT_FOUND_NOTE })
     async getCredentialStatus(
         @Param("id") id: string,
         @Token() token: TokenPayload,
@@ -270,6 +294,7 @@ export class SessionController {
             id,
             credentialStatusScope(token),
             readOnlySessionTypes(token),
+            sessionConfigLimits(token),
         );
         return this.statusListService.getSessionStatus(token.entity!.id, id);
     }
@@ -286,7 +311,7 @@ export class SessionController {
     @ApiOperation({
         summary: "Change the status of the credentials issued in a session",
         description:
-            "Revokes (1), suspends (2) or reinstates (0) all credentials issued in the session, optionally only those of one credential configuration. Revocation is final.",
+            "Revokes (1), suspends (2) or reinstates (0) all credentials issued in the session, optionally only those of one credential configuration. Revocation is final. A client limited to some credential configurations (`allowedIssuanceConfigs`) changes only credentials of those; a request that covers a credential of another configuration answers 409 and changes nothing.",
     })
     @ApiResponse({ status: 204, description: "Status updated" })
     @ApiResponse({
@@ -301,10 +326,14 @@ export class SessionController {
     @ApiResponse({
         status: 409,
         description:
-            "No status entry for the session, or a revoked credential would be reinstated or suspended",
+            "No status entry for the session, one of a credential configuration outside the client's limits, or a revoked credential would be reinstated or suspended",
     })
     @HttpCode(204)
     revokeAll(@Body() value: StatusUpdateDto, @Token() user: TokenPayload) {
-        return this.statusListService.updateStatus(value, user.entity!.id);
+        return this.statusListService.updateStatus(
+            value,
+            user.entity!.id,
+            sessionConfigLimits(user).issuance,
+        );
     }
 }

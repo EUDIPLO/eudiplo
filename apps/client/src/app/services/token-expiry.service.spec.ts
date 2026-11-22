@@ -6,6 +6,7 @@ import { vi } from 'vitest';
 
 import { ApiRefusalService, ApiService } from '../core';
 import { TokenExpiryService } from './token-expiry.service';
+import { UnsavedChangesService } from './unsaved-changes.service';
 
 const revokedText =
   'Your API client no longer has access, for example because it was deleted or its secret changed. Log in with a client that has access; unsaved changes on this page will be lost.';
@@ -84,6 +85,7 @@ describe('TokenExpiryService', () => {
   afterEach(() => {
     service.stop();
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   it('warns once per token before a token without refresh expires', async () => {
@@ -152,6 +154,33 @@ describe('TokenExpiryService', () => {
     expect(api.logoutExpired).toHaveBeenCalledOnce();
     expect(api.logout).not.toHaveBeenCalled();
     expect(router.navigate).toHaveBeenCalledWith(['/login'], { queryParams: undefined });
+  });
+
+  it('keeps the session and shows the notice again when the user stays with unsaved changes', async () => {
+    const confirm = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
+    TestBed.inject(UnsavedChangesService).shown({ hasUnsavedChanges: () => true });
+    api.getAuthenticationStatus = () => false;
+    const expiredText =
+      'Your session has expired. Log in again; unsaved changes on this page will be lost.';
+
+    await service.check();
+    // The action closes the snackbar; its dismissal is reported only after it has left the screen.
+    notices[0].action.next();
+
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(api.logoutExpired).not.toHaveBeenCalled();
+    expect(api.logout).not.toHaveBeenCalled();
+    expect(router.navigate).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(texts()).toEqual([expiredText, expiredText]));
+
+    // The notice that left the screen does not take the new one with it.
+    notices[0].dismissed.next({ dismissedByAction: true });
+    await service.check();
+    expect(texts()).toEqual([expiredText, expiredText]);
+
+    confirm.mockReturnValue(true);
+    notices[1].action.next();
+    expect(api.logoutExpired).toHaveBeenCalledOnce();
   });
 
   it('returns to the page after logging in again as the client of the expired session', async () => {

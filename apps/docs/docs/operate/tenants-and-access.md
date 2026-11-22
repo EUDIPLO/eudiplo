@@ -116,7 +116,24 @@ across all tenants: an ID that is already taken answers `409`.
 `allowedIssuanceConfigs` limits the credential configuration IDs the client may
 put in offers, `allowedPresentationConfigs` the presentation configurations it
 may request. Other IDs are rejected with `403`; an empty or missing list allows
-all. The web client's client form changes a list only when it can load the
+all. The lists also limit the sessions the client gets from the session
+endpoints (`/api/session`): it lists, counts, reads, follows, cancels and
+deletes only presentation sessions of an allowed presentation configuration and
+issuance sessions whose offered credential configurations are all allowed, and
+reads the credential status only of those. Other sessions are left out of the
+list and the counts, answer `404` and are not deleted, also when the client
+holds `sessions:read`. So a client limited to a `pid` presentation
+configuration does not see what wallets presented for an `mdl` configuration of
+the same tenant. Issuance sessions without stored offered configurations are
+outside every `allowedIssuanceConfigs` list: sessions a wallet started without
+an offer, and sessions created before 9.0. Changing credential status
+(`POST /api/session/revoke`) goes by the credentials instead of the session, so
+it still works after the session was cleaned up: a request that covers a
+credential of a configuration outside `allowedIssuanceConfigs` answers `409`
+and changes nothing. The lists do not limit reading the configurations
+themselves.
+
+The web client's client form changes a list only when it can load the
 configurations to choose from: listing credential configurations needs
 `issuance:manage`, listing presentation configurations `presentation:manage` or
 `presentation:request`. Without that role, or when the list fails to load, the
