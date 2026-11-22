@@ -398,8 +398,9 @@ describe('SessionManagementListComponent', () => {
     const element = fixture.nativeElement as HTMLElement;
 
     for (const area of ['.header-actions', '.empty-state']) {
-      const links = [...element.querySelectorAll(`${area} a`)].map((a) => a.textContent?.trim());
-      expect(links, area).toEqual(['add Presentation Request']);
+      // Only the verification side stays a link.
+      const links = [...element.querySelectorAll(`${area} a`)].map((a) => a.getAttribute('href'));
+      expect(links, area).toEqual(['/offer/presentation']);
       const locked = fixture.debugElement
         .queryAll(By.css(`${area} button`))
         .find((button) => button.nativeElement.textContent.includes('Issuance Offer'))!;
