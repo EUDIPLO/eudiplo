@@ -4,7 +4,7 @@ title: Upgrade
 
 # Upgrading EUDIPLO
 
-Minor and patch releases are drop-in: change the image tag and restart. A new major version can need changes to your configuration, integration or deployment; its upgrade guide lists every one of them.
+Minor and patch releases are drop-in: change the image tag and restart. The exceptions are fixes that close a security or conformance gap: [Fixes in 10.x that change behavior](./10.x-fixes.md) lists them. A new major version can need changes to your configuration, integration or deployment; its upgrade guide lists every one of them.
 
 ## Upgrade guides
 
@@ -12,7 +12,6 @@ Upgrade one major version at a time and read every guide on the way.
 
 | From | To | Guide |
 | --- | --- | --- |
-| 10.x | 11.0 | [10.x to 11.0](./10.x-to-11.0.md) (unreleased): TS3 1.5 status claims of wallet and key attestations are checked, revocation with the wallet unit follows the wallet attestation too, credential expiry bounded by the attestations' status maintenance period |
 | 9.x | 10.0 | [9.x to 10.0](./9.x-to-10.0.md): callers grant only their own roles to clients and people, `credentials:status` instead of `issuance:offer` for credential status changes, unique client IDs, webhook time and size limits, checked webhook redirects, stricter inline webhook validation, sandbox registrar integration removed, new configuration file formats, key chain imports remove an omitted description and rotation settings, key chain rotation needs `intervalDays`, unchanged key chain documents are not applied again, unchanged `!generate` clients keep their secret |
 | 8.x | 9.0 | [8.x to 9.0](./8.x-to-9.0.md): object storage, outbound URL and schema synchronization defaults, TLS fails closed, stricter OAuth and OID4VP, role-scoped sessions, key export and KMS configuration, session expiry, presentation webhooks, new configuration file formats |
 | 7.x | 8.0 | [7.x to 8.0](./7.x-to-8.0.md): canonical `$schema` envelopes for configuration files |
@@ -24,7 +23,7 @@ Upgrade one major version at a time and read every guide on the way.
 
 ## Upgrade procedure
 
-1. **Read the guide** of every major version you cross and the [release notes](https://github.com/EUDIPLO/eudiplo/releases) of the versions in between.
+1. **Read the guide** of every major version you cross, [Fixes in 10.x that change behavior](./10.x-fixes.md) when the target is a 10.x release, and the [release notes](https://github.com/EUDIPLO/eudiplo/releases) of the versions in between.
 2. **Back up** everything you would need to go back:
     - the database (for PostgreSQL `pg_dump`; for SQLite a copy of the database file taken while EUDIPLO is stopped),
     - the configuration folder (`CONFIG_FOLDER`; `config/` in a CLI project) and the env file,
@@ -52,7 +51,7 @@ Images tagged `:main` are development builds. Their database migrations can stil
 
 EUDIPLO follows [Semantic Versioning](https://semver.org/):
 
-- **Breaking changes only in major versions.** Removed or renamed API fields and endpoints, changed defaults, stricter validation, new required environment variables and changed configuration formats wait for a major release, which comes with an upgrade guide. A breaking change in a minor or patch release is a bug; please [report it](https://github.com/EUDIPLO/eudiplo/issues/new?template=bug_report.md).
+- **Breaking changes only in major versions.** Removed or renamed API fields and endpoints, changed defaults, stricter validation, new required environment variables and changed configuration formats wait for a major release, which comes with an upgrade guide. A breaking change in a minor or patch release is a bug; please [report it](https://github.com/EUDIPLO/eudiplo/issues/new?template=bug_report.md). The exception is a fix that closes a security or conformance gap: it ships in a minor or patch release and is listed in [Fixes in 10.x that change behavior](./10.x-fixes.md).
 - **Deprecation before removal** where feasible: a minor release deprecates, the next major removes.
 - **Database migrations are automatic.** No manual SQL is needed.
 - **Configuration files are versioned per resource.** A release imports files of its own and older format versions and upgrades them; it rejects files with a newer version. Files exported from a new major can therefore not be imported into the previous one.
