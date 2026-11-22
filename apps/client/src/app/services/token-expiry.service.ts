@@ -3,6 +3,7 @@ import { MatSnackBar, MatSnackBarRef, TextOnlySnackBar } from '@angular/material
 import { NavigationEnd, Router } from '@angular/router';
 import { filter, merge, Subscription } from 'rxjs';
 import { ApiRefusalService, ApiService } from '../core';
+import { UnsavedChangesService } from './unsaved-changes.service';
 
 const checkIntervalMs = 30_000;
 const warnBeforeMs = 5 * 60_000;
@@ -29,7 +30,8 @@ export class TokenExpiryService implements OnDestroy {
     private readonly apiService: ApiService,
     private readonly refusals: ApiRefusalService,
     private readonly router: Router,
-    private readonly snackBar: MatSnackBar
+    private readonly snackBar: MatSnackBar,
+    private readonly unsavedChanges: UnsavedChangesService
   ) {}
 
   start(): void {
@@ -165,6 +167,13 @@ export class TokenExpiryService implements OnDestroy {
    * returns to this page.
    */
   private logInAgain(expired: boolean): void {
+    if (!this.unsavedChanges.confirmLeave()) {
+      // The user stays to copy unsaved changes. The action closes the notice, so open it again
+      // at once instead of with the next check.
+      this.notice = undefined;
+      void this.check();
+      return;
+    }
     const returnUrl = this.router.url;
     // After an expired SSO session the next SSO sign-in is the same person's.
     const sameSso = expired && this.apiService.usesSso();

@@ -51,6 +51,7 @@ import {
 } from '../session-management.service';
 import { maySessionChange, SESSION_CHANGER_ROLES } from '../session-roles';
 import { sessionStatusClass } from '../session-outcome';
+import { sessionDeleteQuestion } from '../session-delete-question';
 import { JwtService } from '../../services/jwt.service';
 import { LoadErrorComponent } from '../../common/load-error.component';
 import { getApiErrorMessage } from '../../utils/error-message';
@@ -522,13 +523,7 @@ export class SessionManagementListComponent implements OnInit, AfterViewInit {
     if (this.runningBulkAction) return;
     const sessions = [...this.selection.selected];
     const count = sessions.length;
-    if (
-      count === 0 ||
-      !confirm(
-        `Delete ${count} ${count === 1 ? 'session' : 'sessions'}? Credentials issued in them ` +
-          'keep their status. This cannot be undone.'
-      )
-    ) {
+    if (count === 0 || !confirm(sessionDeleteQuestion(sessions))) {
       return;
     }
 

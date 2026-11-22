@@ -585,7 +585,7 @@
                         />
                         <mat-icon matSuffix>autorenew</mat-icon>
                         <mat-hint>How often the signing key is replaced</mat-hint>
-                        <mat-error>Enter 1 to 3650 days</mat-error>
+                        <mat-error>{{ rotationDaysError }}</mat-error>
                       </mat-form-field>
                     }
 
@@ -601,7 +601,7 @@
                       />
                       <mat-icon matSuffix>event</mat-icon>
                       <mat-hint>How long each signing certificate is valid</mat-hint>
-                      <mat-error>Enter 1 to 3650 days</mat-error>
+                      <mat-error>{{ rotationDaysError }}</mat-error>
                     </mat-form-field>
                   </div>
                 </mat-card-content>

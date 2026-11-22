@@ -61,6 +61,25 @@
           <mat-icon>edit_note</mat-icon>
           Show tenant config JSON
         </button>
+        @if (tenantConfigLoaded && hasTenantConfig) {
+          <button
+            matButton
+            type="button"
+            [disabled]="!!tenantConfigUnavailableReason"
+            disabledInteractive
+            (click)="resetTenantConfig()"
+            [matTooltip]="
+              tenantConfigUnavailableReason ||
+              'Delete the tenant providers and use the global configuration'
+            "
+            appConfigManaged
+            managedKind="KmsConfig"
+            managedResourceId="kms"
+          >
+            <mat-icon>settings_backup_restore</mat-icon>
+            Use global configuration
+          </button>
+        }
       </mat-card-actions>
     </mat-card>
   }

@@ -1,10 +1,11 @@
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ConfigOwnershipDirective } from '../../config-portability/config-ownership.directive';
 import { keyChainDeleteQuestion } from '../key-chain-delete-question';
+import { keyChainRotateQuestion } from '../key-chain-rotate-question';
 import { KeyChainService } from '../key-chain.service';
 import { KeyManagementListComponent } from './key-management-list.component';
 
@@ -95,6 +96,52 @@ describe('KeyManagementListComponent delete', () => {
     expect(window.confirm).toHaveBeenCalledWith(keyChainDeleteQuestion('signing', 'PID signing'));
     expect(keyChainService.delete).toHaveBeenCalledTimes(1);
     expect(component.deletingIds.has('signing')).toBe(false);
+  });
+});
+
+describe('KeyManagementListComponent rotate', () => {
+  const keyChain = { id: 'signing', description: 'PID signing', type: 'standalone' };
+  const item = { id: 'signing', rotationEnabled: true, keyChain } as never;
+  let keyChainService: { rotate: ReturnType<typeof vi.fn> };
+  let component: KeyManagementListComponent;
+  const event = { stopPropagation: vi.fn() } as unknown as Event;
+
+  beforeEach(() => {
+    keyChainService = { rotate: vi.fn().mockResolvedValue(undefined) };
+    component = new KeyManagementListComponent(
+      keyChainService as never,
+      { open: vi.fn() } as never
+    );
+    vi.spyOn(component, 'loadAllKeys').mockResolvedValue();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('asks the shared question first and does not rotate when it is declined', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    await component.rotateItem(item, event);
+
+    expect(window.confirm).toHaveBeenCalledWith(keyChainRotateQuestion(keyChain as never));
+    expect(keyChainService.rotate).not.toHaveBeenCalled();
+  });
+
+  it('sends one request when Rotate is selected twice', async () => {
+    let finish!: () => void;
+    keyChainService.rotate.mockReturnValue(new Promise<void>((done) => (finish = done)));
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    const first = component.rotateItem(item, event);
+    expect(component.rotatingIds.has('signing')).toBe(true);
+    await component.rotateItem(item, event);
+    finish();
+    await first;
+
+    expect(window.confirm).toHaveBeenCalledOnce();
+    expect(keyChainService.rotate).toHaveBeenCalledTimes(1);
+    expect(component.rotatingIds.has('signing')).toBe(false);
   });
 });
 

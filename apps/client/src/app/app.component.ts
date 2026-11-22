@@ -22,12 +22,14 @@ import { NavigationEnd, Router, RouterModule, RouterOutlet } from '@angular/rout
 import { Subscription } from 'rxjs';
 import { filter } from 'rxjs/operators';
 import { JwtService, Role } from './services/jwt.service';
+import { SignedInAccountService } from './services/signed-in-account.service';
 import { ThemeService } from './services/theme.service';
 import { VersionService } from './services/version.service';
 import { FrontendConfigService } from './services/frontend-config.service';
 import { RoleChangeService } from './services/role-change.service';
 import { TokenExpiryService } from './services/token-expiry.service';
 import { NavSectionsService } from './services/nav-sections.service';
+import { UnsavedChangesService } from './services/unsaved-changes.service';
 import { NavSectionComponent } from './common/nav-section/nav-section.component';
 import { DiploLogoComponent } from './common/diplo-logo.component';
 import { ApiService } from './core';
@@ -69,6 +71,8 @@ export function isLoginUrl(url: string): boolean {
 })
 export class AppComponent implements OnInit, OnDestroy {
   logout() {
+    // Single sign-on leaves the client at once, so the question comes before the logout.
+    if (!this.unsavedChanges.confirmLeave()) return;
     this.apiService.logout();
     this.router.navigate(['/login']);
   }
@@ -80,6 +84,7 @@ export class AppComponent implements OnInit, OnDestroy {
   private breakpointSubscription?: Subscription;
 
   private readonly frontendConfig = inject(FrontendConfigService);
+  readonly unsavedChanges = inject(UnsavedChangesService);
 
   constructor(
     private router: Router,
@@ -148,9 +153,12 @@ export class AppComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** First letter of the signed-in client, shown in the account button. */
+  /** Who is signed in and for which tenant, for the account menu. */
+  readonly account = inject(SignedInAccountService);
+
+  /** First letter of the signed-in client or user, shown in the account button. */
   get accountInitial(): string {
-    return (this.apiService.getClientId() ?? '').charAt(0).toUpperCase() || '?';
+    return (this.account.name ?? '').charAt(0).toUpperCase() || '?';
   }
 
   /** Whether the Administration section has an entry for the caller on this instance. */

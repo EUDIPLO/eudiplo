@@ -1507,12 +1507,19 @@ export class StatusListService implements OnApplicationBootstrap {
      * Update the status of a session and its credential configuration.
      * @param value The status update DTO.
      * @param tenantId The tenant ID.
+     * @param allowedCredentialConfigurationIds The credential configurations
+     * the caller is limited to (`allowedIssuanceConfigs`); none or an empty
+     * list is no limit. Decided by the status entries, which outlive their
+     * session, so a limited client still revokes after session cleanup.
      * @throws BadRequestException when the status does not fit one of the
      * session's status lists; no entry is changed then.
+     * @throws ConflictException when no entry matches, or one of them is of a
+     * configuration outside the limit; no entry is changed then.
      */
     async updateStatus(
         value: StatusUpdateDto,
         tenantId: string,
+        allowedCredentialConfigurationIds?: readonly string[] | null,
     ): Promise<void> {
         const entries = await this.statusMappingRepository.findBy({
             tenantId,
@@ -1523,7 +1530,16 @@ export class StatusListService implements OnApplicationBootstrap {
                 credentialConfigurationId: value.credentialConfigurationId,
             }),
         });
-        if (entries.length === 0) {
+        // Entries outside the caller's limit answer like missing ones.
+        const outsideLimit =
+            !!allowedCredentialConfigurationIds?.length &&
+            entries.some(
+                (entry) =>
+                    !allowedCredentialConfigurationIds.includes(
+                        entry.credentialConfigurationId,
+                    ),
+            );
+        if (entries.length === 0 || outsideLimit) {
             throw new ConflictException(
                 `No status mapping found for session ${value.sessionId} and credential configuration ${value.credentialConfigurationId}`,
             );

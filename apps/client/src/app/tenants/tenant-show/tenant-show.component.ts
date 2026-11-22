@@ -20,6 +20,7 @@ import { copyToClipboard } from '../../utils/copy-to-clipboard';
 import { formatDuration } from '../../utils/duration';
 import { getApiErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
+import { confirmTenantDelete } from '../tenant-delete-confirmation';
 
 /** One setting of the tenant; without a value of its own, the instance's default applies. */
 interface Setting {
@@ -58,6 +59,8 @@ export class TenantShowComponent implements OnInit {
   tenant?: TenantResponseDto;
   /** Set when the tenant could not be loaded, so the page does not stay empty. */
   loadError = '';
+  /** True while the delete request runs, so it is not sent twice. */
+  deleting = false;
   /** The tenant's settings, built once it has loaded. */
   settingGroups: SettingGroup[] = [];
 
@@ -103,20 +106,20 @@ export class TenantShowComponent implements OnInit {
     );
   }
 
+  /** Deletes the tenant once its ID was typed, then returns to the list. */
   async deleteTenant(): Promise<void> {
     const tenant = this.tenant;
-    if (
-      !tenant ||
-      !confirm(`Delete tenant "${tenant.name}" and all its data? This cannot be undone.`)
-    ) {
-      return;
-    }
+    if (!tenant || this.deleting) return;
+    if (!confirmTenantDelete(this.snackBar, tenant)) return;
+    this.deleting = true;
     try {
       await tenantControllerDeleteTenant({ path: { id: tenant.id } });
     } catch (error) {
       console.error('Error deleting tenant:', error);
       openErrorSnackBar(this.snackBar, getApiErrorMessage(error, 'Failed to delete tenant'));
       return;
+    } finally {
+      this.deleting = false;
     }
     this.snackBar.open('Tenant deleted successfully', 'Close', { duration: 3000 });
     await this.router.navigate(['../'], { relativeTo: this.route });
