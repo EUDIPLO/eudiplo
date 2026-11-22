@@ -38,6 +38,12 @@ It supports all core flows of electronic attribute attestations—**issuing**,
 compatible with multiple
 [wallets](./apps/docs/docs/reference/wallet-compatibility.md).
 
+Wallet developers can test their wallet against EUDIPLO on the hosted
+[Wallet QA](https://github.com/EUDIPLO/wallet-qa) instance at
+[conformance.eudiplo.dev](https://conformance.eudiplo.dev), with nothing to
+install besides the wallet. Published results are on the
+[results page](https://conformance.eudiplo.dev/results).
+
 EUDIPLO is built for production: secure key management, scalable database
 support, and clean API boundaries.
 
