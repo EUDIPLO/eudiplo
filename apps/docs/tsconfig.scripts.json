@@ -10,6 +10,7 @@
     "scripts/generate-roles-docs.ts",
     "scripts/schema-docs/**/*.ts",
     "scripts/roles-docs/**/*.ts",
+    "src/components/WalletQaResults/model*.ts",
     "scripts/check-sidebar-orphans.ts"
   ]
 }

@@ -19,7 +19,7 @@ pnpm --filter @eudiplo/docs start              # live reload on http://127.0.0.1
 | `pnpm --filter @eudiplo/docs build` | Runs `prebuild`, then a production build. Broken links and anchors fail the build. |
 | `pnpm --filter @eudiplo/docs serve` | Serves the last build on port 3003 |
 | `pnpm --filter @eudiplo/docs lint` | markdownlint (`apps/docs/.markdownlint.json`); `lint:fix` fixes what it can |
-| `pnpm --filter @eudiplo/docs test` | Sidebar orphan check and the schema and roles generator tests |
+| `pnpm --filter @eudiplo/docs test` | Sidebar orphan check, the schema and roles generator tests and the Wallet QA results model tests |
 | `pnpm --filter @eudiplo/docs typecheck:scripts` | Type-checks the generator scripts |
 
 The search widget reads `ALGOLIA_APP_ID`, `ALGOLIA_SEARCH_API_KEY`, `ALGOLIA_INDEX_NAME` and `DOCSEARCH_AGENT_ID`; local builds work without them.
@@ -71,6 +71,8 @@ Prefer a reference generated from code over a hand-written table. `prebuild` wri
 | Roles and the endpoints that accept them | `apps/backend/src/auth/roles/role.enum.ts` (member comments are the descriptions) and the `@Secured` decorators of the controllers | `scripts/generate-roles-docs.ts` → `_generated/roles.json` | `<RoleReference table="roles" />` or `table="endpoints"` (`src/components/RoleReference`) |
 
 To document a new Zod schema, add `{ name, schema }` to `registry.ts`, run `prebuild`, import `SchemaReference` from `@site/src/components/SchemaReference` and place the component. Field descriptions come from the schema's `.describe(…)` texts, so improve the description in the backend schema instead of the page. An unknown `name` fails the build. Descriptions that are part of a published configuration file format can't change without a new format version (`pnpm schemas:check-contract` fails); correct those with the entry's `descriptions` overrides in `registry.ts` until the next format version. Text in backticks renders as inline code in the generated tables.
+
+`<WalletQaResults />` (`src/components/WalletQaResults`) is the one table not built at build time: it loads the published results of the hosted Wallet QA instance (`https://conformance.eudiplo.dev/v1/published`) in the reader's browser, so it is missing from the build output and `llms.txt`. The page that shows it links the results page and the feed for that reason. The rules that turn the feed into table cells are in `model.ts` next to the component, with tests in `model.test.ts`.
 
 Generate other references that can be derived from code too, instead of writing a table by hand. The published JSON schemas for configuration files are a separate pipeline: [Configuration schemas](./configuration-schemas.md).
 
