@@ -70,7 +70,7 @@
               <mat-hint>This instance accepts client credentials.</mat-hint>
             }
             @if (detectedMode === 'unreachable') {
-              <mat-hint class="unreachable-hint">Could not check this instance.</mat-hint>
+              <mat-hint>Could not check this instance.</mat-hint>
             }
             @if (loginForm.get('apiUrl')?.invalid && loginForm.get('apiUrl')?.touched) {
               <mat-error>
@@ -79,11 +79,19 @@
             }
           </mat-form-field>
 
-          @if (detectedMode === 'unreachable') {
+          <!-- Stays while the instance is checked again, so Retry keeps the focus and takes the click. -->
+          @if (instanceProblem) {
             <div class="notice mode-hint warning instance-problem">
               <mat-icon aria-hidden="true">cloud_off</mat-icon>
               <span role="alert">{{ instanceProblem }}</span>
-              <button matButton type="button" (click)="retryInstanceCheck()">
+              <button
+                matButton
+                type="button"
+                (click)="retryInstanceCheck()"
+                [disabled]="recheckingInstance"
+                disabledInteractive
+                [matTooltip]="recheckingInstance ? 'Checking the instance…' : ''"
+              >
                 <mat-icon>refresh</mat-icon>
                 Retry
               </button>
@@ -206,14 +214,11 @@
               [matTooltip]="loginUnavailableReason"
               class="login-button"
             >
-              @if (isLoading) {
+              @if (isLoading || checkingInstanceForSubmit) {
                 <mat-spinner diameter="20" class="button-spinner"> </mat-spinner>
-              }
-              @if (!isLoading) {
-                <span>{{ submitLabel }}</span>
-              }
-              @if (isLoading) {
                 <span>{{ loadingLabel }}</span>
+              } @else {
+                <span>{{ submitLabel }}</span>
               }
             </button>
 

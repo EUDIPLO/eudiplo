@@ -58,6 +58,51 @@ test('says an instance could not be reached and checks it again on Retry', async
   ).toBeVisible();
 });
 
+test('Retry takes a click that comes straight from the instance field', async ({ page }) => {
+  let down = true;
+  const checks: string[] = [];
+  // The check after the instance is back waits until the test lets it go on.
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => (release = resolve));
+  await page.route('**/.well-known/oauth-authorization-server', async (route) => {
+    checks.push(route.request().url());
+    if (down) return route.abort('connectionrefused');
+    await released;
+    return route.fallback();
+  });
+  await page.goto('/login');
+  const instance = page.getByLabel('EUDIPLO Instance');
+  await instance.fill(resolvedE2EConfig.apiBaseUrl);
+  // Enter signs in with SSO: the check fails, and the page says so and keeps the focus in the field.
+  await instance.press('Enter');
+
+  const problem = page.locator('.instance-problem');
+  const retry = problem.getByRole('button', { name: 'Retry' });
+  await expect(problem.getByRole('alert')).toContainText('Could not reach');
+  // The snackbar comes once the check of the sign-in is done, so no check is running now.
+  await expect(page.locator('mat-snack-bar-container')).toContainText('Could not reach');
+  await expect(instance).toBeFocused();
+  const checksBefore = checks.length;
+
+  // The click takes the focus out of the field, which starts a check. Retry must stay under the
+  // pointer while it runs, and the click must not lead to a second request.
+  down = false;
+  await retry.click();
+  await expect(retry).toHaveAttribute('aria-disabled', 'true');
+  await expect(problem.getByRole('alert')).toContainText('Could not reach');
+  expect(checks).toHaveLength(checksBefore + 1);
+
+  release();
+  await expect(problem).toHaveCount(0);
+  await expect(
+    page.getByText(
+      /SSO is available for this instance\.|This instance accepts client credentials\./
+    )
+  ).toBeVisible();
+  await expect(instance).toBeFocused();
+  expect(checks).toHaveLength(checksBefore + 1);
+});
+
 test('login with client credentials redirects to dashboard', async ({ page }) => {
   test.skip(
     !hasAuthCredentials,

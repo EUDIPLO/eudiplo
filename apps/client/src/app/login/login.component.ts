@@ -78,19 +78,14 @@ const TOKEN_ERROR_HINTS = new Map<string, string>([
 ]);
 
 /**
- * Why a sign-in with client credentials failed and what to check, with the
- * token endpoint's own reason when it gives one. The built-in server answers a
- * wrong secret with a Nest body (`error: "Unauthorized"`), another identity
- * provider with an RFC 6749 error code, so the status decides first.
- */
-/**
  * Why the instance check could not tell whether `url` offers SSO. Every EUDIPLO instance serves
  * its authorization server metadata, with or without SSO, so a failed request means the instance
- * was not reached or is not one.
+ * was not reached or is not one. A failure with a success status is an answer that is not JSON,
+ * for example the start page a web server sends for every address.
  */
 export function instanceCheckFailure(error: unknown, url: string): string {
   const status = (error as { status?: unknown } | undefined)?.status;
-  if (status === 404) {
+  if (status === 404 || (typeof status === 'number' && status >= 200 && status < 300)) {
     return `${url} answered, but it is not an EUDIPLO instance. Check the address.`;
   }
   if (typeof status === 'number' && status >= 500) {
@@ -102,6 +97,12 @@ export function instanceCheckFailure(error: unknown, url: string): string {
   return `Could not reach ${url}. Check the address, that the instance is running and that it allows this console's address (CORS).`;
 }
 
+/**
+ * Why a sign-in with client credentials failed and what to check, with the
+ * token endpoint's own reason when it gives one. The built-in server answers a
+ * wrong secret with a Nest body (`error: "Unauthorized"`), another identity
+ * provider with an RFC 6749 error code, so the status decides first.
+ */
 function signInFailure(error: unknown): string {
   const http = error instanceof OAuth2HttpError ? error : undefined;
   const other = error as { status?: unknown; message?: unknown; name?: unknown } | undefined;
@@ -220,8 +221,17 @@ export class LoginComponent implements OnInit, OnDestroy {
   isDevelopmentMode = false;
   /** What the instance check found; `unreachable` when it could not tell, see `instanceProblem`. */
   detectedMode: null | 'loading' | 'local' | 'oidc' | 'unreachable' = null;
-  /** Why the last instance check could not tell whether the instance offers SSO. */
+  /**
+   * Why the last instance check could not tell whether the instance offers SSO. It stays while
+   * the same instance is checked again, so the alert and its Retry do not leave under the focus
+   * or the pointer; a check that answers, a check of another instance and an invalid instance
+   * URL clear it.
+   */
   instanceProblem = '';
+  /** The instance URL `instanceProblem` is about. */
+  private instanceProblemUrl?: string;
+  /** A click on Retry waits for its check, so a second click does not report the outcome twice. */
+  private retryingInstanceCheck = false;
   selectedLoginMode: 'sso' | 'client' = 'sso';
   private discoveredIssuer?: string;
   private discoveredUiClientId?: string;
@@ -246,8 +256,11 @@ export class LoginComponent implements OnInit, OnDestroy {
   private keepClientCredentialsTab = false;
   /** The last check of whether an instance offers SSO; an earlier one that answers late is ignored. */
   private instanceCheck?: InstanceCheck;
-  /** A submit on the SSO tab waits for the instance check. */
-  private waitingForInstanceCheck = false;
+  /**
+   * The tab of a submit that waits for the instance check. A check that ends meanwhile leaves
+   * the Client ID and Secret tab open for such a submit, also where the instance offers SSO.
+   */
+  private waitingForInstanceCheck?: 'sso' | 'client';
   /**
    * The instance the link chose that the user agreed to sign in at, and what it receives then,
    * so a retry does not ask again.
@@ -284,10 +297,7 @@ export class LoginComponent implements OnInit, OnDestroy {
     }
     this.initializeForm();
 
-    const initialApiUrl = this.loginForm.get('apiUrl')?.value;
-    if (initialApiUrl) {
-      void this.detectMode(initialApiUrl);
-    }
+    this.checkInstanceInField();
 
     // Auto-login if all required params are provided via URL
     this.autoLoginIfParamsProvided();
@@ -504,10 +514,40 @@ export class LoginComponent implements OnInit, OnDestroy {
   }
 
   onApiUrlBlur(): void {
-    const url = this.loginForm.get('apiUrl')?.value;
-    if (url) {
-      void this.detectMode(url);
+    this.checkInstanceInField();
+  }
+
+  /** Checks the instance the field holds. A missing or invalid URL is the field's error only. */
+  private checkInstanceInField(): void {
+    if (this.apiUrlControl.invalid) {
+      this.forgetInstanceCheck();
+      return;
     }
+    void this.detectMode(this.apiUrlControl.value);
+  }
+
+  /** Drops what was found about an instance, and a check still running, as before any check. */
+  private forgetInstanceCheck(): void {
+    this.instanceCheck = undefined;
+    this.detectedMode = null;
+    this.forgetDiscovery();
+    this.clearInstanceProblem();
+    this.syncLoginModeState();
+  }
+
+  /** Drops what an instance said about its single sign-on. */
+  private forgetDiscovery(): void {
+    this.discoveredIssuer = undefined;
+    this.discoveredUiClientId = undefined;
+    this.discoveredProvider = undefined;
+  }
+
+  /** Removes the alert of a failed instance check; focus on its Retry moves to the instance field. */
+  private clearInstanceProblem(): void {
+    if (!this.instanceProblem) return;
+    this.instanceProblem = '';
+    this.instanceProblemUrl = undefined;
+    focusAfterRenderIfLost(this.injector, () => this.apiUrlInput()?.nativeElement);
   }
 
   onLoginTabChange(index: number): void {
@@ -557,6 +597,8 @@ export class LoginComponent implements OnInit, OnDestroy {
    * it, else a new one, and again when the URL changes meanwhile.
    */
   private async instanceInFieldChecked(): Promise<void> {
+    // The caller says that the field needs fixing.
+    if (this.apiUrlControl.invalid) return;
     const url = withoutTrailingSlashes(this.apiUrlControl.value);
     // An instance that could not be reached is checked again.
     if (this.instanceCheck?.url !== url || this.detectedMode === 'unreachable') {
@@ -570,27 +612,32 @@ export class LoginComponent implements OnInit, OnDestroy {
 
   private async checkInstance(check: InstanceCheck): Promise<void> {
     const normalizedUrl = check.url;
+    // A problem found for this instance stays on screen until the check has an answer; the
+    // problem of another instance says nothing about this one.
+    if (this.instanceProblemUrl !== normalizedUrl) this.clearInstanceProblem();
     this.detectedMode = 'loading';
-    this.instanceProblem = '';
 
     try {
       const discovery = await this.apiService.fetchDiscovery(normalizedUrl);
       // A check started since then decides.
       if (this.instanceCheck !== check) return;
 
+      this.clearInstanceProblem();
       if (discovery?.ui_client_id) {
         this.detectedMode = 'oidc';
         // Another instance than the ended session's opens like a fresh login page.
         const sameInstance = normalizedUrl === this.previousSession?.baseUrl;
-        this.selectedLoginMode = this.keepClientCredentialsTab && sameInstance ? 'client' : 'sso';
+        const keepClientTab =
+          (this.keepClientCredentialsTab && sameInstance) ||
+          this.waitingForInstanceCheck === 'client';
+        this.selectedLoginMode = keepClientTab ? 'client' : 'sso';
         this.discoveredIssuer = discovery.issuer;
         this.discoveredUiClientId = discovery.ui_client_id;
         this.discoveredProvider = oidcProviderOf(discovery.oidc_provider);
       } else {
         this.detectedMode = 'local';
         this.selectedLoginMode = 'client';
-        this.discoveredIssuer = undefined;
-        this.discoveredUiClientId = undefined;
+        this.forgetDiscovery();
       }
     } catch (error) {
       if (this.instanceCheck !== check) return;
@@ -598,20 +645,36 @@ export class LoginComponent implements OnInit, OnDestroy {
       // tabs stay as they are, and the page says what failed.
       this.detectedMode = 'unreachable';
       this.instanceProblem = instanceCheckFailure(error, normalizedUrl);
-      this.discoveredIssuer = undefined;
-      this.discoveredUiClientId = undefined;
+      this.instanceProblemUrl = normalizedUrl;
+      this.forgetDiscovery();
     }
 
     this.syncLoginModeState();
   }
 
-  /** Checks the instance in the field again after it could not be reached. */
+  /**
+   * Checks the instance in the field again after it could not be reached. A click that took the
+   * focus out of the instance field started that check already, so it waits for the one running.
+   */
   async retryInstanceCheck(): Promise<void> {
-    const url = this.apiUrlControl.value;
-    if (!url) return;
-    await this.detectMode(url);
-    // The Retry button left with the problem it belonged to.
+    // `disabledInteractive` keeps the button clickable while it looks disabled.
+    if (this.retryingInstanceCheck) return;
+    this.retryingInstanceCheck = true;
+    try {
+      await this.instanceInFieldChecked();
+    } finally {
+      this.retryingInstanceCheck = false;
+    }
+    if (this.detectedMode !== 'unreachable') return;
+    // The alert may read as before, so the snackbar says that the instance was checked again.
+    openErrorSnackBar(this.snackBar, this.instanceProblem);
+    // Safari does not focus a clicked button, so after a click there the focus is nowhere.
     focusAfterRenderIfLost(this.injector, () => this.apiUrlInput()?.nativeElement);
+  }
+
+  /** The instance could not be reached before and is being checked again. */
+  get recheckingInstance(): boolean {
+    return this.detectedMode === 'loading' && !!this.instanceProblem;
   }
 
   get isSsoAvailable(): boolean {
@@ -627,7 +690,13 @@ export class LoginComponent implements OnInit, OnDestroy {
   }
 
   get loadingLabel(): string {
+    if (this.checkingInstanceForSubmit) return 'Checking the instance…';
     return this.selectedLoginMode === 'sso' ? 'Redirecting to SSO...' : 'Authenticating...';
+  }
+
+  /** A submit waits for the check of the instance before it signs in. */
+  get checkingInstanceForSubmit(): boolean {
+    return !this.isLoading && !!this.waitingForInstanceCheck;
   }
 
   /**
@@ -641,11 +710,12 @@ export class LoginComponent implements OnInit, OnDestroy {
         : 'Signing in…';
     }
     // Without a valid instance URL, the URL is what to fix. A submit waits for the check.
-    return this.selectedLoginMode === 'sso' &&
-      this.apiUrlControl.valid &&
-      this.detectedMode === 'loading'
-      ? 'Checking whether this instance offers SSO…'
-      : '';
+    if (this.apiUrlControl.invalid) return '';
+    if (this.selectedLoginMode === 'sso') {
+      return this.detectedMode === 'loading' ? 'Checking whether this instance offers SSO…' : '';
+    }
+    // With client credentials, only a submit for an instance that was not reached waits.
+    return this.waitingForInstanceCheck ? 'Checking the instance…' : '';
   }
 
   private get apiUrlControl(): AbstractControl {
@@ -663,21 +733,7 @@ export class LoginComponent implements OnInit, OnDestroy {
       }
       // A click right after leaving the instance field comes while its check runs, and Enter in
       // the field comes before the URL it holds was checked.
-      this.waitingForInstanceCheck = true;
-      try {
-        await this.instanceInFieldChecked();
-      } finally {
-        this.waitingForInstanceCheck = false;
-      }
-      if (this.apiUrlControl.invalid) {
-        this.showFieldsToFix(this.apiUrlControl);
-        return;
-      }
-      if (this.detectedMode === 'unreachable') {
-        openErrorSnackBar(this.snackBar, this.instanceProblem);
-        this.apiUrlInput()?.nativeElement.focus();
-        return;
-      }
+      if (!(await this.instanceInFieldReached('sso'))) return;
       if (this.selectedLoginMode !== 'sso') {
         this.askForClientCredentials();
         return;
@@ -685,6 +741,9 @@ export class LoginComponent implements OnInit, OnDestroy {
     } else if (this.loginForm.invalid) {
       this.showFieldsToFix(this.loginForm);
       return;
+    } else if (this.instanceProblem) {
+      // The token request would fail at an instance that was not reached, without saying so.
+      if (!(await this.instanceInFieldReached('client'))) return;
     }
 
     const formValue = this.loginForm.value;
@@ -766,6 +825,29 @@ export class LoginComponent implements OnInit, OnDestroy {
       await this.continueToApp();
     }
     this.isLoading = false;
+  }
+
+  /**
+   * Waits for the check of the instance in the field, see `instanceInFieldChecked`, and says
+   * whether it answered. If not, says what to fix and moves focus to the instance field.
+   */
+  private async instanceInFieldReached(tab: 'sso' | 'client'): Promise<boolean> {
+    this.waitingForInstanceCheck = tab;
+    try {
+      await this.instanceInFieldChecked();
+    } finally {
+      this.waitingForInstanceCheck = undefined;
+    }
+    if (this.apiUrlControl.invalid) {
+      this.showFieldsToFix(this.apiUrlControl);
+      return false;
+    }
+    if (this.detectedMode === 'unreachable') {
+      openErrorSnackBar(this.snackBar, this.instanceProblem);
+      this.apiUrlInput()?.nativeElement.focus();
+      return false;
+    }
+    return true;
   }
 
   /**
