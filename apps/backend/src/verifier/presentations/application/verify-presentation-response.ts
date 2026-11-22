@@ -15,6 +15,8 @@ import {
     claimSelections,
     claimSetNotSatisfied,
     claimValueMismatchViolation,
+    credentialTypeViolation,
+    type DcqlCredentialMeta,
     type DcqlCredentialQuery,
     type DcqlCredentialSetQuery,
     findMissingCredentials,
@@ -122,9 +124,11 @@ export class CredentialVerificationFailedError extends Error {
  * with at least one presentation; per credential id, it is part of the query,
  * it has a single presentation unless the query allows `multiple`, its
  * trusted authorities resolve, its claim sets are well formed; then every
- * presented value is verified by its format and must disclose the requested
- * claims (or one claim set) with one of their requested `values`. A value
- * mismatch is reported before missing claims. Once every credential is
+ * presented value is verified by its format, must be of a type the query's
+ * `meta` accepts (`vct_values` or `doctype_value`, exact match) and must
+ * disclose the requested claims (or one claim set) with one of their
+ * requested `values`. A type mismatch is reported first, then a value
+ * mismatch, then missing claims. Once every credential is
  * verified, each entry of the request's transaction data must be authorized
  * by a presented SD-JWT VC it references; an entry that references none of
  * the presented SD-JWT VCs fails the response (see
@@ -225,7 +229,7 @@ export class VerifyPresentationResponse {
                     skewSeconds: session.skewSeconds ?? query.skewSeconds,
                 });
 
-                const format = requestedFormat(
+                const { format, meta } = requestedCredential(
                     session.requestObject!,
                     credentialId,
                 );
@@ -254,6 +258,19 @@ export class VerifyPresentationResponse {
                                 credentialId,
                                 result.failure,
                                 { format, docType: result.docType },
+                            );
+                        }
+                        // The type the wallet was asked for, as in the
+                        // request object (OID4VP 1.0 §8.6).
+                        const typeViolation = credentialTypeViolation(
+                            credentialId,
+                            format,
+                            meta,
+                            result.credentialType,
+                        );
+                        if (typeViolation) {
+                            throw new IncompletePresentationError(
+                                typeViolation,
                             );
                         }
                         if (result.mismatchedClaims.length > 0) {
@@ -317,14 +334,17 @@ export class VerifyPresentationResponse {
     }
 }
 
-/** The credential format of a DCQL credential id as sent in the request object. */
-function requestedFormat(
+/**
+ * The format and `meta` of a DCQL credential id as sent in the request
+ * object. Its `meta` has `<TENANT_URL>` resolved, like the `vct` of a
+ * credential EUDIPLO issued.
+ */
+function requestedCredential(
     requestObject: string,
     credentialId: string,
-): VerifierCredentialFormat {
+): { format: VerifierCredentialFormat; meta?: DcqlCredentialMeta } {
     const payload = decodeJwt<any>(requestObject);
     return payload.dcql_query.credentials.find(
-        (credential: { id: string; format: VerifierCredentialFormat }) =>
-            credential.id === credentialId,
-    ).format;
+        (credential: { id: string }) => credential.id === credentialId,
+    );
 }

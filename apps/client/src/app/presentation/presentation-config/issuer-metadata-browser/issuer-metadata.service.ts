@@ -99,6 +99,46 @@ export interface NormalizedCredential {
   textColor?: string;
 }
 
+/**
+ * A claim path as text: `nationalities[*]` for every element of an array,
+ * `places[0].city` for one element.
+ */
+export function claimPathLabel(path: readonly (string | number | null)[]): string {
+  return path.reduce<string>((label, step) => {
+    if (step === null) return `${label}[*]`;
+    if (typeof step === 'number') return `${label}[${step}]`;
+    return label ? `${label}.${step}` : step;
+  }, '');
+}
+
+/**
+ * The array a claim is requested as, when its path addresses every element
+ * of one (see {@link wholeClaimPaths}); `null` when it is requested as it is.
+ */
+export function requestedArrayLabel(claim: NormalizedClaim): string | null {
+  const steps: readonly (string | null)[] = claim.path;
+  const everyElement = steps.indexOf(null);
+  return everyElement > 0 ? claimPathLabel(claim.path.slice(0, everyElement)) : null;
+}
+
+/**
+ * The paths a generated query asks for. Issuer metadata addresses every
+ * element of an array with a `null` step (`["nationalities", null]`), which
+ * the query form cannot show: such a claim is requested as the array it is in
+ * (`["nationalities"]`), once. So is a claim below the elements:
+ * `["addresses", null, "locality"]` asks for `["addresses"]`.
+ */
+function wholeClaimPaths(claims: NormalizedClaim[]): string[][] {
+  const paths = new Map<string, string[]>();
+  for (const claim of claims) {
+    const steps: readonly (string | null)[] = claim.path;
+    const everyElement = steps.indexOf(null);
+    const path = everyElement === -1 ? claim.path : claim.path.slice(0, everyElement);
+    if (path.length) paths.set(JSON.stringify(path), path);
+  }
+  return [...paths.values()];
+}
+
 @Injectable({ providedIn: 'root' })
 export class IssuerMetadataService {
   constructor(
@@ -188,7 +228,7 @@ export class IssuerMetadataService {
       for (const claim of config.credential_metadata.claims) {
         claims.push({
           path: claim.path,
-          displayName: claim.display?.[0]?.name || claim.path.join('.'),
+          displayName: claim.display?.[0]?.name || claimPathLabel(claim.path),
           mandatory: claim.mandatory || false,
           valueType: claim.value_type,
         });
@@ -295,9 +335,9 @@ export class IssuerMetadataService {
           }
         } else {
           // SD-JWT format uses path arrays
-          cred.claims = selection.selectedClaims.map((claim) => ({
-            path: claim.path,
-          }));
+          // An empty claims list is not a valid query: leave the key out.
+          const paths = wholeClaimPaths(selection.selectedClaims);
+          if (paths.length) cred.claims = paths.map((path) => ({ path }));
         }
       }
 

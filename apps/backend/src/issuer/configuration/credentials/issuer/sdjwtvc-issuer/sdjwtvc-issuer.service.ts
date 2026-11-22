@@ -124,8 +124,13 @@ export class SdjwtvcIssuerService {
         }
 
         const host = this.settings.publicUrl;
+        // Built from the claims being issued: an element path (`null` or an
+        // index) needs the elements of the issued array
         const disclosureFrame =
-            buildDisclosureFrame(credentialConfiguration.fields as any) ?? {};
+            buildDisclosureFrame(
+                credentialConfiguration.fields as any,
+                claims,
+            ) ?? {};
 
         const vct =
             typeof credentialConfiguration.vct === "string"

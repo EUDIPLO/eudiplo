@@ -20,6 +20,16 @@ export interface DcqlClaimQuery {
     values?: DcqlClaimValue[];
 }
 
+/**
+ * The type constraints of a DCQL credential query's `meta` (OID4VP 1.0
+ * Appendices B.2.3 and B.3.5): `vct_values` for `dc+sd-jwt`,
+ * `doctype_value` for `mso_mdoc`.
+ */
+export interface DcqlCredentialMeta {
+    vct_values?: string[];
+    doctype_value?: string;
+}
+
 /** The subset of a DCQL credential query the policy needs. */
 export interface DcqlCredentialQuery {
     id: string;
@@ -37,10 +47,16 @@ export interface DcqlCredentialSetQuery {
 /** Failure code of a disclosed claim whose value is not one of its `values`. */
 export const CLAIM_VALUE_MISMATCH = "claim_value_mismatch";
 
+/**
+ * Failure code of a presented credential whose type (SD-JWT VC `vct`, mdoc
+ * docType) is not one the credential query's `meta` accepts.
+ */
+export const CREDENTIAL_TYPE_MISMATCH = "credential_type_mismatch";
+
 /** Why a presentation does not satisfy the DCQL query. */
 export interface IncompletePresentation {
     /** Stable failure code for the session outcome, when there is one. */
-    code?: typeof CLAIM_VALUE_MISMATCH;
+    code?: typeof CLAIM_VALUE_MISMATCH | typeof CREDENTIAL_TYPE_MISMATCH;
     message: string;
     details: {
         missingCredentials?: string[];
@@ -160,6 +176,54 @@ export function claimValueMismatchViolation(
         message: `Disclosed claim values do not match the requested values for credential '${credentialId}': ${mismatchedClaims.join(", ")}`,
         details: { mismatchedClaims: { [credentialId]: mismatchedClaims } },
     };
+}
+
+/**
+ * The violation reported when a presented credential is not of a type the
+ * credential query's `meta` accepts (OID4VP 1.0 §8.6): an SD-JWT VC whose
+ * `vct` is not one of `vct_values`, or an mdoc whose docType is not
+ * `doctype_value`. Undefined when the type is accepted or `meta` sets no
+ * type for the format.
+ *
+ * Types are compared as exact strings. SD-JWT VC type inheritance
+ * (`extends` in the type metadata) is not followed, because the verifier
+ * does not resolve type metadata: a `vct` that only extends one of
+ * `vct_values` is rejected. The message names the accepted types from the
+ * configuration, never the presented one, which the wallet controls.
+ */
+export function credentialTypeViolation(
+    credentialId: string,
+    format: VerifierCredentialFormat,
+    meta: DcqlCredentialMeta | undefined,
+    presentedType: unknown,
+): IncompletePresentation | undefined {
+    const accepted = acceptedCredentialTypes(format, meta);
+    if (
+        !accepted ||
+        (typeof presentedType === "string" && accepted.includes(presentedType))
+    ) {
+        return undefined;
+    }
+    const field = format === "mso_mdoc" ? "doctype_value" : "vct_values";
+    return {
+        code: CREDENTIAL_TYPE_MISMATCH,
+        message: `Credential '${credentialId}' is not of a requested type: ${field} accepts ${accepted.join(", ")}`,
+        details: {},
+    };
+}
+
+/** The types `meta` accepts for a format, or undefined when it sets none. */
+function acceptedCredentialTypes(
+    format: VerifierCredentialFormat,
+    meta: DcqlCredentialMeta | undefined,
+): string[] | undefined {
+    if (format === "mso_mdoc") {
+        return typeof meta?.doctype_value === "string"
+            ? [meta.doctype_value]
+            : undefined;
+    }
+    const values = meta?.vct_values;
+    return Array.isArray(values) && values.length > 0 ? values : undefined;
 }
 
 /** The violation reported when no `claim_sets` option is satisfied. */

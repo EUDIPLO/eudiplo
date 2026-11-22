@@ -6,7 +6,10 @@ import type {
     CredentialVerificationResult,
     CredentialVerifierFormat,
 } from "../domain/credential-verifier-format.js";
-import { UnknownClaimSetReferenceError } from "../domain/dcql-claim-policy.js";
+import {
+    type DcqlCredentialMeta,
+    UnknownClaimSetReferenceError,
+} from "../domain/dcql-claim-policy.js";
 import { TransactionDataBindingError } from "../domain/transaction-data-binding.js";
 import { InvalidTrustedAuthoritiesError } from "../ports/trust-list-ref-resolver.js";
 import type { PresentationSettings } from "../presentation-settings.js";
@@ -24,7 +27,12 @@ const encode = (value: unknown) =>
     base64url.encode(Buffer.from(JSON.stringify(value)));
 
 function setup(
-    credentials: PresentationQuery["dcql_query"]["credentials"],
+    /** Config credential queries; `meta` only goes into the request object. */
+    credentials: Array<
+        PresentationQuery["dcql_query"]["credentials"][number] & {
+            meta?: DcqlCredentialMeta;
+        }
+    >,
     result: Partial<CredentialVerificationResult> = {},
     request: Record<string, unknown> = {},
     credentialSets?: PresentationQuery["dcql_query"]["credential_sets"],
@@ -315,6 +323,109 @@ describe("VerifyPresentationResponse", () => {
             "Disclosed claim values do not match the requested values for credential 'pid': a",
         );
         expect(error.details).toEqual({ mismatchedClaims: { pid: ["a"] } });
+    });
+
+    describe("credential type", () => {
+        it("rejects a credential whose vct is not in vct_values before claim violations", async () => {
+            const { run } = setup(
+                [{ id: "pid", meta: { vct_values: ["urn:eudi:pid:1"] } }],
+                {
+                    credentialType: "urn:eudi:other:1",
+                    mismatchedClaims: ["a"],
+                    missingClaims: ["b"],
+                },
+            );
+
+            const error = await run({ pid: ["vp"] }).catch((e) => e);
+            expect(error).toBeInstanceOf(IncompletePresentationError);
+            expect(error.code).toBe("credential_type_mismatch");
+            expect(error.message).toBe(
+                "Credential 'pid' is not of a requested type: vct_values accepts urn:eudi:pid:1",
+            );
+            expect(error.message).not.toContain("urn:eudi:other:1");
+        });
+
+        it("rejects every presentation of a multiple query that has another type", async () => {
+            const { run, format } = setup([
+                {
+                    id: "pid",
+                    multiple: true,
+                    meta: { vct_values: ["urn:eudi:pid:1"] },
+                },
+            ]);
+            vi.mocked(format.verify)
+                .mockResolvedValueOnce({
+                    verified: true,
+                    claims: {},
+                    credentialType: "urn:eudi:pid:1",
+                    missingClaims: [],
+                    mismatchedClaims: [],
+                })
+                .mockResolvedValueOnce({
+                    verified: true,
+                    claims: {},
+                    credentialType: "urn:eudi:other:1",
+                    missingClaims: [],
+                    mismatchedClaims: [],
+                });
+
+            const error = await run({ pid: ["vp1", "vp2"] }).catch((e) => e);
+            expect(error.code).toBe("credential_type_mismatch");
+        });
+
+        it("accepts a credential whose vct is one of vct_values", async () => {
+            const { run } = setup(
+                [
+                    {
+                        id: "pid",
+                        meta: { vct_values: ["urn:a", "urn:eudi:pid:1"] },
+                    },
+                ],
+                { credentialType: "urn:eudi:pid:1" },
+            );
+
+            await expect(run({ pid: ["vp"] })).resolves.toEqual([
+                { id: "pid", values: [{ given_name: "Erika" }] },
+            ]);
+        });
+
+        it("rejects a credential without a type when the query sets one", async () => {
+            const { run } = setup([
+                { id: "pid", meta: { vct_values: ["urn:eudi:pid:1"] } },
+            ]);
+
+            const error = await run({ pid: ["vp"] }).catch((e) => e);
+            expect(error.code).toBe("credential_type_mismatch");
+        });
+
+        it("compares with the meta of the request object, with <TENANT_URL> resolved", async () => {
+            const vct = "https://eudiplo.example/issuers/tenant/vct/pid";
+            const { run } = setup(
+                [{ id: "pid", meta: { vct_values: ["<TENANT_URL>/vct/pid"] } }],
+                { credentialType: vct },
+                {
+                    dcql_query: {
+                        credentials: [
+                            {
+                                id: "pid",
+                                format: "dc+sd-jwt",
+                                meta: { vct_values: [vct] },
+                            },
+                        ],
+                    },
+                },
+            );
+
+            await expect(run({ pid: ["vp"] })).resolves.toHaveLength(1);
+        });
+
+        it("accepts any type when the query sets no meta", async () => {
+            const { run } = setup([{ id: "pid" }], {
+                credentialType: "urn:eudi:other:1",
+            });
+
+            await expect(run({ pid: ["vp"] })).resolves.toHaveLength(1);
+        });
     });
 
     it("reports incomplete presentations without a failure code", async () => {
