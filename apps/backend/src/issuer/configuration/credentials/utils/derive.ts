@@ -486,6 +486,39 @@ function concretePaths(path: Segment[], claims: unknown): Segment[][] {
     return selected.map((entry) => entry.path);
 }
 
+/** The `_sd` list of each frame node, with its entries as a set. */
+type SdEntries = WeakMap<
+    object,
+    { list: Array<string | number>; entries: Set<string | number> }
+>;
+
+/** Lists the last segment of `path` in `_sd` of its parent's frame node, once. */
+function listInSd(
+    frame: Record<string, unknown>,
+    listed: SdEntries,
+    path: Segment[],
+): void {
+    const lastSegment = path.at(-1) ?? "";
+    // Only `concretePaths` puts valid indices into a path
+    const leaf = isElementIndex(lastSegment)
+        ? lastSegment
+        : segmentToKey(lastSegment);
+
+    const node = ensureFrameNode(frame, path.slice(0, -1));
+    let sd = listed.get(node);
+    // A path through a segment named `_sd` may have replaced the list
+    if (!sd || node._sd !== sd.list) {
+        const list = Array.isArray(node._sd) ? node._sd : [];
+        sd = { list, entries: new Set(list) };
+        listed.set(node, sd);
+        node._sd = list;
+    }
+    if (!sd.entries.has(leaf)) {
+        sd.entries.add(leaf);
+        sd.list.push(leaf);
+    }
+}
+
 /**
  * The disclosure frame of `@sd-jwt/core` for the disclosable fields.
  * Object properties are listed by name in `_sd` of their parent; array
@@ -501,10 +534,7 @@ export function buildDisclosureFrame(
     const frame: Record<string, unknown> = {};
     // The entries of each `_sd` list, so that an array of N elements is not
     // checked for duplicates in O(N²)
-    const listed = new WeakMap<
-        object,
-        { list: Array<string | number>; entries: Set<string | number> }
-    >();
+    const listed: SdEntries = new WeakMap();
     let hasDisclosure = false;
 
     for (const field of flattenFields(fields)) {
@@ -513,26 +543,7 @@ export function buildDisclosureFrame(
         }
 
         for (const path of concretePaths(field.path, claims)) {
-            const lastSegment = path.at(-1) ?? "";
-            // Only `concretePaths` puts valid indices into a path
-            const leaf = isElementIndex(lastSegment)
-                ? lastSegment
-                : segmentToKey(lastSegment);
-
-            const node = ensureFrameNode(frame, path.slice(0, -1));
-            let sd = listed.get(node);
-            // A path through a segment named `_sd` may have replaced the list
-            if (!sd || node._sd !== sd.list) {
-                const list = Array.isArray(node._sd) ? node._sd : [];
-                sd = { list, entries: new Set(list) };
-                listed.set(node, sd);
-                node._sd = list;
-            }
-            if (!sd.entries.has(leaf)) {
-                sd.entries.add(leaf);
-                sd.list.push(leaf);
-            }
-
+            listInSd(frame, listed, path);
             hasDisclosure = true;
         }
     }
