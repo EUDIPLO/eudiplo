@@ -30,7 +30,7 @@ function iconButton(page: Page, tooltip: string) {
 
 async function createKeyChain(page: Page, choices: string[], description: string) {
   await openNav(page, 'Keys');
-  await iconButton(page, 'Create Key').click();
+  await page.locator('a[mattooltip="Create Key"]').click();
   for (const choice of choices) {
     await page.getByRole('radio', { name: choice }).check();
     await page.getByRole('button', { name: /^(Next|Configure Key)/ }).click();

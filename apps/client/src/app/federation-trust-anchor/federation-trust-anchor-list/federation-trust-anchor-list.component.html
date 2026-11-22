@@ -70,15 +70,15 @@
             </th>
             <td mat-cell *matCellDef="let anchor">
               <span class="row-actions">
-                <button
+                <a
                   matIconButton
                   [routerLink]="anchor.id | itemRoute"
                   matTooltip="View details"
                   [attr.aria-label]="'View trust anchor ' + anchor.id"
                 >
                   <mat-icon>visibility</mat-icon>
-                </button>
-                <button
+                </a>
+                <a
                   matIconButton
                   [routerLink]="anchor.id | itemRoute: 'edit'"
                   matTooltip="Edit"
@@ -88,7 +88,7 @@
                   [attr.aria-label]="'Edit trust anchor ' + anchor.id"
                 >
                   <mat-icon>edit</mat-icon>
-                </button>
+                </a>
                 <button
                   matIconButton
                   (click)="downloadConfig(anchor)"
