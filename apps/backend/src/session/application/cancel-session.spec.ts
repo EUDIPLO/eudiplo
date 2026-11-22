@@ -84,15 +84,36 @@ describe("CancelSession", () => {
         );
     });
 
-    it("looks the session up within the caller's scope", async () => {
+    it("looks the session up within the caller's scope and limits", async () => {
         const { useCase, sessions } = setup();
+        const limits = { presentation: ["age-check"] };
 
-        await useCase.execute({ ...command, scope: "presentation" });
+        await useCase.execute({ ...command, scope: "presentation", limits });
 
         expect(sessions.getForTenant).toHaveBeenCalledWith(
             "tenant-1",
             "session-1",
             "presentation",
+            limits,
+        );
+    });
+
+    it("reads the reason of a failed cancellation within the caller's limits", async () => {
+        const { useCase, sessions } = setup();
+        sessions.updateIfUnconsumed.mockResolvedValue(false);
+        const limits = { presentation: ["age-check"] };
+
+        await expect(
+            useCase.execute({ ...command, scope: "presentation", limits }),
+        ).rejects.toBeInstanceOf(SessionNotCancellable);
+
+        expect(sessions.getForTenant).toHaveBeenCalledTimes(2);
+        expect(sessions.getForTenant).toHaveBeenNthCalledWith(
+            2,
+            "tenant-1",
+            "session-1",
+            "presentation",
+            limits,
         );
     });
 

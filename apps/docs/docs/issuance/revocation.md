@@ -49,7 +49,7 @@ curl -X POST "$EUDIPLO_URL/api/session/revoke" \
 | `credentialConfigurationId` | no | Restrict the change to one credential type. Without it, all credentials of the session change. |
 | `status` | yes | `0` = valid, `1` = revoked, `2` = suspended. |
 
-- The call answers `204 No Content`. It updates every credential of the session and type, including all credentials of a batch; without `credentialConfigurationId` it updates all credentials of the session. If the session has no status entry for the type, it answers `409`. A value that does not fit a list's bits per entry (for example `2` on a 1-bit list) is rejected with `400` before anything is changed.
+- The call answers `204 No Content`. It updates every credential of the session and type, including all credentials of a batch; without `credentialConfigurationId` it updates all credentials of the session. If the session has no status entry for the type, it answers `409`, as it does when the client is [limited to some credential configurations](../operate/tenants-and-access.md#api-clients-with-least-privilege) and the change covers a credential of another one. A value that does not fit a list's bits per entry (for example `2` on a 1-bit list) is rejected with `400` before anything is changed.
 - Allowed roles: `credentials:status` or `issuance:manage`. `issuance:offer` creates offers but cannot change the status.
 - Revocation is final: setting `0` or `2` on a revoked credential is rejected with `409`, and nothing is changed. A suspension can be lifted (`0`) or turned into a revocation (`1`).
 

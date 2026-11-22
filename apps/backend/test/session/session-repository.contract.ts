@@ -618,6 +618,154 @@ export function sessionRepositoryContract(getDataSource: () => DataSource) {
             );
         });
 
+        it("lists and counts only the sessions within the configuration limits", async () => {
+            const repository = getDataSource().getRepository(Session);
+            await repository.delete({ id: sessionId });
+            const tenantId = "tenant-a";
+            const ids = {
+                pidPresentation: randomUUID(),
+                mdlPresentation: randomUUID(),
+                pidIssuance: randomUUID(),
+                pidAndMdlIssuance: randomUUID(),
+                mdlIssuance: randomUUID(),
+                legacyIssuance: randomUUID(),
+                emptyIssuance: randomUUID(),
+            };
+            await repository.save([
+                { id: ids.pidPresentation, tenantId, requestId: "pid" },
+                { id: ids.mdlPresentation, tenantId, requestId: "mdl" },
+                {
+                    id: ids.pidIssuance,
+                    tenantId,
+                    credentialConfigurationIds: ["pid"],
+                },
+                {
+                    id: ids.pidAndMdlIssuance,
+                    tenantId,
+                    credentialConfigurationIds: ["pid", "mdl"],
+                },
+                {
+                    id: ids.mdlIssuance,
+                    tenantId,
+                    credentialConfigurationIds: ["mdl"],
+                },
+                // Created before the configuration ids were stored.
+                { id: ids.legacyIssuance, tenantId },
+                {
+                    id: ids.emptyIssuance,
+                    tenantId,
+                    credentialConfigurationIds: [],
+                },
+            ]);
+            const all = Object.values(ids);
+            const listed = async (
+                configLimits: SessionListQuery["configLimits"],
+                filters: Partial<SessionListQuery> = {},
+            ) =>
+                (
+                    await adapter.listForTenant(tenantId, {
+                        page: 1,
+                        pageSize: 10,
+                        configLimits,
+                        ...filters,
+                    })
+                ).items
+                    .map((item) => item.id)
+                    .sort();
+            const sorted = (...expected: string[]) => expected.sort();
+
+            expect(await listed(undefined)).toEqual(sorted(...all));
+            expect(await listed({ presentation: [], issuance: null })).toEqual(
+                sorted(...all),
+            );
+            // Each limit leaves the sessions of the other type alone.
+            expect(await listed({ presentation: ["pid"] })).toEqual(
+                sorted(...all.filter((id) => id !== ids.mdlPresentation)),
+            );
+            expect(await listed({ issuance: ["pid"] })).toEqual(
+                sorted(
+                    ids.pidPresentation,
+                    ids.mdlPresentation,
+                    ids.pidIssuance,
+                ),
+            );
+            expect(
+                await listed({
+                    presentation: ["pid", "other"],
+                    issuance: ["mdl", "pid"],
+                }),
+            ).toEqual(
+                sorted(
+                    ids.pidPresentation,
+                    ids.pidIssuance,
+                    ids.pidAndMdlIssuance,
+                    ids.mdlIssuance,
+                ),
+            );
+
+            // The limits combine with the other list filters.
+            expect(
+                await listed(
+                    { issuance: ["pid", "mdl"] },
+                    { credentialConfigurationId: "mdl", type: "issuance" },
+                ),
+            ).toEqual(sorted(ids.pidAndMdlIssuance, ids.mdlIssuance));
+            expect(
+                await listed(
+                    { issuance: ["pid"] },
+                    { credentialConfigurationId: "mdl" },
+                ),
+            ).toEqual([]);
+            // All of them are open, so a reader of presentations sees none.
+            expect(
+                await listed(
+                    { presentation: ["pid"], issuance: ["pid"] },
+                    { hideOpen: ["presentation"] },
+                ),
+            ).toEqual(sorted(ids.pidIssuance));
+
+            const counts = await adapter.countForTenant(tenantId, {
+                configLimits: { presentation: ["pid"], issuance: ["pid"] },
+            });
+            expect(
+                Object.fromEntries(
+                    counts.map(({ type, count }) => [type, count]),
+                ),
+            ).toEqual({ presentation: 1, issuance: 1 });
+
+            // The other statistics leave out the same sessions.
+            const pidCompletedAt = new Date("2026-10-10T10:00:00Z");
+            await repository.update(ids.pidIssuance, {
+                status: SessionStatus.Failed,
+                failureCode: "pid_failure",
+            });
+            await repository.update(ids.mdlIssuance, {
+                status: SessionStatus.Failed,
+                failureCode: "mdl_failure",
+            });
+            const limited = {
+                type: "issuance" as const,
+                configLimits: { issuance: ["pid"] },
+            };
+            expect(
+                await adapter.topFailureCodesForTenant(tenantId, limited, 10),
+            ).toEqual([{ code: "pid_failure", count: 1 }]);
+            await repository.update(ids.pidIssuance, {
+                status: SessionStatus.Completed,
+                updatedAt: pidCompletedAt,
+            });
+            await repository.update(ids.mdlIssuance, {
+                status: SessionStatus.Completed,
+                updatedAt: new Date("2026-10-11T10:00:00Z"),
+            });
+            expect(
+                await adapter.lastUpdatedForTenant(tenantId, {
+                    ...limited,
+                    status: SessionStatus.Completed,
+                }),
+            ).toEqual(pidCompletedAt);
+        });
+
         it("lists only tenant summaries with filters, ordering and pagination", async () => {
             const repository = getDataSource().getRepository(Session);
             await repository.delete({ id: sessionId });

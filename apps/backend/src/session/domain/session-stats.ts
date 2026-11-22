@@ -16,7 +16,7 @@ export type SessionStatsFilter = Pick<
 /** Sessions to count: the stats filter, optionally of one type only. */
 export type SessionCountFilter = Pick<
     SessionListQuery,
-    "createdFrom" | "createdTo" | "type"
+    "createdFrom" | "createdTo" | "type" | "configLimits"
 >;
 
 /** Number of a tenant's sessions of one type in one status. */

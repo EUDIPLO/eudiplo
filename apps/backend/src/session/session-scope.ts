@@ -1,6 +1,9 @@
 import { Role } from "../auth/roles/role.enum.js";
 import type { TokenPayload } from "../auth/token.decorator.js";
-import type { SessionType } from "./domain/session-list.js";
+import type {
+    SessionConfigLimits,
+    SessionType,
+} from "./domain/session-list.js";
 
 const issuanceRoles = [Role.IssuanceOffer, Role.Issuances];
 const presentationRoles = [Role.PresentationRequest, Role.Presentations];
@@ -82,6 +85,20 @@ export function credentialStatusScope(
         [...issuanceRoles, Role.SessionsRead, Role.CredentialStatus],
         [...presentationRoles, Role.SessionsRead],
     );
+}
+
+/**
+ * The configurations whose sessions a client may read and change: the ones
+ * it may create offers and requests for (`allowedIssuanceConfigs`,
+ * `allowedPresentationConfigs`). So a client limited to one presentation
+ * configuration never sees what wallets presented for another. Tokens
+ * without a stored client have no limits.
+ */
+export function sessionConfigLimits(token: TokenPayload): SessionConfigLimits {
+    return {
+        presentation: token.client?.allowedPresentationConfigs,
+        issuance: token.client?.allowedIssuanceConfigs,
+    };
 }
 
 function scopeOf(

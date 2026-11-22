@@ -13,6 +13,46 @@ export function typeOfSession(session: {
     return session.requestId == null ? "issuance" : "presentation";
 }
 
+/**
+ * The configurations a client is limited to, per session type: its
+ * `allowedPresentationConfigs` and `allowedIssuanceConfigs`. An absent or
+ * empty list is no limit for that type, as for creating offers and requests.
+ */
+export interface SessionConfigLimits {
+    /** Presentation configuration ids, the `requestId` of the sessions. */
+    presentation?: readonly string[] | null;
+    /** Credential configuration ids. */
+    issuance?: readonly string[] | null;
+}
+
+/**
+ * Whether a session is within the limits: a presentation session by its
+ * `requestId`, an issuance session when every offered credential
+ * configuration is allowed, as for creating the offer. An issuance session
+ * without stored configuration ids (none or an empty list) is outside every
+ * issuance limit.
+ */
+export function withinConfigLimits(
+    session: {
+        requestId?: string | null;
+        credentialConfigurationIds?: readonly string[] | null;
+    },
+    limits?: SessionConfigLimits,
+): boolean {
+    const type = typeOfSession(session);
+    const allowed = limits?.[type];
+    if (!allowed?.length) return true;
+    if (type === "presentation")
+        return allowed.includes(session.requestId as string);
+    const ids = session.credentialConfigurationIds;
+    return !!ids?.length && ids.every((id) => allowed.includes(id));
+}
+
+/** Whether the limits leave out any session. */
+export function hasConfigLimits(limits?: SessionConfigLimits): boolean {
+    return !!(limits?.presentation?.length || limits?.issuance?.length);
+}
+
 export const SESSION_SORT_FIELDS = [
     "id",
     "status",
@@ -45,6 +85,8 @@ export interface SessionListQuery {
      * (`isOpenForWallet`), for callers that may only read them.
      */
     hideOpen?: readonly SessionType[];
+    /** Leaves out the sessions outside the caller's limits, see {@link withinConfigLimits}. */
+    configLimits?: SessionConfigLimits;
     sortBy?: (typeof SESSION_SORT_FIELDS)[number];
     sortOrder?: "asc" | "desc";
 }

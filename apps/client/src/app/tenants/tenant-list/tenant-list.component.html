@@ -127,7 +127,8 @@
                 [matMenuTriggerFor]="tenantMenu"
                 [matMenuTriggerData]="{ tenant }"
                 [attr.aria-label]="'Actions for tenant ' + tenant.id"
-                matTooltip="More actions"
+                [attr.aria-busy]="deletingId === tenant.id"
+                [matTooltip]="deletingId === tenant.id ? 'Deleting the tenant…' : 'More actions'"
               >
                 <mat-icon>more_vert</mat-icon>
               </button>
@@ -204,9 +205,14 @@
       <span>Edit</span>
     </a>
     <mat-divider></mat-divider>
-    <button mat-menu-item class="danger" (click)="deleteTenant(tenant)">
+    <button
+      mat-menu-item
+      class="danger"
+      (click)="deleteTenant(tenant)"
+      [disabled]="deletingId !== undefined"
+    >
       <mat-icon>delete_outline</mat-icon>
-      <span>Delete tenant</span>
+      <span>{{ deletingId === tenant.id ? 'Deleting tenant…' : 'Delete tenant' }}</span>
     </button>
   </ng-template>
 </mat-menu>

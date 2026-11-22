@@ -1,4 +1,5 @@
 import type { Routes } from '@angular/router';
+import { unsavedChangesGuard } from '../guards/unsaved-changes.guard';
 
 export const trustListRoutes: Routes = [
   {
@@ -10,6 +11,7 @@ export const trustListRoutes: Routes = [
     path: 'create',
     loadComponent: () =>
       import('./trust-list-edit/trust-list-edit.component').then((m) => m.TrustListEditComponent),
+    canDeactivate: [unsavedChangesGuard],
   },
   {
     path: ':id',
@@ -20,5 +22,6 @@ export const trustListRoutes: Routes = [
     path: ':id/edit',
     loadComponent: () =>
       import('./trust-list-edit/trust-list-edit.component').then((m) => m.TrustListEditComponent),
+    canDeactivate: [unsavedChangesGuard],
   },
 ];
