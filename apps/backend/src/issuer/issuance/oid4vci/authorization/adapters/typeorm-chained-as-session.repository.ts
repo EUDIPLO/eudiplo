@@ -1,4 +1,5 @@
 import { IsNull, LessThan, type Repository } from "typeorm";
+import { validate as isUuid } from "uuid";
 import {
     type ChainedAsSession,
     ChainedAsSessionStatus,
@@ -30,6 +31,10 @@ export class TypeOrmChainedAsSessionRepository
         id: string,
         status: ChainedAsSessionStatus,
     ) {
+        // The ID comes from the wallet's request_uri or a callback path and
+        // is stored in a `uuid` column. PostgreSQL refuses to compare a value
+        // that is not a UUID with that column, so such an ID is unknown.
+        if (!isUuid(id)) return Promise.resolve(null);
         return this.sessions.findOne({ where: { id, tenantId, status } });
     }
 

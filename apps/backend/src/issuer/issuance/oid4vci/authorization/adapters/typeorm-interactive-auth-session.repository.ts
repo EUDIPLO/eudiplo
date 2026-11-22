@@ -1,4 +1,5 @@
 import type { Repository } from "typeorm";
+import { validate as isUuid } from "uuid";
 import type { InteractiveAuthSessionEntity } from "../../entities/interactive-auth-session.entity.js";
 import type { InteractiveAuthSession } from "../domain/interactive-auth-session.js";
 import type {
@@ -18,7 +19,13 @@ export class TypeOrmInteractiveAuthSessionRepository
         await this.sessions.save(session);
     }
 
+    /**
+     * `auth_session` comes from the wallet and is stored in a `uuid` column.
+     * PostgreSQL refuses to compare a value that is not a UUID with that
+     * column, so such a value is unknown.
+     */
     findForTenant(tenantId: string, authSession: string) {
+        if (!isUuid(authSession)) return Promise.resolve(null);
         return this.sessions.findOne({ where: { authSession, tenantId } });
     }
 
@@ -34,6 +41,7 @@ export class TypeOrmInteractiveAuthSessionRepository
         authSession: string,
         changes: InteractiveAuthSessionUpdate,
     ): Promise<boolean> {
+        if (!isUuid(authSession)) return false;
         const result = await this.sessions.update(
             { authSession, tenantId },
             changes,
