@@ -33,6 +33,8 @@ Expiry is enforced when a wallet uses the session: a presentation request or res
 | `expiresAt`        | When the request expires (presentation configuration `lifeTime`, default 300 seconds).                                                                                                      |
 | `transaction_data` | The [transaction data](../presentation/transaction-data.md) sent with the request.                                                                                                          |
 
+mDOC data elements are CBOR values; their claims hold them as JSON, in the session and in webhooks. A map, such as the PID's `place_of_birth`, becomes an object (keys that are not text become text, a byte string key base64url) and a set an array. A `full-date` becomes `YYYY-MM-DD` text such as `"1964-08-12"`, a `tdate` or epoch date an ISO 8601 date-time with milliseconds such as `"2026-01-02T03:04:05.000Z"`. An integer outside ±(2^53 − 1) becomes a decimal string. NaN, infinity, `undefined` and an invalid date become `null`, and a value with an unknown tag becomes `{ "value", "tag" }`. A byte string, such as a `portrait`, is not converted and appears as an object holding its bytes as numbers. A DCQL [`values`](../presentation/dcql.md#accept-specific-values) check compares these JSON values.
+
 ## Outcome
 
 ```json
