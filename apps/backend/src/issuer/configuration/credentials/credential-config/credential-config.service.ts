@@ -375,30 +375,14 @@ export class CredentialConfigService {
     }
 
     /**
-     * Updates a credential configuration for a given tenant.
-     * Only updates fields that are provided in the config.
-     * Set fields to null to clear them.
-     * Automatically replaces image references with public URLs.
-     * Validates IAE action references.
-     * @param tenantId - The ID of the tenant.
-     * @param id - The ID of the CredentialConfig entity to update.
-     * @param config - The partial CredentialConfig to update.
-     * @param options - Whether a change of the embedded disclosure policy
-     * revokes the credentials issued under the configuration.
-     * @returns A promise that resolves to the updated CredentialConfig entity.
+     * Checks the rules that tie active credentials and wallet unit revocation
+     * to status management, with the values the update leaves unchanged taken
+     * from the stored configuration.
      */
-    async update(
-        tenantId: string,
-        id: string,
+    private assertUpdateEnforceable(
         config: CredentialConfigUpdate,
-        actorToken?: TokenPayload,
-        requestMeta?: AuditLogRequestMeta,
-        options: CredentialConfigUpdateOptions = {},
-    ) {
-        this.assertMayRevokeIssued(id, options);
-        await this.replaceImageReferences(tenantId, config);
-        await this.validateIaeActions(tenantId, config);
-        const existing = await this.getById(tenantId, id);
+        existing: CredentialConfig,
+    ): void {
         // Checked only when the update touches the policy, so that partial
         // updates of other fields (e.g. registrar schema metadata) keep working
         // for configurations stored before the rule was enforced.
@@ -437,6 +421,34 @@ export class CredentialConfigService {
                         : existing.config,
             });
         }
+    }
+
+    /**
+     * Updates a credential configuration for a given tenant.
+     * Only updates fields that are provided in the config.
+     * Set fields to null to clear them.
+     * Automatically replaces image references with public URLs.
+     * Validates IAE action references.
+     * @param tenantId - The ID of the tenant.
+     * @param id - The ID of the CredentialConfig entity to update.
+     * @param config - The partial CredentialConfig to update.
+     * @param options - Whether a change of the embedded disclosure policy
+     * revokes the credentials issued under the configuration.
+     * @returns A promise that resolves to the updated CredentialConfig entity.
+     */
+    async update(
+        tenantId: string,
+        id: string,
+        config: CredentialConfigUpdate,
+        actorToken?: TokenPayload,
+        requestMeta?: AuditLogRequestMeta,
+        options: CredentialConfigUpdateOptions = {},
+    ) {
+        this.assertMayRevokeIssued(id, options);
+        await this.replaceImageReferences(tenantId, config);
+        await this.validateIaeActions(tenantId, config);
+        const existing = await this.getById(tenantId, id);
+        this.assertUpdateEnforceable(config, existing);
         const keyChainId =
             config.keyChainId !== undefined
                 ? (config.keyChainId ?? undefined)
