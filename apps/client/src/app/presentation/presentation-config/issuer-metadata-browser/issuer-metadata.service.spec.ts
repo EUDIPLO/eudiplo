@@ -28,4 +28,51 @@ describe('issuer imports for the presentation builder', () => {
       claims: [{ path: ['org.iso.18013.5.1', 'family_name'] }],
     });
   });
+
+  it('asks for the array when a selected claim addresses every element of it', () => {
+    const service = new IssuerMetadataService(null as any, null as any);
+    const [credential] = service.normalizeCredentials({
+      credential_issuer: 'https://issuer.example',
+      credential_configurations_supported: {
+        pid: {
+          format: 'dc+sd-jwt',
+          vct: 'urn:eudi:pid:de:1',
+          credential_metadata: {
+            claims: [
+              { path: ['given_name'] },
+              { path: ['nationalities'] },
+              { path: ['nationalities', null] },
+              { path: ['addresses', null, 'locality'] },
+              { path: ['places', 0, 'city'] },
+              { path: [null] },
+            ],
+          },
+        },
+      },
+    } as any);
+    // The catalog keeps the published paths: the query builder hints read them.
+    expect(credential.claims.map((claim) => claim.path)).toContainEqual(['nationalities', null]);
+
+    const query = service.generateDcqlQuery([{ credential, selectedClaims: credential.claims }]);
+    expect(readSimpleDcql(query)?.credentials[0].claims?.map((claim) => claim.path)).toEqual([
+      ['given_name'],
+      ['nationalities'],
+      ['addresses'],
+      ['places', 0, 'city'],
+    ]);
+  });
+
+  it('leaves the claims out when no selected claim has a path the query can ask for', () => {
+    const service = new IssuerMetadataService(null as any, null as any);
+    const credential: NormalizedCredential = {
+      id: 'list',
+      format: 'dc+sd-jwt',
+      displayName: 'List',
+      vct: 'urn:example:list',
+      claims: [{ path: [null as unknown as string], displayName: 'Entry', mandatory: false }],
+    };
+    const query = service.generateDcqlQuery([{ credential, selectedClaims: credential.claims }]);
+    expect((query as any).credentials[0]).not.toHaveProperty('claims');
+    expect(readSimpleDcql(query)).not.toBeNull();
+  });
 });

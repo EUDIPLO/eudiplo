@@ -187,12 +187,12 @@
                   </div>
 
                   <div class="claims-grid">
-                    @for (claim of credential.claims; track claim.path.join('.')) {
+                    @for (claim of credential.claims; track pathLabel(claim)) {
                       <div class="fx-row align-center gap-8 claim-item">
                         <mat-checkbox
                           [checked]="isClaimSelected(credential, claim)"
                           [aria-label]="
-                            'Request ' + claim.displayName + ' (' + claim.path.join('.') + ')'
+                            'Request ' + claim.displayName + ' (' + pathLabel(claim) + ')'
                           "
                           (change)="toggleClaim(credential, claim, $event.checked)"
                           [disabled]="!isCredentialSelected(credential)"
@@ -203,7 +203,12 @@
                             @if (claim.namespace) {
                               {{ claim.namespace }}:
                             }
-                            {{ claim.path.join('.') }}
+                            {{ pathLabel(claim) }}
+                            @if (requestedArray(claim); as array) {
+                              <span class="claim-requested-as">
+                                (requested as the whole array {{ array }})
+                              </span>
+                            }
                             @if (claim.mandatory) {
                               <mat-chip class="mandatory-chip">mandatory</mat-chip>
                             }

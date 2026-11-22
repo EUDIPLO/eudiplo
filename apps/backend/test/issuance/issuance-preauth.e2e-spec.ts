@@ -620,6 +620,144 @@ describe("Issuance - Pre-authorized Code Flow", () => {
         ).rejects.toThrow();
     });
 
+    describe("answers a key proof the issuer cannot use with invalid_proof", () => {
+        const b64 = (value: unknown) =>
+            Buffer.from(JSON.stringify(value)).toString("base64url");
+
+        /** A pre-authorized access token, a fresh c_nonce and the audience. */
+        const prepare = async () => {
+            const offerResponse = await request(app.getHttpServer())
+                .post("/issuer/offer")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .send({
+                    response_type: "uri",
+                    credentialConfigurationIds: ["pid-no-key"],
+                    flow: "pre_authorized_code",
+                })
+                .expect(201);
+            const client = new Openid4vciClient({
+                callbacks: {
+                    ...callbacks,
+                    clientAuthentication: clientAuthenticationAnonymous(),
+                },
+            });
+            const credentialOffer = await client.resolveCredentialOffer(
+                offerResponse.body.uri,
+            );
+            const issuerMetadata = await client.resolveIssuerMetadata(
+                credentialOffer.credential_issuer,
+            );
+            const { accessTokenResponse } =
+                await client.retrievePreAuthorizedCodeAccessTokenFromOffer({
+                    credentialOffer,
+                    issuerMetadata,
+                });
+            const { c_nonce: nonce } = await client.requestNonce({
+                issuerMetadata,
+            });
+            return {
+                issuerMetadata,
+                accessToken: accessTokenResponse.access_token,
+                nonce,
+                audience: credentialOffer.credential_issuer,
+                credentialConfigurationId:
+                    credentialOffer.credential_configuration_ids[0],
+            };
+        };
+
+        const holderHeader = async () => {
+            const holder = await generateKeyPair("ES256", {
+                extractable: true,
+            });
+            return {
+                holder,
+                jwk: await exportJWK(holder.publicKey),
+            };
+        };
+
+        const payloadOf = (nonce: string, audience: string) => ({
+            aud: audience,
+            iat: Math.floor(Date.now() / 1000),
+            nonce,
+        });
+
+        const proofs: Record<
+            string,
+            (nonce: string, audience: string) => Promise<string>
+        > = {
+            "alg none with an empty signature": async (nonce, audience) => {
+                const { jwk } = await holderHeader();
+                return `${b64({ alg: "none", typ: "openid4vci-proof+jwt", jwk })}.${b64(payloadOf(nonce, audience))}.`;
+            },
+            "alg none with a signature": async (nonce, audience) => {
+                const { jwk } = await holderHeader();
+                return `${b64({ alg: "none", typ: "openid4vci-proof+jwt", jwk })}.${b64(payloadOf(nonce, audience))}.AAAA`;
+            },
+            "no alg": async (nonce, audience) => {
+                const { jwk } = await holderHeader();
+                return `${b64({ typ: "openid4vci-proof+jwt", jwk })}.${b64(payloadOf(nonce, audience))}.AAAA`;
+            },
+            "a value that is not a JWT": async () => "not-a-jwt",
+            "a JWT with only two parts": async (nonce, audience) => {
+                const { jwk } = await holderHeader();
+                return `${b64({ alg: "ES256", typ: "openid4vci-proof+jwt", jwk })}.${b64(payloadOf(nonce, audience))}`;
+            },
+            "an unsupported typ": async (nonce, audience) => {
+                const { holder, jwk } = await holderHeader();
+                return new SignJWT({ nonce })
+                    .setProtectedHeader({ alg: "ES256", typ: "JWT", jwk })
+                    .setAudience(audience)
+                    .setIssuedAt()
+                    .sign(holder.privateKey);
+            },
+            HS256: async (nonce, audience) =>
+                new SignJWT({ nonce })
+                    .setProtectedHeader({
+                        alg: "HS256",
+                        typ: "openid4vci-proof+jwt",
+                    })
+                    .setAudience(audience)
+                    .setIssuedAt()
+                    .sign(new Uint8Array(32)),
+        };
+
+        const notCompact = [
+            "alg none with an empty signature",
+            "a value that is not a JWT",
+            "a JWT with only two parts",
+        ];
+
+        test.each(Object.keys(proofs))("%s", async (name) => {
+            const {
+                issuerMetadata,
+                accessToken,
+                nonce,
+                audience,
+                credentialConfigurationId,
+            } = await prepare();
+            const response = await request(app.getHttpServer())
+                .post(
+                    new URL(issuerMetadata.credentialIssuer.credential_endpoint)
+                        .pathname,
+                )
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${accessToken}`)
+                .send({
+                    credential_configuration_id: credentialConfigurationId,
+                    proofs: { jwt: [await proofs[name](nonce, audience)] },
+                });
+            expect(response.status).toBe(400);
+            expect(response.body.error).toBe("invalid_proof");
+            // The library refuses these as malformed requests, see issue #1619.
+            if (notCompact.includes(name)) {
+                expect(response.body.error_description).toBe(
+                    "A key proof of type 'jwt' is not a signed compact JWT",
+                );
+            }
+        });
+    });
+
     test("rejects attestation proof without x5c when trust list validation is configured", async () => {
         const trustListUrl = "http://localhost:8787/key-attestation-trust-list";
         const trustListSigningCert = await generateSelfSignedCertificate();

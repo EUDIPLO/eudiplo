@@ -261,6 +261,7 @@ describe("Iso18013Service.processResponse presentation webhook", () => {
     let publish: ReturnType<typeof vi.fn>;
     let verify: ReturnType<typeof vi.fn>;
     let mdlQuery: Record<string, unknown>;
+    let logFlowError: ReturnType<typeof vi.fn>;
     let service: Iso18013Service;
 
     beforeEach(() => {
@@ -292,6 +293,7 @@ describe("Iso18013Service.processResponse presentation webhook", () => {
         announce = vi.fn();
         publish = vi.fn().mockResolvedValue({});
         verify = vi.fn();
+        logFlowError = vi.fn();
         mdlQuery = {
             id: "mdl",
             format: "mso_mdoc",
@@ -318,7 +320,7 @@ describe("Iso18013Service.processResponse presentation webhook", () => {
             { publish } as any,
             {
                 logFlowStart: vi.fn(),
-                logFlowError: vi.fn(),
+                logFlowError,
                 logFlowComplete: vi.fn(),
                 logCredentialVerification: vi.fn(),
             } as any,
@@ -479,6 +481,78 @@ describe("Iso18013Service.processResponse presentation webhook", () => {
             message: "The credential signature is invalid.",
         });
         expect(sessionStore.updateIfUnconsumed).toHaveBeenCalledOnce();
+    });
+
+    it("rejects an mDOC whose docType is not the query's doctype_value", async () => {
+        mdlQuery.meta = { doctype_value: "org.iso.18013.5.1.mDL" };
+        verify.mockResolvedValue({
+            verified: true,
+            docType: "eu.europa.ec.eudi.pid.1",
+            credentialType: "eu.europa.ec.eudi.pid.1",
+            claims: { family_name: "Mustermann" },
+            missingClaims: [],
+            mismatchedClaims: [],
+        });
+
+        const error = await service
+            .processResponse("wallet-nonce", "encrypted")
+            .catch((error) => error);
+
+        expect(error.getStatus()).toBe(400);
+        const message =
+            "Credential 'mdl' is not of a requested type: doctype_value accepts org.iso.18013.5.1.mDL";
+        expect(error.getResponse()).toEqual({
+            error: "credential_type_mismatch",
+            message,
+        });
+        const outcome = {
+            result: "failed",
+            source: "verifier",
+            error: "credential_type_mismatch",
+            message,
+        };
+        expect(sessionStore.updateIfUnconsumed).toHaveBeenCalledExactlyOnceWith(
+            "tenant",
+            "session",
+            expect.objectContaining({
+                status: "failed",
+                failureCode: "credential_type_mismatch",
+                errorReason: message,
+                outcome,
+            }),
+        );
+        expect(publish).toHaveBeenCalledExactlyOnceWith({
+            webhook,
+            session,
+            status: "failed",
+            outcome,
+        });
+        expect(logFlowError).toHaveBeenCalledExactlyOnceWith(
+            expect.anything(),
+            expect.any(Error),
+            expect.objectContaining({ errorCode: "credential_type_mismatch" }),
+        );
+    });
+
+    it("completes an mDOC whose docType is the query's doctype_value", async () => {
+        mdlQuery.meta = { doctype_value: "org.iso.18013.5.1.mDL" };
+        verify.mockResolvedValue({
+            verified: true,
+            docType: "org.iso.18013.5.1.mDL",
+            credentialType: "org.iso.18013.5.1.mDL",
+            claims: {},
+            missingClaims: [],
+            mismatchedClaims: [],
+        });
+
+        await expect(
+            service.processResponse("wallet-nonce", "encrypted"),
+        ).resolves.toEqual({});
+        expect(sessionStore.updateIfUnconsumed).toHaveBeenCalledWith(
+            "tenant",
+            "session",
+            expect.objectContaining({ status: "completed" }),
+        );
     });
 
     it("reports a completed presentation with status, outcome and credentials", async () => {

@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
     CLAIM_VALUE_MISMATCH,
+    CREDENTIAL_TYPE_MISMATCH,
     claimSelections,
     claimSetNotSatisfied,
     claimValueMismatchViolation,
+    credentialTypeViolation,
     evaluateClaimSelection,
     evaluateMdocClaimSelection,
     findMissingCredentials,
@@ -13,6 +15,87 @@ import {
     selectClaimValues,
     UnknownClaimSetReferenceError,
 } from "./dcql-claim-policy.js";
+
+describe("credentialTypeViolation", () => {
+    const pid = { vct_values: ["urn:eudi:pid:1", "urn:eudi:pid:de:1"] };
+    const mdocPid = { doctype_value: "eu.europa.ec.eudi.pid.1" };
+
+    it("accepts an SD-JWT VC whose vct is one of vct_values", () => {
+        expect(
+            credentialTypeViolation(
+                "pid",
+                "dc+sd-jwt",
+                pid,
+                "urn:eudi:pid:de:1",
+            ),
+        ).toBeUndefined();
+    });
+
+    it("rejects an SD-JWT VC of another, missing or non-string vct", () => {
+        for (const vct of [
+            "urn:eudi:other:1",
+            "URN:EUDI:PID:1",
+            undefined,
+            1,
+        ]) {
+            expect(
+                credentialTypeViolation("pid", "dc+sd-jwt", pid, vct),
+            ).toEqual({
+                code: CREDENTIAL_TYPE_MISMATCH,
+                message:
+                    "Credential 'pid' is not of a requested type: vct_values accepts urn:eudi:pid:1, urn:eudi:pid:de:1",
+                details: {},
+            });
+        }
+    });
+
+    it("compares an mdoc docType with doctype_value", () => {
+        expect(
+            credentialTypeViolation(
+                "pid",
+                "mso_mdoc",
+                mdocPid,
+                "eu.europa.ec.eudi.pid.1",
+            ),
+        ).toBeUndefined();
+        expect(
+            credentialTypeViolation(
+                "pid",
+                "mso_mdoc",
+                mdocPid,
+                "org.iso.18013.5.1.mDL",
+            )?.message,
+        ).toBe(
+            "Credential 'pid' is not of a requested type: doctype_value accepts eu.europa.ec.eudi.pid.1",
+        );
+    });
+
+    it("uses only the meta field of the credential's format", () => {
+        expect(
+            credentialTypeViolation("pid", "mso_mdoc", pid, "anything"),
+        ).toBeUndefined();
+        expect(
+            credentialTypeViolation("pid", "dc+sd-jwt", mdocPid, "anything"),
+        ).toBeUndefined();
+    });
+
+    it("accepts any type without meta or with empty vct_values", () => {
+        expect(
+            credentialTypeViolation("pid", "dc+sd-jwt", undefined, "x"),
+        ).toBeUndefined();
+        expect(
+            credentialTypeViolation(
+                "pid",
+                "dc+sd-jwt",
+                { vct_values: [] },
+                "x",
+            ),
+        ).toBeUndefined();
+        expect(
+            credentialTypeViolation("pid", "mso_mdoc", undefined, "x"),
+        ).toBeUndefined();
+    });
+});
 
 describe("findMissingCredentials", () => {
     const credentials = [{ id: "pid" }, { id: "mdl" }];

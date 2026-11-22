@@ -58,6 +58,7 @@ import { CredentialVerifierFormatRegistry } from "../presentations/application/c
 import { allowedExpectedOrigin } from "../presentations/configuration/allowed-expected-origin.js";
 import { PresentationConfigService } from "../presentations/configuration/presentation-config.service.js";
 import { verificationFailureDetails } from "../presentations/credential/verification-failure.js";
+import { credentialTypeViolation } from "../presentations/domain/dcql-claim-policy.js";
 import { missingTrustedAuthorities } from "../presentations/domain/trusted-authority-requirement.js";
 import {
     trustListAuthorities,
@@ -618,6 +619,39 @@ export class Iso18013Service {
             throw new BadRequestException({
                 error: errorCode,
                 message: shortMessage,
+            });
+        }
+
+        // The DeviceRequest asked for doctype_value, but the wallet chose
+        // what to return (OID4VP 1.0 §14.9 applies to this flow as well).
+        const typeViolation = credentialTypeViolation(
+            mdocCred.id,
+            "mso_mdoc",
+            mdocCred.meta,
+            verifyResult.credentialType,
+        );
+        if (typeViolation) {
+            await this.failSession(session, {
+                errorReason: typeViolation.message,
+                failureCode: typeViolation.code,
+                outcome: {
+                    result: "failed",
+                    source: "verifier",
+                    error: typeViolation.code,
+                    message: typeViolation.message,
+                },
+            });
+            this.auditLogService.logFlowError(
+                logContext,
+                new Error(typeViolation.message),
+                {
+                    stage: "mdoc_verification",
+                    errorCode: typeViolation.code,
+                },
+            );
+            throw new BadRequestException({
+                error: typeViolation.code,
+                message: typeViolation.message,
             });
         }
 

@@ -69,6 +69,7 @@ import { DeferredCredentialService } from "./deferred-credential.service.js";
 import { AuthorizationServerError } from "./domain/authorization-server-errors.js";
 import { InvalidCredentialOffer } from "./domain/credential-offer-errors.js";
 import { InvalidCredentialProof } from "./domain/credential-proof-errors.js";
+import { findMalformedKeyProof } from "./domain/credential-proof-format.js";
 import {
     checkCredentialRequestJweHeader,
     InvalidCredentialRequestEncryption,
@@ -484,6 +485,21 @@ export class Oid4vciService {
                 throw new CredentialRequestException(
                     "invalid_encryption_parameters",
                     err.errorResponse.error_description,
+                );
+            }
+            // The library refuses a key proof that is not a signed compact
+            // JWT, such as an unsecured one (alg none), as a malformed
+            // request; the wallet learns that the proof is the problem. When
+            // the request has other faults as well, the proof is named.
+            const malformedProofType =
+                err instanceof Oauth2ServerErrorResponseError &&
+                err.errorResponse.error === "invalid_credential_request"
+                    ? findMalformedKeyProof(requestBody)
+                    : undefined;
+            if (malformedProofType) {
+                throw new CredentialRequestException(
+                    "invalid_proof",
+                    `A key proof of type '${malformedProofType}' is not a signed compact JWT`,
                 );
             }
             throw new CredentialRequestException(

@@ -284,6 +284,322 @@ describe("buildJsonSchema", () => {
     });
 });
 
+describe("buildClaimsMetadata", () => {
+    it("publishes array element steps as claims path pointers", () => {
+        expect(
+            buildClaimsMetadata([
+                {
+                    path: ["nationalities"],
+                    type: "array",
+                    children: [{ path: [null], type: "string" }],
+                },
+                {
+                    path: ["addresses"],
+                    type: "array",
+                    children: [{ path: ["street"], type: "string" }],
+                },
+                { path: ["places", 0, "city"], type: "string" },
+                // No valid index: kept as a string key
+                { path: ["odd", -1], type: "string" },
+                { path: ["odd", 1.5], type: "string" },
+            ]).map((claim) => claim.path),
+        ).toEqual([
+            ["nationalities"],
+            ["nationalities", null],
+            ["addresses"],
+            ["addresses", null, "street"],
+            ["places", 0, "city"],
+            ["odd", "-1"],
+            ["odd", "1.5"],
+        ]);
+    });
+});
+
+describe("buildDisclosureFrame", () => {
+    it("keeps the frame of configurations without array element paths", () => {
+        const fields: ClaimFieldDefinition[] = [
+            { path: ["given_name"], type: "string", disclosable: true },
+            { path: ["family_name"], type: "string" },
+            {
+                path: ["address"],
+                type: "object",
+                disclosable: true,
+                children: [
+                    {
+                        path: ["street_address"],
+                        type: "string",
+                        disclosable: true,
+                    },
+                    { path: ["locality"], type: "string", disclosable: false },
+                    { path: ["region"], type: "string", disclosable: true },
+                ],
+            },
+            {
+                path: ["place_of_birth", "country"],
+                type: "string",
+                disclosable: true,
+            },
+            {
+                path: ["age_equal_or_over", "18"],
+                type: "boolean",
+                disclosable: true,
+            },
+            { path: ["age_equal_or_over"], type: "object", disclosable: true },
+            { path: ["given_name"], type: "string", disclosable: true },
+        ];
+
+        // Built from the field paths alone, whatever the claims hold
+        for (const claims of [{}, { address: [] }, { given_name: "ERIKA" }]) {
+            expect(JSON.stringify(buildDisclosureFrame(fields, claims))).toBe(
+                '{"_sd":["given_name","address","age_equal_or_over"],"address":{"_sd":["street_address","region"]},"place_of_birth":{"_sd":["country"]},"age_equal_or_over":{"_sd":["18"]}}',
+            );
+        }
+        expect(
+            buildDisclosureFrame(
+                [{ path: ["given_name"], type: "string" }],
+                {},
+            ),
+        ).toBeUndefined();
+    });
+
+    it("makes the array and each of its elements disclosable", () => {
+        const fields: ClaimFieldDefinition[] = [
+            {
+                path: ["nationalities"],
+                type: "array",
+                disclosable: true,
+                children: [{ path: [null], type: "string", disclosable: true }],
+            },
+        ];
+
+        expect(
+            buildDisclosureFrame(fields, { nationalities: ["DE", "FR"] }),
+        ).toEqual({
+            _sd: ["nationalities"],
+            nationalities: { _sd: [0, 1] },
+        });
+    });
+
+    it("makes only the elements disclosable", () => {
+        expect(
+            buildDisclosureFrame(
+                [
+                    {
+                        path: ["nationalities", null],
+                        type: "string",
+                        disclosable: true,
+                    },
+                ],
+                { nationalities: ["DE", "FR", "IT"] },
+            ),
+        ).toEqual({ nationalities: { _sd: [0, 1, 2] } });
+    });
+
+    it("makes a concrete element disclosable once", () => {
+        expect(
+            buildDisclosureFrame(
+                [
+                    {
+                        path: ["nationalities", 1],
+                        type: "string",
+                        disclosable: true,
+                    },
+                    {
+                        path: ["nationalities", null],
+                        type: "string",
+                        disclosable: true,
+                    },
+                ],
+                { nationalities: ["DE", "FR"] },
+            ),
+        ).toEqual({ nationalities: { _sd: [1, 0] } });
+    });
+
+    it("makes properties of array element objects disclosable", () => {
+        const fields: ClaimFieldDefinition[] = [
+            {
+                path: ["addresses"],
+                type: "array",
+                children: [
+                    { path: ["street"], type: "string", disclosable: true },
+                    { path: ["city"], type: "string" },
+                ],
+            },
+        ];
+        const claims = {
+            addresses: [{ street: "A", city: "X" }, { city: "Y" }],
+        };
+
+        expect(buildDisclosureFrame(fields, claims)).toEqual({
+            addresses: { 0: { _sd: ["street"] }, 1: { _sd: ["street"] } },
+        });
+
+        // Elements disclosable too: both levels
+        expect(
+            buildDisclosureFrame(
+                [
+                    ...fields,
+                    {
+                        path: ["addresses", null],
+                        type: "object",
+                        disclosable: true,
+                    },
+                ],
+                claims,
+            ),
+        ).toEqual({
+            addresses: {
+                0: { _sd: ["street"] },
+                1: { _sd: ["street"] },
+                _sd: [0, 1],
+            },
+        });
+    });
+
+    it("makes elements of nested arrays disclosable", () => {
+        expect(
+            buildDisclosureFrame(
+                [
+                    {
+                        path: ["matrix", null],
+                        type: "array",
+                        disclosable: true,
+                    },
+                    {
+                        path: ["matrix", null, null],
+                        type: "integer",
+                        disclosable: true,
+                    },
+                ],
+                { matrix: [[1, 2], [3], []] },
+            ),
+        ).toEqual({
+            matrix: {
+                _sd: [0, 1, 2],
+                0: { _sd: [0, 1] },
+                1: { _sd: [0] },
+            },
+        });
+    });
+
+    it("adds nothing for empty, missing, short or non-array values", () => {
+        const field = (
+            path: ClaimFieldDefinition["path"],
+        ): ClaimFieldDefinition => ({
+            path,
+            type: "string",
+            disclosable: true,
+        });
+
+        for (const claims of [
+            { list: [] },
+            {},
+            { list: "DE" },
+            { list: { 0: "DE" } },
+            { list: null },
+        ]) {
+            expect(
+                buildDisclosureFrame([field(["list", null])], claims),
+            ).toBeUndefined();
+        }
+        expect(
+            buildDisclosureFrame([field(["list", 5])], { list: ["DE"] }),
+        ).toBeUndefined();
+        expect(
+            buildDisclosureFrame([field(["list", 3, "street"])], {
+                list: [{ street: "A" }],
+            }),
+        ).toBeUndefined();
+        expect(
+            buildDisclosureFrame([field(["list", null, "street"])], {
+                list: [],
+            }),
+        ).toBeUndefined();
+
+        // The array itself stays disclosable when it has no elements
+        expect(
+            buildDisclosureFrame(
+                [{ ...field(["list"]), type: "array" }, field(["list", null])],
+                { list: [] },
+            ),
+        ).toEqual({ _sd: ["list"] });
+    });
+
+    it("keeps numbers that are no array index as object keys", () => {
+        const field = (
+            path: ClaimFieldDefinition["path"],
+        ): ClaimFieldDefinition => ({
+            path,
+            type: "string",
+            disclosable: true,
+        });
+
+        expect(
+            buildDisclosureFrame([field(["odd", -1]), field(["odd", 1.5])], {
+                odd: { "-1": "a", "1.5": "b" },
+            }),
+        ).toEqual({ odd: { _sd: ["-1", "1.5"] } });
+    });
+
+    it("survives a path through a segment named _sd", () => {
+        const field = (
+            path: ClaimFieldDefinition["path"],
+        ): ClaimFieldDefinition => ({
+            path,
+            type: "string",
+            disclosable: true,
+        });
+
+        // As before the change: the later list replaces what `_sd` held
+        expect(
+            buildDisclosureFrame(
+                [
+                    field(["a", "x"]),
+                    field(["a", "_sd", "b"]),
+                    field(["a", "y"]),
+                    field(["list", null]),
+                    field(["list", "_sd", "b"]),
+                    field(["list", 0]),
+                ],
+                { list: ["DE"] },
+            ),
+        ).toEqual({ a: { _sd: ["y"] }, list: { _sd: [0] } });
+    });
+
+    it("discloses an array as a whole when only the array is disclosable", () => {
+        expect(
+            buildDisclosureFrame(
+                [
+                    {
+                        path: ["nationalities"],
+                        type: "array",
+                        disclosable: true,
+                        children: [{ path: [null], type: "string" }],
+                    },
+                ],
+                { nationalities: ["DE", "FR"] },
+            ),
+        ).toEqual({ _sd: ["nationalities"] });
+    });
+
+    it("reads element values through own properties only", () => {
+        const claims = JSON.parse('{"__proto__":{"list":["DE"]}}');
+
+        expect(
+            buildDisclosureFrame(
+                [
+                    {
+                        path: ["list", null],
+                        type: "string",
+                        disclosable: true,
+                    },
+                ],
+                claims,
+            ),
+        ).toBeUndefined();
+    });
+});
+
 describe("prototype pollution", () => {
     const unsafeKeys = [
         "__proto__",
@@ -295,7 +611,8 @@ describe("prototype pollution", () => {
     const derive: Record<string, (fields: ClaimFieldDefinition[]) => unknown> =
         {
             buildClaims,
-            buildDisclosureFrame,
+            buildDisclosureFrame: (fields) =>
+                buildDisclosureFrame(fields, buildClaims(fields)),
             buildClaimsMetadata,
             buildJsonSchema,
             buildClaimsByNamespace,
@@ -377,7 +694,7 @@ describe("prototype pollution", () => {
         expect(Object.hasOwn(schema.properties ?? {}, "__proto__")).toBe(true);
         expect(schema.properties?.["__proto__"]?.required).toEqual(["x"]);
 
-        const frame = buildDisclosureFrame(fields) ?? {};
+        const frame = buildDisclosureFrame(fields, claims) ?? {};
         expect(Object.hasOwn(frame, "__proto__")).toBe(true);
     });
 

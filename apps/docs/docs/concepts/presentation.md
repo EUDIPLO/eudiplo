@@ -103,7 +103,7 @@ flowchart TB
     S --> T[Issuer trusted?]
     T --> H[Holder binding: nonce, audience]
     H --> X[Status list check]
-    X --> Q[Requested claims disclosed<br/>with accepted values?]
+    X --> Q[Requested type, claims disclosed<br/>with accepted values?]
     Q --> D[Transaction data authorized<br/>by a referenced credential?]
     D --> OK[Session completed]
     C -->|no| F[Session failed]
@@ -111,7 +111,7 @@ flowchart TB
     T -->|untrusted| F
     H -->|mismatch| F
     X -->|revoked, suspended,<br/>malformed or unavailable| F
-    Q -->|missing or<br/>other value| F
+    Q -->|other type, missing<br/>or other value| F
     D -->|no matching hash| F
 ```
 
@@ -119,7 +119,7 @@ flowchart TB
 2. **Signature and trust.** The format verifier (SD-JWT VC or mdoc) checks the issuer signature, builds the issuer certificate chain and checks every certificate's validity period. An SD-JWT VC is rejected if one of `iss`, `nbf`, `exp`, `cnf`, `vct`, `vct#integrity` and `status`, or a part of it, is selectively disclosed. Every credential query names its trusted issuers in `trusted_authorities`: the chain must match a PID, Pub-EAA or EAA issuer listed in one of the LoTE trust lists, or a QTSP with a granted qualified QEAA service in one of the ETSI TS 119 612 Trusted Lists ([Trusted Lists for QEAAs](../trust/trust-lists.md#trusted-lists-for-qeaas)), and a trust list that cannot be loaded or has a bad signature fails the check (a Trusted List that a list of trusted lists points to is left out instead). A list without a valid `NextUpdate`, or past it, is discarded, so its issuers are not trusted, and so is an older version of a list or one without a valid `LoTESequenceNumber` or `TSLSequenceNumber` ([Older versions of a list](../trust/trust-lists.md#older-versions-of-a-list)); the check fails only when no list of the query's `etsi_tl` entry is left. A query without `trusted_authorities` is rejected; only with `SKIP_TRUST_AUTHORITY=true` (development and tests) is it allowed, and then any validly signed issuer is accepted. Certificate revocation (CRL, OCSP) is not checked. An SD-JWT VC query with only `openid_federation` authorities is checked through the issuer's federation trust chain instead, with the key `kid` of its federation metadata and no certificate chain, as described in [OpenID Federation](../trust/federation.md).
 3. **Holder binding.** The key binding JWT (SD-JWT VC) or device authentication (mdoc) must match the request's `nonce` and audience.
 4. **Status.** The credential's status list is fetched and checked according to `statusCheckMode`: `strict` fails if the list is unavailable, `best_effort` continues, `disabled` skips the check. A credential without status information, such as a short-lived one, is accepted in every mode, except a PID valid for more than 24 hours: `strict` rejects it and `best_effort` accepts it with a warning. A malformed status reference fails in `strict` and `best_effort` before any list is fetched, and so does an oversized status list once it is fetched ([`statusCheckMode`](../reference/presentation-configuration.md)). A credential whose status names only another status mechanism cannot be checked, so `strict` rejects it and `best_effort` accepts it.
-5. **Claims.** The requested claims, or one of the `claim_sets`, must be disclosed, each with one of its `values` if the claim query lists them (`claim_value_mismatch` otherwise).
+5. **Type and claims.** The credential's type must be one the query's `meta` names: an SD-JWT VC `vct` in `vct_values`, an mdoc docType equal to `doctype_value` (`credential_type_mismatch` otherwise, [Credential type](../presentation/dcql.md#credential-type)). The requested claims, or one of the `claim_sets`, must be disclosed, each with one of its `values` if the claim query lists them (`claim_value_mismatch` otherwise).
 6. **Transaction data.** Once all credentials are verified, each transaction data entry must be authorized by one SD-JWT VC it references, with the entry's hash in its key binding JWT ([Transaction data](../presentation/transaction-data.md#how-eudiplo-checks-the-binding)).
 
 A failed check records the failure as a structured `outcome` on the session, with a machine-readable code such as `trust_chain_not_trusted` ([Session outcome](../reference/session-outcome.md)).
