@@ -122,6 +122,8 @@ describe("Oid4vciService credential request error mapping", () => {
         updateForTenant?: ReturnType<typeof vi.fn>;
         executeFrom?: ReturnType<typeof vi.fn>;
         keyAttestationsRequired?: Record<string, string[]>;
+        keyProofRequired?: boolean;
+        validateAndConsume?: ReturnType<typeof vi.fn>;
         parseCredentialRequest?: (options: never) => unknown;
         onIssuer?: (decryptJwe: unknown) => void;
         metadata?: unknown;
@@ -185,6 +187,7 @@ describe("Oid4vciService credential request error mapping", () => {
                 getProofRequirementsForCredentialConfig: vi
                     .fn()
                     .mockResolvedValue({
+                        keyProofRequired: overrides.keyProofRequired ?? true,
                         proofTypes: ["jwt"],
                         keyAttestationsRequired:
                             overrides.keyAttestationsRequired,
@@ -206,7 +209,9 @@ describe("Oid4vciService credential request error mapping", () => {
                 logFlowComplete: vi.fn(),
                 logCredentialIssuance: vi.fn(),
             },
-            nonceService: { validateAndConsume: vi.fn() },
+            nonceService: {
+                validateAndConsume: overrides.validateAndConsume ?? vi.fn(),
+            },
             issueCredentialsFromProofs: {
                 execute:
                     overrides.issue ??
@@ -406,6 +411,96 @@ describe("Oid4vciService credential request error mapping", () => {
         });
     });
 
+    it("answers a refused request whose key proof is not a signed compact JWT with invalid_proof", async () => {
+        const unsecured = `${Buffer.from('{"alg":"none"}').toString("base64url")}.${Buffer.from("{}").toString("base64url")}.`;
+        const error = await rejection(
+            setup({
+                parseCredentialRequest: () => {
+                    throw new Oauth2ServerErrorResponseError({
+                        error: "invalid_credential_request",
+                        error_description: "Not a valid compact JWT",
+                    });
+                },
+            }).getCredential(
+                {
+                    ...request,
+                    body: {
+                        credential_configuration_id: "pid",
+                        proofs: { jwt: [unsecured] },
+                    },
+                },
+                "tenant",
+            ),
+        );
+
+        expect(protocolError(error)).toEqual({
+            error: "invalid_proof",
+            error_description:
+                "A key proof of type 'jwt' is not a signed compact JWT",
+        });
+    });
+
+    it.each([
+        ["a plain error", new Error("x")],
+        [
+            "another OAuth error code",
+            new Oauth2ServerErrorResponseError({
+                error: "invalid_request",
+                error_description: "x",
+            }),
+        ],
+    ])(
+        "does not turn %s next to a malformed key proof into invalid_proof",
+        async (_name, failure) => {
+            const error = await rejection(
+                setup({
+                    parseCredentialRequest: () => {
+                        throw failure;
+                    },
+                }).getCredential(
+                    {
+                        ...request,
+                        body: {
+                            credential_configuration_id: "pid",
+                            proofs: { jwt: ["a.b."] },
+                        },
+                    },
+                    "tenant",
+                ),
+            );
+
+            expect(protocolError(error)).toMatchObject({
+                error: "invalid_credential_request",
+            });
+        },
+    );
+
+    it("keeps invalid_credential_request for a refused request whose key proofs are well-formed", async () => {
+        const error = await rejection(
+            setup({
+                parseCredentialRequest: () => {
+                    throw new Oauth2ServerErrorResponseError({
+                        error: "invalid_credential_request",
+                        error_description: "Unknown format",
+                    });
+                },
+            }).getCredential(
+                {
+                    ...request,
+                    body: {
+                        credential_configuration_id: "pid",
+                        proofs: { jwt: ["aGVhZA.Ym9keQ.c2ln"] },
+                    },
+                },
+                "tenant",
+            ),
+        );
+
+        expect(protocolError(error)).toMatchObject({
+            error: "invalid_credential_request",
+        });
+    });
+
     it("hands a plain request to the parser as application/json", async () => {
         let options: Record<string, unknown> | undefined;
         await setup({
@@ -536,6 +631,60 @@ describe("Oid4vciService credential request error mapping", () => {
                 keyAttestationsRequired: { key_storage: ["iso_18045_high"] },
             }),
         );
+    });
+
+    describe("configuration that needs no key proof", () => {
+        it.each([
+            ["without proofs", undefined],
+            ["with proofs, which are ignored", { jwt: ["proof-jwt"] }],
+            [
+                "with a batch of proofs, which add no credentials",
+                { jwt: ["proof-1", "proof-2", "proof-3"] },
+            ],
+        ])(
+            "issues one unbound credential %s and consumes no nonce",
+            async (_label, proofs) => {
+                const issue = vi
+                    .fn()
+                    .mockResolvedValue([{ credential: "credential" }]);
+                const validateAndConsume = vi.fn();
+
+                await expect(
+                    setup({
+                        issue,
+                        validateAndConsume,
+                        keyProofRequired: false,
+                        parseCredentialRequest: () => ({
+                            proofs,
+                            credentialConfigurationId: "pid",
+                        }),
+                    }).getCredential(request, "tenant"),
+                ).resolves.toEqual({ credentialResponse: {} });
+
+                expect(validateAndConsume).not.toHaveBeenCalled();
+                expect(issue).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        proofs: undefined,
+                        keyAttestationsRequired: undefined,
+                    }),
+                );
+            },
+        );
+
+        it("still answers invalid_proof without proofs when a proof is required", async () => {
+            const error = await rejection(
+                setup({
+                    parseCredentialRequest: () => ({
+                        credentialConfigurationId: "pid",
+                    }),
+                }).getCredential(request, "tenant"),
+            );
+            expect(protocolError(error)).toEqual({
+                error: "invalid_proof",
+                error_description:
+                    "The proofs parameter is missing or does not contain supported proof types (jwt, attestation)",
+            });
+        });
     });
 
     it("maps InvalidCredentialProof to invalid_proof", async () => {

@@ -23,6 +23,8 @@ import {
   CredentialIssuerMetadata,
   NormalizedCredential,
   NormalizedClaim,
+  claimPathLabel,
+  requestedArrayLabel,
 } from './issuer-metadata.service';
 import {
   isMissingIssuanceConfig,
@@ -217,6 +219,16 @@ export class IssuerMetadataBrowserComponent implements OnInit {
     } else {
       this.selectedCredentials.delete(credential.id);
     }
+  }
+
+  /** The claim's path as shown on its row. */
+  pathLabel(claim: NormalizedClaim): string {
+    return claimPathLabel(claim.path);
+  }
+
+  /** The array the claim is requested as, when it addresses every element of one. */
+  requestedArray(claim: NormalizedClaim): string | null {
+    return requestedArrayLabel(claim);
   }
 
   isClaimSelected(credential: NormalizedCredential, claim: NormalizedClaim): boolean {
