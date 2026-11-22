@@ -249,12 +249,8 @@ test('issue and verify cookbook', async ({ page }) => {
     await page.getByRole('textbox', { name: 'E-mail Address' }).fill('info@membership.example');
     await page.getByRole('textbox', { name: 'Website' }).fill('https://membership.example/');
     await page.getByRole('button', { name: 'Create Trust List' }).click();
-    await expect(page).toHaveURL(/\/trust-list$/);
-
-    await page
-      .getByRole('row', { name: /membership-issuers/ })
-      .locator('button[mattooltip="View details"]')
-      .click();
+    // Saving opens the trust list's page.
+    await expect(page).toHaveURL(/\/trust-list\/membership-issuers$/);
     const trustListUrl = `${resolvedE2EConfig.apiBaseUrl}/issuers/${tenantId}/trust-list/membership-issuers`;
     await expect(page.getByRole('textbox', { name: 'Trust List URL' })).toHaveValue(trustListUrl);
     // The URL serves the signed trust list JWT.

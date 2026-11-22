@@ -906,7 +906,8 @@ export class TrustListEditComponent implements OnInit, PageWithUnsavedChanges {
         { duration: 3000 }
       );
 
-      this.router.navigate(['/trust-list']);
+      // The saved list's page, as federation trust anchors open theirs
+      this.router.navigate(['/trust-list', this.trustListId ?? formValue.id]);
     } catch (error) {
       console.error('Failed to save trust list:', error);
       openErrorSnackBar(
