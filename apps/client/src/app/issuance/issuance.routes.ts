@@ -1,4 +1,5 @@
 import type { Routes } from '@angular/router';
+import { unsavedChangesGuard } from '../guards/unsaved-changes.guard';
 
 export const issuanceOfferRoutes: Routes = [
   {
@@ -27,6 +28,7 @@ export const issuanceConfigRoutes: Routes = [
       import('./issuance-config/issuance-config-create/issuance-config-create.component').then(
         (m) => m.IssuanceConfigCreateComponent
       ),
+    canDeactivate: [unsavedChangesGuard],
   },
 ];
 
@@ -44,6 +46,7 @@ export const credentialConfigRoutes: Routes = [
       import('./credential-config/credential-config-create/credential-config-create.component').then(
         (m) => m.CredentialConfigCreateComponent
       ),
+    canDeactivate: [unsavedChangesGuard],
   },
   {
     path: ':id',
@@ -58,6 +61,7 @@ export const credentialConfigRoutes: Routes = [
       import('./credential-config/credential-config-create/credential-config-create.component').then(
         (m) => m.CredentialConfigCreateComponent
       ),
+    canDeactivate: [unsavedChangesGuard],
   },
 ];
 
@@ -75,6 +79,7 @@ export const attributeProviderRoutes: Routes = [
       import('./attribute-provider/attribute-provider-create/attribute-provider-create.component').then(
         (m) => m.AttributeProviderCreateComponent
       ),
+    canDeactivate: [unsavedChangesGuard],
   },
   {
     path: ':id',
@@ -89,5 +94,6 @@ export const attributeProviderRoutes: Routes = [
       import('./attribute-provider/attribute-provider-create/attribute-provider-create.component').then(
         (m) => m.AttributeProviderCreateComponent
       ),
+    canDeactivate: [unsavedChangesGuard],
   },
 ];

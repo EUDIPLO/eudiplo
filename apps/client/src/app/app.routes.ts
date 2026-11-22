@@ -1,4 +1,5 @@
 import type { Routes } from '@angular/router';
+import { unsavedChangesGuard } from './guards/unsaved-changes.guard';
 import { AuthGuard } from './guards/auth.guard';
 import { getRole, TENANT_ADMIN_ROLES } from './services/jwt.service';
 import { RoleGuard } from './guards/roles.guard';
@@ -51,6 +52,7 @@ export const routes: Routes = [
       import('./config-portability/config-portability.component').then(
         (m) => m.ConfigPortabilityComponent
       ),
+    canDeactivate: [unsavedChangesGuard],
     canActivate: [AuthGuard, RoleGuard],
     data: { role: TENANT_ADMIN_ROLES },
   },
@@ -169,6 +171,7 @@ export const routes: Routes = [
       import('./status-list-config/status-list-config.component').then(
         (m) => m.StatusListConfigComponent
       ),
+    canDeactivate: [unsavedChangesGuard],
   },
 
   // Session management routes

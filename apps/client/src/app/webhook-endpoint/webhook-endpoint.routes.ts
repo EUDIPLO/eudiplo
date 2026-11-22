@@ -1,4 +1,5 @@
 import type { Routes } from '@angular/router';
+import { unsavedChangesGuard } from '../guards/unsaved-changes.guard';
 
 export const webhookEndpointRoutes: Routes = [
   {
@@ -14,6 +15,7 @@ export const webhookEndpointRoutes: Routes = [
       import('./webhook-endpoint-create/webhook-endpoint-create.component').then(
         (m) => m.WebhookEndpointCreateComponent
       ),
+    canDeactivate: [unsavedChangesGuard],
   },
   {
     path: ':id',
@@ -28,5 +30,6 @@ export const webhookEndpointRoutes: Routes = [
       import('./webhook-endpoint-create/webhook-endpoint-create.component').then(
         (m) => m.WebhookEndpointCreateComponent
       ),
+    canDeactivate: [unsavedChangesGuard],
   },
 ];

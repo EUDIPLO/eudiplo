@@ -81,6 +81,7 @@ import {
   FederationTrustAnchorService,
 } from '../../../federation-trust-anchor/federation-trust-anchor.service';
 import { issuanceConfigTrustAnchorIds } from '../../../federation-trust-anchor/federation-trust-anchor-reference';
+import type { PageWithUnsavedChanges } from '../../../services/unsaved-changes.service';
 
 /** A managed list of this tenant, or an external list given by URL and signer certificate. */
 type WalletProviderTrustListMode = 'managed' | 'external';
@@ -123,7 +124,7 @@ type WalletProviderTrustListEntry = Omit<WalletProviderTrustListRefDto, 'verifie
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './issuance-config-create.component.scss',
 })
-export class IssuanceConfigCreateComponent implements OnInit {
+export class IssuanceConfigCreateComponent implements OnInit, PageWithUnsavedChanges {
   readonly languageOptionsWith = languageOptionsWith;
 
   private trustListVerifierValidator(control: AbstractControl): ValidationErrors | null {
@@ -1120,6 +1121,10 @@ export class IssuanceConfigCreateComponent implements OnInit {
     return this.loading ? 'Saving the issuer settings…' : '';
   }
 
+  hasUnsavedChanges(): boolean {
+    return this.form.dirty;
+  }
+
   onSubmit(): void {
     // `disabledInteractive` keeps Save clickable while it looks disabled.
     if (this.loading || this.loadingConfig || this.loadError) return;
@@ -1137,6 +1142,7 @@ export class IssuanceConfigCreateComponent implements OnInit {
       .saveConfiguration(issuanceDto)
       .then(
         () => {
+          this.form.markAsPristine();
           this.snackBar.open('Configuration saved successfully', 'Close', { duration: 3000 });
           this.router.navigate(['../'], { relativeTo: this.route });
         },
@@ -1208,6 +1214,8 @@ export class IssuanceConfigCreateComponent implements OnInit {
 
   removeDisplay(index: number): void {
     this.displays.removeAt(index);
+    // A row button changes the form without marking it dirty.
+    this.displays.markAsDirty();
     // Remove is offered only while there are two or more languages, so one is always left.
     focusRowAfterRemoval(
       this.injector,
@@ -1402,6 +1410,8 @@ export class IssuanceConfigCreateComponent implements OnInit {
 
   removeAuthorizationServer(index: number): void {
     this.authorizationServers.removeAt(index);
+    // A row button changes the form without marking it dirty.
+    this.authorizationServers.markAsDirty();
     focusRowAfterRemoval(
       this.injector,
       () => this.serverHeaders?.map((header) => header.nativeElement),
@@ -1431,6 +1441,8 @@ export class IssuanceConfigCreateComponent implements OnInit {
     const target = this.authorizationServers.at(targetIndex);
     this.authorizationServers.setControl(index, target);
     this.authorizationServers.setControl(targetIndex, current);
+    // A row button changes the form without marking it dirty.
+    this.authorizationServers.markAsDirty();
 
     // The panel moves with its server, which can take focus off the pressed button. At the first
     // or last position that button stays focusable, with the reason in its tooltip.
@@ -1508,6 +1520,8 @@ export class IssuanceConfigCreateComponent implements OnInit {
 
   removeTrustAnchor(index: number): void {
     this.trustAnchors.removeAt(index);
+    // A row button changes the form without marking it dirty.
+    this.trustAnchors.markAsDirty();
     focusRowAfterRemoval(
       this.injector,
       () => this.trustAnchorSelects?.toArray().flatMap((picker) => picker.focusTarget ?? []),
@@ -1538,6 +1552,8 @@ export class IssuanceConfigCreateComponent implements OnInit {
    */
   removeTrustListEntry(trustLists: FormArray, index: number, section: HTMLElement): void {
     trustLists.removeAt(index);
+    // A row button changes the form without marking it dirty.
+    trustLists.markAsDirty();
     focusRowAfterRemoval(
       this.injector,
       () => this.entriesIn(section, this.trustListFields),

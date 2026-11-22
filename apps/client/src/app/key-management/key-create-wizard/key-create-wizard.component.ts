@@ -40,6 +40,8 @@ import { type CreatedForForm, openedFromForm } from '../../common/return-to-form
 import { ReturnToFormComponent } from '../../common/return-to-form.component';
 import { showFieldsToFix } from '../../common/field-to-fix.util';
 import { keyUsages, type KeyUsageType } from '../key-usage';
+import type { PageWithUnsavedChanges } from '../../services/unsaved-changes.service';
+import { ROTATION_DAYS_ERROR, rotationDaysValidators } from '../rotation-days';
 
 export type KeyChainTypeSelection = 'internalChain' | 'externalCaChain' | 'standalone';
 export type AccessSourceSelection = 'selfSigned' | 'external';
@@ -85,7 +87,7 @@ function requiredText(control: AbstractControl): ValidationErrors | null {
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './key-create-wizard.component.scss',
 })
-export class KeyCreateWizardComponent implements OnInit, OnDestroy {
+export class KeyCreateWizardComponent implements OnInit, OnDestroy, PageWithUnsavedChanges {
   @ViewChild('stepper') stepper!: MatStepper;
 
   /** Set when the user left the wizard, so a running request does not pull them back. */
@@ -96,6 +98,7 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
   caSourceForm: FormGroup;
   accessSourceForm: FormGroup;
   configForm: FormGroup;
+  readonly rotationDaysError = ROTATION_DAYS_ERROR;
 
   isSubmitting = false;
   /** Holds the fields of the Configure step; Create focuses the first invalid one. */
@@ -266,8 +269,8 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
       alg: ['ES256' as SigningAlgorithm, Validators.required],
       // Rotation settings (only for internal and external CA chains)
       rotationEnabled: [true],
-      rotationIntervalDays: [30, [Validators.required, Validators.min(1), Validators.max(3650)]],
-      certValidityDays: [365, [Validators.required, Validators.min(1), Validators.max(3650)]],
+      rotationIntervalDays: [30, rotationDaysValidators],
+      certValidityDays: [365, rotationDaysValidators],
       externalPrivateKey: [''],
       externalCertificate: [''],
       useExternalCertificate: [false],
@@ -306,6 +309,14 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.destroyed = true;
+  }
+
+  /**
+   * The steps before Configure hold choices only; Configure holds what was typed, pasted or
+   * read from a selected file.
+   */
+  hasUnsavedChanges(): boolean {
+    return this.configForm.dirty;
   }
 
   /** Requires the pasted key and certificate chain while the Configure step shows them. */
@@ -551,6 +562,7 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
       const createDto = this.createRequest(usage, description);
 
       const result = await this.keyChainService.create(createDto);
+      this.configForm.markAsPristine();
 
       // The key cannot sign before its certificate is stored, which its page requests.
       if (this.requestsCertificate) {
@@ -608,6 +620,7 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
       rotationPolicy: this.isExternalCaChain ? this.rotationPolicy() : undefined,
     };
     const result = await this.keyChainService.import(importDto);
+    this.configForm.markAsPristine();
     if (this.openedFromForm) {
       this.returnToForm(result.id, `Key chain "${importDto.description}" imported`);
       return;
@@ -837,12 +850,18 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
   async onPrivateKeyFileSelected(event: Event): Promise<void> {
     const file = (event.target as HTMLInputElement).files?.[0];
     if (!file) return;
-    this.configForm.patchValue({ externalPrivateKey: await file.text() });
+    const control = this.configForm.get('externalPrivateKey')!;
+    control.setValue(await file.text());
+    // A selected file fills the field without marking it dirty.
+    control.markAsDirty();
   }
 
   async onCertificateFilesSelected(event: Event): Promise<void> {
     const files = (event.target as HTMLInputElement).files;
     if (!files?.length) return;
-    this.configForm.patchValue({ externalCertificate: await readCertificateFiles(files) });
+    const control = this.configForm.get('externalCertificate')!;
+    control.setValue(await readCertificateFiles(files));
+    // The selected files fill the field without marking it dirty.
+    control.markAsDirty();
   }
 }
