@@ -88,8 +88,12 @@ test.describe('verifier admin', () => {
     await expect(nav.getByText('All Sessions')).toHaveCount(0);
 
     await page.goto('/session-management');
-    // The guard's snackbar closes after 3 seconds, so check it first.
-    await expect(page.getByText('Access denied')).toBeVisible();
+    // The guard's snackbar closes after a few seconds, so check it first.
+    await expect(
+      page.getByText(
+        'Access denied to /session-management: it needs the issuance:offer, presentation:request or sessions:read role.'
+      )
+    ).toBeVisible();
     await expect(page).toHaveURL(/\/dashboard$/);
   });
 });
