@@ -7,6 +7,7 @@ import {
     buildClaimsMetadata,
     buildDisclosureFrame,
     buildJsonSchema,
+    formattedClaimFields,
 } from "../../../../../src/issuer/configuration/credentials/utils/derive.js";
 import type { ClaimFieldDefinition } from "../../../../../src/issuer/configuration/credentials/utils/types.js";
 import { builtInShape, changedBuiltIns } from "../../../../shared/built-ins.js";
@@ -393,5 +394,51 @@ describe("prototype pollution", () => {
 
         expect(Object.hasOwn(byNamespace, "__proto__")).toBe(true);
         expect(Object.getPrototypeOf(byNamespace)).toBe(Object.prototype);
+    });
+});
+
+describe("claim field format", () => {
+    const fields: ClaimFieldDefinition[] = [
+        {
+            namespace: "eu.europa.ec.eudi.pid.1",
+            path: ["eu.europa.ec.eudi.pid.1", "birth_date"],
+            type: "string",
+            format: "date",
+            constraints: { minLength: 10 },
+        },
+        {
+            path: ["history"],
+            type: "array",
+            children: [{ path: ["at"], type: "string", format: "date-time" }],
+        },
+        { path: ["name"], type: "string" },
+    ];
+
+    it("carries the format into the claims schema", () => {
+        const schema = buildJsonSchema(fields) as any;
+        expect(
+            schema.properties["eu.europa.ec.eudi.pid.1"].properties.birth_date,
+        ).toEqual({ minLength: 10, type: "string", format: "date" });
+        expect(schema.properties.history.items.properties.at.format).toBe(
+            "date-time",
+        );
+        expect(schema.properties.name.format).toBeUndefined();
+    });
+
+    it("lists formatted fields with their claim and namespace paths", () => {
+        expect(formattedClaimFields(fields)).toEqual([
+            {
+                format: "date",
+                path: ["eu.europa.ec.eudi.pid.1", "birth_date"],
+                namespace: "eu.europa.ec.eudi.pid.1",
+                namespacePath: ["birth_date"],
+            },
+            {
+                format: "date-time",
+                path: ["history", null, "at"],
+                namespace: "history",
+                namespacePath: [null, "at"],
+            },
+        ]);
     });
 });

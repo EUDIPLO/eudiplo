@@ -1,3 +1,4 @@
+import { CLAIM_FIELD_FORMAT_VALIDATORS } from "@eudiplo/config-format/claim-formats.js";
 import { UnsupportedClaimPattern } from "@eudiplo/config-format/claim-patterns.js";
 import type { ErrorObject } from "ajv";
 import { Ajv2020 as Ajv } from "ajv/dist/2020.js";
@@ -43,6 +44,8 @@ export function assertClaimsMatchConfiguration(
         // The strict check for `properties` names matching `patternProperties`
         // runs the patterns with the native RegExp engine, not `code.regExp`.
         allowMatchingProperties: true,
+        // Claim field `format`: only the formats a field may declare.
+        formats: CLAIM_FIELD_FORMAT_VALIDATORS,
     });
     let validate: ReturnType<typeof ajv.compile>;
     try {

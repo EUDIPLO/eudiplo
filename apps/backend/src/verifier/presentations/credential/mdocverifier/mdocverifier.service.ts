@@ -43,6 +43,7 @@ import {
     type VerificationFailureType,
 } from "../verification-failure.js";
 import { toProvenance } from "../verification-provenance.js";
+import { withDateStrings } from "./mdoc-date-values.js";
 
 /**
  * Session data for the standard OID4VP flow (direct_post or direct_post.jwt).
@@ -159,7 +160,8 @@ export class MdocverifierService {
             > = {};
             const claims: Record<string, unknown> = {};
             for (const [ns] of namespacesMap.entries()) {
-                const nsClaims = issuerSigned.getPrettyClaims(ns);
+                const prettyClaims = issuerSigned.getPrettyClaims(ns);
+                const nsClaims = prettyClaims && withDateStrings(prettyClaims);
                 if (nsClaims) {
                     claimsByNamespace[ns] = nsClaims;
                     Object.assign(claims, nsClaims);

@@ -8,6 +8,11 @@ import {
     duplicateDisplayLocaleMessage,
     findDuplicateDisplayLocales,
 } from "@eudiplo/config-format/display-entries.js";
+import {
+    CLAIM_FIELD_FORMAT_TYPE_MESSAGE,
+    CLAIM_FIELD_FORMATS,
+    claimFieldFormatAllowed,
+} from "@eudiplo/config-format/claim-formats.js";
 import { z } from "zod";
 import {
     ACTIVE_CREDENTIALS_REQUIRE_STATUS_MANAGEMENT,
@@ -49,6 +54,12 @@ const ClaimFieldDefinitionSchema: z.ZodTypeAny = z.lazy(() =>
                     "array",
                 ])
                 .describe("Data type of the claim value."),
+            format: z
+                .enum(CLAIM_FIELD_FORMATS)
+                .optional()
+                .describe(
+                    'JSON Schema format of a "string" claim: "date" for an RFC 3339 full-date (YYYY-MM-DD), "date-time" for an RFC 3339 date-time. Claims that do not match are refused at issuance. mDOC credentials encode the claim as full-date (CBOR tag 1004, RFC 8943) or tdate (CBOR tag 0, in UTC with whole seconds); SD-JWT VC credentials issue the string unchanged. Only allowed with type "string".',
+                ),
             defaultValue: z
                 .unknown()
                 .optional()
@@ -70,7 +81,7 @@ const ClaimFieldDefinitionSchema: z.ZodTypeAny = z.lazy(() =>
                 .optional()
                 .describe("Localized display metadata for this field."),
             constraints: ClaimConstraintsSchema.optional().describe(
-                "Optional JSON Schema 2020-12 validation keywords for the claim value. Only the JSON Schema keywords listed under Constraints in the claims documentation are accepted (validation keywords such as pattern, minLength or enum, subschemas such as items or properties, and annotations); other keys, such as format or $ref, are refused.",
+                "Optional JSON Schema 2020-12 validation keywords for the claim value. Only the JSON Schema keywords listed under Constraints in the claims documentation are accepted (validation keywords such as pattern, minLength or enum, subschemas such as items or properties, and annotations); other keys, such as $ref or format (use the field's format instead), are refused.",
             ),
             children: z
                 .array(ClaimFieldDefinitionSchema)
@@ -80,7 +91,11 @@ const ClaimFieldDefinitionSchema: z.ZodTypeAny = z.lazy(() =>
                 ),
         })
         .describe("Claim field definition.")
-        .strict(),
+        .strict()
+        .refine(claimFieldFormatAllowed, {
+            path: ["format"],
+            message: CLAIM_FIELD_FORMAT_TYPE_MESSAGE,
+        }),
 );
 
 const KeyAttestationsRequiredSchema = z

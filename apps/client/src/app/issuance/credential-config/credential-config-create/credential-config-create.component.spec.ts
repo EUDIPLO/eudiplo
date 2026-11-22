@@ -680,6 +680,34 @@ describe('CredentialConfigCreateComponent', () => {
     );
   });
 
+  it('keeps a date format through the form and checks the default against it', () => {
+    const field = component.createFieldGroup({
+      path: ['birth_date'],
+      type: 'string',
+      format: 'date',
+      defaultValue: '1964-08-12',
+    });
+    expect(field.valid).toBe(true);
+    expect((component as any).buildFieldsPayload([field.value])[0].format).toBe('date');
+
+    field.get('defaultValue')!.setValue('1964-02-30');
+    expect(field.get('defaultValue')!.getError('defaultValueType')).toContain('YYYY-MM-DD');
+    field.get('format')!.setValue('');
+    expect(field.valid).toBe(true);
+    expect((component as any).buildFieldsPayload([field.value])[0]).not.toHaveProperty('format');
+  });
+
+  it('drops the format when the claim is no longer a string', () => {
+    const field = component.createFieldGroup({
+      path: ['issued'],
+      type: 'string',
+      format: 'date-time',
+    });
+    field.get('type')!.setValue('integer');
+    expect(field.get('format')!.value).toBe('');
+    expect((component as any).buildFieldsPayload([field.value])[0]).not.toHaveProperty('format');
+  });
+
   it('keeps the constraints of the PID template through the form', () => {
     const pid = configs.find((template) => template.name.startsWith('PID'))!;
     component.loadPredefinedConfig(pid);
