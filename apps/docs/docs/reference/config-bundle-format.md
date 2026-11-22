@@ -52,7 +52,7 @@ rejects versions newer than its own.
 | `KeyChain`           | `KeyChainConfigFile`          | 4               |           |
 | `KeyChainDefaults`   | `KeyChainDefaultsConfigFile`  | 2               | yes       |
 | `IssuanceConfig`     | `IssuanceConfigFile`          | 7               | yes       |
-| `CredentialConfig`   | `CredentialConfigFile`        | 4               |           |
+| `CredentialConfig`   | `CredentialConfigFile`        | 5               |           |
 | `PresentationConfig` | `PresentationConfigFile`      | 5               |           |
 | `AttributeProvider`  | `AttributeProviderConfigFile` | 1               |           |
 | `WebhookEndpoint`    | `WebhookEndpointConfigFile`   | 1               |           |
@@ -181,6 +181,13 @@ empty color, and removes any other color with the warning
 one locale stops the migration with the required input
 `DISPLAY_LOCALE_DUPLICATE` at `/spec/config/display/<index>/locale`, and nothing
 is written until you remove or change it. 9.x cannot read v4 files.
+
+**CredentialConfig v5** came with EUDIPLO 10.1. It adds the optional `format`
+(`date`, `date-time`) on `string` claim fields, which mDOC issuance encodes as
+`full-date` (CBOR tag 1004) or `tdate` (CBOR tag 0); see
+[Dates](../issuance/claims.md#dates). The v4 to v5 step changes nothing, and a
+bare credential configuration file with `format` on a field, nested ones
+included, is read as v5. 10.0 cannot read v5 files.
 
 **KeyChain v2** came with EUDIPLO 10.0. It adds the optional `type`
 (`standalone` or `internalChain`), which exports write. For a `private-jwk` key

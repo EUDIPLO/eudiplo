@@ -295,6 +295,31 @@ describe('IssuanceOfferComponent', () => {
     );
   });
 
+  it('hints and checks date claims as issuance does', async () => {
+    component.credentialConfigs = [
+      {
+        id: 'pid',
+        config: { format: 'dc+sd-jwt' },
+        fields: [
+          { path: ['birth_date'], type: 'string', format: 'date' },
+          { path: ['name'], type: 'string' },
+        ],
+      } as any,
+    ];
+
+    await component.setClaimFormFields(['pid']);
+
+    const fieldGroup = component.fields[0].fieldGroup ?? [];
+    const birthDate = fieldGroup.find((field) => field.key === 'birth_date')!;
+    expect(birthDate.props?.description).toContain('YYYY-MM-DD');
+    const check = (birthDate.validators as any).claimFormat.expression;
+    expect(check({ value: '1964-08-12' })).toBe(true);
+    expect(check({ value: '12.08.1964' })).toBe(false);
+    expect(check({ value: '' })).toBe(true);
+    const name = fieldGroup.find((field) => field.key === 'name')!;
+    expect(name.validators?.['claimFormat']).toBeUndefined();
+  });
+
   it('includes configured authorization server options in order for pre-authorized flow', () => {
     component.issuanceConfig = {
       authorizationServers: [

@@ -19,6 +19,10 @@ import { toBuffer } from "../../shared/utils/buffer.util.js";
 import { assertCertificateChainLength } from "../../shared/utils/certificate-chain-length.util.js";
 import { CertificatePathBuilder } from "../../shared/utils/certificate-path.util.js";
 import {
+    assertCertificatePathConstraints,
+    CertificatePathConstraintViolation,
+} from "../../shared/utils/certificate-path-constraints.util.js";
+import {
     certificateValidityAt,
     formatCertificateDate,
 } from "../../shared/utils/certificate-validity.util.js";
@@ -328,6 +332,31 @@ const verifyChainCertificates = async (
 };
 
 /**
+ * Matches the cause that {@link mdocContext}'s `verifyCertificateChain` gives
+ * for a path that breaks an RFC 5280 constraint
+ * ({@link assertCertificatePathConstraints}), as
+ * {@link CERTIFICATE_VALIDITY_FAILURE} does for validity periods.
+ */
+export const CERTIFICATE_PATH_CONSTRAINT_FAILURE =
+    /cause=certificate path constraint: /i;
+
+/**
+ * Check the RFC 5280 constraints of a root-first path, from the trusted
+ * certificate at the start to the signing certificate
+ * ({@link assertCertificatePathConstraints}).
+ */
+const verifyChainConstraints = (parsedChain: X509Certificate[]): void => {
+    try {
+        assertCertificatePathConstraints([...parsedChain].reverse());
+    } catch (error) {
+        if (!(error instanceof CertificatePathConstraintViolation)) throw error;
+        throw new Error(
+            `X.509 chain verification failed at index=${parsedChain.length - 1 - error.index}. cause=${error.message}`,
+        );
+    }
+};
+
+/**
  * Everything @owf/mdoc needs except `fetch`, for signing, session transcripts
  * and issuance. Verifying a presented mDOC fetches the status list or
  * identifier list named in its MSO, and has to use {@link withFetch} with a
@@ -512,6 +541,7 @@ export const mdocContext: Omit<MdocContext, "fetch"> = {
                 now ?? new Date(),
                 trimmed.previousCertificate,
             );
+            verifyChainConstraints(parsedChain);
 
             if (X509_CHAIN_TRACE) {
                 const [chainDiagnostics, links] = await Promise.all([

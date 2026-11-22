@@ -1,3 +1,5 @@
+import type { ClaimFieldFormat } from "./formats";
+
 export type CredentialFormat = "dc+sd-jwt" | "mso_mdoc";
 
 export type FieldType =
@@ -19,6 +21,8 @@ export interface FieldDisplay {
 export interface ClaimFieldDefinition {
   path: ClaimPathElement[];
   type: FieldType;
+  /** JSON Schema format of a `string` claim; mDOC issuance encodes dates as CBOR tags 1004 and 0. */
+  format?: ClaimFieldFormat;
   defaultValue?: unknown;
   mandatory?: boolean;
   disclosable?: boolean;
