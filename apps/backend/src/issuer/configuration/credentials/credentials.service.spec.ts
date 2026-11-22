@@ -30,6 +30,7 @@ describe("CredentialsService proof_types_supported generation", () => {
             tenantId: "tenant-1",
             fields: [],
             vct: "https://issuer.example/vct/credential-1",
+            keyBinding: true,
             config: {
                 format: CredentialFormat.SD_JWT_VC,
                 display: [],
@@ -331,6 +332,113 @@ describe("CredentialsService proof_types_supported generation", () => {
         ).proof_types_supported as ProofTypesSupported;
         expect(parsedProofTypes.attestation.key_attestations_required).toEqual({
             key_storage: ["iso_18045_high"],
+        });
+    });
+
+    describe("key binding (OpenID4VCI 1.0 Section 12.2.4)", () => {
+        const supportedEntry = async (entity: CredentialConfig) => {
+            listForTenant.mockResolvedValue([entity]);
+            const supported =
+                await service.getCredentialConfigurationSupported("tenant-1");
+            return supported[entity.id] as unknown as Record<string, unknown>;
+        };
+
+        it.each([
+            ["false", { keyBinding: false }],
+            ["unset", { keyBinding: undefined }],
+        ])(
+            "omits binding methods and proof types for an SD-JWT VC with keyBinding %s",
+            async (_label, overrides) => {
+                const entry = await supportedEntry(buildEntity({}, overrides));
+
+                expect(entry).not.toHaveProperty(
+                    "cryptographic_binding_methods_supported",
+                );
+                expect(entry).not.toHaveProperty("proof_types_supported");
+                expect(entry).toMatchObject({
+                    format: "dc+sd-jwt",
+                    vct: "https://issuer.example/vct/credential-1",
+                });
+            },
+        );
+
+        it("publishes jwk binding and proof types for an SD-JWT VC with keyBinding true", async () => {
+            const entry = await supportedEntry(buildEntity({}));
+
+            expect(entry.cryptographic_binding_methods_supported).toEqual([
+                "jwk",
+            ]);
+            expect(
+                Object.keys(entry.proof_types_supported as object).sort(),
+            ).toEqual(["attestation", "jwt"]);
+        });
+
+        it("keeps proof types when a key attestation is required without keyBinding", async () => {
+            const entry = await supportedEntry(
+                buildEntity(
+                    { keyAttestationsRequired: { key_storage: [] } },
+                    { keyBinding: false },
+                ),
+            );
+
+            expect(entry.cryptographic_binding_methods_supported).toEqual([
+                "jwk",
+            ]);
+            expect(
+                (entry.proof_types_supported as ProofTypesSupported).jwt
+                    .key_attestations_required,
+            ).toEqual({});
+        });
+
+        it("always publishes cose_key binding for an mDOC, whatever keyBinding says", async () => {
+            const entry = await supportedEntry(
+                buildEntity(
+                    {
+                        format: CredentialFormat.MSO_MDOC,
+                        docType: "org.iso.18013.5.1.mDL",
+                    },
+                    { keyBinding: false },
+                ),
+            );
+
+            expect(entry.cryptographic_binding_methods_supported).toEqual([
+                "cose_key",
+            ]);
+            expect(entry.proof_types_supported).toBeDefined();
+        });
+
+        it("reports whether requests need key proofs", async () => {
+            const findForTenant = vi.fn();
+            Object.assign(service, {
+                credentialConfigurationRepository: { findForTenant },
+            });
+            const requirement = async (entity: CredentialConfig) => {
+                findForTenant.mockResolvedValue(entity);
+                return (
+                    await service.getProofRequirementsForCredentialConfig(
+                        "tenant-1",
+                        entity.id,
+                    )
+                ).keyProofRequired;
+            };
+
+            expect(await requirement(buildEntity({}))).toBe(true);
+            expect(
+                await requirement(buildEntity({}, { keyBinding: false })),
+            ).toBe(false);
+        });
+
+        it("produces issuer metadata without proof types that the OpenID4VCI parser accepts", async () => {
+            const entry = await supportedEntry(
+                buildEntity({}, { keyBinding: false }),
+            );
+            const parsed = zCredentialIssuerMetadataSchema.safeParse({
+                credential_issuer: "https://issuer.example/issuers/tenant-1",
+                credential_endpoint:
+                    "https://issuer.example/issuers/tenant-1/vci/credential",
+                credential_configurations_supported: { "credential-1": entry },
+            });
+            expect(parsed.success).toBe(true);
         });
     });
 });

@@ -5,7 +5,11 @@ import type { CredentialBatchIssuer } from "../ports/credential-batch-issuer.js"
 
 export interface IssueCredentialsForKeysInput {
     credentialConfigurationId: string;
-    holderKeys: Jwk[];
+    /**
+     * One credential is issued per key. Without keys (a configuration that
+     * needs no key proof), one credential bound to no key is issued.
+     */
+    holderKeys?: Jwk[];
     session: SessionData;
     claims?: Record<string, unknown>;
     issuanceSetId: string;
@@ -18,7 +22,8 @@ export class IssueCredentialsForKeys {
 
     async execute(input: IssueCredentialsForKeysInput): Promise<string[]> {
         const credentials: string[] = [];
-        for (const holderKey of input.holderKeys) {
+        const holderKeys: (Jwk | undefined)[] = input.holderKeys ?? [undefined];
+        for (const holderKey of holderKeys) {
             credentials.push(
                 await this.issuer.issue(
                     input.credentialConfigurationId,

@@ -30,6 +30,7 @@ import {
 } from "./domain/credential-claims-validation.js";
 import type { CredentialConfiguration as CredentialConfig } from "./domain/credential-configuration.js";
 import { hostedVctUrl } from "./domain/hosted-vct.js";
+import { requiresKeyProof } from "./domain/key-proof-requirement.js";
 import {
     CredentialFormat,
     CredentialProofType,
@@ -44,6 +45,7 @@ import {
     buildMsoMdocConfig,
     buildSdJwtDcConfig,
     MSO_MDOC_FORMAT,
+    type ProofTypesSupported,
     type TypedCredentialConfig,
     toCredentialConfigurationSupported,
 } from "./types/credential-config-types.js";
@@ -241,7 +243,7 @@ export class CredentialsService {
     private buildProofTypesSupported(
         config: CredentialConfig["config"],
         algs: string[],
-    ): BuildCredentialConfigOptions["proofTypesSupported"] {
+    ): ProofTypesSupported {
         const supportedProofTypes = this.resolveConfiguredProofTypes(config);
         // An empty key_storage / user_authentication list means "no
         // constraint"; the metadata only allows non-empty arrays, so it is
@@ -278,7 +280,30 @@ export class CredentialsService {
             };
         }
 
-        return proofTypesSupported as BuildCredentialConfigOptions["proofTypesSupported"];
+        return proofTypesSupported as ProofTypesSupported;
+    }
+
+    /**
+     * The binding methods and proof types a configuration publishes, or
+     * nothing when its credential requests carry no key proofs
+     * (`requiresKeyProof`).
+     */
+    private buildKeyBinding(
+        entity: CredentialConfig,
+        bindingMethod: "jwk" | "cose_key",
+    ): BuildCredentialConfigOptions["keyBinding"] {
+        if (!requiresKeyProof(entity)) return undefined;
+        return {
+            bindingMethods: [bindingMethod],
+            // Proofs are signed by the wallet, so they accept every algorithm
+            // EUDIPLO verifies, not only the one of the credential's key chain.
+            proofTypesSupported: this.buildProofTypesSupported(
+                entity.config,
+                this.cryptoImplementationService.getAlgs(
+                    CredentialFormat.SD_JWT_VC,
+                ) as string[],
+            ),
+        };
     }
 
     private buildCredentialMetadata(
@@ -302,7 +327,8 @@ export class CredentialsService {
     }
 
     /**
-     * Proof requirements of a credential configuration: the supported proof
+     * Proof requirements of a credential configuration: whether its requests
+     * carry key proofs at all (`requiresKeyProof`), the supported proof
      * types and, when configured, the key attestation requirements every
      * proof has to meet.
      */
@@ -310,6 +336,7 @@ export class CredentialsService {
         tenantId: string,
         credentialConfigurationId: string,
     ): Promise<{
+        keyProofRequired: boolean;
         proofTypes: CredentialProofType[];
         keyAttestationsRequired?: CredentialConfig["config"]["keyAttestationsRequired"];
         /** Whether credentials follow the wallet unit and its maintenance period. */
@@ -328,6 +355,7 @@ export class CredentialsService {
         }
 
         return {
+            keyProofRequired: requiresKeyProof(config),
             proofTypes: this.resolveConfiguredProofTypes(config.config),
             keyAttestationsRequired:
                 config.config.keyAttestationsRequired ?? undefined,
@@ -352,19 +380,13 @@ export class CredentialsService {
         // Build credential_metadata with display and claims
         const credentialMetadata = this.buildCredentialMetadata(entity);
 
-        const proofTypesSupported = this.buildProofTypesSupported(
-            entity.config,
-            this.cryptoImplementationService.getAlgs(
-                CredentialFormat.SD_JWT_VC,
-            ) as string[],
-        );
-
+        // An mDOC is always bound to its device key; `keyBinding` does not
+        // apply to it (see `requiresKeyProof`).
         const config = buildMsoMdocConfig(
             doctype,
             {
                 signingAlgorithms: algs,
-                bindingMethods: ["cose_key"],
-                proofTypesSupported,
+                keyBinding: this.buildKeyBinding(entity, "cose_key"),
             },
             credentialMetadata,
             entity.config.scope,
@@ -404,21 +426,11 @@ export class CredentialsService {
         // Build credential_metadata with display and claims
         const credentialMetadata = this.buildCredentialMetadata(entity);
 
-        // Proofs are signed by the wallet, so they accept every algorithm
-        // EUDIPLO verifies, not only the one of the credential's key chain.
-        const proofTypesSupported = this.buildProofTypesSupported(
-            entity.config,
-            this.cryptoImplementationService.getAlgs(
-                CredentialFormat.SD_JWT_VC,
-            ) as string[],
-        );
-
         const config = buildSdJwtDcConfig(
             vct,
             {
                 signingAlgorithms: algs,
-                bindingMethods: ["jwk"],
-                proofTypesSupported,
+                keyBinding: this.buildKeyBinding(entity, "jwk"),
             },
             credentialMetadata,
             entity.config.scope,
@@ -459,7 +471,7 @@ export class CredentialsService {
      * Issues a credential based on the provided configuration and session.
      * Delegates to format-specific issuer services.
      * @param credentialConfigurationId
-     * @param holderCnf
+     * @param holderCnf The proven holder key; absent for a configuration whose requests carry no key proofs
      * @param session
      * @param preloadedClaims Claims resolved from the session's claim source; without them, the static defaults are issued
      * @param issuanceSetId Opaque identifier grouping credentials issued with one access token
@@ -468,7 +480,7 @@ export class CredentialsService {
      */
     async getCredential(
         credentialConfigurationId: string,
-        holderCnf: Jwk,
+        holderCnf: Jwk | undefined,
         session: Session,
         preloadedClaims?: Record<string, any>,
         issuanceSetId?: string,

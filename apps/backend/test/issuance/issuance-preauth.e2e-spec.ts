@@ -1206,6 +1206,152 @@ describe("Issuance - Pre-authorized Code Flow", () => {
         }
     });
 
+    // Issue #1625: an SD-JWT VC without key binding publishes no proof types
+    // (OpenID4VCI 1.0 Section 12.2.4), so `proofs` is optional (Section 8.2).
+    test("issues an SD-JWT VC without key binding without proofs and ignores proofs sent anyway", async () => {
+        const baseConfig = (
+            await request(app.getHttpServer())
+                .get("/issuer/credentials/pid-no-key")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .expect(200)
+        ).body;
+        const configId = `pid-unbound-${Date.now()}`;
+        await request(app.getHttpServer())
+            .post("/issuer/credentials")
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .send({
+                id: configId,
+                config: baseConfig.config,
+                fields: baseConfig.fields,
+                vct: baseConfig.vct,
+                keyBinding: false,
+                ...(baseConfig.keyChainId && {
+                    keyChainId: baseConfig.keyChainId,
+                }),
+            })
+            .expect(201);
+
+        try {
+            const metadata = await credentialConfigurationMetadata(
+                app,
+                configId,
+            );
+            expect(metadata).not.toHaveProperty(
+                "cryptographic_binding_methods_supported",
+            );
+            expect(metadata).not.toHaveProperty("proof_types_supported");
+            // Key-bound configurations keep both.
+            const bound = await credentialConfigurationMetadata(
+                app,
+                "pid-no-key",
+            );
+            expect(bound.cryptographic_binding_methods_supported).toEqual([
+                "jwk",
+            ]);
+            expect(bound.proof_types_supported.jwt).toBeDefined();
+
+            const offerResponse = await request(app.getHttpServer())
+                .post("/issuer/offer")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .send({
+                    response_type: "uri",
+                    credentialConfigurationIds: [configId],
+                    flow: "pre_authorized_code",
+                })
+                .expect(201);
+
+            const holderKeyPair = await generateKeyPair("ES256", {
+                extractable: true,
+            });
+            const holderPrivateKeyJwk = await exportJWK(
+                holderKeyPair.privateKey,
+            );
+            const holderPublicKeyJwk = await exportJWK(holderKeyPair.publicKey);
+            const client = new Openid4vciClient({
+                callbacks: {
+                    ...callbacks,
+                    clientAuthentication: clientAuthenticationAnonymous(),
+                    signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
+                },
+            });
+            const credentialOffer = await client.resolveCredentialOffer(
+                offerResponse.body.uri,
+            );
+            const issuerMetadata = await client.resolveIssuerMetadata(
+                credentialOffer.credential_issuer,
+            );
+            const { accessTokenResponse } =
+                await client.retrievePreAuthorizedCodeAccessTokenFromOffer({
+                    credentialOffer,
+                    issuerMetadata,
+                });
+            const unboundPayload = async (response: {
+                credentialResponse: { credentials?: unknown[] };
+            }) => {
+                expect(response.credentialResponse.credentials).toHaveLength(1);
+                const credential: string = (
+                    response.credentialResponse.credentials?.[0] as any
+                ).credential;
+                return (await sdjwt.decode(credential)).jwt?.payload as Record<
+                    string,
+                    unknown
+                >;
+            };
+
+            // Without proofs: one credential bound to no key.
+            const withoutProofs = await client.retrieveCredentials({
+                accessToken: accessTokenResponse.access_token,
+                credentialConfigurationId: configId,
+                issuerMetadata,
+            });
+            const payload = await unboundPayload(withoutProofs);
+            expect(payload.vct).toBe(baseConfig.vct);
+            expect(payload).not.toHaveProperty("cnf");
+            await expect(
+                client.sendNotification({
+                    issuerMetadata,
+                    notification: {
+                        notificationId:
+                            withoutProofs.credentialResponse.notification_id!,
+                        event: "credential_accepted",
+                    },
+                    accessToken: accessTokenResponse.access_token,
+                }),
+            ).resolves.toMatchObject({ ok: true });
+
+            // Proofs sent anyway are ignored, even with a nonce EUDIPLO never
+            // issued: they neither bind the credential nor add credentials.
+            const { jwt: proofJwt } =
+                await client.createCredentialRequestJwtProof({
+                    issuerMetadata,
+                    signer: {
+                        method: "jwk",
+                        alg: "ES256",
+                        publicJwk: holderPublicKeyJwk,
+                    } as JwsSignerJwk,
+                    clientId,
+                    issuedAt: new Date(),
+                    credentialConfigurationId: configId,
+                    nonce: "not-issued-by-eudiplo",
+                });
+            const withProofs = await client.retrieveCredentials({
+                accessToken: accessTokenResponse.access_token,
+                credentialConfigurationId: configId,
+                issuerMetadata,
+                proofs: { jwt: [proofJwt] },
+            });
+            expect(await unboundPayload(withProofs)).not.toHaveProperty("cnf");
+        } finally {
+            await request(app.getHttpServer())
+                .delete(`/issuer/credentials/${configId}`)
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`);
+        }
+    });
+
     test("enforces the key attestation requirements of the credential configuration", async () => {
         const trust = await configureTrustedAttestationProvider(app, authToken);
         const baseConfig = (

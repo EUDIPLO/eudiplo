@@ -40,7 +40,7 @@ export class CompleteDeferredCredential {
         try {
             credential = await this.issuer.issue(
                 transaction.credentialConfigurationId,
-                transaction.holderCnf as Jwk,
+                (transaction.holderCnf as Jwk | null) ?? undefined,
                 session,
                 input.claims,
                 transaction.issuanceSetId ?? undefined,

@@ -25,7 +25,8 @@ import { roundedCredentialValidity } from "../credential-time.util.js";
 
 export interface SdJwtVcIssueOptions {
     credentialConfiguration: CredentialConfiguration;
-    holderCnf: Jwk;
+    /** The proven holder key; absent when the configuration needs no key proof. */
+    holderCnf?: Jwk;
     session: Session;
     claims: Record<string, any>;
     federationEntityId?: string;
@@ -118,6 +119,12 @@ export class SdjwtvcIssuerService {
         // If key binding is enabled, include the JWK in the cnf
         let cnf: { jwk: Jwk } | undefined;
         if (credentialConfiguration.keyBinding) {
+            // keyBinding makes requests carry a key proof (`requiresKeyProof`).
+            if (!holderCnf) {
+                throw new Error(
+                    "A key-bound SD-JWT VC needs the holder key of a key proof",
+                );
+            }
             cnf = {
                 jwk: holderCnf,
             };
