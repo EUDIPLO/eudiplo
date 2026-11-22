@@ -1,6 +1,8 @@
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatTooltip } from '@angular/material/tooltip';
+import { By } from '@angular/platform-browser';
 import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angular/router';
 import type { Session } from '@eudiplo/sdk-core';
 import { of } from 'rxjs';
@@ -23,7 +25,7 @@ describe('SessionManagementListComponent', () => {
 
   async function setup(
     queryParams: Record<string, string | string[]> = {},
-    granted = ['issuance:offer', 'presentation:request']
+    granted = ['issuance:offer', 'issuance:manage', 'presentation:request']
   ) {
     roles = granted;
     vi.useFakeTimers();
@@ -388,6 +390,50 @@ describe('SessionManagementListComponent', () => {
     );
     expect(buttons.some((text) => text.includes('Issuance Offer'))).toBe(false);
     expect(buttons.some((text) => text.includes('Presentation Request'))).toBe(false);
+  });
+
+  it('locks Issuance Offer with the reason and skips the credential configs without issuance:manage', async () => {
+    await setup({}, ['issuance:offer', 'presentation:request']);
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+
+    for (const area of ['.header-actions', '.empty-state']) {
+      // Only the verification side stays a link.
+      const links = [...element.querySelectorAll(`${area} a`)].map((a) => a.getAttribute('href'));
+      expect(links, area).toEqual(['/offer/presentation']);
+      const locked = fixture.debugElement
+        .queryAll(By.css(`${area} button`))
+        .find((button) => button.nativeElement.textContent.includes('Issuance Offer'))!;
+      expect(locked.nativeElement.getAttribute('aria-disabled'), area).toBe('true');
+      expect(locked.injector.get(MatTooltip).message, area).toContain(
+        'also needs the issuance:manage role'
+      );
+    }
+
+    expect(TestBed.inject(CredentialConfigService).loadConfigurations).not.toHaveBeenCalled();
+    expect(component.issuanceConfigOptions).toEqual([]);
+    expect(component.presentationConfigOptions).toHaveLength(1);
+    expect(element.querySelector('mat-hint')?.textContent?.trim()).toBe(
+      'Not listed, as your roles cannot read them: credential configs need issuance:manage.'
+    );
+  });
+
+  it('requests no configurations for sessions:read alone and says why', async () => {
+    await setup({}, ['sessions:read']);
+
+    expect(TestBed.inject(CredentialConfigService).loadConfigurations).not.toHaveBeenCalled();
+    expect(TestBed.inject(PresentationManagementService).loadConfigurations).not.toHaveBeenCalled();
+    expect(component.configFilterHint).toBe(
+      'Not listed, as your roles cannot read them: credential configs need issuance:manage; verification configs need presentation:manage or presentation:request.'
+    );
+  });
+
+  it('adds no filter hint when the caller reads every configuration of its sessions', async () => {
+    await setup();
+    fixture.detectChanges();
+
+    expect(component.configFilterHint).toBe('');
+    expect((fixture.nativeElement as HTMLElement).querySelector('mat-hint')).toBeNull();
   });
 
   it('counts the manage roles toward a side, like the backend', async () => {

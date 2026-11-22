@@ -164,6 +164,17 @@ a wallet redeems or answers them with, such as the offer and request URIs and
 the transaction code. Changing credential status
 (`POST /api/session/revoke`) needs `credentials:status` or `issuance:manage`.
 
+In the web client, **New Issuance** needs `issuance:manage` besides
+`issuance:offer`: its form reads the credential configurations, the issuer
+settings and the attribute providers. With `issuance:offer` alone, the
+navigation leaves out the **Credential Issuance** section, Issuance Offer on the
+session list and Recreate Offer on a session are locked with that reason, and the page itself says so instead of
+loading. Create offers through the API in that case. **New Verification** needs
+only `presentation:request`. The Configuration filter of the session list offers
+credential configurations only with `issuance:manage` and presentation
+configurations only with `presentation:manage` or `presentation:request`, and
+says which it leaves out.
+
 Typical role sets:
 
 | Caller                                   | Roles                                                         |

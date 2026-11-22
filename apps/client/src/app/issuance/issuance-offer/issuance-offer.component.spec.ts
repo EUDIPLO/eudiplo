@@ -5,7 +5,7 @@ import { MatAutocompleteTrigger } from '@angular/material/autocomplete';
 import { MatDialog } from '@angular/material/dialog';
 import { By } from '@angular/platform-browser';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { Router } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import { provideFormlyCore } from '@ngx-formly/core';
 import { withFormlyMaterial } from '@ngx-formly/material';
 import { of } from 'rxjs';
@@ -79,11 +79,14 @@ describe('IssuanceOfferComponent', () => {
           },
         },
         { provide: MatSnackBar, useValue: { open: vi.fn() } },
-        { provide: Router, useValue: { navigate: vi.fn().mockResolvedValue(true) } },
+        provideRouter([]),
         { provide: MatDialog, useValue: { open: vi.fn() } },
       ],
     }).compileComponents();
 
+    vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    // A caller who can use the form: issuance:offer and issuance:manage.
+    vi.spyOn(TestBed.inject(JwtService), 'hasRole').mockReturnValue(true);
     fixture = TestBed.createComponent(IssuanceOfferComponent);
     component = fixture.componentInstance;
   });
@@ -104,7 +107,6 @@ describe('IssuanceOfferComponent', () => {
       const load = vi.mocked(TestBed.inject(CredentialConfigService).loadConfigurations);
       load.mockRejectedValue({ statusCode: 403, message: 'Forbidden resource' });
       vi.spyOn(console, 'error').mockImplementation(() => undefined);
-      vi.spyOn(TestBed.inject(JwtService), 'hasRole').mockReturnValue(false);
 
       const page = await render();
 
@@ -112,7 +114,6 @@ describe('IssuanceOfferComponent', () => {
       expect(error.textContent).toContain(
         'Failed to load the credential configs and issuer settings: Forbidden resource'
       );
-      expect(error.textContent).toContain('needs the issuance:manage role');
       expect(page.querySelector('mat-stepper')).toBeNull();
       expect(page.textContent).not.toContain('No credential configs available');
 
@@ -146,17 +147,26 @@ describe('IssuanceOfferComponent', () => {
       }
     });
 
-    it('adds no role hint for a caller with issuance:manage', async () => {
-      vi.mocked(TestBed.inject(IssuanceConfigService).getConfig).mockRejectedValue({
-        statusCode: 503,
-        message: 'Service Unavailable',
-      });
-      vi.spyOn(console, 'error').mockImplementation(() => undefined);
-      vi.spyOn(TestBed.inject(JwtService), 'hasRole').mockReturnValue(true);
+    it('says why the form cannot be used with issuance:offer alone, without loading or Retry', async () => {
+      vi.mocked(TestBed.inject(JwtService).hasRole).mockImplementation(
+        (role) => role === 'issuance:offer'
+      );
 
       const page = await render();
 
-      expect(page.querySelector('app-load-error')!.textContent).not.toContain('issuance:manage');
+      const notice = page.querySelector('.form-locked')!;
+      expect(notice.getAttribute('role')).toBe('status');
+      expect(notice.textContent).toContain(
+        'Creating offers in the Web Client also needs the issuance:manage role'
+      );
+      expect(notice.querySelector('a')?.textContent?.trim()).toBe('Back to Sessions');
+      expect(page.querySelector('app-load-error')).toBeNull();
+      expect(page.querySelector('mat-stepper')).toBeNull();
+      // The header does not invite the caller to fill in a form they cannot use.
+      expect(page.querySelector('.page-header')?.textContent).not.toContain('fill in the claims');
+      expect(TestBed.inject(CredentialConfigService).loadConfigurations).not.toHaveBeenCalled();
+      expect(TestBed.inject(IssuanceConfigService).getConfig).not.toHaveBeenCalled();
+      expect(TestBed.inject(AttributeProviderService).getAll).not.toHaveBeenCalled();
     });
   });
 

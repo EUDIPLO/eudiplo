@@ -6,18 +6,7 @@
     </div>
     @if (canOfferIssuance || canRequestPresentation) {
       <div class="header-actions">
-        @if (canOfferIssuance) {
-          <a matButton="filled" [routerLink]="['/offer/issuance']">
-            <mat-icon>add</mat-icon>
-            Issuance Offer
-          </a>
-        }
-        @if (canRequestPresentation) {
-          <a matButton="tonal" [routerLink]="['/offer/presentation']">
-            <mat-icon>add</mat-icon>
-            Presentation Request
-          </a>
-        }
+        <ng-container [ngTemplateOutlet]="createActions" />
       </div>
     }
   </header>
@@ -109,6 +98,9 @@
               </mat-optgroup>
             }
           </mat-select>
+          @if (configFilterHint) {
+            <mat-hint>{{ configFilterHint }}</mat-hint>
+          }
         </mat-form-field>
 
         <mat-form-field appearance="outline" subscriptSizing="dynamic">
@@ -366,18 +358,7 @@
                         wallet.
                       </p>
                       <span class="empty-actions">
-                        @if (canOfferIssuance) {
-                          <a matButton="filled" [routerLink]="['/offer/issuance']">
-                            <mat-icon>add</mat-icon>
-                            Issuance Offer
-                          </a>
-                        }
-                        @if (canRequestPresentation) {
-                          <a matButton="tonal" [routerLink]="['/offer/presentation']">
-                            <mat-icon>add</mat-icon>
-                            Presentation Request
-                          </a>
-                        }
+                        <ng-container [ngTemplateOutlet]="createActions" />
                       </span>
                     } @else {
                       <p>Sessions appear here once offers or requests are sent to wallets.</p>
@@ -401,3 +382,30 @@
     </div>
   </mat-card>
 </div>
+
+<!-- The header and the empty state offer the same ways to start a session. -->
+<ng-template #createActions>
+  @if (canOfferIssuance && canUseIssuanceForm) {
+    <a matButton="filled" [routerLink]="['/offer/issuance']">
+      <mat-icon>add</mat-icon>
+      Issuance Offer
+    </a>
+  } @else if (canOfferIssuance) {
+    <button
+      matButton="filled"
+      type="button"
+      disabled
+      disabledInteractive
+      [matTooltip]="issuanceFormLockedReason"
+    >
+      <mat-icon>add</mat-icon>
+      Issuance Offer
+    </button>
+  }
+  @if (canRequestPresentation) {
+    <a matButton="tonal" [routerLink]="['/offer/presentation']">
+      <mat-icon>add</mat-icon>
+      Presentation Request
+    </a>
+  }
+</ng-template>

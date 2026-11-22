@@ -237,6 +237,20 @@ describe('AppComponent navigation', () => {
     ).toEqual(entries);
   });
 
+  // New Issuance reads the credential configs and issuer settings, which need issuance:manage.
+  it.each<[Role[], boolean]>([
+    [['issuance:offer', 'issuance:manage'], true],
+    [['issuance:offer'], false],
+    [['issuance:manage'], false],
+  ])('lists New Issuance for %j: %s', (roles, shown) => {
+    expect(menuItems(roles).includes('New Issuance')).toBe(shown);
+  });
+
+  it('leaves out the empty Credential Issuance section for issuance:offer alone', () => {
+    const element = renderNav(['issuance:offer']);
+    expect(element.querySelector('button[aria-controls="nav-section-issuance"]')).toBeNull();
+  });
+
   it.each<[Role[], boolean]>([
     [['presentation:manage'], true],
     [['clients:manage'], false],
