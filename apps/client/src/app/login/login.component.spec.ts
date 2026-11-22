@@ -177,6 +177,14 @@ describe('LoginComponent with a kept session', () => {
     expect(api.refreshAccessToken).not.toHaveBeenCalled();
   });
 
+  it('links Help to the documentation site, like the other documentation links', () => {
+    api.kept = false;
+    render();
+
+    const help = [...page().querySelectorAll('a')].find((a) => a.textContent?.includes('Help'));
+    expect(help?.getAttribute('href')).toBe('https://docs.eudiplo.dev/');
+  });
+
   it('returns to the page the user came from once the session renews', () => {
     queryParams['returnUrl'] = '/issuance/offers?page=2';
     render();
