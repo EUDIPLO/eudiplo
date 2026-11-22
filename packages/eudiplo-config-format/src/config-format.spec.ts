@@ -434,7 +434,7 @@ describe("portable schema identity and migrations", () => {
         expect(bareFileVersion(kind, spec)).toBe(version);
     });
 
-    it("upgrades a v1 credential configuration to v4 unchanged", () => {
+    it("upgrades a v1 credential configuration to v5 unchanged", () => {
         const v1 = {
             $schema: schemaUrl("CredentialConfig", 1),
             metadata: { generation: 2 },
@@ -450,8 +450,9 @@ describe("portable schema identity and migrations", () => {
             "credential-config-v2-x509-trusted-authority",
             "credential-config-v3-claim-constraint-keywords",
             "credential-config-v4-display-colors-locales",
+            "credential-config-v5-claim-date-format",
         ]);
-        expect(result.document.$schema).toBe(schemaUrl("CredentialConfig", 4));
+        expect(result.document.$schema).toBe(schemaUrl("CredentialConfig", 5));
         expect(result.document.spec).toEqual(v1.spec);
         expect(result.document.metadata).toEqual({ generation: 2 });
         // Repeating the upgrade on the result is a no-op.
@@ -505,9 +506,10 @@ describe("portable schema identity and migrations", () => {
             expect(result.migrations).toEqual([
                 "credential-config-v3-claim-constraint-keywords",
                 "credential-config-v4-display-colors-locales",
+                "credential-config-v5-claim-date-format",
             ]);
             expect(result.document.$schema).toBe(
-                schemaUrl("CredentialConfig", 4),
+                schemaUrl("CredentialConfig", 5),
             );
             expect(result.document.spec.fields).toEqual([
                 {
@@ -630,6 +632,87 @@ describe("portable schema identity and migrations", () => {
         });
     });
 
+    describe("CredentialConfig v5 claim date formats", () => {
+        const fields = [
+            {
+                namespace: "eu.europa.ec.eudi.pid.1",
+                path: ["birth_date"],
+                type: "string",
+                format: "date",
+            },
+            {
+                path: ["address"],
+                type: "object",
+                children: [
+                    { path: ["since"], type: "string", format: "date-time" },
+                ],
+            },
+        ];
+        const document = (version: number, spec: Record<string, unknown>) => ({
+            $schema: schemaUrl("CredentialConfig", version),
+            spec: {
+                id: "pid",
+                config: {
+                    format: "mso_mdoc",
+                    docType: "eu.europa.ec.eudi.pid.1",
+                    display: [],
+                },
+                ...spec,
+            },
+        });
+
+        it("upgrades a v4 file unchanged, and again as a no-op", () => {
+            const v4 = document(4, {
+                fields: [{ path: ["birth_date"], type: "string" }],
+            });
+            const result = migrateDocument(v4, validateConfigDocument);
+
+            expect(result.issues).toEqual([]);
+            expect(result.migrations).toEqual([
+                "credential-config-v5-claim-date-format",
+            ]);
+            expect(result.document.$schema).toBe(
+                schemaUrl("CredentialConfig", 5),
+            );
+            expect(result.document.spec).toEqual(v4.spec);
+            expect(
+                migrateDocument(result.document, validateConfigDocument)
+                    .migrations,
+            ).toEqual([]);
+        });
+
+        it("accepts format on v5 fields only", () => {
+            expect(validateConfigDocument(document(5, { fields }))).toEqual([]);
+            expect(
+                validateConfigDocument(document(4, { fields })).length,
+            ).toBeGreaterThan(0);
+        });
+
+        it("refuses other formats", () => {
+            expect(
+                validateConfigDocument(
+                    document(5, {
+                        fields: [
+                            { path: ["mail"], type: "string", format: "email" },
+                        ],
+                    }),
+                ).length,
+            ).toBeGreaterThan(0);
+        });
+
+        it("reads a bare file with a format, nested ones included, as v5", () => {
+            expect(bareFileVersion("CredentialConfig", { fields })).toBe(5);
+            expect(
+                bareFileVersion("CredentialConfig", { fields: [fields[1]] }),
+            ).toBe(5);
+            expect(
+                bareFileVersion("CredentialConfig", {
+                    fields: [{ path: ["name"], type: "string" }],
+                }),
+            ).toBe(1);
+        });
+    });
+
     describe("CredentialConfig v4 display entries", () => {
         const v3 = (display: unknown[]) => ({
             $schema: schemaUrl("CredentialConfig", 3),
@@ -655,6 +738,7 @@ describe("portable schema identity and migrations", () => {
             expect(result.issues).toEqual([]);
             expect(result.migrations).toEqual([
                 "credential-config-v4-display-colors-locales",
+                "credential-config-v5-claim-date-format",
             ]);
             expect(result.document.spec.config).toEqual({
                 format: "dc+sd-jwt",
@@ -676,7 +760,7 @@ describe("portable schema identity and migrations", () => {
             );
 
             expect(result.document.$schema).toBe(
-                schemaUrl("CredentialConfig", 4),
+                schemaUrl("CredentialConfig", 5),
             );
             expect(result.document.spec.config).toEqual({
                 format: "dc+sd-jwt",
@@ -728,7 +812,7 @@ describe("portable schema identity and migrations", () => {
             });
             expect(result.issues).toEqual([]);
             expect(result.document.$schema).toBe(
-                schemaUrl("CredentialConfig", 4),
+                schemaUrl("CredentialConfig", 5),
             );
         });
 

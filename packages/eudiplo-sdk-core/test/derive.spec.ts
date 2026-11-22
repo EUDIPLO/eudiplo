@@ -9,6 +9,19 @@ import {
 import type { ClaimFieldDefinition } from "../src/config";
 
 describe("config derive helpers", () => {
+  it("puts a claim field format into the claims schema, as the backend does", () => {
+    const schema = buildJsonSchema([
+      { path: ["birth_date"], type: "string", format: "date" },
+      { path: ["name"], type: "string" },
+    ]);
+
+    expect(schema.properties?.birth_date).toEqual({
+      type: "string",
+      format: "date",
+    });
+    expect(schema.properties?.name).not.toHaveProperty("format");
+  });
+
   it("builds SD-JWT runtime artifacts from fields", () => {
     const fields: ClaimFieldDefinition[] = [
       {

@@ -204,4 +204,51 @@ describe("assertClaimsMatchConfiguration", () => {
         expect(Object.hasOwn(Object.prototype, "x")).toBe(false);
         expect(({} as Record<string, unknown>).required).toBeUndefined();
     });
+
+    describe("date formats", () => {
+        const dated = {
+            id: "pid",
+            fields: [
+                { path: ["birth_date"], type: "string", format: "date" },
+                { path: ["issued_at"], type: "string", format: "date-time" },
+            ],
+        };
+
+        it("accepts RFC 3339 full-date and date-time claims", () => {
+            expect(() =>
+                assertClaimsMatchConfiguration(dated, {
+                    birth_date: "2024-02-29",
+                    issued_at: "2026-11-20T10:15:30.5+02:00",
+                }),
+            ).not.toThrow();
+        });
+
+        it.each([
+            [
+                "a day that does not exist",
+                { birth_date: "2023-02-29" },
+                "/birth_date",
+            ],
+            [
+                "a date with a time",
+                { birth_date: "1964-08-12T00:00:00Z" },
+                "/birth_date",
+            ],
+            [
+                "a date-time without offset",
+                { issued_at: "2026-11-20T10:15:30" },
+                "/issued_at",
+            ],
+            [
+                "a leap second",
+                { issued_at: "2026-12-31T23:59:60Z" },
+                "/issued_at",
+            ],
+        ])("refuses %s without naming the value", (_case, claims, path) => {
+            const call = () => assertClaimsMatchConfiguration(dated, claims);
+            expect(call).toThrow(InvalidCredentialClaims);
+            expect(call).toThrow(`${path}: must match format`);
+            expect(call).not.toThrow(Object.values(claims)[0]);
+        });
+    });
 });

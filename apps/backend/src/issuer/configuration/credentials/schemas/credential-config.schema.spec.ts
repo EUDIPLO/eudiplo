@@ -495,3 +495,58 @@ describe("CredentialConfigCreateSchema display entries", () => {
         ]);
     });
 });
+
+describe("CredentialConfigCreateSchema claim field format", () => {
+    const withFields = (fields: unknown[]) =>
+        CredentialConfigCreateSchema.safeParse({ ...credentialConfig, fields });
+
+    test("accepts date and date-time on string fields, nested ones included", () => {
+        const result = withFields([
+            { path: ["birth_date"], type: "string", format: "date" },
+            {
+                path: ["history"],
+                type: "array",
+                children: [
+                    { path: ["at"], type: "string", format: "date-time" },
+                ],
+            },
+        ]);
+
+        expect(result.error?.issues).toBeUndefined();
+    });
+
+    test.each([
+        [
+            "a non-string field",
+            [{ path: ["age"], type: "integer", format: "date" }],
+            ["fields", 0, "format"],
+        ],
+        [
+            "a nested non-string field",
+            [
+                {
+                    path: ["address"],
+                    type: "object",
+                    children: [
+                        { path: ["since"], type: "number", format: "date" },
+                    ],
+                },
+            ],
+            ["fields", 0, "children", 0, "format"],
+        ],
+    ])("refuses a format on %s", (_case, fields, path) => {
+        expect(withFields(fields).error?.issues).toEqual([
+            expect.objectContaining({
+                path,
+                message: 'format is only allowed on fields of type "string"',
+            }),
+        ]);
+    });
+
+    test("refuses other formats", () => {
+        expect(
+            withFields([{ path: ["mail"], type: "string", format: "email" }])
+                .success,
+        ).toBe(false);
+    });
+});
