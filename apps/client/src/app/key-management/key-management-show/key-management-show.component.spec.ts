@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { renderDownloadButton } from '../../config-portability/config-document.testing';
 import { keyChainDeleteQuestion } from '../key-chain-delete-question';
+import { keyChainRotateQuestion } from '../key-chain-rotate-question';
 import { KeyChainService } from '../key-chain.service';
 import { KeyManagementShowComponent } from './key-management-show.component';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -616,6 +617,70 @@ describe('KeyManagementShowComponent delete', () => {
 
     expect(keyChainService.delete).toHaveBeenCalledOnce();
     expectUnavailable(fixture, remove, 'Deleting the key chain…');
+  });
+});
+
+describe('KeyManagementShowComponent rotate', () => {
+  const keyChain = {
+    id: 'signing',
+    description: 'PID signing',
+    type: 'standalone',
+    usageType: 'access',
+    rotationPolicy: { enabled: true },
+    activeCertificate: { pem: '', subject: 'CN=key', issuer: 'CN=EUDI Hub CA' },
+  } as KeyChainResponseDto;
+  let keyChainService: { rotate: ReturnType<typeof vi.fn> };
+  let component: KeyManagementShowComponent;
+  let loadKey: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    keyChainService = { rotate: vi.fn().mockResolvedValue(undefined) };
+    component = new KeyManagementShowComponent(
+      keyChainService as never,
+      {} as never,
+      { open: vi.fn() } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never
+    );
+    component.keyChain = keyChain;
+    // Reloads the key chain after the rotation.
+    loadKey = vi.fn().mockResolvedValue(undefined);
+    (component as unknown as { loadKey: typeof loadKey }).loadKey = loadKey;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('asks the shared question, which names the certificate that is replaced', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    await component.rotateKey();
+
+    expect(window.confirm).toHaveBeenCalledWith(keyChainRotateQuestion(keyChain));
+    expect(vi.mocked(window.confirm).mock.lastCall?.[0]).toContain(
+      'The active certificate issued by "CN=EUDI Hub CA" is replaced by a self-signed certificate'
+    );
+    expect(keyChainService.rotate).not.toHaveBeenCalled();
+  });
+
+  it('sends one request when Rotate is selected twice', async () => {
+    let finish!: () => void;
+    keyChainService.rotate.mockReturnValue(new Promise<void>((done) => (finish = done)));
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    const first = component.rotateKey();
+    expect(component.rotating).toBe(true);
+    await component.rotateKey();
+    finish();
+    await first;
+
+    expect(window.confirm).toHaveBeenCalledOnce();
+    expect(keyChainService.rotate).toHaveBeenCalledTimes(1);
+    expect(loadKey).toHaveBeenCalledWith('signing');
+    expect(component.rotating).toBe(false);
   });
 });
 

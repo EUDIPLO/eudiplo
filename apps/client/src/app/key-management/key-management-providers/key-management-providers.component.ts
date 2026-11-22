@@ -9,7 +9,10 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { RouterModule } from '@angular/router';
 import { KmsConfigDto, KmsProviderInfoDto } from '@eudiplo/sdk-core';
-import { JsonViewDialogComponent } from '../../issuance/credential-config/credential-config-create/json-view-dialog/json-view-dialog.component';
+import {
+  JsonViewDialogComponent,
+  type JsonViewDialogData,
+} from '../../issuance/credential-config/credential-config-create/json-view-dialog/json-view-dialog.component';
 import { kmsConfigSchema } from '../../utils/schemas';
 import { KEY_ADMIN_FORBIDDEN_MESSAGE, KeyChainService, isForbidden } from '../key-chain.service';
 import { JwtService, TENANT_ADMIN_ROLES } from '../../services/jwt.service';
@@ -156,36 +159,37 @@ export class KeyManagementProvidersComponent implements OnInit {
   async openTenantConfigEditor(): Promise<void> {
     // `disabledInteractive` keeps the button clickable while it cannot be used.
     if (this.tenantConfigUnavailableReason) return;
-    const dialogRef = this.dialog.open(JsonViewDialogComponent, {
+    // The dialog saves before it closes, so a rejected configuration stays in the editor.
+    this.dialog.open(JsonViewDialogComponent, {
       data: {
         title: 'Tenant KMS Configuration JSON',
         jsonData: this.tenantConfig,
         readonly: false,
         schema: kmsConfigSchema,
-      },
+        save: (json: unknown) => this.saveTenantConfig(json as KmsConfigDto),
+      } satisfies JsonViewDialogData,
       disableClose: true,
       minWidth: '60vw',
       maxWidth: '95vw',
       maxHeight: '95vh',
     });
-
-    dialogRef.afterClosed().subscribe(async (result) => {
-      if (!result) {
-        return;
-      }
-
-      await this.saveTenantConfig(result as KmsConfigDto);
-    });
   }
 
-  async saveTenantConfig(config: KmsConfigDto): Promise<void> {
+  /**
+   * Saves the tenant configuration and resolves to whether it was saved; on failure it says why.
+   * The providers reload afterwards without being awaited, so the editor closes once the
+   * configuration is stored.
+   */
+  async saveTenantConfig(config: KmsConfigDto): Promise<boolean> {
     this.isSavingConfig = true;
     try {
       const result = await this.keyChainService.updateTenantKmsConfig(config);
       this.hasTenantConfig = !!result.tenantConfig;
       this.tenantConfig = this.editableConfig(result.tenantConfig);
       this.snackBar.open('Tenant KMS configuration saved', 'Dismiss', { duration: 3000 });
-      await this.loadProviders();
+      // Sets isLoading before it returns, so the editor stays locked until the reload is done.
+      void this.loadProviders();
+      return true;
     } catch (error) {
       console.error('Failed to save tenant KMS config:', error);
       openErrorSnackBar(
@@ -195,12 +199,25 @@ export class KeyManagementProvidersComponent implements OnInit {
           : getApiErrorMessage(error, 'Failed to save tenant KMS configuration'),
         'Dismiss'
       );
+      return false;
     } finally {
       this.isSavingConfig = false;
     }
   }
 
+  /** Deletes the tenant configuration after asking, so the global configuration applies again. */
   async resetTenantConfig(): Promise<void> {
+    if (this.tenantConfigUnavailableReason || !this.hasTenantConfig) return;
+    if (
+      !confirm(
+        'Delete the tenant KMS configuration and use the global configuration?' +
+          " The tenant's providers and their stored credentials are removed. Key chains on a" +
+          ' provider that only the tenant configuration defines cannot be used until that' +
+          ' provider is configured again. This cannot be undone.'
+      )
+    ) {
+      return;
+    }
     this.isSavingConfig = true;
     try {
       await this.keyChainService.deleteTenantKmsConfig();

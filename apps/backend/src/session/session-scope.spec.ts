@@ -6,6 +6,7 @@ import {
     mayChangeSessions,
     readOnlySessionTypes,
     sessionChangeScope,
+    sessionConfigLimits,
     sessionReadScope,
 } from "./session-scope.js";
 
@@ -144,5 +145,25 @@ describe("credentialStatusScope", () => {
         expect(() => credentialStatusScope(token([Role.Clients]))).toThrow(
             "Token has no role that grants access to sessions",
         );
+    });
+});
+
+describe("sessionConfigLimits", () => {
+    it("takes the limits from the client's allowed configurations", () => {
+        expect(
+            sessionConfigLimits({
+                roles: [Role.PresentationRequest],
+                client: {
+                    clientId: "client-1",
+                    roles: [Role.PresentationRequest],
+                    allowedPresentationConfigs: ["pid"],
+                    allowedIssuanceConfigs: null,
+                },
+            }),
+        ).toEqual({ presentation: ["pid"], issuance: null });
+    });
+
+    it("has no limits for a token without a stored client", () => {
+        expect(sessionConfigLimits(token([Role.SessionsRead]))).toEqual({});
     });
 });
