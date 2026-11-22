@@ -134,6 +134,19 @@ export class KeyManagementCreateComponent implements OnInit, PageWithUnsavedChan
     return (usage && keyUsages[usage]?.icon) ?? 'key';
   }
 
+  /**
+   * The key chain's type, and for a standalone key who signed its certificate, as the key page
+   * tells: a certificate whose issuer is its subject signed itself.
+   */
+  get typeLabel(): string {
+    if (this.isInternalChain) return 'Internal Chain (Root CA + Signing Key)';
+    const certificate = this.keyChain?.activeCertificate;
+    if (!certificate) return 'Standalone';
+    return certificate.issuer === certificate.subject
+      ? 'Standalone (Self-signed)'
+      : 'Standalone (CA-issued certificate)';
+  }
+
   get isInternalChain(): boolean {
     return this.keyChain?.type === 'internalChain';
   }

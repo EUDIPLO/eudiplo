@@ -19,7 +19,7 @@ test('presentation offer page is reachable when authenticated', async ({ page })
   await selectPidPresentationConfig(page);
   await page.getByRole('button', { name: 'Generate Request' }).click();
   await expect(page).toHaveURL(/\/session-management\/[^/]+$/);
-  await expect(page.getByText('Presentation Request QR Code')).toBeVisible();
+  await expect(page.getByText('Verification Request QR Code')).toBeVisible();
 });
 
 test.describe('presentation offer with dc api', () => {

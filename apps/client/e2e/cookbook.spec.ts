@@ -315,7 +315,7 @@ test('issue and verify cookbook', async ({ page }) => {
     await selectOption(page, 'Verification Config', 'membership-check');
     await page.getByRole('button', { name: 'Generate Request' }).click();
     await expect(page).toHaveURL(/\/session-management\/[^/]+$/);
-    await expect(page.getByText('Presentation Request QR Code')).toBeVisible();
+    await expect(page.getByText('Verification Request QR Code')).toBeVisible();
 
     const response = await presentCredential(await scanQrCode(page), holder);
     expect(response.status, await response.text()).toBe(200);

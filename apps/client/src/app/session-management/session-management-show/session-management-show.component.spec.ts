@@ -88,7 +88,7 @@ describe('SessionManagementShowComponent', () => {
     fixture.detectChanges();
 
     const hero: HTMLElement = fixture.nativeElement.querySelector('.hero');
-    expect(hero.querySelector('h1')?.textContent?.trim()).toBe('Presentation Session');
+    expect(hero.querySelector('h1')?.textContent?.trim()).toBe('Verification Session');
     const badge = hero.querySelector('.status-badge')!;
     expect(badge.classList).toContain(tone);
     expect(badge.textContent?.trim()).toBe(label);

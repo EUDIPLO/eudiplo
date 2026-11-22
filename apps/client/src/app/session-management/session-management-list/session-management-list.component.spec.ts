@@ -234,7 +234,7 @@ describe('SessionManagementListComponent', () => {
 
     expect(open).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ data: { count: 2 } })
+      expect.objectContaining({ data: { offers: 2, requests: 0 } })
     );
     expect(cancelSession).toHaveBeenCalledTimes(2);
     expect(cancelSession).toHaveBeenCalledWith('s-1', 'sent to wrong recipient');
@@ -387,7 +387,7 @@ describe('SessionManagementListComponent', () => {
       (button) => button.textContent!.trim()
     );
     expect(buttons.some((text) => text.includes('Issuance Offer'))).toBe(false);
-    expect(buttons.some((text) => text.includes('Presentation Request'))).toBe(false);
+    expect(buttons.some((text) => text.includes('Verification Request'))).toBe(false);
   });
 
   it('counts the manage roles toward a side, like the backend', async () => {
@@ -484,7 +484,7 @@ describe('SessionManagementListComponent', () => {
     expect(element.querySelector('.empty-state')?.textContent).toContain('No sessions yet');
     expect(
       [...element.querySelectorAll('.empty-state a')].map((a) => a.textContent?.trim())
-    ).toEqual(['add Issuance Offer', 'add Presentation Request']);
+    ).toEqual(['add Issuance Offer', 'add Verification Request']);
     expect(element.querySelector('.table-title output')?.textContent?.trim()).toBe('0 sessions');
 
     TestBed.resetTestingModule();

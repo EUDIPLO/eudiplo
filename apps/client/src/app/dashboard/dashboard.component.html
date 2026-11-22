@@ -385,7 +385,7 @@
           >
             <span class="action-icon"><mat-icon>fact_check</mat-icon></span>
             <span class="action-copy">
-              <strong>Request Presentation</strong>
+              <strong>Request Verification</strong>
               <small>Ask a wallet to present credentials</small>
             </span>
             <mat-icon class="action-arrow">arrow_forward</mat-icon>
@@ -410,7 +410,7 @@
             @if (
               dashboardService.canReadPresentationConfigs && dashboardService.verifyReadinessReason
             ) {
-              Presentation is blocked:
+              Verification is blocked:
               <strong>{{ dashboardService.verifyReadinessReason }}</strong>.
             }
           </span>
@@ -560,7 +560,7 @@
         <mat-card appearance="outlined" class="recent-activity-card">
           <mat-card-header>
             <h2 mat-card-title>Recent Activity</h2>
-            <mat-card-subtitle>Latest issuance and presentation session updates</mat-card-subtitle>
+            <mat-card-subtitle>Latest issuance and verification session updates</mat-card-subtitle>
             @if (
               dashboardService.recentSessions.length > 0 ||
               dashboardService.hasFailed('recentSessions')

@@ -199,7 +199,8 @@ export class PresentationRequestComponent implements OnInit {
       this.isReadyToGenerate = readiness.ready;
       this.readinessError = readiness.ready
         ? null
-        : readiness.reason || 'Presentation cannot be generated with the current setup.';
+        : readiness.reason ||
+          'The verification request cannot be generated with the current setup.';
     } catch (error) {
       console.error('Error checking presentation readiness:', error);
       this.isReadyToGenerate = false;
@@ -218,7 +219,9 @@ export class PresentationRequestComponent implements OnInit {
   private get generateProblem(): string | null {
     if (this.dcApiOriginProblem) return this.dcApiOriginProblem;
     if (this.isReadyToGenerate) return null;
-    return this.readinessError || 'Presentation cannot be generated with the current setup.';
+    return (
+      this.readinessError || 'The verification request cannot be generated with the current setup.'
+    );
   }
 
   /**
@@ -226,7 +229,7 @@ export class PresentationRequestComponent implements OnInit {
    * configuration that is not selected is no such reason: generating says to select one.
    */
   get generateUnavailableReason(): string {
-    if (this.generatingOffer) return 'Generating the presentation request…';
+    if (this.generatingOffer) return 'Generating the verification request…';
     if (this.configs.length === 0) return this.noConfigurationReason;
     if (this.form.get('requestId')?.invalid) return '';
     // Known at once, and still true after the readiness check.
@@ -303,7 +306,7 @@ export class PresentationRequestComponent implements OnInit {
       this.offerResult = result || null;
 
       this.snackBar.open(
-        'Presentation request generated successfully! Redirecting to session details...',
+        'Verification request generated successfully! Redirecting to session details...',
         'Close',
         {
           duration: 2000,
@@ -318,7 +321,7 @@ export class PresentationRequestComponent implements OnInit {
     } catch (error) {
       console.error('Error generating presentation request:', error);
       // The backend names a missing access certificate here.
-      const message = getApiErrorMessage(error, 'Failed to generate presentation request');
+      const message = getApiErrorMessage(error, 'Failed to generate verification request');
       openErrorSnackBar(this.snackBar, message, 'Close', { panelClass: ['error-snackbar'] });
     } finally {
       this.generatingOffer = false;

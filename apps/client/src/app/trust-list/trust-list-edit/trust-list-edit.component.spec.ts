@@ -568,14 +568,13 @@ describe('TrustListEditComponent loading the trust list', () => {
     buttons(page, 'Add Internal Entity')[0].click();
     harness.detectChanges();
 
-    const noIssuer = 'No credential signing key chains. Create one in Key Management.';
-    const noRevocation =
-      'No status list or credential signing key chains. Create one in Key Management.';
+    const noIssuer = 'No credential signing key chains. Create one in Keys.';
+    const noRevocation = 'No status list or credential signing key chains. Create one in Keys.';
     expect(hints(page, noIssuer)).toHaveLength(1);
     expect(hints(page, noRevocation)).toHaveLength(1);
     // The signing key chain select has its key chain, so it keeps its usual hint and gets no link.
     expect(hints(page, 'Key chain used to sign the trust list JWT')).toHaveLength(1);
-    expect(hints(page, 'No trust list key chains. Create one in Key Management.')).toHaveLength(0);
+    expect(hints(page, 'No trust list key chains. Create one in Keys.')).toHaveLength(0);
     // The links open in a new tab, so the form keeps what was entered.
     const links = [...page.querySelectorAll<HTMLAnchorElement>('a[href^="/keys/create"]')];
     expect(
@@ -635,7 +634,7 @@ describe('TrustListEditComponent loading the trust list', () => {
     expect(signing.hasError('signingKeyChain')).toBe(true);
     const errors = () =>
       [...page.querySelectorAll('mat-error')].map((error) => error.textContent?.trim());
-    expect(errors()).toEqual(['No trust list key chains. Create one in Key Management.']);
+    expect(errors()).toEqual(['No trust list key chains. Create one in Keys.']);
     expect(hints(page, 'Key chain used to sign the trust list JWT')).toHaveLength(0);
     const links = [...page.querySelectorAll<HTMLAnchorElement>('a[href^="/keys/create"]')];
     expect(

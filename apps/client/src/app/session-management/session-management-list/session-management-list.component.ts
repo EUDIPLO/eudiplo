@@ -189,7 +189,7 @@ export class SessionManagementListComponent implements OnInit, AfterViewInit {
   typeOptions = [
     { value: 'all', label: 'All Sessions' },
     { value: 'issuance', label: 'Issuance Sessions' },
-    { value: 'presentation', label: 'Presentation Sessions' },
+    { value: 'presentation', label: 'Verification Sessions' },
   ];
 
   statusOptions = [
@@ -576,7 +576,14 @@ export class SessionManagementListComponent implements OnInit, AfterViewInit {
     if (this.cancellableSelected.length === 0) {
       return 'None of the selected sessions can be cancelled: a wallet has redeemed them or they have ended';
     }
-    return 'Cancel the selected offers a wallet has not redeemed yet, so it can no longer use them';
+    const requests = this.cancellableSelected.filter(isPresentationSession).length;
+    const offers = this.cancellableSelected.length - requests;
+    if (offers && requests) {
+      return 'Cancel the selected offers and requests a wallet has not used yet, so it can no longer use them';
+    }
+    return offers
+      ? 'Cancel the selected offers a wallet has not redeemed yet, so it can no longer use them'
+      : 'Cancel the selected requests a wallet has not answered yet, so it can no longer use them';
   }
 
   async cancelSelectedSessions() {
@@ -591,7 +598,13 @@ export class SessionManagementListComponent implements OnInit, AfterViewInit {
       this.dialog
         .open<CancelSessionDialogComponent, CancelSessionDialogData, CancelSessionDialogResult>(
           CancelSessionDialogComponent,
-          { data: { count: sessions.length }, width: '480px' }
+          {
+            data: {
+              offers: sessions.filter((session) => !isPresentationSession(session)).length,
+              requests: sessions.filter(isPresentationSession).length,
+            },
+            width: '480px',
+          }
         )
         .afterClosed()
         .subscribe(resolve)

@@ -166,7 +166,7 @@
                 <mat-option [value]="null">Default (auto-managed)</mat-option>
                 @for (keyChain of keyChains; track keyChain.id) {
                   <mat-option [value]="keyChain.id"
-                    >{{ keyChain.id }} ({{ keyChain.usageType }})</mat-option
+                    >{{ keyChain.id }} ({{ usageLabel(keyChain) }})</mat-option
                   >
                 }
               </mat-select>
@@ -195,9 +195,8 @@
               <div class="info-box">
                 <mat-icon aria-hidden="true">info</mat-icon>
                 <span>
-                  No key chains with <strong>statusList</strong> or
-                  <strong>attestation</strong> usage found. The tenant's default key chain will be
-                  used for signing.
+                  No <strong>Status List</strong> or <strong>Credential Signing</strong> key chains
+                  found. The tenant's default key chain will be used for signing.
                 </span>
               </div>
             }

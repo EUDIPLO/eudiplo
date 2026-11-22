@@ -246,14 +246,10 @@ test.describe('edit page', () => {
     await page.goto(`/trust-list/${id}/edit`);
     await page.getByRole('button', { name: 'Add Internal Entity' }).click();
 
-    const noIssuer = page.getByText(
-      'No credential signing key chains. Create one in Key Management.'
-    );
+    const noIssuer = page.getByText('No credential signing key chains. Create one in Keys.');
     await expect(noIssuer).toBeVisible();
     await expect(
-      page.getByText(
-        'No status list or credential signing key chains. Create one in Key Management.'
-      )
+      page.getByText('No status list or credential signing key chains. Create one in Keys.')
     ).toBeVisible();
     // A new tab, so the form keeps what was entered.
     const createIssuer = page.getByRole('link', {
@@ -420,7 +416,7 @@ test.describe('create page', () => {
     // Without a selection, a create signs with a trust list key chain of the tenant.
     const signing = page.getByRole('combobox', { name: /^Signing Key Chain/ });
     await expect(signing).toContainText('Any trust list key chain of the tenant');
-    const noSigning = page.getByText('No trust list key chains. Create one in Key Management.');
+    const noSigning = page.getByText('No trust list key chains. Create one in Keys.');
     await expect(noSigning).toBeVisible();
     // A new tab, so the form keeps what was entered.
     const create = page.getByRole('link', {

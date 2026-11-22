@@ -331,7 +331,7 @@ export class DashboardComponent implements OnInit {
   }
 
   sessionTypeLabel(session: Session): string {
-    return isPresentationSession(session) ? 'Presentation' : 'Issuance';
+    return isPresentationSession(session) ? 'Verification' : 'Issuance';
   }
 
   sessionDetails(session: Session): string {

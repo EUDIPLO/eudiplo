@@ -1,11 +1,6 @@
-<h2 mat-dialog-title>Cancel {{ data.count === 1 ? 'offer' : data.count + ' offers' }}?</h2>
+<h2 mat-dialog-title>{{ title }}</h2>
 <mat-dialog-content>
-  <p>
-    A wallet can no longer use
-    {{ data.count === 1 ? 'this offer or request' : 'these offers or requests' }} to start a flow.
-    Offers a wallet already redeemed can no longer be cancelled, and credentials that were already
-    issued stay valid.
-  </p>
+  <p>{{ explanation }}</p>
   <mat-form-field appearance="outline" style="width: 100%">
     <mat-label>Reason (optional)</mat-label>
     <textarea
@@ -20,5 +15,7 @@
 </mat-dialog-content>
 <mat-dialog-actions align="end">
   <button mat-button type="button" mat-dialog-close>Back</button>
-  <button mat-raised-button color="warn" type="button" (click)="confirm()">Cancel offer</button>
+  <button mat-raised-button color="warn" type="button" (click)="confirm()">
+    {{ confirmLabel }}
+  </button>
 </mat-dialog-actions>

@@ -56,13 +56,7 @@
               </div>
               <div>
                 <dt>Type</dt>
-                <dd>
-                  {{
-                    keyChain.type === 'internalChain'
-                      ? 'Internal Chain (Root CA + Signing Key)'
-                      : 'Standalone (Self-signed)'
-                  }}
-                </dd>
+                <dd>{{ typeLabel }}</dd>
               </div>
               <div>
                 <dt>Usage</dt>
