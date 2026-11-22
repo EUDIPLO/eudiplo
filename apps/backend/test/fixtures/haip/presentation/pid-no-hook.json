@@ -13,7 +13,8 @@
           "format": "dc+sd-jwt",
           "meta": {
             "vct_values": [
-              "<TENANT_URL>/credentials-metadata/vct/pid"
+              "<TENANT_URL>/credentials-metadata/vct/pid",
+              "urn:eudi:pid:1"
             ]
           },
           "trusted_authorities": [

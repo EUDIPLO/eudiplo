@@ -32,6 +32,7 @@ function requestObject(payload: Record<string, unknown>): string {
 type DcqlCredential = {
     id: string;
     format: "dc+sd-jwt" | "mso_mdoc";
+    meta?: { vct_values?: string[]; doctype_value?: string };
     claims?: Array<{
         id?: string;
         path: string[];
@@ -600,6 +601,153 @@ describe("OID4VP presentation verification", () => {
         expect(error).toBeInstanceOf(IncompletePresentationException);
         expect(error.message).toBe(
             'Credential "mdl" does not satisfy any claim_set',
+        );
+    });
+});
+
+describe("DCQL credential type", () => {
+    const pidSdJwt: DcqlCredential = {
+        id: "pid",
+        format: "dc+sd-jwt",
+        meta: { vct_values: ["urn:eudi:pid:1"] },
+    };
+    const pidMdoc: DcqlCredential = {
+        id: "pid",
+        format: "mso_mdoc",
+        meta: { doctype_value: "eu.europa.ec.eudi.pid.1" },
+    };
+    const flows = [
+        { name: "redirect", session: {}, request: {} },
+        {
+            name: "DC API",
+            session: { useDcApi: true },
+            request: { expected_origins: ["https://wallet.example"] },
+        },
+    ];
+    const parse = (
+        credentials: DcqlCredential[],
+        flow: (typeof flows)[number],
+        options: Parameters<typeof setup>[1] = {},
+    ) => {
+        const { service, config, session } = setup(credentials, {
+            ...options,
+            session: flow.session,
+            request: flow.request,
+        });
+        return service.parseResponse(
+            { vp_token: { pid: ["vp"] } } as any,
+            config,
+            session,
+        );
+    };
+    const expectTypeMismatch = async (result: Promise<unknown>) => {
+        const error = await result.catch((e) => e);
+        expect(error).toBeInstanceOf(IncompletePresentationException);
+        expect(error.code).toBe("credential_type_mismatch");
+        return error;
+    };
+
+    for (const flow of flows) {
+        describe(flow.name, () => {
+            it("rejects an SD-JWT VC whose vct is not in vct_values", async () => {
+                const error = await expectTypeMismatch(
+                    parse([pidSdJwt], flow, {
+                        sdJwtPayload: { vct: "urn:eudi:other:1", cnf: {} },
+                    }),
+                );
+                expect(error.message).toBe(
+                    "Credential 'pid' is not of a requested type: vct_values accepts urn:eudi:pid:1",
+                );
+            });
+
+            it("accepts an SD-JWT VC whose vct is in vct_values", async () => {
+                await expect(
+                    parse([pidSdJwt], flow, {
+                        sdJwtPayload: { vct: "urn:eudi:pid:1", cnf: {} },
+                    }),
+                ).resolves.toEqual([
+                    {
+                        id: "pid",
+                        values: [
+                            {
+                                vct: "urn:eudi:pid:1",
+                                cnf: undefined,
+                                status: undefined,
+                            },
+                        ],
+                    },
+                ]);
+            });
+
+            it("rejects an mdoc whose docType is not doctype_value", async () => {
+                await expectTypeMismatch(
+                    parse([pidMdoc], flow, {
+                        mdocResult: {
+                            verified: true,
+                            claims: { family_name: "Mustermann" },
+                            docType: "org.iso.18013.5.1.mDL",
+                        },
+                    }),
+                );
+            });
+
+            it("accepts an mdoc whose docType is doctype_value", async () => {
+                await expect(
+                    parse([pidMdoc], flow, {
+                        mdocResult: {
+                            verified: true,
+                            claims: { family_name: "Mustermann" },
+                            docType: "eu.europa.ec.eudi.pid.1",
+                        },
+                    }),
+                ).resolves.toEqual([
+                    { id: "pid", values: [{ family_name: "Mustermann" }] },
+                ]);
+            });
+        });
+    }
+
+    it("reports another docType before an unsatisfied claim set", async () => {
+        await expectTypeMismatch(
+            parse(
+                [
+                    {
+                        ...pidMdoc,
+                        claims: [{ id: "a", path: ["ns", "given_name"] }],
+                        claim_sets: [["a"]],
+                    },
+                ],
+                flows[0],
+                {
+                    mdocResult: {
+                        verified: true,
+                        claims: { family_name: "Mustermann" },
+                        docType: "org.iso.18013.5.1.mDL",
+                    },
+                },
+            ),
+        );
+    });
+
+    it("rejects an mdoc of another docType that satisfies a claim set", async () => {
+        await expectTypeMismatch(
+            parse(
+                [
+                    {
+                        ...pidMdoc,
+                        claims: [{ id: "a", path: ["ns", "family_name"] }],
+                        claim_sets: [["a"]],
+                    },
+                ],
+                flows[0],
+                {
+                    mdocResult: {
+                        verified: true,
+                        claims: { family_name: "Mustermann" },
+                        docType: "org.iso.18013.5.1.mDL",
+                    },
+                },
+            ),
         );
     });
 });

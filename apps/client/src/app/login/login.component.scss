@@ -140,6 +140,22 @@ mat-card mat-card-content {
   margin: 0;
 }
 
+// An instance that could not be checked: the reason, which can hold a long URL, and Retry
+.instance-problem {
+  flex-wrap: wrap;
+  align-items: center;
+
+  > span {
+    flex: 1 1 12rem;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  > button {
+    margin-left: auto;
+  }
+}
+
 .kept-session {
   display: flex;
   flex-direction: column;
