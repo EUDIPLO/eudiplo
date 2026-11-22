@@ -44,13 +44,17 @@ Each entry of `fields[]` describes one claim: its `path`, `type`, whether it is 
         {
             "path": ["nationalities"],
             "type": "array",
-            "children": [{ "path": [null], "type": "string" }]
+            "disclosable": true,
+            "children": [
+                { "path": [null], "type": "string", "disclosable": true }
+            ]
         }
     ]
 }
 ```
 
-- Nest claims with `children`; child paths are relative to the parent. `null` in a path stands for every array element (the web client writes it as `nationalities.*`).
+- Nest claims with `children`; child paths are relative to the parent. `null` in a path stands for every array element (the web client writes it as `nationalities.*`), an integer for one element. The issuer metadata publishes these paths with `null` and integers as well.
+- A disclosable element path gives every element of the issued array its own disclosure (SD-JWT, RFC 9901 Section 4.2.2), so the holder can disclose some elements and withhold others. In the example the array and its elements are both disclosable, as the EUDI PID rules require (ARF Annex 2, PID_21); with only `["nationalities"]` disclosable, the holder discloses the array as a whole. The elements are taken from the claims being issued: an empty array has no element disclosures, and an index beyond the end of the array is ignored. Properties of array elements work the same way, for example `["addresses", null, "street"]`.
 - `display` entries use `{ "locale", "name" }` and are published in the issuer metadata.
 - For mDOC, set `namespace` on each field, for example `eu.europa.ec.eudi.pid.1`. Without it, the first segment of a nested path or the document type is used.
 - `defaultValue` provides a static value. Where claim values come from and how they are validated is described in [Claims](claims.md).
