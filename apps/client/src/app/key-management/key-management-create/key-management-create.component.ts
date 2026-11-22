@@ -1,5 +1,13 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, ChangeDetectionStrategy } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  Injector,
+  OnInit,
+  ViewChild,
+  inject,
+} from '@angular/core';
 import { FormBuilder, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
@@ -20,6 +28,9 @@ import { ConfigOwnershipNoticeComponent } from '../../config-portability/config-
 import { getApiErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { keyUsages, type KeyUsageType } from '../key-usage';
+import { LoadErrorComponent } from '../../common/load-error.component';
+import { showFieldsToFix } from '../../common/field-to-fix.util';
+import { ROTATION_DAYS_ERROR, rotationDaysValidators } from '../rotation-days';
 
 @Component({
   selector: 'app-key-management-create',
@@ -40,6 +51,7 @@ import { keyUsages, type KeyUsageType } from '../key-usage';
     RouterModule,
     ConfigOwnershipDirective,
     ConfigOwnershipNoticeComponent,
+    LoadErrorComponent,
   ],
   templateUrl: './key-management-create.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
@@ -50,6 +62,15 @@ export class KeyManagementCreateComponent implements OnInit {
   public keyChainId?: string;
   public keyChain?: KeyChainResponseDto;
   public isLoading = false;
+  /** Set when the key chain could not be loaded; the page then offers Retry instead of a form. */
+  public loadError = '';
+  /** While a save runs, so a second click does not send it again. */
+  public saving = false;
+  readonly rotationDaysError = ROTATION_DAYS_ERROR;
+
+  @ViewChild('formElement', { read: ElementRef })
+  private readonly formElement?: ElementRef<HTMLFormElement>;
+  private readonly injector = inject(Injector);
 
   constructor(
     private readonly keyChainService: KeyChainService,
@@ -61,24 +82,28 @@ export class KeyManagementCreateComponent implements OnInit {
     this.keyChainId = this.route.snapshot.params['id'];
     this.form = this.fb.group({
       description: [''],
-      // Rotation policy fields (only for internal chain type)
+      // Rotation policy fields, shown for key chains that can rotate (see showsRotation)
       rotationEnabled: [false],
-      rotationIntervalDays: [30],
-      certValidityDays: [365],
+      rotationIntervalDays: [30, rotationDaysValidators],
+      certValidityDays: [365, rotationDaysValidators],
     });
+    // Hidden fields must not block the form.
+    this.form.get('rotationEnabled')!.valueChanges.subscribe(() => this.syncRotationControls());
   }
 
   ngOnInit(): void {
     if (this.keyChainId) {
-      void this.loadKeyChain();
+      void this.load();
     } else {
       // This component is now only for editing, redirect to wizard for create
       this.router.navigate(['/keys/create']);
     }
   }
 
-  private async loadKeyChain(): Promise<void> {
+  /** Loads the key chain into the form; on failure the page shows why, with Retry. */
+  async load(): Promise<void> {
     this.isLoading = true;
+    this.loadError = '';
     try {
       this.keyChain = await this.keyChainService.getById(this.keyChainId!);
 
@@ -88,10 +113,10 @@ export class KeyManagementCreateComponent implements OnInit {
         rotationIntervalDays: this.keyChain.rotationPolicy?.intervalDays || 30,
         certValidityDays: this.keyChain.rotationPolicy?.certValidityDays || 365,
       });
+      this.syncRotationControls();
     } catch (error) {
       console.error('Error loading key chain:', error);
-      openErrorSnackBar(this.snackBar, getApiErrorMessage(error, 'Failed to load key chain'));
-      this.router.navigate(['../'], { relativeTo: this.route });
+      this.loadError = getApiErrorMessage(error, 'Failed to load key chain');
     } finally {
       this.isLoading = false;
     }
@@ -112,17 +137,58 @@ export class KeyManagementCreateComponent implements OnInit {
     return this.keyChain?.type === 'internalChain';
   }
 
+  /**
+   * Whether the page offers the rotation policy: for a key chain with its own root CA, and for
+   * any other key chain whose rotation is on (set through the API, the CLI or an import), so
+   * that it can be turned off before a rotation replaces its certificate with a self-signed one.
+   */
+  get showsRotation(): boolean {
+    return this.isInternalChain || !!this.keyChain?.rotationPolicy?.enabled;
+  }
+
+  /** The tooltip of Save while it waits. */
+  get saveTooltip(): string {
+    return this.saving ? 'Saving the key chain…' : '';
+  }
+
+  /** Enables the interval and validity fields only while the Rotation Policy section shows them. */
+  private syncRotationControls(): void {
+    const enabled = this.showsRotation && !!this.form.get('rotationEnabled')!.value;
+    for (const name of ['rotationIntervalDays', 'certValidityDays']) {
+      const control = this.form.get(name)!;
+      if (enabled) control.enable({ emitEvent: false });
+      else control.disable({ emitEvent: false });
+    }
+  }
+
   async onSubmit(): Promise<void> {
+    // `disabledInteractive` keeps Save clickable while it looks disabled.
+    if (this.saving) return;
+    if (this.form.invalid) {
+      showFieldsToFix(this.form, {
+        snackBar: this.snackBar,
+        injector: this.injector,
+        container: () => this.formElement?.nativeElement,
+        sections: [
+          {
+            name: 'Rotation Policy',
+            controls: [this.form.get('rotationIntervalDays')!, this.form.get('certValidityDays')!],
+          },
+        ],
+      });
+      return;
+    }
+
+    // An empty description is sent as such, so clearing it clears the stored one.
+    const updateDto: KeyChainUpdateDto = {
+      description: ((this.form.get('description')?.value as string | null) ?? '').trim(),
+    };
+    if (this.showsRotation) {
+      updateDto.rotationPolicy = this.buildRotationPolicy();
+    }
+
+    this.saving = true;
     try {
-      const updateDto: KeyChainUpdateDto = {
-        description: this.form.get('description')?.value || undefined,
-      };
-
-      // Only include rotation policy updates for internal chain
-      if (this.isInternalChain) {
-        updateDto.rotationPolicy = this.buildRotationPolicy();
-      }
-
       await this.keyChainService.update(this.keyChainId!, updateDto);
       this.snackBar.open('Key chain updated successfully', 'Close', {
         duration: 3000,
@@ -132,26 +198,18 @@ export class KeyManagementCreateComponent implements OnInit {
     } catch (error) {
       console.error('Error updating key chain:', error);
       openErrorSnackBar(this.snackBar, getApiErrorMessage(error, 'Failed to update key chain'));
+    } finally {
+      this.saving = false;
     }
   }
 
-  /**
-   * Build rotation policy update DTO from form values.
-   */
+  /** The rotation policy of the form; the validators have checked both numbers. */
   private buildRotationPolicy(): RotationPolicyUpdateDto {
-    const policy: RotationPolicyUpdateDto = {
-      enabled: this.form.value.rotationEnabled || false,
+    if (!this.form.value.rotationEnabled) return { enabled: false };
+    return {
+      enabled: true,
+      intervalDays: Number(this.form.value.rotationIntervalDays),
+      certValidityDays: Number(this.form.value.certValidityDays),
     };
-
-    if (policy.enabled) {
-      if (this.form.value.rotationIntervalDays) {
-        policy.intervalDays = this.form.value.rotationIntervalDays;
-      }
-      if (this.form.value.certValidityDays) {
-        policy.certValidityDays = this.form.value.certValidityDays;
-      }
-    }
-
-    return policy;
   }
 }

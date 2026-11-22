@@ -40,6 +40,7 @@ import { type CreatedForForm, openedFromForm } from '../../common/return-to-form
 import { ReturnToFormComponent } from '../../common/return-to-form.component';
 import { showFieldsToFix } from '../../common/field-to-fix.util';
 import { keyUsages, type KeyUsageType } from '../key-usage';
+import { ROTATION_DAYS_ERROR, rotationDaysValidators } from '../rotation-days';
 
 export type KeyChainTypeSelection = 'internalChain' | 'externalCaChain' | 'standalone';
 export type AccessSourceSelection = 'selfSigned' | 'external';
@@ -96,6 +97,7 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
   caSourceForm: FormGroup;
   accessSourceForm: FormGroup;
   configForm: FormGroup;
+  readonly rotationDaysError = ROTATION_DAYS_ERROR;
 
   isSubmitting = false;
   /** Holds the fields of the Configure step; Create focuses the first invalid one. */
@@ -266,8 +268,8 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
       alg: ['ES256' as SigningAlgorithm, Validators.required],
       // Rotation settings (only for internal and external CA chains)
       rotationEnabled: [true],
-      rotationIntervalDays: [30, [Validators.required, Validators.min(1), Validators.max(3650)]],
-      certValidityDays: [365, [Validators.required, Validators.min(1), Validators.max(3650)]],
+      rotationIntervalDays: [30, rotationDaysValidators],
+      certValidityDays: [365, rotationDaysValidators],
       externalPrivateKey: [''],
       externalCertificate: [''],
       useExternalCertificate: [false],
