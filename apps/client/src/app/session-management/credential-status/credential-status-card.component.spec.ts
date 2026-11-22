@@ -98,6 +98,33 @@ describe('CredentialStatusCardComponent', () => {
     expect(buttons(element)).toContain('block Revoke');
   });
 
+  it('says there is no status after a retry that finds none, instead of losing the focus', async () => {
+    sessions.getCredentialStatus.mockRejectedValue({ statusCode: 503, message: 'Unavailable' });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    fixture = TestBed.createComponent(CredentialStatusCardComponent);
+    fixture.componentRef.setInput('sessionId', 'session-1');
+    fixture.componentRef.setInput('canChange', true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+
+    sessions.getCredentialStatus.mockResolvedValue([]);
+    const retry = element.querySelector<HTMLButtonElement>('app-load-error button')!;
+    retry.focus();
+    retry.click();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      TestBed.inject(ApplicationRef).tick();
+      expect(element.querySelector('app-load-error')).toBeNull();
+      expect(document.activeElement?.textContent?.trim()).toBe('Credential Status');
+    });
+    expect(element.querySelector('.no-status')?.textContent?.trim()).toBe(
+      'No credential of this session is in a status list.'
+    );
+    expect(buttons(element)).toEqual([]);
+  });
+
   it('leaves the hint about changes out for a caller that may only read the status', async () => {
     sessions.getCredentialStatus.mockRejectedValue({ statusCode: 503, message: 'Unavailable' });
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
