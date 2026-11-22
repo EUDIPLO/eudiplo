@@ -6,6 +6,7 @@ import {
   Injector,
   Input,
   type OnChanges,
+  type SimpleChanges,
   ViewChild,
   inject,
 } from '@angular/core';
@@ -88,9 +89,9 @@ export class CredentialStatusCardComponent implements OnChanges {
   readonly revoked = STATUS_REVOKED;
   readonly suspended = STATUS_SUSPENDED;
 
-  ngOnChanges(): void {
+  ngOnChanges(changes: SimpleChanges): void {
     // Another session: its card is hidden while it has no status entries, as on a first load.
-    this.emptyAfterRetry = false;
+    if (changes['sessionId']) this.emptyAfterRetry = false;
     void this.load();
   }
 

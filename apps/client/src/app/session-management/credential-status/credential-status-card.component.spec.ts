@@ -124,6 +124,12 @@ describe('CredentialStatusCardComponent', () => {
     );
     expect(buttons(element)).toEqual([]);
 
+    // A new status of the same session keeps the card and its focused title.
+    fixture.componentRef.setInput('sessionStatus', 'completed');
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(element.querySelector('.no-status')).not.toBeNull();
+
     // Another session without status entries hides the card, as on a first load.
     fixture.componentRef.setInput('sessionId', 'session-2');
     await vi.waitFor(() => {
