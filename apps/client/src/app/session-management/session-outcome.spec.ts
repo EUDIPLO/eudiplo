@@ -125,7 +125,7 @@ describe('sessionResult', () => {
     );
 
     expect(result).toMatchObject({
-      title: 'Presentation failed',
+      title: 'Verification failed',
       message: 'Not trusted',
       code: 'trust_chain_not_trusted',
       checkRequest: false,
@@ -143,7 +143,7 @@ describe('sessionResult', () => {
   it('names a finished issuance and presentation', () => {
     expect(sessionResult(session({ status: 'completed' }))?.title).toBe('Credentials issued');
     expect(sessionResult(session({ status: 'completed', requestId: 'x' }))?.title).toBe(
-      'Presentation verified'
+      'Verification succeeded'
     );
   });
 

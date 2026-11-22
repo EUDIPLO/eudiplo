@@ -520,7 +520,7 @@ export class PresentationCreateComponent implements OnInit, PageWithUnsavedChang
       : this.keyChains;
     return chains.some((chain) => chain.activeCertificate?.pem)
       ? null
-      : 'An access key chain with an active certificate is needed to create presentation requests.';
+      : 'An access key chain with an active certificate is needed to create verification requests.';
   }
 
   get hasAdvancedQuery(): boolean {

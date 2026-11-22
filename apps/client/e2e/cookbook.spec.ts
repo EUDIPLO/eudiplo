@@ -323,7 +323,7 @@ test('issue and verify cookbook', async ({ page }) => {
 
   await test.step('chapter 3, step 6: inspect the verified session', async () => {
     await expect(page.locator('.hero .status-badge')).toHaveText('Completed');
-    await expect(page.getByRole('heading', { name: 'Presentation verified' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Verification succeeded' })).toBeVisible();
     const presented = page.locator('.presented-card');
     await expect(presented.getByRole('heading', { name: /membership/ })).toBeVisible();
     await expect(presented.getByRole('row', { name: 'name Max' })).toBeVisible();

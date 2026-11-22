@@ -8,7 +8,7 @@ import type { KeyChainService } from './key-chain.service';
 
 /** What the default access key chain signs, for tooltips. */
 const USED_FOR =
-  'It signs presentation requests of configurations without an access key chain and the signed issuer metadata.';
+  'It signs verification requests of configurations without an access key chain and the signed issuer metadata.';
 
 /** Chip of the access key chain used where no configuration names one, or undefined. */
 export function defaultAccessChip(
@@ -94,7 +94,7 @@ export function missingDefaultAccessMessage(
   if (!info?.defaultAccessKeyChainId || info.keyChainId) return undefined;
   return (
     `The default access key chain "${info.defaultAccessKeyChainId}" no longer exists, so` +
-    ' presentation requests without their own access key chain and the signed issuer metadata' +
+    ' verification requests without their own access key chain and the signed issuer metadata' +
     ' fail. Remove the default or choose another access key chain.'
   );
 }

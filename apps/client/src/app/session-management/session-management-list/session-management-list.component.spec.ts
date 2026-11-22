@@ -224,7 +224,7 @@ describe('SessionManagementListComponent', () => {
       .spyOn(TestBed.inject(MatDialog), 'open')
       .mockReturnValue({ afterClosed: () => of({ reason: 'sent to wrong recipient' }) } as never);
     const active = { id: 's-1', status: 'active' } as Session;
-    const fetched = { id: 's-2', status: 'fetched' } as Session;
+    const fetched = { id: 's-2', status: 'fetched', requestId: 'age-check' } as Session;
     const completed = { id: 's-3', status: 'completed' } as Session;
     const redeemed = { id: 's-4', status: 'active', consumed: true } as Session;
     component.selection.select(active, fetched, completed, redeemed);
@@ -234,7 +234,7 @@ describe('SessionManagementListComponent', () => {
 
     expect(open).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ data: { offers: 2, requests: 0 } })
+      expect.objectContaining({ data: { offers: 1, requests: 1 } })
     );
     expect(cancelSession).toHaveBeenCalledTimes(2);
     expect(cancelSession).toHaveBeenCalledWith('s-1', 'sent to wrong recipient');
@@ -272,6 +272,29 @@ describe('SessionManagementListComponent', () => {
       'Cancel the selected offers a wallet has not redeemed yet, so it can no longer use them'
     );
     expectAvailable(fixture, bulkButton('Delete Selected'), 'Delete selected sessions');
+  });
+
+  it('names requests, or offers and requests, in the Cancel Selected description', async () => {
+    await selectPending();
+    const request = { id: 's-2', status: 'active', requestId: 'age-check' } as Session;
+    component.selection.clear();
+    component.selection.select(request);
+    fixture.detectChanges();
+
+    expectAvailable(
+      fixture,
+      bulkButton('Cancel Selected'),
+      'Cancel the selected requests a wallet has not answered yet, so it can no longer use them'
+    );
+
+    component.selection.select({ id: 's-1', status: 'active' } as Session);
+    fixture.detectChanges();
+
+    expectAvailable(
+      fixture,
+      bulkButton('Cancel Selected'),
+      'Cancel the selected offers and requests a wallet has not used yet, so it can no longer use them'
+    );
   });
 
   it('keeps both bulk actions focusable while a cancellation runs: a second click sends nothing', async () => {

@@ -25,10 +25,10 @@ flowchart LR
 
 Every credential query of a presentation configuration names the issuers it accepts, here through a trust list. Open **Cryptographic Assets → Keys** and create two key chains with **Create Key**:
 
-| Usage                   | Description                       | Purpose                                                           |
-| ----------------------- | --------------------------------- | ----------------------------------------------------------------- |
-| **Trust List Signing**  | `Membership trust list signing`   | Signs the trust list                                              |
-| **Status List Signing** | `Membership status list signing`  | Listed as the issuer's status list certificate                    |
+| Usage                   | Description                      | Purpose                                        |
+| ----------------------- | -------------------------------- | ---------------------------------------------- |
+| **Trust List Signing**  | `Membership trust list signing`  | Signs the trust list                           |
+| **Status List Signing** | `Membership status list signing` | Listed as the issuer's status list certificate |
 
 For the status list key, keep **Key Chain with Root CA**: its signing key rotates while the trust list keeps naming the same root CA. EUDIPLO does not create a trust list signing key on its own.
 
@@ -114,7 +114,12 @@ Open **Credential Verification → Verification Configs** and choose **Create co
                 "vct_values": ["urn:example:membership:1"]
             },
             "claims": [{ "path": ["name"] }, { "path": ["member_id"] }],
-            "trusted_authorities": [{ "type": "etsi_tl", "values": [{ "trustListId": "membership-issuers" }] }]
+            "trusted_authorities": [
+                {
+                    "type": "etsi_tl",
+                    "values": [{ "trustListId": "membership-issuers" }]
+                }
+            ]
         }
     ]
 }
@@ -152,7 +157,7 @@ On **3. Settings**:
 
 ## Step 6: Inspect the verified session
 
-Open **Sessions → All Sessions** and open the new presentation session. Its status chip shows **Completed** and the result card reads **Presentation verified**. The **Presented credentials** card lists the verified claims for query `membership`:
+Open **Sessions → All Sessions** and open the new presentation session. Its status chip shows **Completed** and the result card reads **Verification succeeded**. The **Presented credentials** card lists the verified claims for query `membership`:
 
 | Claim       | Expected value |
 | ----------- | -------------- |
@@ -165,15 +170,15 @@ You have now issued and verified a credential end to end. In an application, you
 
 ## Troubleshooting
 
-| Symptom                                     | Cause                                                                    | Fix                                                                                                               |
-| ------------------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
-| **Create Trust List** points at **Signing Key Chain**, which says "No trust list key chains" (the API call answers `409`) | No key chain with usage **Trust List Signing** | Create the key in step 1, choose **Reload key chains** and select it as **Signing Key Chain**. |
-| Saving fails with `Credential queries without trusted_authorities` | **Issuer trust** of the query is empty                   | Add `membership-issuers` as managed trust list (step 3).                                                          |
-| Wallet finds no matching credential         | VCT or claim path differ from chapter 2, the credential expired, or the wallet cannot match the `aki` values | Compare `urn:example:membership:1`, `name` and `member_id` with the credential type; issue a fresh credential. See [Accept only trusted issuers](trusted-issuers.md#troubleshooting) for wallets that cannot match `aki` values. |
-| Session `failed` with `trust_chain_not_trusted` | The trust list entity lists a different issuer key chain             | Edit the list and select `Membership credential signing` as **Issuer Key Chain**.                                 |
-| Reminder about a missing access certificate | No access key chain selected, or its certificate is not active           | Select `Membership verifier access` in **Access Key Chain (optional)**.                                           |
-| Request expired                             | Approved after the 300-second lifetime                                   | Generate a new request and approve it right away.                                                                 |
-| Changed claims do not show up               | A wallet credential keeps the claims it was issued with                  | Issue a new credential, then generate a new request.                                                              |
+| Symptom                                                                                                                   | Cause                                                                                                        | Fix                                                                                                                                                                                                                              |
+| ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Create Trust List** points at **Signing Key Chain**, which says "No trust list key chains" (the API call answers `409`) | No key chain with usage **Trust List Signing**                                                               | Create the key in step 1, choose **Reload key chains** and select it as **Signing Key Chain**.                                                                                                                                   |
+| Saving fails with `Credential queries without trusted_authorities`                                                        | **Issuer trust** of the query is empty                                                                       | Add `membership-issuers` as managed trust list (step 3).                                                                                                                                                                         |
+| Wallet finds no matching credential                                                                                       | VCT or claim path differ from chapter 2, the credential expired, or the wallet cannot match the `aki` values | Compare `urn:example:membership:1`, `name` and `member_id` with the credential type; issue a fresh credential. See [Accept only trusted issuers](trusted-issuers.md#troubleshooting) for wallets that cannot match `aki` values. |
+| Session `failed` with `trust_chain_not_trusted`                                                                           | The trust list entity lists a different issuer key chain                                                     | Edit the list and select `Membership credential signing` as **Issuer Key Chain**.                                                                                                                                                |
+| Reminder about a missing access certificate                                                                               | No access key chain selected, or its certificate is not active                                               | Select `Membership verifier access` in **Access Key Chain (optional)**.                                                                                                                                                          |
+| Request expired                                                                                                           | Approved after the 300-second lifetime                                                                       | Generate a new request and approve it right away.                                                                                                                                                                                |
+| Changed claims do not show up                                                                                             | A wallet credential keeps the claims it was issued with                                                      | Issue a new credential, then generate a new request.                                                                                                                                                                             |
 
 Verifier trust, overasking and failed-session errors are covered in [Troubleshooting](../troubleshooting.md#presentation).
 

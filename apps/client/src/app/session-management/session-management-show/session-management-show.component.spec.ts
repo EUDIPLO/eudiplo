@@ -184,6 +184,10 @@ describe('SessionManagementShowComponent', () => {
       fixture.detectChanges();
 
       expect(openDialog).toHaveBeenCalledOnce();
+      expect(openDialog).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ data: { offers: 1, requests: 0 } })
+      );
       expect(cancelSession).toHaveBeenCalledOnce();
       expectUnavailable(fixture, cancel, 'Cancelling this offer…');
     });
@@ -205,6 +209,11 @@ describe('SessionManagementShowComponent', () => {
       cancel.click();
       fixture.detectChanges();
 
+      // The dialog asks about a request, not an offer.
+      expect(openDialog).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ data: { offers: 0, requests: 1 } })
+      );
       expect(cancelSession).toHaveBeenCalledOnce();
       expectUnavailable(fixture, cancel, 'Cancelling this request…');
     });

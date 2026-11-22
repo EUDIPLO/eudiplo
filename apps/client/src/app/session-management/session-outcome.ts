@@ -61,7 +61,7 @@ export function sessionResult(session: ResultSession): SessionResultSummary | nu
         ...base,
         tone: 'success',
         icon: 'check_circle',
-        title: presentation ? 'Presentation verified' : 'Credentials issued',
+        title: presentation ? 'Verification succeeded' : 'Credentials issued',
         message: null,
       };
     case 'expired':
@@ -137,7 +137,7 @@ function failedResult(
       checkRequest: !known,
     };
   }
-  return { ...failed, title: presentation ? 'Presentation failed' : 'Issuance failed' };
+  return { ...failed, title: presentation ? 'Verification failed' : 'Issuance failed' };
 }
 
 /**
