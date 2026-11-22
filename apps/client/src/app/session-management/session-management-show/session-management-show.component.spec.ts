@@ -789,10 +789,13 @@ describe('SessionManagementShowComponent load error', () => {
 
 describe('SessionManagementShowComponent live updates', () => {
   let getSession: ReturnType<typeof vi.fn>;
+  let cancelSession: ReturnType<typeof vi.fn>;
   let snackBar: { open: ReturnType<typeof vi.fn> };
+  let component: SessionManagementShowComponent | undefined;
 
   beforeEach(async () => {
     getSession = vi.fn().mockResolvedValue({ id: 'session-1', status: 'active' });
+    cancelSession = vi.fn().mockResolvedValue(undefined);
     snackBar = { open: vi.fn() };
     await TestBed.configureTestingModule({
       imports: [SessionManagementShowComponent],
@@ -801,7 +804,7 @@ describe('SessionManagementShowComponent live updates', () => {
         { provide: ActivatedRoute, useValue: { snapshot: { params: { id: 'session-1' } } } },
         {
           provide: SessionManagementService,
-          useValue: { getSession, getSessionLogs: vi.fn().mockResolvedValue([]) },
+          useValue: { getSession, cancelSession, getSessionLogs: vi.fn().mockResolvedValue([]) },
         },
         { provide: JwtService, useValue: { hasRole: () => true } },
       ],
@@ -810,8 +813,11 @@ describe('SessionManagementShowComponent live updates', () => {
       .compileComponents();
   });
 
+  afterEach(() => component?.stopPolling());
+
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
     TestBed.resetTestingModule();
   });
 
@@ -820,12 +826,24 @@ describe('SessionManagementShowComponent live updates', () => {
     fixture.detectChanges();
     await vi.waitFor(() => expect(fixture.componentInstance.session).toBeDefined());
     fixture.detectChanges();
-    return {
-      fixture,
-      component: fixture.componentInstance,
-      page: fixture.nativeElement as HTMLElement,
-    };
+    component = fixture.componentInstance;
+    return { fixture, component, page: fixture.nativeElement as HTMLElement };
   }
+
+  /** The page after polling stopped at its time limit. */
+  async function renderPaused() {
+    const rendered = await render();
+    rendered.component.stopPolling();
+    rendered.component.updatesPaused = true;
+    rendered.fixture.detectChanges();
+    getSession.mockClear();
+    return rendered;
+  }
+
+  /** The live region of the indicator, which stays in the page while its text changes. */
+  const statusRegion = (page: HTMLElement) => page.querySelector('.hero-meta [role="status"]');
+  const hasRefresh = (page: HTMLElement) =>
+    [...page.querySelectorAll('button')].some((b) => b.textContent?.includes('Refresh'));
 
   /** The indicator's text without its icon's ligature. */
   const indicator = (page: HTMLElement) => {
@@ -846,16 +864,41 @@ describe('SessionManagementShowComponent live updates', () => {
     expect(component.isPolling()).toBe(false);
     expect(component.updatesPaused).toBe(true);
     expect(indicator(page)).toBe('Updates paused: the status may be out of date.');
-    expect(page.querySelector('.polling-indicator')?.getAttribute('role')).toBe('status');
     expect(findButton(page, 'Refresh')).toBeTruthy();
   });
 
-  it('loads the session on Refresh and follows it again while it is pending', async () => {
+  it('announces the indicator from one status region that stays in the page', async () => {
     const { fixture, component, page } = await render();
+    await vi.waitFor(() => expect(component.isPolling()).toBe(true));
+    fixture.detectChanges();
+    const region = statusRegion(page);
+
+    expect(region?.textContent).toContain('Live updates');
+
+    getSession.mockRejectedValue({ statusCode: 503, message: 'Unavailable' });
+    await component.fetchSessionStatus('session-1');
+    fixture.detectChanges();
+    expect(statusRegion(page)).toBe(region);
+    expect(region?.textContent).toContain('Updates failing');
+
     component.stopPolling();
     component.updatesPaused = true;
     fixture.detectChanges();
-    getSession.mockClear();
+    expect(statusRegion(page)).toBe(region);
+    expect(region?.textContent).toContain('Updates paused');
+    // Refresh is an action, not part of the announced text.
+    expect(region?.querySelector('button')).toBeNull();
+    expect(findButton(page, 'Refresh').closest('.hero-meta')).not.toBeNull();
+
+    getSession.mockResolvedValue({ id: 'session-1', status: 'completed' });
+    await component.loadSession('session-1');
+    fixture.detectChanges();
+    expect(statusRegion(page)).toBe(region);
+    expect(region?.textContent?.trim()).toBe('');
+  });
+
+  it('loads the session on Refresh and follows it again while it is pending', async () => {
+    const { fixture, component, page } = await renderPaused();
 
     findButton(page, 'Refresh').click();
     await vi.waitFor(() => expect(component.refreshing).toBe(false));
@@ -865,19 +908,142 @@ describe('SessionManagementShowComponent live updates', () => {
     expect(component.isPolling()).toBe(true);
     expect(component.updatesPaused).toBe(false);
     expect(indicator(page)).toContain('Live updates');
-    component.stopPolling();
+  });
+
+  it('moves the focus to the heading once Refresh has left with the paused notice', async () => {
+    const { fixture, component, page } = await renderPaused();
+    const refresh = findButton(page, 'Refresh');
+
+    refresh.focus();
+    refresh.click();
+    await vi.waitFor(() => expect(component.refreshing).toBe(false));
+    fixture.detectChanges();
+    TestBed.inject(ApplicationRef).tick();
+
+    expect(hasRefresh(page)).toBe(false);
+    expect(document.activeElement).toBe(page.querySelector('h1'));
+  });
+
+  it('stays focusable while Refresh runs: a second click sends one request', async () => {
+    const { fixture, page } = await renderPaused();
+    getSession.mockReturnValue(new Promise(() => undefined));
+    const refresh = findButton(page, 'Refresh');
+    expectAvailable(fixture, refresh, 'Load the current status');
+
+    refresh.click();
+    fixture.detectChanges();
+    refresh.click();
+    fixture.detectChanges();
+
+    expect(getSession).toHaveBeenCalledOnce();
+    expectUnavailable(fixture, refresh, 'Refreshing the session…');
+  });
+
+  it('stays paused, with Refresh, when the reload fails, and says why', async () => {
+    const { fixture, component, page } = await renderPaused();
+    getSession.mockRejectedValue({ statusCode: 500, message: 'Unavailable' });
+    const refresh = findButton(page, 'Refresh');
+
+    refresh.focus();
+    refresh.click();
+    await vi.waitFor(() => expect(component.refreshing).toBe(false));
+    fixture.detectChanges();
+    TestBed.inject(ApplicationRef).tick();
+
+    expect(snackBar.open.mock.lastCall?.[0]).toBe('Failed to load session: Unavailable');
+    expect(component.isPolling()).toBe(false);
+    expect(component.updatesPaused).toBe(true);
+    expect(indicator(page)).toBe('Updates paused: the status may be out of date.');
+    expect(findButton(page, 'Refresh')).toBe(refresh);
+    expect(document.activeElement).toBe(refresh);
   });
 
   it('stops saying paused when Refresh finds the session finished', async () => {
-    const { component } = await render();
-    component.stopPolling();
-    component.updatesPaused = true;
+    const { fixture, component, page } = await renderPaused();
     getSession.mockResolvedValue({ id: 'session-1', status: 'completed' });
 
     await component.refreshSession();
+    fixture.detectChanges();
 
     expect(component.isPolling()).toBe(false);
     expect(component.updatesPaused).toBe(false);
+    expect(page.querySelector('.polling-indicator')).toBeNull();
+    expect(hasRefresh(page)).toBe(false);
+  });
+
+  it('stops saying paused when the paused session is cancelled', async () => {
+    const { fixture, component, page } = await renderPaused();
+    vi.spyOn(TestBed.inject(MatDialog), 'open').mockReturnValue({
+      afterClosed: () => of({ reason: 'sent to the wrong person' }),
+    } as never);
+    getSession.mockResolvedValue({ id: 'session-1', status: 'cancelled' });
+
+    component.cancelSession();
+    await vi.waitFor(() => expect(snackBar.open).toHaveBeenCalled());
+    fixture.detectChanges();
+
+    expect(cancelSession).toHaveBeenCalledWith('session-1', 'sent to the wrong person');
+    expect(component.updatesPaused).toBe(false);
+    expect(page.querySelector('.polling-indicator')).toBeNull();
+    expect(hasRefresh(page)).toBe(false);
+  });
+
+  it('offers Refresh when the session was cancelled but could not be loaded again', async () => {
+    const { fixture, component, page } = await render();
+    await vi.waitFor(() => expect(component.isPolling()).toBe(true));
+    vi.spyOn(TestBed.inject(MatDialog), 'open').mockReturnValue({
+      afterClosed: () => of({ reason: 'sent to the wrong person' }),
+    } as never);
+    getSession.mockRejectedValue({ statusCode: 503, message: 'Unavailable' });
+
+    component.cancelSession();
+    await vi.waitFor(() => expect(component.cancelling).toBe(false));
+    fixture.detectChanges();
+
+    expect(cancelSession).toHaveBeenCalledWith('session-1', 'sent to the wrong person');
+    expect(component.isPolling()).toBe(false);
+    expect(indicator(page)).toBe('Updates paused: the status may be out of date.');
+    expect(hasRefresh(page)).toBe(true);
+  });
+
+  it('keeps saying paused when a poll that was under way fails after the pause', async () => {
+    const { fixture, component, page } = await renderPaused();
+    getSession.mockRejectedValue({ statusCode: 404, message: 'Not found' });
+
+    await component.fetchSessionStatus('session-1');
+    fixture.detectChanges();
+
+    expect(component.sessionUnavailable).toBe(false);
+    expect(indicator(page)).toBe('Updates paused: the status may be out of date.');
+  });
+
+  it('stops saying paused when a refused Cancel finds the session finished', async () => {
+    const { fixture, component, page } = await renderPaused();
+    vi.spyOn(TestBed.inject(MatDialog), 'open').mockReturnValue({
+      afterClosed: () => of({ reason: 'sent to the wrong person' }),
+    } as never);
+    cancelSession.mockRejectedValue({ statusCode: 409, message: 'Conflict' });
+    getSession.mockResolvedValue({ id: 'session-1', status: 'completed' });
+
+    component.cancelSession();
+    await vi.waitFor(() => expect(component.session?.status).toBe('completed'));
+    fixture.detectChanges();
+
+    expect(component.updatesPaused).toBe(false);
+    expect(page.querySelector('.polling-indicator')).toBeNull();
+    expect(hasRefresh(page)).toBe(false);
+  });
+
+  it('stops saying paused when a poll still under way finds the session finished', async () => {
+    const { fixture, component, page } = await renderPaused();
+    getSession.mockResolvedValue({ id: 'session-1', status: 'completed' });
+
+    await component.fetchSessionStatus('session-1');
+    fixture.detectChanges();
+
+    expect(component.updatesPaused).toBe(false);
+    expect(page.querySelector('.polling-indicator')).toBeNull();
+    expect(hasRefresh(page)).toBe(false);
   });
 
   it('says when polls fail instead of "Live updates", and goes back once one succeeds', async () => {
@@ -889,7 +1055,6 @@ describe('SessionManagementShowComponent live updates', () => {
 
     expect(component.isPolling()).toBe(true);
     expect(indicator(page)).toBe('Updates failing: Unavailable. Retrying.');
-    expect(page.querySelector('.polling-indicator')?.getAttribute('role')).toBe('status');
     expect(snackBar.open).not.toHaveBeenCalled();
 
     getSession.mockResolvedValue({ id: 'session-1', status: 'active' });
@@ -898,8 +1063,39 @@ describe('SessionManagementShowComponent live updates', () => {
 
     expect(component.pollFailure).toBe('');
     expect(indicator(page)).toContain('Live updates');
-    component.stopPolling();
   });
+
+  it('ends the reason of a failing poll with one period when the backend is unreachable', async () => {
+    const { fixture, component, page } = await render();
+    getSession.mockRejectedValue(new TypeError('Failed to fetch'));
+
+    await component.fetchSessionStatus('session-1');
+    fixture.detectChanges();
+
+    const text = indicator(page);
+    expect(text).toBe(
+      'Updates failing: the backend could not be reached. Check the connection and try again. Retrying.'
+    );
+    expect(text).not.toContain('..');
+    expect(text?.endsWith('Retrying.')).toBe(true);
+  });
+
+  it.each([404, 403])(
+    'stops polling a session the backend no longer returns (%i), with Refresh instead of "Retrying."',
+    async (statusCode) => {
+      const { fixture, component, page } = await render();
+      getSession.mockRejectedValue({ statusCode, message: 'Session not found' });
+
+      await component.fetchSessionStatus('session-1');
+      fixture.detectChanges();
+
+      expect(component.isPolling()).toBe(false);
+      expect(indicator(page)).toBe('Updates stopped: the session is no longer available.');
+      expect(indicator(page)).not.toContain('Retrying');
+      expect(findButton(page, 'Refresh')).toBeTruthy();
+      expect(snackBar.open).not.toHaveBeenCalled();
+    }
+  );
 
   it('says nothing about paused updates for a session that finished', async () => {
     getSession.mockResolvedValue({ id: 'session-1', status: 'completed' });

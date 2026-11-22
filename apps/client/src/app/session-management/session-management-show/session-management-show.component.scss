@@ -32,6 +32,17 @@ mat-card mat-card-content {
   margin-top: -16px;
 }
 
+// Stays in the accessibility tree so a change of the indicator is announced; while empty it
+// takes no room next to the status badge
+.polling-status {
+  display: inline-flex;
+  align-items: center;
+
+  &:empty {
+    margin-left: -12px;
+  }
+}
+
 .polling-indicator {
   display: inline-flex;
   align-items: center;

@@ -18,23 +18,32 @@
           <span class="badge status-badge" [class]="statusClass(session.status)">
             {{ getStatusDisplayText(session.status) }}
           </span>
-          @if (isPolling()) {
-            @if (pollFailure) {
-              <span class="polling-indicator failing" role="status">
-                <mat-icon aria-hidden="true">sync_problem</mat-icon>
-                {{ pollFailure }}. Retrying.
-              </span>
-            } @else {
-              <span class="polling-indicator">
-                <mat-icon class="spinning" aria-hidden="true">refresh</mat-icon>
-                Live updates
+          <!-- Stays in the page, so a change of its text is announced -->
+          <span class="polling-status" role="status">
+            @if (isPolling()) {
+              @if (pollFailure) {
+                <span class="polling-indicator failing">
+                  <mat-icon aria-hidden="true">sync_problem</mat-icon>
+                  {{ pollFailure }} Retrying.
+                </span>
+              } @else {
+                <span class="polling-indicator">
+                  <mat-icon class="spinning" aria-hidden="true">refresh</mat-icon>
+                  Live updates
+                </span>
+              }
+            } @else if (updatesPaused) {
+              <span class="polling-indicator paused">
+                <mat-icon aria-hidden="true">pause_circle</mat-icon>
+                @if (sessionUnavailable) {
+                  Updates stopped: the session is no longer available.
+                } @else {
+                  Updates paused: the status may be out of date.
+                }
               </span>
             }
-          } @else if (updatesPaused) {
-            <span class="polling-indicator paused" role="status">
-              <mat-icon aria-hidden="true">pause_circle</mat-icon>
-              Updates paused: the status may be out of date.
-            </span>
+          </span>
+          @if (updatesPaused && !isPolling()) {
             <button
               matButton
               type="button"

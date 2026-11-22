@@ -38,7 +38,8 @@ test('says when updates fail and when they paused, and Refresh follows the sessi
   const session = await pendingSession(request);
   await page.clock.install();
   await page.goto(`/session-management/${session}`);
-  const indicator = page.locator('.polling-indicator');
+  // One status region holds the indicator, so a change of its text is announced.
+  const indicator = page.locator('.hero-meta [role="status"]');
   await expect(indicator).toContainText('Live updates');
 
   // The backend does not answer the next polls.
