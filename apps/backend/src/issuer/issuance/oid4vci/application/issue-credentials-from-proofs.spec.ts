@@ -21,8 +21,7 @@ describe("IssueCredentialsFromProofs", () => {
 
         await expect(
             useCase.execute({
-                proofs: ["proof-1", "proof-2"],
-                proofType: "jwt",
+                proofs: { values: ["proof-1", "proof-2"], proofType: "jwt" },
                 session,
                 credentialConfigurationId: "config-1",
                 claims: { name: "Ada" },
@@ -64,8 +63,7 @@ describe("IssueCredentialsFromProofs", () => {
 
         await expect(
             useCase.execute({
-                proofs: ["attestation"],
-                proofType: "attestation",
+                proofs: { values: ["attestation"], proofType: "attestation" },
                 session,
                 credentialConfigurationId: "config-1",
                 issuanceSetId: "set-1",
@@ -94,8 +92,7 @@ describe("IssueCredentialsFromProofs", () => {
 
         await expect(
             useCase.execute({
-                proofs: ["proof"],
-                proofType: "jwt",
+                proofs: { values: ["proof"], proofType: "jwt" },
                 session,
                 credentialConfigurationId: "config-1",
                 issuanceSetId: "set-1",
@@ -125,8 +122,10 @@ describe("IssueCredentialsFromProofs", () => {
                 { execute: issue } as any,
             );
             const result = useCase.execute({
-                proofs: verified.map((_, index) => `proof-${index}`),
-                proofType: "jwt",
+                proofs: {
+                    values: verified.map((_, index) => `proof-${index}`),
+                    proofType: "jwt",
+                },
                 session,
                 credentialConfigurationId: "config-1",
                 issuanceSetId: "set-1",
@@ -225,8 +224,7 @@ describe("IssueCredentialsFromProofs", () => {
         );
 
         await useCase.execute({
-            proofs: ["proof-1", "proof-2"],
-            proofType: "jwt",
+            proofs: { values: ["proof-1", "proof-2"], proofType: "jwt" },
             session,
             credentialConfigurationId: "config-1",
             issuanceSetId: "set-1",
@@ -243,5 +241,40 @@ describe("IssueCredentialsFromProofs", () => {
         expect(issue.mock.calls.map(([command]) => command.walletUnit)).toEqual(
             [walletUnit, undefined],
         );
+    });
+
+    it("issues one credential bound to no key, verifying nothing, without proofs", async () => {
+        const prepare = vi.fn();
+        const issue = vi.fn().mockResolvedValue(["unbound"]);
+        const onIssued = vi.fn();
+        const useCase = new IssueCredentialsFromProofs(
+            { prepare } as unknown as CredentialProofVerifier,
+            { execute: issue } as any,
+        );
+
+        await expect(
+            useCase.execute({
+                session,
+                credentialConfigurationId: "config-1",
+                claims: { name: "Ada" },
+                issuanceSetId: "set-1",
+                batchSize: 5,
+                trustLists: [],
+                keyAttestationStatusCheckMode: RevocationCheckMode.Strict,
+                onIssued,
+            }),
+        ).resolves.toEqual([{ credential: "unbound" }]);
+
+        expect(prepare).not.toHaveBeenCalled();
+        expect(issue).toHaveBeenCalledOnce();
+        expect(issue).toHaveBeenCalledWith({
+            credentialConfigurationId: "config-1",
+            holderKeys: undefined,
+            session,
+            claims: { name: "Ada" },
+            issuanceSetId: "set-1",
+            walletUnit: undefined,
+        });
+        expect(onIssued).toHaveBeenCalledOnce();
     });
 });

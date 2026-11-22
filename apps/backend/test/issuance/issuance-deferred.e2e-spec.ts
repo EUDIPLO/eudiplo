@@ -256,6 +256,111 @@ describe("Issuance - Deferred Credential Flow", () => {
         expect(nock.isDone()).toBe(true);
     });
 
+    // Issue #1625: a configuration without key binding is also deferred
+    // without proofs, and its credential carries no cnf.
+    test("deferred credential issuance without key binding needs no proofs", async () => {
+        const citizen = (
+            await request(app.getHttpServer())
+                .get("/issuer/credentials/citizen")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .expect(200)
+        ).body;
+        const configId = `citizen-unbound-${Date.now()}`;
+        await request(app.getHttpServer())
+            .post("/issuer/credentials")
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .send({
+                id: configId,
+                config: citizen.config,
+                fields: citizen.fields,
+                vct: citizen.vct,
+                keyBinding: false,
+            })
+            .expect(201);
+
+        try {
+            nock("http://localhost:8787")
+                .post("/deferred-unbound", () => true)
+                .reply(200, { deferred: true, interval: 2 });
+            const offerResponse = await request(app.getHttpServer())
+                .post("/issuer/offer")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .send({
+                    flow: "pre_authorized_code",
+                    response_type: "uri",
+                    credentialConfigurationIds: [configId],
+                    credentialClaims: {
+                        [configId]: {
+                            type: "webhook",
+                            webhook: {
+                                url: "http://localhost:8787/deferred-unbound",
+                                auth: { type: "none" },
+                            },
+                        },
+                    },
+                })
+                .expect(201);
+
+            const client = new Openid4vciClient({
+                callbacks: {
+                    ...callbacks,
+                    clientAuthentication: clientAuthenticationAnonymous(),
+                },
+            });
+            const credentialOffer = await client.resolveCredentialOffer(
+                offerResponse.body.uri,
+            );
+            const issuerMetadata = await client.resolveIssuerMetadata(
+                credentialOffer.credential_issuer,
+            );
+            const { accessTokenResponse } =
+                await client.retrievePreAuthorizedCodeAccessTokenFromOffer({
+                    credentialOffer,
+                    issuerMetadata,
+                });
+
+            const credentialResponse = await client.retrieveCredentials({
+                accessToken: accessTokenResponse.access_token,
+                credentialConfigurationId: configId,
+                issuerMetadata,
+            });
+            const transactionId =
+                credentialResponse.credentialResponse.transaction_id;
+            expect(transactionId).toBeDefined();
+
+            await request(app.getHttpServer())
+                .post(`/issuer/deferred/${transactionId}/complete`)
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .send({ claims: { town: "Bonn" } })
+                .expect(200);
+
+            const deferred = await retrieveDeferredCredential(
+                app,
+                issuerMetadata,
+                accessTokenResponse.access_token,
+                transactionId!,
+            );
+            expect(deferred.statusCode).toBe(200);
+            expect(deferred.body.credentials).toHaveLength(1);
+            const credential = deferred.body.credentials[0]
+                .credential as string;
+            const claims = await sdjwt.getClaims(credential);
+            expect(claims.town).toBe("Bonn");
+            expect(
+                (await sdjwt.decode(credential)).jwt?.payload,
+            ).not.toHaveProperty("cnf");
+        } finally {
+            await request(app.getHttpServer())
+                .delete(`/issuer/credentials/${configId}`)
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`);
+        }
+    });
+
     test("deferred credential issuance with attestation proof type", async () => {
         const trust = await configureTrustedAttestationProvider(app, authToken);
         try {

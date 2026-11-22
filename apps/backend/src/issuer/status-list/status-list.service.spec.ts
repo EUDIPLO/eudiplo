@@ -863,4 +863,171 @@ describe("StatusListService SQLite concurrency", () => {
             service.createNewList("tenant-1", { capacity }),
         ).rejects.toMatchObject({ status: 400 });
     });
+    describe("revoking a credential configuration's entries", () => {
+        const regenerateListTokens = vi.fn().mockResolvedValue(undefined);
+
+        const mapping = (
+            tenantId: string,
+            sessionId: string,
+            statusListId: string,
+            index: number,
+            credentialConfigurationId: string,
+        ) => ({
+            tenantId,
+            sessionId,
+            statusListId,
+            index,
+            list: `https://issuer.example/issuers/${tenantId}/status-management/status-list/${statusListId}`,
+            credentialConfigurationId,
+        });
+
+        const listOf = (tenantId: string, id: string) =>
+            dataSource
+                .getRepository(StatusListEntity)
+                .findOneByOrFail({ id, tenantId });
+
+        beforeEach(async () => {
+            regenerateListTokens.mockClear();
+            Object.assign(service as object, {
+                statusListConfigService: {
+                    getEffectiveConfig: vi
+                        .fn()
+                        .mockResolvedValue({ immediateUpdate: true }),
+                },
+                regenerateListTokens,
+            });
+            await dataSource.getRepository(TenantEntity).save({
+                id: "tenant-2",
+                name: "Tenant 2",
+                status: "active",
+            });
+            const lists = dataSource.getRepository(StatusListEntity);
+            await lists.update(
+                { tenantId: "tenant-1", id: "list-1" },
+                { elements: [0, 0, 0, 1], stack: [] },
+            );
+            await lists.save([
+                {
+                    id: "list-2",
+                    tenantId: "tenant-1",
+                    credentialConfigurationId: null,
+                    elements: [0, 2],
+                    stack: [],
+                    bits: 2,
+                },
+                {
+                    id: "list-1",
+                    tenantId: "tenant-2",
+                    credentialConfigurationId: null,
+                    elements: [0, 0],
+                    stack: [],
+                    bits: 1,
+                },
+            ]);
+            await dataSource
+                .getRepository(StatusMapping)
+                .insert([
+                    mapping("tenant-1", "a", "list-1", 0, "pid"),
+                    mapping("tenant-1", "b", "list-1", 1, "mdl"),
+                    mapping("tenant-1", "c", "list-1", 2, "pid"),
+                    mapping("tenant-1", "d", "list-1", 3, "pid"),
+                    mapping("tenant-1", "e", "list-2", 1, "pid"),
+                    mapping("tenant-2", "f", "list-1", 0, "pid"),
+                ]);
+        });
+
+        test("revokes only the tenant's entries of the configuration, once per list", async () => {
+            const revoked = await service.revokeCredentialConfigurationEntries(
+                "tenant-1",
+                "pid",
+            );
+
+            // Index 3 of list-1 was revoked already; index 1 of list-2 was
+            // suspended and is revoked now.
+            expect(revoked).toBe(3);
+            expect((await listOf("tenant-1", "list-1")).elements).toEqual([
+                1, 0, 1, 1,
+            ]);
+            expect((await listOf("tenant-1", "list-2")).elements).toEqual([
+                0, 1,
+            ]);
+            expect((await listOf("tenant-2", "list-1")).elements).toEqual([
+                0, 0,
+            ]);
+            expect(regenerateListTokens).toHaveBeenCalledTimes(2);
+
+            const updated = await dataSource.getRepository(StatusMapping).find({
+                where: { tenantId: "tenant-1" },
+                order: { sessionId: "ASC" },
+            });
+            expect(
+                updated.map((entry) => [
+                    entry.sessionId,
+                    entry.statusUpdatedAt instanceof Date,
+                ]),
+            ).toEqual([
+                ["a", true],
+                ["b", false],
+                ["c", true],
+                ["d", false],
+                ["e", true],
+            ]);
+        });
+
+        test("finishes a call whose publication failed when it is repeated", async () => {
+            regenerateListTokens.mockImplementation(
+                async (_tenantId: string, listId: string) => {
+                    if (listId === "list-2") throw new Error("signer down");
+                },
+            );
+            await expect(
+                service.revokeCredentialConfigurationEntries("tenant-1", "pid"),
+            ).rejects.toThrow("signer down");
+            expect((await listOf("tenant-1", "list-1")).elements).toEqual([
+                1, 0, 1, 1,
+            ]);
+
+            regenerateListTokens.mockReset();
+            regenerateListTokens.mockResolvedValue(undefined);
+            // Everything is revoked by now; the lists are published anyway.
+            expect(
+                await service.revokeCredentialConfigurationEntries(
+                    "tenant-1",
+                    "pid",
+                ),
+            ).toBe(0);
+            expect(
+                regenerateListTokens.mock.calls.map(([, listId]) => listId),
+            ).toEqual(expect.arrayContaining(["list-1", "list-2"]));
+        });
+
+        test("leaves publication to the list's TTL without immediate updates", async () => {
+            Object.assign(service as object, {
+                statusListConfigService: {
+                    getEffectiveConfig: vi
+                        .fn()
+                        .mockResolvedValue({ immediateUpdate: false }),
+                },
+            });
+            expect(
+                await service.revokeCredentialConfigurationEntries(
+                    "tenant-1",
+                    "pid",
+                ),
+            ).toBe(3);
+            expect(regenerateListTokens).not.toHaveBeenCalled();
+        });
+
+        test("revokes nothing for a configuration without entries", async () => {
+            expect(
+                await service.revokeCredentialConfigurationEntries(
+                    "tenant-1",
+                    "unknown",
+                ),
+            ).toBe(0);
+            expect((await listOf("tenant-1", "list-1")).elements).toEqual([
+                0, 0, 0, 1,
+            ]);
+        });
+    });
 });

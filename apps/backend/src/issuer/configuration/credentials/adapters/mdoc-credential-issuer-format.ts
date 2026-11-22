@@ -12,7 +12,12 @@ export class MdocCredentialIssuerFormat implements CredentialIssuerFormat {
 
     constructor(private readonly issuer: MdocIssuerService) {}
 
-    issue(context: CredentialIssuanceContext): Promise<string> {
+    async issue(context: CredentialIssuanceContext): Promise<string> {
+        // An mDOC always carries its device key, so its requests always
+        // carry a key proof (`requiresKeyProof`).
+        if (!context.holderKey) {
+            throw new Error("An mDOC needs the device key of a key proof");
+        }
         return this.issuer.issue({
             credentialConfiguration: context.credentialConfiguration,
             deviceKey: context.holderKey,

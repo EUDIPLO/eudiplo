@@ -4526,7 +4526,7 @@ export type CredentialStatusDto = {
      */
     bits: 1 | 2 | 4 | 8;
     /**
-     * When the status value last changed, through POST /api/session/revoke or when activeCredentials revokes a previous credential (ISO 8601). Absent if it has not changed since issuance, or only changed before this field was recorded.
+     * When the status value last changed, through POST /api/session/revoke, when activeCredentials revokes a previous credential, when revokeWithWalletUnit revokes it, or when a change of the embedded disclosure policy revokes it (ISO 8601). Absent if it has not changed since issuance, or only changed before this field was recorded.
      */
     statusUpdatedAt?: string;
 };
@@ -7740,8 +7740,24 @@ export type CredentialConfigControllerUpdateCredentialConfigurationData = {
     path: {
         id: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Revoke the credentials issued under this configuration when the update adds, changes or deletes its embedded disclosure policy. Not stored. Default false: the update revokes nothing.
+         */
+        revokeOnDisclosurePolicyChange?: boolean;
+    };
     url: '/api/issuer/credentials/{id}';
+};
+
+export type CredentialConfigControllerUpdateCredentialConfigurationErrors = {
+    /**
+     * The body is invalid, or revokeOnDisclosurePolicyChange is neither true nor false
+     */
+    400: unknown;
+    /**
+     * revokeOnDisclosurePolicyChange=true from a client limited to other credential configurations (allowedIssuanceConfigs)
+     */
+    403: unknown;
 };
 
 export type CredentialConfigControllerUpdateCredentialConfigurationResponses = {
