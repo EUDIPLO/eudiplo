@@ -254,6 +254,29 @@ export class DeferredCredentialService {
                 );
             }
         }
+        this.assertProofAllowsIssuance(
+            verified,
+            keyAttestationsRequired,
+            maintenance,
+        );
+        return {
+            holderCnf: holderKeys[0] as Jwk,
+            walletUnit: verified.keyAttestation?.walletUnit ?? null,
+        };
+    }
+
+    /**
+     * Checks the verified proof against the key attestation requirements
+     * and the status maintenance period, as protocol errors.
+     */
+    private assertProofAllowsIssuance(
+        verified: Parameters<typeof assertKeyAttestationRequirements>[1],
+        keyAttestationsRequired: KeyAttestationRequirements | undefined,
+        maintenance: Pick<
+            CreateDeferredTransactionParams,
+            "revokeWithWalletUnit" | "session"
+        >,
+    ): void {
         try {
             assertKeyAttestationRequirements(keyAttestationsRequired, verified);
             // Refused now rather than when the transaction is completed: a
@@ -279,10 +302,6 @@ export class DeferredCredentialService {
             }
             throw error;
         }
-        return {
-            holderCnf: holderKeys[0] as Jwk,
-            walletUnit: verified.keyAttestation?.walletUnit ?? null,
-        };
     }
 
     /**
