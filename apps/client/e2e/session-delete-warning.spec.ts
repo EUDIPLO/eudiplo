@@ -97,5 +97,8 @@ test('names the sessions Delete Selected removes and says which are still pendin
   expect(question).toContain('It is still pending');
   // A presentation session issues no credentials.
   expect(question).not.toContain('revoke');
+  // Declining deletes nothing: the list, loaded again, still has the session.
+  await page.reload();
+  await page.getByRole('searchbox', { name: /Search sessions/ }).fill(session);
   await expect(row).toHaveCount(1);
 });

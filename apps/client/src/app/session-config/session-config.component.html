@@ -131,6 +131,14 @@
                   {{ deletedSessionCredentials }}
                 </span>
               </div>
+            } @else if (!configForm.get('cleanupMode')?.value) {
+              <div class="info-box warning">
+                <mat-icon aria-hidden="true">warning</mat-icon>
+                <span>
+                  The <strong>global default</strong> may be Full Delete; then cleanup removes the
+                  whole session record. {{ deletedSessionCredentials }}
+                </span>
+              </div>
             }
 
             @if (configForm.get('cleanupMode')?.value === 'anonymize') {

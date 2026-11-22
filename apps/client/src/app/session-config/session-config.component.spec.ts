@@ -302,6 +302,193 @@ describe('SessionConfigComponent', () => {
     expect(putBodies).toHaveLength(1);
   });
 
+  /** Renders the stored settings, applies the form change and clicks Save with the question declined. */
+  async function declinedSave(
+    stored: Record<string, unknown>,
+    change: Record<string, unknown>
+  ): Promise<{ element: HTMLElement; confirm: ReturnType<typeof vi.fn<(m?: string) => boolean>> }> {
+    responses['GET /api/session-config'] = { status: 200, body: stored };
+    responses['PUT /api/session-config'] = { status: 200, body: {} };
+    const confirm = vi.fn<(m?: string) => boolean>(() => false);
+    vi.stubGlobal('confirm', confirm);
+    const element = await render();
+    fixture.componentInstance.configForm.patchValue(change);
+    fixture.detectChanges();
+    button(element, 'Save Configuration').click();
+    // The SDK awaits before it calls fetch; let a save that was not stopped reach it.
+    await new Promise((resolve) => setTimeout(resolve));
+    return { element, confirm };
+  }
+
+  it('asks before a stored TTL is cleared while cleanup deletes: SESSION_TTL may be shorter', async () => {
+    const { confirm } = await declinedSave(
+      { ttlSeconds: 2592000, cleanupMode: 'full' },
+      { ttlSeconds: null }
+    );
+
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(confirm.mock.lastCall?.[0]).toContain(
+      'sessions older than SESSION_TTL are deleted completely'
+    );
+    expect(confirm.mock.lastCall?.[0]).not.toContain('30 days');
+    expect(putBodies).toEqual([]);
+  });
+
+  it('asks before a stored TTL is cleared while the global cleanup mode applies', async () => {
+    const { element, confirm } = await declinedSave({ ttlSeconds: 2592000 }, { ttlSeconds: '' });
+
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(confirm.mock.lastCall?.[0]).toContain(
+      'sessions older than SESSION_TTL are cleaned up with SESSION_CLEANUP_MODE, which can delete them completely'
+    );
+    expect(confirm.mock.lastCall?.[0]).toContain(
+      'only POST /api/session/revoke with the session ID'
+    );
+    expect(putBodies).toEqual([]);
+
+    // Accepted, the save clears the TTL.
+    confirm.mockReturnValue(true);
+    await clickAndWait(element, 'Save Configuration');
+    expect(putBodies).toEqual([{ ttlSeconds: null }]);
+  });
+
+  it('names SESSION_TTL, not the cleared TTL, when the same save switches to Full Delete', async () => {
+    const { confirm } = await declinedSave(
+      { ttlSeconds: 604800, cleanupMode: 'anonymize' },
+      { ttlSeconds: null, cleanupMode: 'full' }
+    );
+
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(confirm.mock.lastCall?.[0]).toContain(
+      'sessions older than SESSION_TTL are deleted completely'
+    );
+    expect(confirm.mock.lastCall?.[0]).not.toContain('7 days');
+    expect(putBodies).toEqual([]);
+  });
+
+  it('asks before a first TTL while the global cleanup mode applies', async () => {
+    const { confirm } = await declinedSave({}, { ttlSeconds: 3600 });
+
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(confirm.mock.lastCall?.[0]).toContain(
+      'sessions older than 1 hour are cleaned up with SESSION_CLEANUP_MODE, which can delete them completely'
+    );
+    expect(putBodies).toEqual([]);
+  });
+
+  it('does not ask for a save that leaves the TTL as it is while cleanup deletes', async () => {
+    const stored = { ttlSeconds: 86400, cleanupMode: 'full' };
+    responses['GET /api/session-config'] = { status: 200, body: stored };
+    responses['PUT /api/session-config'] = { status: 200, body: stored };
+    const confirm = vi.fn<(message?: string) => boolean>(() => false);
+    vi.stubGlobal('confirm', confirm);
+    const element = await render();
+
+    await clickAndWait(element, 'Save Configuration');
+
+    expect(confirm).not.toHaveBeenCalled();
+    expect(putBodies).toEqual([stored]);
+  });
+
+  it('does not ask for a save without a TTL, stored or set, while cleanup deletes', async () => {
+    const stored = { cleanupMode: 'full' };
+    responses['GET /api/session-config'] = { status: 200, body: stored };
+    responses['PUT /api/session-config'] = { status: 200, body: stored };
+    const confirm = vi.fn<(message?: string) => boolean>(() => false);
+    vi.stubGlobal('confirm', confirm);
+    const element = await render();
+
+    await clickAndWait(element, 'Save Configuration');
+
+    expect(confirm).not.toHaveBeenCalled();
+    expect(putBodies).toEqual([stored]);
+  });
+
+  it('asks before a shorter TTL while the global cleanup mode applies, but not for a longer one', async () => {
+    responses['GET /api/session-config'] = { status: 200, body: { ttlSeconds: 86400 } };
+    responses['PUT /api/session-config'] = { status: 200, body: { ttlSeconds: 3600 } };
+    const confirm = vi.fn<(message?: string) => boolean>(() => true);
+    vi.stubGlobal('confirm', confirm);
+    const element = await render();
+
+    fixture.componentInstance.configForm.patchValue({ ttlSeconds: 3600 });
+    fixture.detectChanges();
+    await clickAndWait(element, 'Save Configuration');
+
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(confirm.mock.lastCall?.[0]).toContain(
+      'sessions older than 1 hour are cleaned up with SESSION_CLEANUP_MODE'
+    );
+
+    responses['PUT /api/session-config'] = { status: 200, body: { ttlSeconds: 604800 } };
+    fixture.componentInstance.configForm.patchValue({ ttlSeconds: 604800 });
+    fixture.detectChanges();
+    await clickAndWait(element, 'Save Configuration');
+
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(putBodies).toEqual([{ ttlSeconds: 3600 }, { ttlSeconds: 604800 }]);
+  });
+
+  it('does not ask when a stored TTL is cleared while cleanup anonymizes', async () => {
+    responses['GET /api/session-config'] = {
+      status: 200,
+      body: { ttlSeconds: 604800, cleanupMode: 'anonymize' },
+    };
+    responses['PUT /api/session-config'] = { status: 200, body: { cleanupMode: 'anonymize' } };
+    const confirm = vi.fn<(message?: string) => boolean>(() => true);
+    vi.stubGlobal('confirm', confirm);
+    const element = await render();
+
+    button(element, 'Use default').click();
+    fixture.detectChanges();
+    await clickAndWait(element, 'Save Configuration');
+
+    expect(confirm).not.toHaveBeenCalled();
+    expect(putBodies).toEqual([{ ttlSeconds: null, cleanupMode: 'anonymize' }]);
+  });
+
+  it('gives focus back to Save when the question is declined with focus lost', async () => {
+    responses['GET /api/session-config'] = { status: 200, body: {} };
+    vi.stubGlobal('confirm', () => {
+      // Safari, for one, does not focus a clicked button, so the dialog returns focus nowhere.
+      loseFocus();
+      return false;
+    });
+    const element = await render();
+    fixture.componentInstance.configForm.patchValue({ cleanupMode: 'full' });
+    fixture.detectChanges();
+
+    button(element, 'Save Configuration').click();
+
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(document.activeElement).toBe(button(element, 'Save Configuration'));
+    });
+    expect(putBodies).toEqual([]);
+  });
+
+  it('warns that the global default may be Full Delete while no mode is chosen', async () => {
+    responses['GET /api/session-config'] = { status: 200, body: {} };
+    const element = await render();
+    const warning = () => element.querySelector('.info-box.warning');
+
+    expect(warning()?.textContent).toContain('global default may be Full Delete');
+    expect(warning()?.textContent).toContain(
+      'the Web Client can no longer revoke, suspend or reinstate them'
+    );
+    expect(warning()?.querySelector('mat-icon')?.getAttribute('aria-hidden')).toBe('true');
+
+    fixture.componentInstance.configForm.patchValue({ cleanupMode: 'full' });
+    fixture.detectChanges();
+    expect(element.querySelectorAll('.info-box.warning')).toHaveLength(1);
+    expect(warning()?.textContent).toContain('Full Delete removes the whole session record.');
+    expect(warning()?.textContent).not.toContain('global default');
+
+    fixture.componentInstance.configForm.patchValue({ cleanupMode: 'anonymize' });
+    fixture.detectChanges();
+    expect(warning()).toBeNull();
+  });
+
   it('sends a chosen cleanup mode and leaves an empty TTL out', async () => {
     responses['GET /api/session-config'] = { status: 200, body: {} };
     responses['PUT /api/session-config'] = { status: 200, body: { cleanupMode: 'anonymize' } };
@@ -349,6 +536,14 @@ describe('SessionConfigComponent', () => {
     button(element, 'Reset to Defaults').click();
     expect(confirm.mock.lastCall?.[0]).toContain(
       'the TTL of 1 hour and the cleanup mode "Anonymize"'
+    );
+    expect(confirm.mock.lastCall?.[0]).toContain(
+      'From the next cleanup run, sessions older than SESSION_TTL are cleaned up with ' +
+        'SESSION_CLEANUP_MODE, which can delete them completely. Credentials issued in a ' +
+        'deleted session keep their status'
+    );
+    expect(confirm.mock.lastCall?.[0]).toContain(
+      'only POST /api/session/revoke with the session ID still can. This cannot be undone.'
     );
     expect(fixture.componentInstance.isSaving).toBe(false);
     // The SDK awaits before it calls fetch; let a cancelled reset run to completion.

@@ -75,6 +75,9 @@ export class SessionConfigComponent implements OnInit {
 
   cleanupModes = cleanupModes;
 
+  /** Shown in the Full Delete warning: what deleting a session means for its credentials. */
+  readonly deletedSessionCredentials = DELETED_SESSION_CREDENTIALS;
+
   /** Common TTLs; null clears the TTL, so the global default applies. */
   readonly ttlPresets: { label: string; seconds: number | null }[] = [
     { label: '1 hour', seconds: 3600 },
@@ -180,7 +183,11 @@ export class SessionConfigComponent implements OnInit {
 
     const update = this.buildUpdate();
     const question = this.saveConfirmation(update);
-    if (question && !confirm(question)) return;
+    if (question && !confirm(question)) {
+      // The dialog can end with focus nowhere, as a save does.
+      focusAfterRenderIfLost(this.injector, () => this.saveButton?.nativeElement);
+      return;
+    }
     this.isSaving = true;
     try {
       this.currentConfig = await this.sessionConfigService.updateConfig(update);
@@ -221,36 +228,27 @@ export class SessionConfigComponent implements OnInit {
     });
   }
 
-  /** Shown beside "Full Delete": what deleting a session means for its credentials. */
-  readonly deletedSessionCredentials = DELETED_SESSION_CREDENTIALS;
-
   /**
    * What to confirm before a save that lets cleanup delete sessions sooner or completely:
-   * switching to Full Delete, or a shorter TTL (or a first one, whose length against the global
-   * SESSION_TTL is not known here) while cleanup may delete. Anonymize keeps the sessions, so
-   * their credentials can still be revoked. Undefined when the save needs no confirmation.
+   * switching to Full Delete, or a TTL that may be shorter than the one in effect while cleanup
+   * may delete. The global SESSION_TTL is not known here, so a first TTL and a cleared one count
+   * as possibly shorter. Anonymize keeps the sessions, so their credentials can still be revoked.
+   * Undefined when the save needs no confirmation.
    */
   private saveConfirmation(update: UpdateSessionConfigDto): string | undefined {
     const storedMode = this.currentConfig?.cleanupMode;
     const mode = update.cleanupMode ?? storedMode;
     if (mode === 'anonymize') return undefined;
-    const storedTtl = this.currentConfig?.ttlSeconds;
+    // Undefined stands for the global SESSION_TTL.
+    const storedTtl = this.currentConfig?.ttlSeconds || undefined;
+    // The TTL in effect after the save: an omitted field keeps the stored one, null clears it.
+    const ttl = update.ttlSeconds === undefined ? storedTtl : (update.ttlSeconds ?? undefined);
     const toFullDelete = update.cleanupMode === 'full' && storedMode !== 'full';
-    const shorterTtl =
-      typeof update.ttlSeconds === 'number' && (!storedTtl || update.ttlSeconds < storedTtl);
-    if (!toFullDelete && !shorterTtl) return undefined;
+    const maybeShorterTtl =
+      ttl !== storedTtl && (ttl === undefined || storedTtl === undefined || ttl < storedTtl);
+    if (!toFullDelete && !maybeShorterTtl) return undefined;
 
-    let age = 'SESSION_TTL';
-    if (typeof update.ttlSeconds === 'number') age = this.formatTtl(update.ttlSeconds);
-    else if (storedTtl) age = this.formatTtl(storedTtl);
-    const cleanup =
-      mode === 'full'
-        ? `sessions older than ${age} are deleted completely`
-        : `sessions older than ${age} are cleaned up with SESSION_CLEANUP_MODE, which can delete them completely`;
-    return (
-      `Save the session settings? From the next cleanup run, ${cleanup}. ` +
-      `${DELETED_SESSION_CREDENTIALS} This cannot be undone.`
-    );
+    return `Save the session settings? ${this.cleanupConsequence(ttl, mode)} This cannot be undone.`;
   }
 
   private resetConfirmation(): string {
@@ -262,11 +260,28 @@ export class SessionConfigComponent implements OnInit {
         ? `the cleanup mode "${this.cleanupModeLabel(this.currentConfig.cleanupMode)}"`
         : '',
     ].filter(Boolean);
+    // After a reset both global defaults apply, and SESSION_CLEANUP_MODE may be Full Delete.
     return (
       `Reset the session settings to the global defaults of this instance? ` +
-      `This removes ${removed.join(' and ')}. From the next cleanup run, sessions older than ` +
-      `SESSION_TTL are cleaned up with SESSION_CLEANUP_MODE, which can delete them completely. ` +
+      `This removes ${removed.join(' and ')}. ${this.cleanupConsequence(undefined, undefined)} ` +
       `This cannot be undone.`
+    );
+  }
+
+  /**
+   * What the next cleanup run does with the given settings, and what that means for the
+   * credentials of deleted sessions. An undefined TTL or mode follows the global default, whose
+   * value is not known here.
+   */
+  private cleanupConsequence(ttl: number | undefined, mode: 'full' | undefined): string {
+    const age = ttl === undefined ? 'SESSION_TTL' : this.formatTtl(ttl);
+    const cleanup =
+      mode === 'full'
+        ? 'deleted completely'
+        : 'cleaned up with SESSION_CLEANUP_MODE, which can delete them completely';
+    return (
+      `From the next cleanup run, sessions older than ${age} are ${cleanup}. ` +
+      DELETED_SESSION_CREDENTIALS
     );
   }
 
