@@ -130,8 +130,11 @@ an offer, and sessions created before 9.0. Changing credential status
 (`POST /api/session/revoke`) goes by the credentials instead of the session, so
 it still works after the session was cleaned up: a request that covers a
 credential of a configuration outside `allowedIssuanceConfigs` answers `409`
-and changes nothing. The lists do not limit reading the configurations
-themselves.
+and changes nothing. Updating a credential configuration outside
+`allowedIssuanceConfigs` with `revokeOnDisclosurePolicyChange=true` answers
+`403` and changes nothing
+([details](../issuance/credential-configuration.md#revoke-credentials-when-the-policy-changes)).
+The lists do not limit reading the configurations themselves.
 
 The web client's client form changes a list only when it can load the
 configurations to choose from: listing credential configurations needs
