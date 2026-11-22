@@ -89,7 +89,7 @@ The web client offers the same action on the session page and as a bulk action i
 
 ## Finding sessions
 
-`GET /api/session` lists the sessions of the caller's tenant, most recently updated first. All filters are optional, combined with AND, and always limited to the tenant and to the session types the client's roles allow ([Tenants and access](../operate/tenants-and-access.md#api-clients-with-least-privilege)).
+`GET /api/session` lists the sessions of the caller's tenant, most recently updated first. All filters are optional, combined with AND, and always limited to the tenant, to the session types the client's roles allow and to the configurations the client is limited to ([Tenants and access](../operate/tenants-and-access.md#api-clients-with-least-privilege)).
 
 | Parameter                   | Matches                                                                                                                         |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
@@ -135,7 +135,7 @@ Once a wallet request has resolved its session (by offer ID, `walletNonce`, `iss
 
 ### Counting sessions
 
-`GET /api/session/stats` counts the tenant's sessions over all pages, with the same role scope as the list. `createdFrom` and `createdTo` limit it to sessions created in a time range, with the same format and checks as in the list. The response has one entry per session type the client may read, `issuance` and `presentation`, each with:
+`GET /api/session/stats` counts the tenant's sessions over all pages, with the same role scope and configuration limits as the list. `createdFrom` and `createdTo` limit it to sessions created in a time range, with the same format and checks as in the list. The response has one entry per session type the client may read, `issuance` and `presentation`, each with:
 
 - `total` and a count for every state in `byStatus` (`0` when there is none),
 - `failureCodes`, the [failure codes](../reference/session-outcome.md#failure-codes) of the failed sessions, most frequent first, at most 10 and cut to 255 characters; failed sessions without a code are not listed; issuance sessions record `credential_failure` and `credential_deleted` from [wallet notifications](../reference/session-outcome.md#issuance-notifications),
