@@ -107,6 +107,8 @@ export class SdJwtCredentialVerifierFormat implements CredentialVerifierFormat {
             verified: true,
             // Holder key and status reference are not claims about the subject.
             claims: { ...result.payload, cnf: undefined, status: undefined },
+            credentialType:
+                typeof payload.vct === "string" ? payload.vct : undefined,
             provenance: result.provenance,
             missingClaims: context.claimSets ? [] : results[0].missing,
             mismatchedClaims: satisfied ? [] : mismatchedClaims(results),

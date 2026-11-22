@@ -107,6 +107,42 @@ describe('IssuerMetadataBrowserComponent with the tenant credential configs', ()
     });
   });
 
+  it('names array element claims and says when one is requested as the whole array', async () => {
+    const { fixture, dialog } = createDialog({ source: 'tenant' });
+    fixture.detectChanges();
+
+    await answer({
+      ...metadata,
+      credential_configurations_supported: {
+        pid: {
+          ...metadata.credential_configurations_supported.pid,
+          credential_metadata: {
+            display: [{ name: 'PID' }],
+            claims: [
+              { path: ['nationalities'] },
+              { path: ['nationalities', null] },
+              { path: ['addresses', null, 'locality'] },
+              { path: ['places', 0, 'city'] },
+            ],
+          },
+        },
+      },
+    });
+    await vi.waitFor(() => expect(dialog.loading).toBe(false));
+    dialog.toggleCredential(dialog.credentials[0], true);
+    fixture.detectChanges();
+
+    const rows = [...fixture.nativeElement.querySelectorAll('.claim-path')].map(
+      (row: HTMLElement) => row.textContent?.replace(/\s+/g, ' ').trim()
+    );
+    expect(rows).toEqual([
+      'nationalities',
+      'nationalities[*] (requested as the whole array nationalities)',
+      'addresses[*].locality (requested as the whole array addresses)',
+      'places[0].city',
+    ]);
+  });
+
   it('hides the issuer URL field', async () => {
     const { fixture } = createDialog({ source: 'tenant' });
     fixture.detectChanges();

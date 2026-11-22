@@ -1,5 +1,6 @@
 import { InjectRepository } from "@nestjs/typeorm";
 import { LessThan, Repository } from "typeorm";
+import { validate as isUuid } from "uuid";
 import { DeferredTransactionStatus } from "../domain/deferred-transaction-status.js";
 import { DeferredTransactionEntity } from "../entities/deferred-transaction.entity.js";
 import type {
@@ -7,6 +8,12 @@ import type {
     DeferredTransactionRepository,
 } from "../ports/deferred-transaction.repository.js";
 
+/**
+ * Transaction IDs are stored in a `uuid` column, and the deferred credential
+ * endpoint passes the wallet's `transaction_id` as it is. PostgreSQL refuses
+ * to compare a value that is not a UUID with that column, so such an ID is
+ * treated as unknown without a query, as SQLite would answer it.
+ */
 export class TypeOrmDeferredTransactionRepository
     implements DeferredTransactionRepository
 {
@@ -28,6 +35,7 @@ export class TypeOrmDeferredTransactionRepository
     }
 
     async find(tenantId: string, transactionId: string) {
+        if (!isUuid(transactionId)) return null;
         return this.map(
             await this.repository.findOneBy({ tenantId, transactionId }),
         );
@@ -69,6 +77,7 @@ export class TypeOrmDeferredTransactionRepository
         tenantId: string,
         transactionId: string,
     ): Promise<boolean> {
+        if (!isUuid(transactionId)) return false;
         const result = await this.repository.update(
             {
                 tenantId,
@@ -81,6 +90,7 @@ export class TypeOrmDeferredTransactionRepository
     }
 
     async markExpired(tenantId: string, transactionId: string): Promise<void> {
+        if (!isUuid(transactionId)) return;
         await this.repository.update(
             { tenantId, transactionId },
             { status: DeferredTransactionStatus.Expired },
@@ -96,6 +106,7 @@ export class TypeOrmDeferredTransactionRepository
         transactionId: string,
         status: DeferredTransactionStatus,
     ) {
+        if (!isUuid(transactionId)) return null;
         return this.map(
             await this.repository.findOneBy({
                 tenantId,

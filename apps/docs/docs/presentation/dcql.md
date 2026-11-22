@@ -44,6 +44,10 @@ For mDOC, `meta.doctype_value` names the document type and each claim path is `[
 - SD-JWT VC paths are property names, with numbers as array indexes (`["address", "locality"]`, `["nationalities", 0]`).
 - Without `claim_sets`, the presented credential must disclose every listed claim; otherwise the presentation fails.
 
+### Credential type
+
+EUDIPLO checks the type of every presented credential against `meta`, because a wallet may present another credential than the one requested: an SD-JWT VC's `vct` must be one of `vct_values`, an mDOC's docType must equal `doctype_value`. Otherwise the presentation fails with the code `credential_type_mismatch` ([failure codes](../reference/session-outcome.md#failure-codes)), in OpenID4VP and ISO 18013-7 flows. The values are compared as exact strings; in OpenID4VP flows `<TENANT_URL>` is resolved first, as in the request the wallet receives. EUDIPLO does not resolve SD-JWT VC type metadata, so a `vct` that `extends` one of `vct_values` is rejected: list every type you accept, for example `["urn:eudi:pid:1", "urn:eudi:pid:de:1"]`.
+
 ## Check a credential without requesting claims
 
 Leave out `claims` to only check that the user holds a valid credential of a type, for example a valid membership, without asking for any of its data:

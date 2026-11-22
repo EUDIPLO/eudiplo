@@ -77,6 +77,19 @@ describe("Issuance - Claims Metadata", () => {
                     disclosable: true,
                     display: [{ name: "Street Address", locale: "en-US" }],
                 },
+                {
+                    path: ["nationalities"],
+                    type: "array",
+                    defaultValue: ["DE"],
+                    disclosable: true,
+                    children: [
+                        { path: [null], type: "string", disclosable: true },
+                    ],
+                },
+                {
+                    path: ["places", 0, "city"],
+                    type: "string",
+                },
             ],
         };
 
@@ -116,7 +129,16 @@ describe("Issuance - Claims Metadata", () => {
 
         // Verify claims array
         const claims = credConfig.credential_metadata.claims;
-        expect(claims).toHaveLength(3);
+        expect(claims).toHaveLength(6);
+
+        // Array steps are claims path pointers (OID4VCI 1.0 Appendix C)
+        expect(claims.map((c: any) => c.path)).toEqual(
+            expect.arrayContaining([
+                ["nationalities"],
+                ["nationalities", null],
+                ["places", 0, "city"],
+            ]),
+        );
 
         // Check given_name claim
         const givenNameClaim = claims.find(

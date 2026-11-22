@@ -19,7 +19,7 @@ import { ApiService, type EndedSession } from '../core';
 import { OidcService } from '../core/oidc.service';
 import { expectAvailable, expectUnavailable } from '../common/unavailable-action.testing';
 import { EnvironmentService } from '../services/environment.service';
-import { LoginComponent } from './login.component';
+import { LoginComponent, instanceCheckFailure } from './login.component';
 
 describe('LoginComponent with a kept session', () => {
   const rejectedText =
@@ -1025,7 +1025,7 @@ describe('LoginComponent with a kept session', () => {
       expectUnavailable(fixture, loginButton(), 'Redirecting to the identity provider…');
     });
 
-    it('gives no reason while an instance URL that is not valid is checked', () => {
+    it('does not check an instance URL that is not valid and gives no reason', () => {
       api.discoveryAnswer = new Promise<Record<string, string>>(() => undefined);
       render();
       const component = fixture.componentInstance;
@@ -1033,7 +1033,8 @@ describe('LoginComponent with a kept session', () => {
       component.onApiUrlBlur();
       fixture.detectChanges();
 
-      expect(component.detectedMode).toBe('loading');
+      expect(api.discoveryRequests).toEqual([]);
+      expect(component.detectedMode).toBeNull();
       expectAvailable(fixture, loginButton());
     });
 
@@ -1319,6 +1320,336 @@ describe('LoginComponent with a kept session', () => {
     });
   });
 
+  describe('an instance that cannot be checked', () => {
+    const unreachable = { status: 0, message: 'Http failure response: 0 Unknown Error' };
+    const retryButton = () =>
+      [...page().querySelectorAll<HTMLButtonElement>('.instance-problem button')].find((b) =>
+        b.textContent?.includes('Retry')
+      );
+    const alert = () => page().querySelector('.instance-problem [role="alert"]');
+    let redirectToLogin: ReturnType<typeof vi.fn>;
+
+    /** Opens the page for an instance that does not answer and waits for the alert. */
+    async function renderUnreachable(): Promise<void> {
+      render();
+      await vi.waitFor(() => expect(fixture.componentInstance.detectedMode).toBe('unreachable'));
+      fixture.detectChanges();
+    }
+
+    beforeEach(() => {
+      api.kept = false;
+      queryParams['apiUrl'] = 'http://down.test';
+      api.discoveryAnswer = Promise.reject(unreachable);
+      // Unobserved until the page asks; Vitest would report the rejection otherwise.
+      api.discoveryAnswer.catch(() => undefined);
+      redirectToLogin = vi.fn(() => new Promise<void>(() => undefined));
+      Object.assign(TestBed.inject(OidcService), { redirectToLogin });
+    });
+
+    it('says the instance could not be reached instead of that it offers no SSO', async () => {
+      render();
+      const component = fixture.componentInstance;
+      await vi.waitFor(() => expect(component.detectedMode).toBe('unreachable'));
+      fixture.detectChanges();
+
+      expect(page().querySelector('.instance-problem [role="alert"]')?.textContent).toContain(
+        'Could not reach http://down.test.'
+      );
+      expect(page().querySelector('mat-hint')?.textContent).toContain(
+        'Could not check this instance.'
+      );
+      expect(page().textContent).not.toContain('SSO is not available');
+      expect(page().textContent).not.toContain('accepts client credentials');
+      // The SSO tab stays usable and chosen.
+      expect(component.isSsoTabDisabled).toBe(false);
+      expect(component.selectedLoginMode).toBe('sso');
+      expect(retryButton()).toBeDefined();
+    });
+
+    it('checks the instance again on Retry', async () => {
+      render();
+      const component = fixture.componentInstance;
+      await vi.waitFor(() => expect(component.detectedMode).toBe('unreachable'));
+      fixture.detectChanges();
+
+      api.discoveryAnswer = Promise.resolve({ issuer: 'http://idp.test', ui_client_id: 'ui' });
+      retryButton()!.click();
+      await vi.waitFor(() => expect(component.detectedMode).toBe('oidc'));
+      fixture.detectChanges();
+
+      expect(api.discoveryRequests).toEqual(['http://down.test', 'http://down.test']);
+      expect(page().querySelector('.instance-problem')).toBeNull();
+      expect(component.instanceProblem).toBe('');
+    });
+
+    it('keeps the alert and Retry, which is unavailable, while it checks the instance again', async () => {
+      await renderUnreachable();
+      const component = fixture.componentInstance;
+      const shown = alert();
+      const retry = retryButton()!;
+      expectAvailable(fixture, retry);
+      let answer!: (discovery: Record<string, string>) => void;
+      api.discoveryAnswer = new Promise((resolve) => (answer = resolve));
+
+      retry.focus();
+      retry.click();
+      fixture.detectChanges();
+
+      expect(component.detectedMode).toBe('loading');
+      expect(retryButton()).toBe(retry);
+      expect(document.activeElement).toBe(retry);
+      expectUnavailable(fixture, retry, 'Checking the instance…');
+      expect(alert()).toBe(shown);
+      expect(shown?.textContent).toContain('Could not reach http://down.test.');
+      // A click on the unavailable button waits for the check that runs.
+      retry.click();
+      expect(api.discoveryRequests).toEqual(['http://down.test', 'http://down.test']);
+
+      answer({});
+      // Retry left with the alert, so its focus moves to the instance field.
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(document.activeElement).toBe(input('apiUrl'));
+      });
+      expect(component.detectedMode).toBe('local');
+      expect(page().querySelector('.instance-problem')).toBeNull();
+      expect(api.discoveryRequests).toEqual(['http://down.test', 'http://down.test']);
+    });
+
+    it('checks once when a click on Retry takes the focus out of the instance field', async () => {
+      await renderUnreachable();
+      const component = fixture.componentInstance;
+      const retry = retryButton()!;
+      input('apiUrl')!.focus();
+      api.discoveryAnswer = Promise.resolve({});
+
+      // A mouse click: the field loses the focus on mousedown, the click follows.
+      retry.focus();
+      fixture.detectChanges();
+      expect(retryButton()).toBe(retry);
+      expectUnavailable(fixture, retry, 'Checking the instance…');
+      retry.click();
+
+      await vi.waitFor(() => expect(component.detectedMode).toBe('local'));
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(document.activeElement).toBe(input('apiUrl'));
+      });
+      expect(api.discoveryRequests).toEqual(['http://down.test', 'http://down.test']);
+    });
+
+    it('shows the alert and Retry again when the instance still cannot be reached', async () => {
+      await renderUnreachable();
+      const component = fixture.componentInstance;
+      const shown = alert();
+      const retry = retryButton()!;
+
+      retry.focus();
+      retry.click();
+      expect(component.detectedMode).toBe('loading');
+      await vi.waitFor(() => expect(component.detectedMode).toBe('unreachable'));
+      fixture.detectChanges();
+
+      expect(api.discoveryRequests).toEqual(['http://down.test', 'http://down.test']);
+      expect(alert()).toBe(shown);
+      expect(shown?.textContent).toContain('Could not reach http://down.test.');
+      expect(retryButton()).toBe(retry);
+      expectAvailable(fixture, retry);
+      expect(document.activeElement).toBe(retry);
+      // The alert reads as before, so the snackbar says that the instance was checked again.
+      expect(snackTexts()).toEqual([
+        "Could not reach http://down.test. Check the address, that the instance is running and that it allows this console's address (CORS).",
+      ]);
+    });
+
+    it('removes the alert while it checks another instance', async () => {
+      await renderUnreachable();
+      const component = fixture.componentInstance;
+      const field = input('apiUrl')!;
+      api.discoveryAnswers = {
+        'http://other.test': new Promise<Record<string, string>>(() => undefined),
+      };
+
+      // Tab from the field: the focus is on Retry when the alert leaves.
+      field.focus();
+      component.loginForm.patchValue({ apiUrl: 'http://other.test' });
+      retryButton()!.focus();
+      fixture.detectChanges();
+
+      expect(api.discoveryRequests).toEqual(['http://down.test', 'http://other.test']);
+      expect(component.detectedMode).toBe('loading');
+      expect(component.instanceProblem).toBe('');
+      expect(page().querySelector('.instance-problem')).toBeNull();
+      expect(page().querySelector('mat-hint')?.textContent).toContain(
+        'Detecting authentication mode...'
+      );
+      // Retry left with the alert, so its focus returns to the instance field, without a new check.
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(document.activeElement).toBe(field);
+      });
+      expect(api.discoveryRequests).toEqual(['http://down.test', 'http://other.test']);
+    });
+
+    it('does not check an invalid instance URL the page opens with', async () => {
+      queryParams['apiUrl'] = 'foo';
+      render();
+      await fixture.whenStable();
+
+      expect(api.discoveryRequests).toEqual([]);
+      expect(fixture.componentInstance.detectedMode).toBeNull();
+      expect(page().querySelector('.instance-problem')).toBeNull();
+    });
+
+    it('shows only the field error once the instance URL is invalid', async () => {
+      await renderUnreachable();
+      const component = fixture.componentInstance;
+      const field = input('apiUrl')!;
+
+      field.focus();
+      component.loginForm.patchValue({ apiUrl: 'foo' });
+      field.blur();
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(api.discoveryRequests).toEqual(['http://down.test']);
+      expect(component.detectedMode).toBeNull();
+      expect(component.instanceProblem).toBe('');
+      expect(page().querySelector('.instance-problem')).toBeNull();
+      expect(page().querySelector('mat-hint')).toBeNull();
+      expect(page().querySelector('mat-error')?.textContent).toContain(
+        'EUDIPLO Instance must be a valid URL'
+      );
+    });
+
+    it('ignores the answer of a check that ran when the instance URL became invalid', async () => {
+      let fail!: (error: unknown) => void;
+      api.discoveryAnswer = new Promise((_, reject) => (fail = reject));
+      render();
+      const component = fixture.componentInstance;
+      expect(component.detectedMode).toBe('loading');
+
+      component.loginForm.patchValue({ apiUrl: 'foo' });
+      component.onApiUrlBlur();
+      fail(unreachable);
+      await fixture.whenStable();
+
+      expect(component.detectedMode).toBeNull();
+      expect(component.instanceProblem).toBe('');
+    });
+
+    it('checks again on an SSO sign-in and says why it cannot sign in while it fails', async () => {
+      await renderUnreachable();
+      const component = fixture.componentInstance;
+      const shown = alert();
+
+      await component.onSubmit();
+      fixture.detectChanges();
+
+      // The alert stays in place, so screen readers hear the reason once, from the snackbar.
+      expect(alert()).toBe(shown);
+      expect(api.discoveryRequests).toEqual(['http://down.test', 'http://down.test']);
+      expect(snackTexts()).toEqual([
+        "Could not reach http://down.test. Check the address, that the instance is running and that it allows this console's address (CORS).",
+      ]);
+      expect(component.selectedLoginMode).toBe('sso');
+      expect(redirectToLogin).not.toHaveBeenCalled();
+    });
+
+    it('signs in with SSO when the check on sign-in reaches the instance', async () => {
+      render();
+      const component = fixture.componentInstance;
+      await vi.waitFor(() => expect(component.detectedMode).toBe('unreachable'));
+
+      api.discoveryAnswer = Promise.resolve({ issuer: 'http://idp.test', ui_client_id: 'ui' });
+      void component.onSubmit();
+
+      await vi.waitFor(() => expect(redirectToLogin).toHaveBeenCalledOnce());
+      expect(snackTexts()).toEqual([]);
+    });
+
+    it('checks again on a sign-in with client credentials and says why it cannot sign in', async () => {
+      await renderUnreachable();
+      const component = fixture.componentInstance;
+      component.selectedLoginMode = 'client';
+      component.loginForm.patchValue({ clientId: 'client-a', clientSecret: 'secret' });
+
+      await component.onSubmit();
+
+      expect(api.discoveryRequests).toEqual(['http://down.test', 'http://down.test']);
+      expect(snackTexts()).toEqual([
+        "Could not reach http://down.test. Check the address, that the instance is running and that it allows this console's address (CORS).",
+      ]);
+      expect(document.activeElement).toBe(input('apiUrl'));
+      expect(api.loginWithClientCredentials).not.toHaveBeenCalled();
+      expect(component.isLoading).toBe(false);
+    });
+
+    it('signs in with client credentials when the check on sign-in reaches the instance', async () => {
+      await renderUnreachable();
+      const component = fixture.componentInstance;
+      component.selectedLoginMode = 'client';
+      component.loginForm.patchValue({ clientId: 'client-a', clientSecret: 'secret' });
+
+      // The instance offers SSO, but the user chose the client credentials.
+      api.discoveryAnswer = Promise.resolve({ issuer: 'http://idp.test', ui_client_id: 'ui' });
+      await component.onSubmit();
+
+      expect(api.discoveryRequests).toEqual(['http://down.test', 'http://down.test']);
+      expect(api.loginWithClientCredentials).toHaveBeenCalledWith(
+        'client-a',
+        'secret',
+        'http://down.test',
+        'http://idp.test'
+      );
+      expect(redirectToLogin).not.toHaveBeenCalled();
+      expect(component.selectedLoginMode).toBe('client');
+      expect(snackTexts()).toEqual(['Login successful!']);
+    });
+
+    it('says on the login button that a sign-in with client credentials waits for the check', async () => {
+      await renderUnreachable();
+      const component = fixture.componentInstance;
+      component.selectedLoginMode = 'client';
+      component.loginForm.patchValue({ clientId: 'client-a', clientSecret: 'secret' });
+      fixture.detectChanges();
+      const login = page().querySelector<HTMLButtonElement>('button[type="submit"]')!;
+      expectAvailable(fixture, login);
+      api.discoveryAnswer = new Promise<Record<string, string>>(() => undefined);
+
+      login.click();
+      fixture.detectChanges();
+
+      expectUnavailable(fixture, login, 'Checking the instance…');
+      expect(login.textContent?.trim()).toBe('Checking the instance…');
+      expect(login.querySelector('mat-spinner')).not.toBeNull();
+      // The tab the user chose and its required fields stay while the check runs.
+      expect(component.selectedLoginMode).toBe('client');
+      login.click();
+      expect(api.discoveryRequests).toEqual(['http://down.test', 'http://down.test']);
+      expect(api.loginWithClientCredentials).not.toHaveBeenCalled();
+    });
+
+    it('names what answered when the instance answered with an error', () => {
+      expect(instanceCheckFailure({ status: 404 }, 'http://x.test')).toBe(
+        'http://x.test answered, but it is not an EUDIPLO instance. Check the address.'
+      );
+      // An answer that is not JSON, such as a web server's start page.
+      expect(instanceCheckFailure({ status: 200 }, 'http://x.test')).toBe(
+        'http://x.test answered, but it is not an EUDIPLO instance. Check the address.'
+      );
+      expect(instanceCheckFailure({ status: 503 }, 'http://x.test')).toBe(
+        'http://x.test failed with status 503. It may be starting; try again in a moment.'
+      );
+      expect(instanceCheckFailure({ status: 403 }, 'http://x.test')).toBe(
+        'http://x.test answered with status 403. Check the address.'
+      );
+      expect(instanceCheckFailure(new TypeError('Failed to fetch'), 'http://x.test')).toContain(
+        'Could not reach http://x.test.'
+      );
+    });
+  });
+
   describe('layout', () => {
     /** The SSO tab's status line, with the class that sets its tone. */
     function ssoNotice(mode: LoginComponent['detectedMode']): HTMLElement | null {
@@ -1364,6 +1695,13 @@ describe('LoginComponent with a kept session', () => {
       expect(notice?.classList).toContain('warning');
     });
 
+    it('says SSO is known once the instance can be reached, without a warning, after a failed check', () => {
+      const notice = ssoNotice('unreachable');
+
+      expect(notice?.textContent).toContain('known once it can be reached');
+      expect(notice?.classList).not.toContain('warning');
+    });
+
     it('asks for the instance URL instead of a warning before any instance check ran', () => {
       const notice = ssoNotice(null);
 
@@ -1374,7 +1712,7 @@ describe('LoginComponent with a kept session', () => {
     });
 
     it('hides the status line icons from assistive technology', () => {
-      for (const mode of [null, 'loading', 'oidc', 'local'] as const) {
+      for (const mode of [null, 'loading', 'oidc', 'local', 'unreachable'] as const) {
         const icon = ssoNotice(mode)?.querySelector('mat-icon');
 
         expect(icon?.getAttribute('aria-hidden'), String(mode)).toBe('true');

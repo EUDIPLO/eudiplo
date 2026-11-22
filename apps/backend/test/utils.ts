@@ -113,6 +113,11 @@ export async function prepareMdocPresentation(
         family_name: "Last",
         first_name: "First", // Keep for backward compatibility
         last_name: "Last", // Keep for backward compatibility
+        // A CBOR map, as the PID Rulebook defines place_of_birth.
+        place_of_birth: new Map([
+            ["locality", "Berlin"],
+            ["country", "DE"],
+        ]),
     });
 
     //TODO: get key from eudiplo so it matches with the trust list
@@ -281,7 +286,7 @@ export async function preparePresentation(
 
     const credential = await createCredential({
         claims: {
-            vct: "http://localhost:3000/issuers/demo/credentials-metadata/vct/pid",
+            vct: "http://localhost:3000/issuers/root/credentials-metadata/vct/pid",
             ...status,
             // Include claims that can be selectively disclosed
             birthdate: "1990-01-01",
