@@ -412,7 +412,44 @@ export class TypeOrmSessionRepository implements SessionRepository {
                 { openStatuses: [...OPEN_SESSION_STATUSES] },
             );
         }
+        const { presentation, issuance } = query.configLimits ?? {};
+        if (presentation?.length)
+            qb.andWhere(
+                "(s.requestId IS NULL OR s.requestId IN (:...allowedRequestIds))",
+                { allowedRequestIds: presentation },
+            );
+        if (issuance?.length) {
+            const [offersOnlyAllowed, parameters] =
+                this.offersOnlyCredentialConfigurations(issuance);
+            qb.andWhere(
+                `(s.requestId IS NOT NULL OR (${offersOnlyAllowed}))`,
+                parameters,
+            );
+        }
         return qb;
+    }
+
+    /**
+     * Every offered credential configuration is one of `allowed`; never for a
+     * session without stored ids, none or an empty list.
+     */
+    private offersOnlyCredentialConfigurations(
+        allowed: readonly string[],
+    ): [string, { allowedCredentialConfigurationIds: unknown }] {
+        const stored =
+            "s.credentialConfigurationIds IS NOT NULL AND json_array_length(s.credentialConfigurationIds) > 0";
+        return this.sessions.manager.connection.options.type === "postgres"
+            ? [
+                  `${stored} AND CAST(s.credentialConfigurationIds AS jsonb) <@ CAST(:allowedCredentialConfigurationIds AS jsonb)`,
+                  {
+                      allowedCredentialConfigurationIds:
+                          JSON.stringify(allowed),
+                  },
+              ]
+            : [
+                  `${stored} AND NOT EXISTS (SELECT 1 FROM json_each(s.credentialConfigurationIds) WHERE json_each.value NOT IN (:...allowedCredentialConfigurationIds))`,
+                  { allowedCredentialConfigurationIds: allowed },
+              ];
     }
 
     /** JSON array membership; neither dialect can index it, the tenant scope bounds it. */

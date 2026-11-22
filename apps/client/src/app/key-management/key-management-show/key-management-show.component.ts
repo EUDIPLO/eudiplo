@@ -14,6 +14,7 @@ import {
 } from '@eudiplo/sdk-core';
 import { MatDialog } from '@angular/material/dialog';
 import { keyChainDeleteConsequence, keyChainDeleteQuestion } from '../key-chain-delete-question';
+import { keyChainRotateQuestion } from '../key-chain-rotate-question';
 import {
   changeDefaultAccess,
   defaultAccessChip,
@@ -65,6 +66,8 @@ export class KeyManagementShowComponent implements OnInit, OnDestroy {
   keyChain?: KeyChainResponseDto;
   /** True while a delete request runs, so it is not sent twice. */
   deleting = false;
+  /** True while a rotation request runs, so a second click does not rotate again. */
+  rotating = false;
   /** Set when the key chain could not be loaded, instead of loading forever. */
   loadError = '';
   private requestedId = '';
@@ -375,12 +378,11 @@ export class KeyManagementShowComponent implements OnInit, OnDestroy {
   }
 
   async rotateKey(): Promise<void> {
-    if (!this.keyChain) return;
+    if (!this.keyChain || this.rotating) return;
 
-    if (!confirm('Rotate this key chain? The current key will move to the previous slot.')) {
-      return;
-    }
+    if (!confirm(keyChainRotateQuestion(this.keyChain))) return;
 
+    this.rotating = true;
     try {
       await this.keyChainService.rotate(this.keyChain.id);
       this.snackBar.open('Key chain rotated successfully', 'Close', { duration: 3000 });
@@ -388,6 +390,8 @@ export class KeyManagementShowComponent implements OnInit, OnDestroy {
     } catch (error) {
       openErrorSnackBar(this.snackBar, getApiErrorMessage(error, 'Failed to rotate key chain'));
       console.error('Rotate error:', error);
+    } finally {
+      this.rotating = false;
     }
   }
 

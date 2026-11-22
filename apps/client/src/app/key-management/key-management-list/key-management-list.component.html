@@ -236,8 +236,11 @@
                     <button
                       mat-icon-button
                       (click)="rotateItem(item, $event)"
+                      [disabled]="rotatingIds.has(item.id)"
+                      [attr.aria-busy]="rotatingIds.has(item.id)"
+                      disabledInteractive
                       matTooltip="Rotate key now"
-                      aria-label="Rotate key now"
+                      [attr.aria-label]="'Rotate key chain ' + getDisplayName(item) + ' now'"
                       appConfigManaged
                       managedKind="KeyChain"
                       [managedResourceId]="item.id"
