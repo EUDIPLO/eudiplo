@@ -587,7 +587,10 @@ export class CredentialConfigCreateComponent implements OnInit, PageWithUnsavedC
               'Close',
               { duration: 3000 }
             );
-            this.router.navigate(['../'], { relativeTo: this.route });
+            // Both open the config's page, as the verification config editor does.
+            this.router.navigate(this.create ? ['../', formValue.id] : ['../'], {
+              relativeTo: this.route,
+            });
           },
           (error) => {
             console.error('Error saving configuration:', error);
@@ -1858,11 +1861,29 @@ export class CredentialConfigCreateComponent implements OnInit, PageWithUnsavedC
     }
   }
 
+  /** Whether the user changed settings a template replaces, as the verification config editor asks. */
+  private hasEditedSettingsBeyondName(): boolean {
+    return Object.entries(this.form.controls).some(
+      ([name, control]) => name !== 'id' && name !== 'description' && control.dirty
+    );
+  }
+
   /**
    * Load a predefined configuration
    */
   loadPredefinedConfig(configTemplate: any): void {
+    if (
+      this.hasEditedSettingsBeyondName() &&
+      !confirm(
+        `Load the template "${configTemplate.name}"? It replaces all settings except ID and Description.`
+      )
+    ) {
+      return;
+    }
     const config = structuredClone(configTemplate.config);
+    // A template is a starting point: it keeps the ID and description the user entered.
+    config.id = this.form.get('id')?.value || config.id;
+    config.description = this.form.get('description')?.value || config.description;
 
     this.loadConfigurationFromJson(config);
 

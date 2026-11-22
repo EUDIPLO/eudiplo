@@ -191,8 +191,8 @@ test('issue and verify cookbook', async ({ page }) => {
 
     // Review
     await page.getByRole('button', { name: 'Create Configuration' }).click();
-    await expect(page).toHaveURL(/\/credential-config$/);
-    await expect(page.getByText('membership', { exact: true })).toBeVisible();
+    await expect(page).toHaveURL(/\/credential-config\/membership$/);
+    await expect(page.locator('code.id-badge')).toHaveText('membership');
   });
 
   await test.step('chapter 2, step 5: send an offer to the wallet', async () => {
