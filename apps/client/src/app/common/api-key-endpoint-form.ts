@@ -18,6 +18,7 @@ import {
   clearAuthFieldIssuesOnTypeChange,
   toAuthFormValue,
 } from './auth-display.util';
+import type { PageWithUnsavedChanges } from '../services/unsaved-changes.service';
 import { focusAfterRenderIfLost } from './focus-if-lost.util';
 import { jsonViewUnavailableReason } from './json-view';
 
@@ -47,7 +48,7 @@ export interface ApiKeyEndpointService {
  * key: webhook endpoints and attribute providers.
  */
 @Directive()
-export abstract class ApiKeyEndpointFormComponent implements OnInit {
+export abstract class ApiKeyEndpointFormComponent implements OnInit, PageWithUnsavedChanges {
   readonly form = new FormGroup({
     id: new FormControl('', [Validators.required]),
     name: new FormControl('', [Validators.required]),
@@ -139,6 +140,10 @@ export abstract class ApiKeyEndpointFormComponent implements OnInit {
     return this.saving ? `Saving the ${this.noun}…` : '';
   }
 
+  hasUnsavedChanges(): boolean {
+    return this.form.dirty;
+  }
+
   onSubmit(): void {
     // `disabledInteractive` keeps Save clickable while it looks disabled.
     if (this.saving || this.loading || this.loadError) return;
@@ -169,6 +174,7 @@ export abstract class ApiKeyEndpointFormComponent implements OnInit {
     const label = this.noun.charAt(0).toUpperCase() + this.noun.slice(1);
     request
       .then(() => {
+        this.form.markAsPristine();
         this.snackBar.open(`${label} ${verb}d successfully`, 'Close', { duration: 3000 });
         this.router.navigate([...next], { relativeTo: this.route });
       })

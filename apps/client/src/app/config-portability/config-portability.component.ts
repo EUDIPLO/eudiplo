@@ -42,6 +42,7 @@ import {
 import { isConfigDocument, singleDocumentBundle } from './config-document-bundle';
 import { LoadErrorComponent } from '../common/load-error.component';
 import { focusIfFocusWasLost } from '../common/focus-if-lost.util';
+import type { PageWithUnsavedChanges } from '../services/unsaved-changes.service';
 
 /**
  * How one side of a field change reads in the plan: a value, a word naming what is not shown,
@@ -96,7 +97,7 @@ const resourceCount = (count: number) => `${count} ${count === 1 ? 'resource' : 
   styleUrl: './config-portability.component.scss',
   changeDetection: ChangeDetectionStrategy.Eager,
 })
-export class ConfigPortabilityComponent implements OnInit {
+export class ConfigPortabilityComponent implements OnInit, PageWithUnsavedChanges {
   readonly planColumns = ['resource', 'version', 'action', 'issues'];
   readonly changeColumns = ['path', 'before', 'after'];
   readonly resourceColumns = ['select', 'resource', 'ownership', 'generation', 'source', 'actions'];
@@ -604,6 +605,15 @@ export class ConfigPortabilityComponent implements OnInit {
       `Secret of ${secret.id} copied to clipboard`,
       'Could not copy the secret. Select it and copy it by hand.'
     );
+  }
+
+  /** Generated secrets are shown only here, so leaving the page loses them. */
+  hasUnsavedChanges(): boolean {
+    return this.generatedSecrets.length > 0;
+  }
+
+  leaveQuestion(): string {
+    return 'Leave this page? The generated secrets cannot be shown again; download or copy them first.';
   }
 
   dismissGeneratedSecrets(): void {

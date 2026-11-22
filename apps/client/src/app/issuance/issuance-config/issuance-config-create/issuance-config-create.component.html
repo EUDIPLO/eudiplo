@@ -1376,7 +1376,7 @@
 
       <!-- Stays in view at the bottom while the form scrolls -->
       <div class="action-bar">
-        <!-- Says only what it knows: row buttons do not mark the form dirty, so no "No changes" -->
+        <!-- Says only what it knows: an added, empty row does not mark the form dirty, so no "No changes" -->
         <output class="change-state" [class.dirty]="form.dirty">
           @if (form.dirty) {
             Unsaved changes

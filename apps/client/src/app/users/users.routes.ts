@@ -1,4 +1,5 @@
 import type { Routes } from '@angular/router';
+import { unsavedChangesGuard } from '../guards/unsaved-changes.guard';
 
 export const userRoutes: Routes = [
   {
@@ -9,6 +10,7 @@ export const userRoutes: Routes = [
     path: 'create',
     loadComponent: () =>
       import('./user-create/user-create.component').then((m) => m.UserCreateComponent),
+    canDeactivate: [unsavedChangesGuard],
   },
   {
     path: ':id',
@@ -18,5 +20,6 @@ export const userRoutes: Routes = [
     path: ':id/edit',
     loadComponent: () =>
       import('./user-create/user-create.component').then((m) => m.UserCreateComponent),
+    canDeactivate: [unsavedChangesGuard],
   },
 ];

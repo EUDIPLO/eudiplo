@@ -21,6 +21,7 @@ import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ItemRoutePipe } from '../../common/item-route.pipe';
+import { confirmTenantDelete } from '../tenant-delete-confirmation';
 
 @Component({
   selector: 'app-tenant-list',
@@ -69,6 +70,8 @@ export class TenantListComponent implements OnInit {
   loading = true;
   /** Set when the list could not be loaded, so it is not shown as empty. */
   loadError = '';
+  /** The tenant whose delete request runs; no other delete starts meanwhile. */
+  deletingId?: string;
 
   constructor(private snackBar: MatSnackBar) {}
 
@@ -169,20 +172,21 @@ export class TenantListComponent implements OnInit {
     return (tenant.name || tenant.id).charAt(0);
   }
 
-  deleteTenant(tenant: TenantResponseDto): void {
-    if (!confirm(`Delete tenant "${tenant.name}" and all its data? This cannot be undone.`)) {
-      return;
+  /** Deletes the tenant once its ID was typed; one delete at a time. */
+  async deleteTenant(tenant: TenantResponseDto): Promise<void> {
+    if (this.deletingId !== undefined) return;
+    if (!confirmTenantDelete(this.snackBar, tenant)) return;
+    this.deletingId = tenant.id;
+    try {
+      await tenantControllerDeleteTenant({ path: { id: tenant.id } });
+      this.tenants = this.tenants.filter((t) => t.id !== tenant.id);
+      this.applyFilters();
+      this.snackBar.open('Tenant deleted successfully', 'Close', { duration: 3000 });
+    } catch (error) {
+      console.error('Error deleting tenant:', error);
+      openErrorSnackBar(this.snackBar, getApiErrorMessage(error, 'Failed to delete tenant'));
+    } finally {
+      this.deletingId = undefined;
     }
-    tenantControllerDeleteTenant({ path: { id: tenant.id } }).then(
-      () => {
-        this.tenants = this.tenants.filter((t) => t.id !== tenant.id);
-        this.applyFilters();
-        this.snackBar.open('Tenant deleted successfully', 'Close', { duration: 3000 });
-      },
-      (error) => {
-        console.error('Error deleting tenant:', error);
-        openErrorSnackBar(this.snackBar, getApiErrorMessage(error, 'Failed to delete tenant'));
-      }
-    );
   }
 }

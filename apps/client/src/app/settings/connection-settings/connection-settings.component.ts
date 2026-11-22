@@ -7,8 +7,8 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ApiService } from '../../core';
-import { OidcService } from '../../core/oidc.service';
 import { FrontendConfigService } from '../../services/frontend-config.service';
+import { SignedInAccountService } from '../../services/signed-in-account.service';
 import { formatBuild, VersionService } from '../../services/version.service';
 import { copyToClipboard } from '../../utils/copy-to-clipboard';
 
@@ -33,7 +33,7 @@ export class ConnectionSettingsComponent implements OnInit {
     public apiService: ApiService,
     public versionService: VersionService,
     public frontendConfigService: FrontendConfigService,
-    private readonly oidcService: OidcService,
+    public readonly account: SignedInAccountService,
     private readonly snackBar: MatSnackBar
   ) {}
 
@@ -79,9 +79,18 @@ export class ConnectionSettingsComponent implements OnInit {
     return this.apiService.getClientSecret();
   }
 
-  /** Shown instead of the secret: SSO uses none, and a reloaded tab no longer has it. */
-  get missingSecretText(): string {
-    return this.oidcService.mode === 'oidc' ? 'Not used with SSO' : 'Not available in this tab';
+  /** The tenant the caller's actions apply to; `…` until the caller is loaded. */
+  get currentTenant(): string {
+    return this.account.tenant ?? '…';
+  }
+
+  /** The SSO user's name from the access token, else the token's subject. */
+  get currentUser(): string {
+    return this.account.name ?? '…';
+  }
+
+  get currentSubject(): string {
+    return this.account.subject ?? '…';
   }
 
   get currentOidcUrl(): string {

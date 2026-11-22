@@ -314,31 +314,35 @@
                             <formly-form
                               [form]="getForm(element.id)"
                               [fields]="[fields[i]]"
-                              [model]="model"
+                              [model]="models[element.id]"
                             ></formly-form>
-                            @if (element.defaultClaims) {
+                            <div class="claim-actions fx-row justify-start align-center gap-8">
+                              @if (element.defaultClaims) {
+                                <button
+                                  mat-button
+                                  type="button"
+                                  (click)="addPreConfigured(element)"
+                                  class="pre-config-button"
+                                >
+                                  <mat-icon>auto_fix_high</mat-icon>
+                                  Use Pre-configured Default Values
+                                </button>
+                              }
                               <button
                                 mat-button
                                 type="button"
-                                (click)="addPreConfigured(element)"
-                                class="pre-config-button"
+                                (click)="importClaims(element)"
+                                [attr.aria-label]="'Import claims JSON for ' + element.id"
                               >
-                                <mat-icon>auto_fix_high</mat-icon>
-                                Use Pre-configured Default Values
+                                <mat-icon>upload_file</mat-icon>
+                                Import Claims JSON
                               </button>
-                            }
+                            </div>
                           </div>
                         }
                       </mat-card-content>
                     </mat-card>
                   }
-                </div>
-
-                <div class="fx-row justify-end align-center">
-                  <button mat-button type="button" (click)="importClaims()">
-                    <mat-icon>upload_file</mat-icon>
-                    Import Claims JSON
-                  </button>
                 </div>
               }
             }

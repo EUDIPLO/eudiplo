@@ -90,6 +90,7 @@ import { getApiErrorMessage } from '../../../utils/error-message';
 import { openErrorSnackBar } from '../../../utils/error-snackbar';
 import { LoadErrorComponent } from '../../../common/load-error.component';
 import { jsonViewUnavailableReason } from '../../../common/json-view';
+import type { PageWithUnsavedChanges } from '../../../services/unsaved-changes.service';
 
 /**
  * How many credentials a DCQL query in the editor asks for: 0 when it is
@@ -138,7 +139,7 @@ function dcqlCredentialCount(value: unknown): number | 'unreadable' {
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./presentation-create.component.scss'],
 })
-export class PresentationCreateComponent implements OnInit {
+export class PresentationCreateComponent implements OnInit, PageWithUnsavedChanges {
   readonly statusCheckModeOptions: {
     value: 'strict' | 'best_effort' | 'disabled';
     label: string;
@@ -301,6 +302,10 @@ export class PresentationCreateComponent implements OnInit {
       this.create = this.copyMode;
       this.loadConfigForEdit();
     }
+  }
+
+  hasUnsavedChanges(): boolean {
+    return this.form.dirty;
   }
 
   /** Loads the configuration to edit or copy; on failure the form stays hidden behind a retry. */
@@ -715,6 +720,7 @@ export class PresentationCreateComponent implements OnInit {
         .createConfiguration(formValue)
         .then(
           (res: any) => {
+            this.form.markAsPristine();
             // In copy mode, navigate up two levels (past :id/copy), otherwise one level
             const navigatePath = this.copyMode ? ['../../', res.id] : ['../', res.id];
             this.router.navigate(navigatePath, { relativeTo: this.route });
@@ -736,6 +742,7 @@ export class PresentationCreateComponent implements OnInit {
       })
         .then(
           () => {
+            this.form.markAsPristine();
             this.router.navigate(['../'], { relativeTo: this.route });
             this.snackBar.open('Verification config saved', 'Close', {
               duration: 3000,

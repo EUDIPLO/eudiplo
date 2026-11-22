@@ -1,4 +1,5 @@
 import type { Routes } from '@angular/router';
+import { unsavedChangesGuard } from '../guards/unsaved-changes.guard';
 import { RoleGuard } from '../guards/roles.guard';
 import { getRole } from '../services/jwt.service';
 import { SESSION_READER_ROLES } from './session-roles';
@@ -19,6 +20,7 @@ export const sessionManagementRoutes: Routes = [
     data: { role: [getRole('issuance:manage'), getRole('presentation:manage')] },
     loadComponent: () =>
       import('../session-config/session-config.component').then((m) => m.SessionConfigComponent),
+    canDeactivate: [unsavedChangesGuard],
   },
   {
     path: ':id',

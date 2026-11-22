@@ -1,4 +1,5 @@
 import type { Routes } from '@angular/router';
+import { unsavedChangesGuard } from '../guards/unsaved-changes.guard';
 
 export const oidcClientRoutes: Routes = [
   {
@@ -14,6 +15,7 @@ export const oidcClientRoutes: Routes = [
       import('./oidc-client-create/oidc-client-create.component').then(
         (m) => m.OidcClientCreateComponent
       ),
+    canDeactivate: [unsavedChangesGuard],
   },
   {
     path: ':id',
@@ -28,5 +30,6 @@ export const oidcClientRoutes: Routes = [
       import('./oidc-client-create/oidc-client-create.component').then(
         (m) => m.OidcClientCreateComponent
       ),
+    canDeactivate: [unsavedChangesGuard],
   },
 ];
