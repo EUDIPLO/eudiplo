@@ -17,6 +17,7 @@ import { LoadErrorComponent } from '../../common/load-error.component';
 import { getApiErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { keyChainDeleteConsequence, keyChainDeleteQuestion } from '../key-chain-delete-question';
+import { keyChainRotateQuestion } from '../key-chain-rotate-question';
 import {
   changeDefaultAccess,
   defaultAccessChip,
@@ -71,6 +72,8 @@ export class KeyManagementListComponent implements OnInit {
   isLoading = true;
   /** Key chains whose delete request runs, so it is not sent twice. */
   readonly deletingIds = new Set<string>();
+  /** Key chains whose rotation request runs, so a second click does not rotate again. */
+  readonly rotatingIds = new Set<string>();
   /** Set when the keys could not be loaded, so the page does not claim there are none. */
   loadError = '';
   /**
@@ -312,12 +315,16 @@ export class KeyManagementListComponent implements OnInit {
 
   async rotateItem(item: KeyDisplayItem, event: Event): Promise<void> {
     event.stopPropagation();
+    if (this.rotatingIds.has(item.id)) return;
 
     if (!item.rotationEnabled) {
       this.snackBar.open('Rotation not enabled for this key chain', 'Dismiss', { duration: 3000 });
       return;
     }
 
+    if (!confirm(keyChainRotateQuestion(item.keyChain))) return;
+
+    this.rotatingIds.add(item.id);
     try {
       await this.keyChainService.rotate(item.id);
       this.snackBar.open('Key chain rotated', 'Dismiss', { duration: 3000 });
@@ -329,6 +336,8 @@ export class KeyManagementListComponent implements OnInit {
         getApiErrorMessage(error, 'Failed to rotate key chain'),
         'Dismiss'
       );
+    } finally {
+      this.rotatingIds.delete(item.id);
     }
   }
 }

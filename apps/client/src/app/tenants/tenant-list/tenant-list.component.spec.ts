@@ -241,7 +241,7 @@ describe('TenantListComponent errors', () => {
 
   it('says why a tenant could not be deleted', async () => {
     stubFetch(409, { statusCode: 409, message: 'Tenant is file-managed' });
-    vi.stubGlobal('confirm', () => true);
+    vi.stubGlobal('prompt', () => 't-1');
     const snackBar = { open: vi.fn() };
     const component = new TenantListComponent(snackBar as never);
 
@@ -252,17 +252,56 @@ describe('TenantListComponent errors', () => {
         'Failed to delete tenant: Tenant is file-managed'
       )
     );
+    expect(component.deletingId).toBeUndefined();
+  });
+
+  it('deletes only once the ID is typed, and one tenant at a time', async () => {
+    stubFetch(200, {});
+    const prompt = vi.fn<typeof globalThis.prompt>(() => 't-1');
+    vi.stubGlobal('prompt', prompt);
+    const snackBar = { open: vi.fn() };
+    const component = new TenantListComponent(snackBar as never);
+    component.tenants = [
+      { id: 't-1', name: 'Tenant' },
+      { id: 't-2', name: 'Tenant' },
+    ] as never;
+    component.applyFilters();
+
+    const first = component.deleteTenant(component.tenants[0]);
+    expect(component.deletingId).toBe('t-1');
+    await component.deleteTenant(component.tenants[1]);
+    await first;
+
+    expect(prompt).toHaveBeenCalledOnce();
+    expect(prompt.mock.lastCall?.[0]).toContain('Delete tenant "Tenant" (t-1) and all its data?');
+    expect(component.tenants.map((t) => t.id)).toEqual(['t-2']);
+    expect(snackBar.open.mock.lastCall?.[0]).toBe('Tenant deleted successfully');
+    expect(component.deletingId).toBeUndefined();
+  });
+
+  it('keeps the tenant when another ID is typed', async () => {
+    const fetchSpy = stubFetch(200, {});
+    vi.stubGlobal('prompt', () => 'Tenant');
+    const snackBar = { open: vi.fn() };
+    const component = new TenantListComponent(snackBar as never);
+
+    await component.deleteTenant({ id: 't-1', name: 'Tenant' } as never);
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(snackBar.open.mock.lastCall?.[0]).toBe(
+      'The ID you typed is not "t-1". The tenant was not deleted.'
+    );
   });
 });
 
 function stubFetch(status: number, body: unknown) {
-  client.setConfig({
-    fetch: vi.fn<typeof fetch>(
-      async () =>
-        new Response(JSON.stringify(body), {
-          status,
-          headers: { 'Content-Type': 'application/json' },
-        })
-    ),
-  });
+  const fetch = vi.fn<typeof globalThis.fetch>(
+    async () =>
+      new Response(JSON.stringify(body), {
+        status,
+        headers: { 'Content-Type': 'application/json' },
+      })
+  );
+  client.setConfig({ fetch });
+  return fetch;
 }

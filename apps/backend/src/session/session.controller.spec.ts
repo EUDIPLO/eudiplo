@@ -25,7 +25,10 @@ function createController() {
     };
     const logs = { findBySessionId: vi.fn().mockResolvedValue([]) };
     const cancel = { execute: vi.fn().mockResolvedValue(undefined) };
-    const statusList = { getSessionStatus: vi.fn().mockResolvedValue([]) };
+    const statusList = {
+        getSessionStatus: vi.fn().mockResolvedValue([]),
+        updateStatus: vi.fn().mockResolvedValue(undefined),
+    };
     const sessionConfig = {
         getEffectiveConfig: vi
             .fn()
@@ -163,12 +166,13 @@ describe("SessionController", () => {
 
                 expect(sessions.listForTenant).toHaveBeenCalledExactlyOnceWith(
                     "tenant-1",
-                    { ...query, hideOpen },
+                    { ...query, hideOpen, configLimits: {} },
                     scope,
                 );
                 expect(sessions.statsForTenant).toHaveBeenCalledExactlyOnceWith(
                     "tenant-1",
                     scope,
+                    {},
                     {},
                 );
                 expect(sessions.getForReader).toHaveBeenCalledTimes(2);
@@ -178,6 +182,7 @@ describe("SessionController", () => {
                         "session-1",
                         scope,
                         hideOpen,
+                        {},
                     ]);
                 }
                 expect(
@@ -186,6 +191,7 @@ describe("SessionController", () => {
                     "tenant-1",
                     "session-1",
                     scope,
+                    {},
                 );
                 expect(logs.findBySessionId).toHaveBeenCalledWith("session-1");
             },
@@ -205,12 +211,13 @@ describe("SessionController", () => {
             // Open issuance sessions stay hidden: it may only read them.
             expect(sessions.listForTenant).toHaveBeenCalledWith(
                 "tenant-1",
-                { ...query, hideOpen: ["issuance"] },
+                { ...query, hideOpen: ["issuance"], configLimits: {} },
                 undefined,
             );
             expect(sessions.statsForTenant).toHaveBeenCalledWith(
                 "tenant-1",
                 undefined,
+                {},
                 {},
             );
             expect(sessions.getForReader).toHaveBeenCalledTimes(2);
@@ -220,12 +227,14 @@ describe("SessionController", () => {
                     "session-1",
                     undefined,
                     ["issuance"],
+                    {},
                 ]);
             }
             expect(sessions.deleteForTenant).toHaveBeenCalledExactlyOnceWith(
                 "tenant-1",
                 "session-1",
                 "presentation",
+                {},
             );
             expect(cancel.execute).toHaveBeenCalledWith(
                 expect.objectContaining({ scope: "presentation" }),
@@ -274,6 +283,71 @@ describe("SessionController", () => {
             },
         );
 
+        it("limits a client with allowed configurations to their sessions", async () => {
+            const { controller, sessions, cancel } = createController();
+            const limits = { presentation: ["pid"], issuance: undefined };
+            const caller = {
+                ...token([Role.PresentationRequest]),
+                client: {
+                    clientId: "client-1",
+                    allowedPresentationConfigs: ["pid"],
+                },
+            } as unknown as TokenPayload;
+
+            await controller.getAllSessions(caller, query);
+            await controller.getSessionStats(caller, {});
+            await controller.getSession("session-1", caller);
+            await controller.getSessionLogs("session-1", caller);
+            await controller.getCredentialStatus("session-1", caller);
+            await controller.deleteSession("session-1", caller);
+            await controller.cancel("session-1", {}, caller, {});
+
+            expect(sessions.listForTenant).toHaveBeenCalledExactlyOnceWith(
+                "tenant-1",
+                { ...query, hideOpen: [], configLimits: limits },
+                "presentation",
+            );
+            expect(sessions.statsForTenant).toHaveBeenCalledExactlyOnceWith(
+                "tenant-1",
+                "presentation",
+                {},
+                limits,
+            );
+            expect(sessions.getForReader).toHaveBeenCalledTimes(3);
+            for (const call of sessions.getForReader.mock.calls) {
+                expect(call[4]).toEqual(limits);
+            }
+            expect(sessions.deleteForTenant).toHaveBeenCalledExactlyOnceWith(
+                "tenant-1",
+                "session-1",
+                "presentation",
+                limits,
+            );
+            expect(cancel.execute).toHaveBeenCalledWith(
+                expect.objectContaining({ limits }),
+            );
+        });
+
+        it("passes the client's credential configuration limit to the status change", async () => {
+            const { controller, statusList } = createController();
+            const update = { sessionId: "session-1", status: 1 };
+            const limited = {
+                ...token([Role.CredentialStatus]),
+                client: {
+                    clientId: "client-1",
+                    allowedIssuanceConfigs: ["pid"],
+                },
+            } as unknown as TokenPayload;
+
+            await controller.revokeAll(update, token([Role.CredentialStatus]));
+            await controller.revokeAll(update, limited);
+
+            expect(statusList.updateStatus.mock.calls).toEqual([
+                [update, "tenant-1", undefined],
+                [update, "tenant-1", ["pid"]],
+            ]);
+        });
+
         it("returns no logs of a session outside the scope", async () => {
             const { controller, sessions, logs } = createController();
             sessions.getForReader.mockRejectedValue(new SessionNotFound());
@@ -311,6 +385,7 @@ describe("SessionController", () => {
                 "session-1",
                 "issuance",
                 [],
+                {},
             );
             expect(statusList.getSessionStatus).toHaveBeenCalledWith(
                 "tenant-1",
@@ -334,6 +409,7 @@ describe("SessionController", () => {
                     "session-1",
                     scope,
                     hideOpen,
+                    {},
                 );
             },
         );
@@ -371,6 +447,7 @@ describe("SessionController", () => {
                 tenantId: "tenant-1",
                 sessionId: "session-1",
                 scope: "issuance",
+                limits: {},
                 reason: "sent to wrong recipient",
                 actor: { type: "client", id: "client-1", display: "client-1" },
                 requestMeta: { requestId: "request-1" },
