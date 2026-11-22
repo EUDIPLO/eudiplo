@@ -42,6 +42,29 @@ describe("IssueCredentialsForKeys", () => {
         ]);
     });
 
+    it("issues one credential bound to no key without holder keys", async () => {
+        const issuer = { issue: vi.fn().mockResolvedValue("unbound") };
+        const session = { id: "session-1", tenantId: "tenant-1" } as any;
+
+        await expect(
+            new IssueCredentialsForKeys(issuer).execute({
+                credentialConfigurationId: "credential-config",
+                session,
+                issuanceSetId: "set-1",
+            }),
+        ).resolves.toEqual(["unbound"]);
+        expect(issuer.issue.mock.calls).toEqual([
+            [
+                "credential-config",
+                undefined,
+                session,
+                undefined,
+                "set-1",
+                undefined,
+            ],
+        ]);
+    });
+
     it("preserves sequential failure behavior", async () => {
         const issuer = {
             issue: vi.fn().mockRejectedValue(new Error("issue failed")),

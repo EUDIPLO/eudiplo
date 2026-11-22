@@ -10,7 +10,10 @@ import {
 } from "../../../test/trust/certificate-chain.fixture.js";
 import { CertificatePathBuilder } from "../../shared/utils/certificate-path.util.js";
 import { coseReadyJwk } from "../../shared/utils/cose-key-jwk.util.js";
-import { mdocContext } from "./mdoc-context.js";
+import {
+    CERTIFICATE_PATH_CONSTRAINT_FAILURE,
+    mdocContext,
+} from "./mdoc-context.js";
 
 type Alg = "ES256" | "ES384" | "ES512";
 
@@ -435,6 +438,99 @@ describe("mdocContext.x509.verifyCertificateChain", () => {
         } finally {
             spy.mockRestore();
         }
+    });
+
+    /** A certificate below `parent` with `extensions`. */
+    async function issuedWith(
+        parent: Issued,
+        name: string,
+        extensions: x509.Extension[],
+    ) {
+        const keys = await keyPair();
+        const cert = await x509.X509CertificateGenerator.create({
+            serialNumber: String(serial++),
+            subject: `C=DE, CN=${name}`,
+            issuer: parent.cert.subject,
+            ...period(),
+            signingAlgorithm,
+            publicKey: keys.publicKey,
+            signingKey: parent.keys.privateKey,
+            extensions,
+        });
+        return issued(cert, keys);
+    }
+
+    it("rejects a document signer issued by a certificate without cA, as in RP_WS_SM_IssuerIntegrity_034b_UF", async () => {
+        const iaca = await ca("IACA");
+        const notCa = await issuedWith(iaca, "Not a CA", [
+            new x509.BasicConstraintsExtension(false, undefined, true),
+            new x509.KeyUsagesExtension(
+                x509.KeyUsageFlags.keyCertSign | x509.KeyUsageFlags.cRLSign,
+                true,
+            ),
+        ]);
+        const documentSigner = await issuedBy(notCa, "Document Signer");
+
+        const verification = mdocContext.x509.verifyCertificateChain({
+            trustedCertificates: [iaca.der],
+            x5chain: [documentSigner.der, notCa.der],
+        });
+
+        await expect(verification).rejects.toThrow(
+            /index=1\. cause=Certificate path constraint: issuing certificate is not a CA .*subject="C=DE, CN=Not a CA"/,
+        );
+        await expect(verification).rejects.toThrow(
+            CERTIFICATE_PATH_CONSTRAINT_FAILURE,
+        );
+    });
+
+    it("rejects a document signer with an unknown critical extension, as in RP_WS_SM_IssuerIntegrity_037b_UF", async () => {
+        const iaca = await ca("IACA");
+        const documentSigner = await issuedWith(iaca, "Document Signer", [
+            new x509.Extension(
+                "1.3.6.1.4.1.55555.1.1",
+                true,
+                new Uint8Array([0x05, 0x00]),
+            ),
+        ]);
+
+        await expect(verifyChain(documentSigner, iaca)).rejects.toThrow(
+            /index=1\. cause=Certificate path constraint: unsupported critical extension 1\.3\.6\.1\.4\.1\.55555\.1\.1/,
+        );
+    });
+
+    it("checks only a trusted document signer, not the certificates above it", async () => {
+        const root = await ca("Root");
+        const notCa = await issuedWith(root, "Not a CA", [
+            new x509.BasicConstraintsExtension(false, undefined, true),
+        ]);
+        const documentSigner = await issuedBy(notCa, "Document Signer");
+
+        await expect(
+            mdocContext.x509.verifyCertificateChain({
+                trustedCertificates: [documentSigner.der],
+                x5chain: [documentSigner.der, notCa.der],
+            }),
+        ).resolves.toEqual({ chain: [documentSigner.der] });
+    });
+
+    it("rejects a trusted certificate that is no CA but issued the document signer", async () => {
+        const keys = await keyPair();
+        const notCa = issued(
+            await x509.X509CertificateGenerator.createSelfSigned({
+                serialNumber: String(serial++),
+                name: "C=DE, CN=Not a CA",
+                ...period(),
+                signingAlgorithm,
+                keys,
+            }),
+            keys,
+        );
+        const documentSigner = await issuedBy(notCa, "Document Signer");
+
+        await expect(verifyChain(documentSigner, notCa)).rejects.toThrow(
+            /index=0\. cause=Certificate path constraint: issuing certificate is not a CA/,
+        );
     });
 
     it("rejects a certificate whose signature does not verify", async () => {

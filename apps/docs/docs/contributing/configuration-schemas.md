@@ -8,7 +8,7 @@ Configuration files name their format in `$schema`, for example `https://eudiplo
 
 ## Format versions
 
-Each resource type has its own format version in `CONFIG_FORMATS` (`packages/eudiplo-config-format/src/config-format.ts`); it is independent of the application version. EUDIPLO 9.0 introduced the first bumps; `IssuanceConfig` v3 followed in 9.1, `CredentialConfig` v2 to v4, `KeyChain` v2, `Client` v2, `KmsConfig` v2, `Tenant` v2 to v4, `IssuanceConfig` v4 to v7, `KeyChain` v3 and v4, `KeyChainDefaults` v2, `PresentationConfig` v4 and v5 and `TrustList` v2 in 10.0, which also retired `RegistrarConfig`:
+Each resource type has its own format version in `CONFIG_FORMATS` (`packages/eudiplo-config-format/src/config-format.ts`); it is independent of the application version. EUDIPLO 9.0 introduced the first bumps; `IssuanceConfig` v3 followed in 9.1, `CredentialConfig` v2 to v4, `KeyChain` v2, `Client` v2, `KmsConfig` v2, `Tenant` v2 to v4, `IssuanceConfig` v4 to v7, `KeyChain` v3 and v4, `KeyChainDefaults` v2, `PresentationConfig` v4 and v5 and `TrustList` v2 in 10.0, which also retired `RegistrarConfig`, and `CredentialConfig` v5 in 10.1:
 
 | Resource | Version | Change |
 | --- | --- | --- |
@@ -21,6 +21,7 @@ Each resource type has its own format version in `CONFIG_FORMATS` (`packages/eud
 | `CredentialConfig` | v2 | `x509` as `frameworkType` of `schemaMeta.trustedAuthorities` entries. A v1 file is a valid v2 file. |
 | `CredentialConfig` | v3 | `fields[].constraints` accept only JSON Schema validation and annotation keywords. The v2 → v3 step drops other keys with a warning and stops on claim patterns RE2 cannot run (`CLAIM_PATTERN_UNSUPPORTED`). |
 | `CredentialConfig` | v4 | `config.display[]` colors must be CSS Color Level 3 numerical values, and each locale may appear once; optional `revokeWithWalletUnit`. The v3 → v4 step trims colors and lowercases their function names, drops the ones wallets cannot read with the warning `DISPLAY_COLOR_REMOVED` and stops on a repeated locale (`DISPLAY_LOCALE_DUPLICATE`). |
+| `CredentialConfig` | v5 | Optional `format` (`date`, `date-time`) on `string` claim fields; mDOC issuance encodes such claims as `full-date` (CBOR tag 1004) or `tdate` (tag 0). A v4 file is a valid v5 file; a bare credential configuration file with a `format` on a field is read as v5 (`bareFileVersion`). |
 | `KeyChain` | v2 | Optional `type` (`standalone`, `internalChain`). A v1 file is a valid v2 file; a bare key chain file with `type` is read as v2 (`bareFileVersion`). |
 | `KeyChain` | v3 | Usage type `federation`. A v2 file is a valid v3 file; a bare key chain file with usage type `federation` is read as v3. |
 | `KeyChain` | v4 | Usage type `authorizationServer`. A v3 file is a valid v4 file; a bare key chain file with usage type `authorizationServer` is read as v4. |

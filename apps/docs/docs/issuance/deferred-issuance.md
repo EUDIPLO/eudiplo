@@ -31,9 +31,9 @@ Answer the attribute provider request with:
 { "deferred": true, "interval": 5 }
 ```
 
-EUDIPLO stores the wallet's holder key and answers the wallet with HTTP `202` and `{ "transaction_id": "…", "interval": 5 }`. `interval` (seconds, default 5) is the polling interval suggested to the wallet.
+EUDIPLO stores the wallet's holder key (for a configuration that needs key proofs, see below) and answers the wallet with HTTP `202` and `{ "transaction_id": "…", "interval": 5 }`. `interval` (seconds, default 5) is the polling interval suggested to the wallet.
 
-Deferred requests must carry exactly one key proof with a `nonce`; batch requests (several proofs) are rejected with `invalid_proof`.
+Deferred requests for a configuration that needs key proofs must carry exactly one key proof with a `nonce`; batch requests (several proofs) are rejected with `invalid_proof`. A credential configuration that needs no key proof (an SD-JWT VC without `keyBinding` and without `config.keyAttestationsRequired`, see [Credential configuration](credential-configuration.md#4-choose-key-binding-and-proofs)) is deferred without proofs, and its credential is bound to no key.
 
 ## 2. Let the wallet poll
 

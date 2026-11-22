@@ -32,6 +32,7 @@ import { NormalizeTrustListEntityInfo1786200000000 } from "../src/database/migra
 import { AddWalletUnitRevocation1786300000000 } from "../src/database/migrations/1786300000000-AddWalletUnitRevocation.js";
 import { AddOidcProvider1786400000000 } from "../src/database/migrations/1786400000000-AddOidcProvider.js";
 import { RemoveSandboxRegistrar1786500000000 } from "../src/database/migrations/1786500000000-RemoveSandboxRegistrar.js";
+import { AllowDeferredTransactionWithoutHolderKey1786700000000 } from "../src/database/migrations/1786700000000-AllowDeferredTransactionWithoutHolderKey.js";
 import { describeWithContainers } from "./container-runtime.js";
 import {
     addTokensValidAfterContract,
@@ -2975,6 +2976,91 @@ describe("Migration tests", () => {
                     dataSource,
                     driftAfterSynchronize,
                 );
+            });
+        });
+    });
+    describe("AllowDeferredTransactionWithoutHolderKey1786700000000", () => {
+        const migration =
+            new AllowDeferredTransactionWithoutHolderKey1786700000000();
+        const BOUND = "00000000-0000-4000-8000-000000000001";
+        const UNBOUND = "00000000-0000-4000-8000-000000000002";
+
+        describeWithContainers("PostgreSQL", () => {
+            let dataSource: DataSource;
+            let driftAfterSynchronize: string[];
+            let postgresContainer: StartedPostgreSqlContainer;
+            const drift = async () =>
+                (await dataSource.driver.createSchemaBuilder().log()).upQueries
+                    .map((query) => query.query)
+                    .sort();
+            const holderCnf = async () =>
+                (
+                    await dataSource
+                        .createQueryRunner()
+                        .getTable("deferred_transaction_entity")
+                )?.findColumnByName("holderCnf");
+            const insert = (transactionId: string, cnf: string | null) =>
+                dataSource.query(
+                    `INSERT INTO "deferred_transaction_entity" ("transactionId", "tenantId", "sessionId", "credentialConfigurationId", "holderCnf", "status", "interval", "expiresAt") VALUES ($1, 't', '00000000-0000-4000-8000-000000000000', 'c', $2, 'pending', 5, now())`,
+                    [transactionId, cnf],
+                );
+
+            beforeAll(async () => {
+                const entities = await Promise.all([
+                    import("../src/auth/tenant/entities/tenant.entity.js").then(
+                        (m) => m.TenantEntity,
+                    ),
+                    import("../src/auth/client/entities/client.entity.js").then(
+                        (m) => m.ClientEntity,
+                    ),
+                    import(
+                        "../src/issuer/issuance/oid4vci/entities/deferred-transaction.entity.js"
+                    ).then((m) => m.DeferredTransactionEntity),
+                ]);
+                postgresContainer = await new PostgreSqlContainer(
+                    "postgres:alpine",
+                ).start();
+                dataSource = new DataSource({
+                    type: "postgres",
+                    url: postgresContainer.getConnectionUri(),
+                    entities,
+                    synchronize: true,
+                    logging: false,
+                });
+                await dataSource.initialize();
+                driftAfterSynchronize = await drift();
+                await dataSource.query(
+                    `INSERT INTO "tenant_entity" ("id", "name") VALUES ('t', 't')`,
+                );
+                const queryRunner = dataSource.createQueryRunner();
+                await migration.down(queryRunner);
+                await queryRunner.release();
+                await insert(BOUND, '{"kty":"EC"}');
+            }, 60_000);
+
+            afterAll(async () => {
+                await dataSource?.destroy();
+                await postgresContainer?.stop();
+            });
+
+            test("allows a null holder key idempotently, matching the entity, and is reversible", async () => {
+                expect((await holderCnf())?.isNullable).toBe(false);
+                const queryRunner = dataSource.createQueryRunner();
+
+                await migration.up(queryRunner);
+                await migration.up(queryRunner);
+
+                expect(await drift()).toEqual(driftAfterSynchronize);
+                await insert(UNBOUND, null);
+
+                await migration.down(queryRunner);
+                expect((await holderCnf())?.isNullable).toBe(false);
+                expect(
+                    await dataSource.query(
+                        `SELECT "transactionId", "holderCnf" FROM "deferred_transaction_entity"`,
+                    ),
+                ).toEqual([{ transactionId: BOUND, holderCnf: { kty: "EC" } }]);
+                await queryRunner.release();
             });
         });
     });

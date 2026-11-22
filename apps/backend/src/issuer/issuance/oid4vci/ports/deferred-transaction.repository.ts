@@ -13,7 +13,8 @@ export interface DeferredTransactionData {
     sessionId: string;
     credentialConfigurationId: string;
     issuanceSetId?: string | null;
-    holderCnf: Record<string, unknown>;
+    /** The proven holder key; null when the configuration needs no key proof. */
+    holderCnf: Record<string, unknown> | null;
     /** Wallet unit attestation that attested `holderCnf`, if any. */
     walletUnit?: WalletUnitReference | null;
     status: DeferredTransactionStatus;
@@ -55,7 +56,7 @@ export interface DeferredTransactionRepository {
 export interface DeferredCredentialIssuer {
     issue(
         credentialConfigurationId: string,
-        holderCnf: Jwk,
+        holderCnf: Jwk | undefined,
         session: SessionData,
         claims: Record<string, unknown>,
         issuanceSetId?: string,

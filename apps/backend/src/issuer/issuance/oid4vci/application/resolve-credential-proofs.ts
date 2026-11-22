@@ -13,7 +13,19 @@ export class CredentialProofResolutionError extends Error {
 }
 
 export class ResolveCredentialProofs {
-    execute(proofs: unknown): ResolvedCredentialProofs {
+    /**
+     * The key proofs of a credential request. A configuration that needs no
+     * key proof (`requiresKeyProof`) publishes no `proof_types_supported`,
+     * so `proofs` is optional for it (OpenID4VCI 1.0 Section 8.2). Proofs a
+     * wallet sends anyway are ignored, not verified: they bind nothing, and
+     * ignoring them keeps them from deciding how many credentials are issued
+     * or consuming a nonce. Returns undefined then.
+     */
+    execute(
+        proofs: unknown,
+        options: { required: boolean },
+    ): ResolvedCredentialProofs | undefined {
+        if (!options.required) return undefined;
         const proofRecord =
             typeof proofs === "object" && proofs !== null
                 ? (proofs as Record<string, unknown>)

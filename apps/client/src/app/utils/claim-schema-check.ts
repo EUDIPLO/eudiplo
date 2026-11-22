@@ -1,5 +1,6 @@
 import Ajv from 'ajv/dist/2020';
 import {
+  CLAIM_FIELD_FORMAT_VALIDATORS,
   ClaimFieldDefinitionDto,
   UnsupportedConstraint,
   buildJsonSchema,
@@ -60,7 +61,13 @@ export function claimSchemaError(fields: ClaimFieldDefinitionDto[]): string | un
       return `Claim ${field.path.map((segment) => segment ?? '*').join('.')}: ${refused}`;
     }
   }
-  const ajv = new Ajv({ allErrors: true, strict: true, useDefaults: true, validateSchema: false });
+  const ajv = new Ajv({
+    allErrors: true,
+    strict: true,
+    useDefaults: true,
+    validateSchema: false,
+    formats: CLAIM_FIELD_FORMAT_VALIDATORS,
+  });
   try {
     ajv.compile(buildJsonSchema(fields as Parameters<typeof buildJsonSchema>[0]));
     return undefined;

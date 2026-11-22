@@ -243,7 +243,7 @@ describe("X509ValidationService.pathMatchesTrustedEntities with the credential i
     );
 });
 
-describe("X509ValidationService.matchesStatusListSigner", () => {
+describe("X509ValidationService.statusListSignerMatchMode", () => {
     const service = new X509ValidationService();
 
     /** A PID provider that also issues Pub-EAAs and runs a wallet solution. */
@@ -285,19 +285,19 @@ describe("X509ValidationService.matchesStatusListSigner", () => {
         const matched = await matchedWith(trustedEntity, certs.pidIssuance);
 
         await expect(
-            service.matchesStatusListSigner(
+            service.statusListSignerMatchMode(
                 [certs.pidRevocation],
                 matched,
                 "leaf",
             ),
-        ).resolves.toBe(true);
+        ).resolves.not.toBeNull();
         await expect(
-            service.matchesStatusListSigner(
+            service.statusListSignerMatchMode(
                 [certs.walletRevocation],
                 matched,
                 "leaf",
             ),
-        ).resolves.toBe(false);
+        ).resolves.toBeNull();
     });
 
     it("requires the matched certificate when no revocation service is paired with it", async () => {
@@ -311,19 +311,19 @@ describe("X509ValidationService.matchesStatusListSigner", () => {
             },
         ]);
         await expect(
-            service.matchesStatusListSigner(
+            service.statusListSignerMatchMode(
                 [certs.pubEaaIssuance],
                 matched,
                 "leaf",
             ),
-        ).resolves.toBe(true);
+        ).resolves.not.toBeNull();
         await expect(
-            service.matchesStatusListSigner(
+            service.statusListSignerMatchMode(
                 [certs.pidRevocation],
                 matched,
                 "leaf",
             ),
-        ).resolves.toBe(false);
+        ).resolves.toBeNull();
     });
 });
 

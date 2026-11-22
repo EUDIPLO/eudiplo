@@ -38,7 +38,7 @@ sequenceDiagram
         AS-->>W: access token
     end
     W->>E: POST nonce
-    W->>E: POST credential (access token, key proofs)
+    W->>E: POST credential (access token, key proofs if required)
     E->>CS: claims (attribute provider or webhook, if configured)
     E-->>W: credential(s), notification_id
     W->>E: POST notification (credential_accepted)
@@ -73,7 +73,7 @@ A presentation step is verified like any OID4VP response, and the verified crede
 1. **Decrypt.** An encrypted request (`application/jwt`) is decrypted with the tenant's `encrypt` key chain, whose public key is published in the issuer metadata. Its JWE header is checked first, against the rules in [Encryption flags](../issuance/issuance-configuration.md#encryption-flags). A header that breaks them, and a JWE that does not decrypt, are refused with `invalid_encryption_parameters`; a decrypted request that is not JSON with `invalid_credential_request`. A failure on the issuer's side while decrypting, such as a private key that cannot be loaded, is answered with HTTP 500.
 2. **Validate the request.** The `credential_configuration_id` must exist, and requested response encryption must use a supported algorithm and is accepted only in an encrypted request. With `credentialRequestEncryption`, plain requests are rejected (see [Encryption flags](../issuance/issuance-configuration.md#encryption-flags)).
 3. **Verify the access token.** Signature against the issuing server's keys, audience, expiry, and the DPoP proof. With `dPopRequired`, bearer tokens are rejected.
-4. **Authorize the credential.** A token with `authorization_details` covers only the configurations listed there (a `credential_identifier` is resolved the same way), and the proof type must be one of the configuration's `proofTypesSupported`.
+4. **Authorize the credential.** A token with `authorization_details` covers only the configurations listed there (a `credential_identifier` is resolved the same way), and the proof type must be one of the configuration's `proofTypesSupported`. A configuration that needs no key proof (an SD-JWT VC without `keyBinding` and without `keyAttestationsRequired`, see [Credential configuration](../issuance/credential-configuration.md#4-choose-key-binding-and-proofs)) takes the request without `proofs` and ignores proofs sent anyway; steps 7 and 8 then skip nonces and proofs and sign one credential bound to no key.
 5. **Find the session and resolve claims.** The session comes from the token (see the table above). Claims come from the offer, a claims webhook or the attribute provider, together with the user identity from the token; [Claims](../issuance/claims.md) explains the order.
 6. **Defer, if requested.** If the claim source answers `deferred`, EUDIPLO stops here (see [Deferred issuance](#deferred-issuance)).
 7. **Consume nonces.** Each proof must carry a nonce from the nonce endpoint; a nonce works once.
@@ -118,7 +118,7 @@ sequenceDiagram
     E-->>W: credential
 ```
 
-When the claim source answers `deferred`, EUDIPLO verifies the key proof, consumes its nonce and stores a transaction with the holder key, valid for 24 hours. Deferred issuance binds exactly one holder key. Your backend later completes the transaction with the claims, which signs the credential immediately, or fails it. The wallet polls `POST /issuers/{tenant}/vci/deferred_credential` with an access token of the same session and can retrieve a ready credential once. The poll follows the encryption rules of the credential endpoint ([Encryption flags](../issuance/issuance-configuration.md#encryption-flags)). A transaction moves from `pending` to `ready` and `retrieved`, or ends as `failed` or `expired`. Steps and API: [Deferred issuance](../issuance/deferred-issuance.md).
+When the claim source answers `deferred`, EUDIPLO verifies the key proof and consumes its nonce, if the configuration needs one, and stores a transaction with the holder key, valid for 24 hours. Deferred issuance binds at most one holder key: none for a configuration that needs no key proof. Your backend later completes the transaction with the claims, which signs the credential immediately, or fails it. The wallet polls `POST /issuers/{tenant}/vci/deferred_credential` with an access token of the same session and can retrieve a ready credential once. The poll follows the encryption rules of the credential endpoint ([Encryption flags](../issuance/issuance-configuration.md#encryption-flags)). A transaction moves from `pending` to `ready` and `retrieved`, or ends as `failed` or `expired`. Steps and API: [Deferred issuance](../issuance/deferred-issuance.md).
 
 ## Session states
 
