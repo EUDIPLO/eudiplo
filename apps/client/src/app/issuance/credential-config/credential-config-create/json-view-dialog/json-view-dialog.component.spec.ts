@@ -47,7 +47,7 @@ describe('JsonViewDialogComponent copy', () => {
 });
 
 describe('JsonViewDialogComponent Apply Changes', () => {
-  async function render() {
+  async function render(save?: (json: unknown) => Promise<boolean>) {
     const close = vi.fn();
     const snackBar = { open: vi.fn() };
     await TestBed.configureTestingModule({
@@ -56,7 +56,7 @@ describe('JsonViewDialogComponent Apply Changes', () => {
         { provide: MatDialogRef, useValue: { close } },
         {
           provide: MAT_DIALOG_DATA,
-          useValue: { title: 'Config', jsonData: { id: 'pid' }, readonly: false },
+          useValue: { title: 'Config', jsonData: { id: 'pid' }, readonly: false, save },
         },
       ],
     })
@@ -70,13 +70,14 @@ describe('JsonViewDialogComponent Apply Changes', () => {
     const fixture = TestBed.createComponent(JsonViewDialogComponent);
     fixture.detectChanges();
     const page = fixture.nativeElement as HTMLElement;
-    const apply = [...page.querySelectorAll('button')].find((button) =>
-      button.textContent?.includes('Apply Changes')
-    )!;
+    const button = (label: string) =>
+      [...page.querySelectorAll('button')].find((b) => b.textContent?.includes(label))!;
+    const apply = button('Apply Changes');
+    const cancel = button('Cancel');
     // Stands in for the editor's own focus, which puts the focus on Monaco's input.
     const focusEditor = vi.fn();
     registerFieldFocus(page.querySelector('app-editor')!, focusEditor);
-    return { fixture, close, snackBar, apply, focusEditor };
+    return { fixture, close, snackBar, apply, cancel, focusEditor };
   }
 
   it('says why invalid JSON cannot be applied, focuses the editor and keeps the dialog open', async () => {
@@ -122,6 +123,38 @@ describe('JsonViewDialogComponent Apply Changes', () => {
     );
     expect(focusEditor).toHaveBeenCalledOnce();
     expect(close).not.toHaveBeenCalled();
+  });
+
+  it('keeps the dialog open with the edited JSON when the save fails', async () => {
+    const save = vi.fn().mockResolvedValue(false);
+    const { fixture, close, apply } = await render(save);
+    const edited = '{ "id": "edited" }';
+    fixture.componentInstance.jsonControl.setValue(edited);
+
+    apply.click();
+    await vi.waitFor(() => expect(fixture.componentInstance.saving).toBe(false));
+
+    expect(save).toHaveBeenCalledWith({ id: 'edited' });
+    expect(close).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.jsonControl.value).toBe(edited);
+  });
+
+  it('cannot be closed or applied again while the save runs, and closes when it succeeds', async () => {
+    let finish!: (saved: boolean) => void;
+    const save = vi.fn().mockReturnValue(new Promise<boolean>((done) => (finish = done)));
+    const { fixture, close, apply, cancel } = await render(save);
+
+    apply.click();
+    fixture.detectChanges();
+    expect(apply.getAttribute('aria-disabled')).toBe('true');
+    expect(apply.getAttribute('aria-busy')).toBe('true');
+    expect(cancel.disabled).toBe(true);
+    apply.click();
+    expect(save).toHaveBeenCalledOnce();
+    expect(close).not.toHaveBeenCalled();
+
+    finish(true);
+    await vi.waitFor(() => expect(close).toHaveBeenCalledWith({ id: 'pid' }));
   });
 
   it('applies valid JSON', async () => {
