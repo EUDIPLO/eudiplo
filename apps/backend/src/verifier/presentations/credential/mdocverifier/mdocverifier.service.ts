@@ -43,6 +43,7 @@ import {
     type VerificationFailureType,
 } from "../verification-failure.js";
 import { toProvenance } from "../verification-provenance.js";
+import { toJsonClaims } from "./mdoc-claim-json.js";
 
 /**
  * Session data for the standard OID4VP flow (direct_post or direct_post.jwt).
@@ -159,8 +160,11 @@ export class MdocverifierService {
             > = {};
             const claims: Record<string, unknown> = {};
             for (const [ns] of namespacesMap.entries()) {
-                const nsClaims = issuerSigned.getPrettyClaims(ns);
-                if (nsClaims) {
+                const prettyClaims = issuerSigned.getPrettyClaims(ns);
+                if (prettyClaims) {
+                    // Decoded CBOR values (maps, byte strings, bigints,
+                    // tagged dates) as plain JSON for the session result.
+                    const nsClaims = toJsonClaims(prettyClaims);
                     claimsByNamespace[ns] = nsClaims;
                     Object.assign(claims, nsClaims);
                 }

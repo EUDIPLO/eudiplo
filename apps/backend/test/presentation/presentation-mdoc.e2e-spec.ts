@@ -568,6 +568,65 @@ describe("Presentation - mDOC Credential", () => {
         expect(claims.last_name).toBe("Last");
     });
 
+    test("an mDOC data element whose value is a CBOR map is stored as an object", async () => {
+        await request(app.getHttpServer())
+            .post("/verifier/config")
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .send({
+                id: "pid-mdoc-place-of-birth",
+                description: "mDOC PID with place_of_birth",
+                dcql_query: {
+                    credentials: [
+                        {
+                            id: "pid-mso-mdoc",
+                            format: "mso_mdoc",
+                            meta: {
+                                doctype_value: "eu.europa.ec.eudi.pid.1",
+                            },
+                            claims: [
+                                {
+                                    path: [
+                                        "eu.europa.ec.eudi.pid.1",
+                                        "given_name",
+                                    ],
+                                },
+                                {
+                                    path: [
+                                        "eu.europa.ec.eudi.pid.1",
+                                        "place_of_birth",
+                                    ],
+                                },
+                            ],
+                            trusted_authorities: FIXTURE_TRUSTED_AUTHORITIES,
+                        },
+                    ],
+                },
+            })
+            .expect(201);
+
+        const { res, submitRes } = await submitMdocPresentation({
+            requestId: "pid-mdoc-place-of-birth",
+            privateKey: privateIssuerKey,
+            issuerCert,
+            credentialId: "pid-mso-mdoc",
+            disclosedElements: ["given_name", "place_of_birth"],
+        });
+        expect(submitRes.response.status).toBe(200);
+
+        const sessionRes = await request(app.getHttpServer())
+            .get(`/session/${res.body.session}`)
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .expect(200);
+
+        expect(sessionRes.body.status).toBe("completed");
+        expect(sessionRes.body.credentials[0].values[0]).toMatchObject({
+            given_name: "First",
+            place_of_birth: { locality: "Berlin", country: "DE" },
+        });
+    });
+
     test("should reject mDOC credential signed by untrusted issuer (not in trust list)", async () => {
         // Generate a new key pair that is NOT in the trust list
         const untrustedKeyPair = await generateKeyPair("ES256", {
