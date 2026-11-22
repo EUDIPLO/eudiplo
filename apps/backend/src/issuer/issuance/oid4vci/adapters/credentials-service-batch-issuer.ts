@@ -9,7 +9,7 @@ export class CredentialsServiceBatchIssuer implements CredentialBatchIssuer {
 
     issue(
         credentialConfigurationId: string,
-        holderKey: Jwk,
+        holderKey: Jwk | undefined,
         session: SessionData,
         claims?: Record<string, unknown>,
         issuanceSetId?: string,

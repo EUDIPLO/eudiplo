@@ -88,7 +88,9 @@ Images use `uri`. To host them in EUDIPLO, see [Object storage](../operate/objec
 
 ## 4. Choose key binding and proofs
 
-- `keyBinding: true` puts the wallet's key into the SD-JWT VC (`cnf`), so the holder must prove possession when presenting. mDOCs always carry the device key.
+- `keyBinding: true` puts the wallet's key into the SD-JWT VC (`cnf`), so the holder must prove possession when presenting. mDOCs always carry the device key: `keyBinding` does not apply to them, and they always need a proof.
+- Without `keyBinding` (`false` is the default) and without `config.keyAttestationsRequired`, the SD-JWT VC is bound to no key. Its issuer metadata then has neither `cryptographic_binding_methods_supported` nor `proof_types_supported`, and the wallet sends its credential request without `proofs` (OpenID4VCI 1.0 sections 8.2 and 12.2.4). Each request yields one credential, whatever `batchSize` says. Proofs that a wallet sends anyway are ignored: they are not verified, consume no nonce and add no credentials. `config.proofTypesSupported` has no effect then.
+- `config.keyAttestationsRequired` without `keyBinding` still needs a proof with a key attestation in every request, so the wallet unit is known (for example for `revokeWithWalletUnit`). The metadata then keeps `cryptographic_binding_methods_supported` and `proof_types_supported`, and the SD-JWT VC still carries no `cnf`.
 - Wallets prove their key at the credential endpoint with a JWT proof or a key attestation. `config.proofTypesSupported` limits the accepted proof types (`jwt`, `attestation`; default both). `config.keyAttestationsRequired` requires a trusted key attestation with an accepted `key_storage` and `user_authentication` level for every proof, and publishes it as `key_attestations_required` under both `jwt` and `attestation` in `proof_types_supported`. With the `attestation` proof type, one key attestation may carry up to `batchSize` keys and yields one credential per key. How key attestations are verified and trusted is described in [Wallet and key attestation](../trust/attestation.md).
 
 ## 5. Set the lifetime and signing key
@@ -150,7 +152,7 @@ How the fingerprints and the revocation sequence work is described in [Issuance 
 }
 ```
 
-`details` accepts `once_only`, `limited_time` (or `limited-time`), `rotating-batch` and `per-relying-party`. The required companion fields per value are listed in the [reference](../reference/credential-configuration.md). Wallets fetch several credentials at once only if the issuer's [`batchSize`](issuance-configuration.md) is larger than 1.
+`details` accepts `once_only`, `limited_time` (or `limited-time`), `rotating-batch` and `per-relying-party`. The required companion fields per value are listed in the [reference](../reference/credential-configuration.md). Wallets fetch several credentials at once only if the issuer's [`batchSize`](issuance-configuration.md) is larger than 1 and the configuration needs key proofs (one credential per proven key); a configuration without key binding yields one credential per request ([section 4](#4-choose-key-binding-and-proofs)).
 
 ### Publish an embedded disclosure policy
 

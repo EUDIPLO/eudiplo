@@ -58,6 +58,7 @@ import {
 import {
     CredentialProofResolutionError,
     ResolveCredentialProofs,
+    type ResolvedCredentialProofs,
 } from "./application/resolve-credential-proofs.js";
 import { ResolveCredentialSession } from "./application/resolve-credential-session.js";
 import { resolveWalletAttestationPolicy } from "./authorization/domain/wallet-attestation-policy.js";
@@ -81,13 +82,6 @@ import { CredentialRequestException } from "./exceptions/index.js";
 import { NonceService } from "./nonce.service.js";
 import { Oid4vciSdkFactory } from "./oid4vci-sdk.factory.js";
 import type { Oid4vciRequestContext } from "./request-context.js";
-
-type SupportedCredentialProofType = "jwt" | "attestation";
-
-interface ParsedCredentialProofs {
-    proofType: SupportedCredentialProofType;
-    values: string[];
-}
 
 /**
  * Service for handling OID4VCI (OpenID 4 Verifiable Credential Issuance) operations.
@@ -269,27 +263,64 @@ export class Oid4vciService {
     }
 
     /**
-     * Reject proof types the credential configuration does not support and
-     * return its key attestation requirements, which every proof must meet.
+     * Resolve the key proofs of the request against the proof requirements
+     * of the credential configuration: none for a configuration that needs
+     * no key proof (proofs sent anyway are ignored), otherwise exactly one
+     * supported proof type. Returns the key attestation requirements every
+     * proof must meet as well.
      */
-    private async enforceProofTypePolicy(
+    private async resolveProofsForConfiguration(
         tenantId: string,
         credentialConfigurationId: string,
-        proofType: SupportedCredentialProofType,
-    ): Promise<KeyAttestationRequirements | undefined> {
-        const { proofTypes, keyAttestationsRequired } =
-            await this.credentialsService.getProofRequirementsForCredentialConfig(
-                tenantId,
-                credentialConfigurationId,
-            );
+        proofs: unknown,
+    ): Promise<{
+        parsedProofs?: ResolvedCredentialProofs;
+        keyAttestationsRequired?: KeyAttestationRequirements;
+    }> {
+        let requirements: Awaited<
+            ReturnType<
+                CredentialsService["getProofRequirementsForCredentialConfig"]
+            >
+        >;
+        try {
+            requirements =
+                await this.credentialsService.getProofRequirementsForCredentialConfig(
+                    tenantId,
+                    credentialConfigurationId,
+                );
+        } catch (error) {
+            this.mapToCredentialRequestException(error);
+        }
 
-        if (!proofTypes.includes(proofType as CredentialProofType)) {
+        let parsedProofs: ResolvedCredentialProofs | undefined;
+        try {
+            parsedProofs = this.resolveCredentialProofs.execute(proofs, {
+                required: requirements.keyProofRequired,
+            });
+        } catch (error) {
+            if (error instanceof CredentialProofResolutionError) {
+                throw new CredentialRequestException(
+                    "invalid_proof",
+                    error.message,
+                );
+            }
+            throw error;
+        }
+        if (!parsedProofs) return {};
+
+        const { proofType } = parsedProofs;
+        if (
+            !requirements.proofTypes.includes(proofType as CredentialProofType)
+        ) {
             throw new CredentialRequestException(
                 "invalid_proof",
                 `Proof type '${proofType}' is not supported for credential_configuration_id '${credentialConfigurationId}'`,
             );
         }
-        return keyAttestationsRequired;
+        return {
+            parsedProofs,
+            keyAttestationsRequired: requirements.keyAttestationsRequired,
+        };
     }
 
     /**
@@ -510,23 +541,8 @@ export class Oid4vciService {
             );
         }
 
-        let parsedProofs: ParsedCredentialProofs;
-        try {
-            parsedProofs = this.resolveCredentialProofs.execute(
-                parsedCredentialRequest?.proofs,
-            );
-        } catch (error) {
-            if (error instanceof CredentialProofResolutionError) {
-                throw new CredentialRequestException(
-                    "invalid_proof",
-                    error.message,
-                );
-            }
-            throw error;
-        }
-
         this.logger.debug(
-            `[${tenantId}] OID4VCI credential request parsed: proofType=${parsedProofs.proofType}, proofCount=${parsedProofs.values.length}, hasResponseEncryption=${!!requestBody.credential_response_encryption}`,
+            `[${tenantId}] OID4VCI credential request parsed: hasResponseEncryption=${!!requestBody.credential_response_encryption}`,
         );
 
         // Verify access token
@@ -564,16 +580,19 @@ export class Oid4vciService {
             throw error;
         }
 
-        let keyAttestationsRequired: KeyAttestationRequirements | undefined;
-        try {
-            keyAttestationsRequired = await this.enforceProofTypePolicy(
+        // The proofs are resolved once the configuration is known: one that
+        // needs no key proof accepts a request without `proofs`.
+        const { parsedProofs, keyAttestationsRequired } =
+            await this.resolveProofsForConfiguration(
                 tenantId,
                 credentialConfigurationId,
-                parsedProofs.proofType,
+                parsedCredentialRequest.proofs,
             );
-        } catch (error) {
-            this.mapToCredentialRequestException(error);
-        }
+        const proofType = parsedProofs?.proofType ?? "none";
+        const proofCount = parsedProofs?.values.length ?? 0;
+        this.logger.debug(
+            `[${tenantId}] OID4VCI credential request proofs: proofType=${proofType}, proofCount=${proofCount}`,
+        );
 
         const { session, claimsResult, isExternalAsToken, isChainedAsToken } =
             await this.resolveSessionAndClaims(
@@ -592,8 +611,8 @@ export class Oid4vciService {
             "session.id": session.id,
             "session.tenantId": session.tenantId,
             "oid4vci.credentialConfigurationId": credentialConfigurationId,
-            "oid4vci.proofCount": parsedProofs.values.length,
-            "oid4vci.proofType": parsedProofs.proofType,
+            "oid4vci.proofCount": proofCount,
+            "oid4vci.proofType": proofType,
             "oid4vci.isExternalAs": isExternalAsToken,
             "oid4vci.isChainedAs": isChainedAsToken,
         });
@@ -608,8 +627,8 @@ export class Oid4vciService {
 
         this.auditLogger.logFlowStart(logContext, {
             credentialConfigurationId,
-            proofCount: parsedProofs.values.length,
-            proofType: parsedProofs.proofType,
+            proofCount,
+            proofType,
             isExternalAs: isExternalAsToken,
             isChainedAs: isChainedAsToken,
         });
@@ -622,8 +641,7 @@ export class Oid4vciService {
                 return this.deferredCredentialService
                     .createDeferredTransaction({
                         parsedCredentialRequest: {
-                            proofs: parsedProofs.values,
-                            proofType: parsedProofs.proofType,
+                            proofs: parsedProofs,
                             credentialConfigurationId,
                         },
                         session,
@@ -637,21 +655,23 @@ export class Oid4vciService {
                     });
             }
 
-            // Validate and consume nonces
-            await this.nonceService.validateAndConsume(
-                parsedProofs.values,
-                parsedProofs.proofType,
-                tenantId,
-                logContext,
-                credentialConfigurationId,
-            );
+            // Validate and consume the nonces of the proofs; a request
+            // without proofs has none.
+            if (parsedProofs) {
+                await this.nonceService.validateAndConsume(
+                    parsedProofs.values,
+                    parsedProofs.proofType,
+                    tenantId,
+                    logContext,
+                    credentialConfigurationId,
+                );
+            }
 
-            // Issue credentials for each proof
+            // Issue one credential per proven key, or one bound to no key
             const walletAttestationPolicy =
                 resolveWalletAttestationPolicy(issuanceConfig);
             const credentials = await this.issueCredentialsFromProofs.execute({
-                proofs: parsedProofs.values,
-                proofType: parsedProofs.proofType,
+                proofs: parsedProofs,
                 session,
                 credentialConfigurationId,
                 claims: claimsResult?.claims,
@@ -665,7 +685,10 @@ export class Oid4vciService {
                     this.auditLogger.logCredentialIssuance(
                         logContext,
                         credentialConfigurationId,
-                        { credentialSize, proofVerified: true },
+                        {
+                            credentialSize,
+                            proofVerified: parsedProofs !== undefined,
+                        },
                     ),
             });
 

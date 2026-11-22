@@ -74,6 +74,46 @@ describe("deferred credential lifecycle", () => {
         );
     });
 
+    it("issues a transaction without a holder key bound to no key", async () => {
+        const unbound = { ...transaction, holderCnf: null, walletUnit: null };
+        const markReady = vi.fn(async () => ({
+            ...unbound,
+            status: DeferredTransactionStatus.Ready,
+            credential: "unbound-jwt",
+        }));
+        const session = {
+            id: "session-1",
+            tenantId: "tenant-1",
+        } as SessionData;
+        const issuer: DeferredCredentialIssuer = {
+            issue: vi.fn(async () => "unbound-jwt"),
+        };
+
+        await new CompleteDeferredCredential(
+            { findPending: vi.fn(async () => unbound), markReady },
+            { getForTenant: vi.fn(async () => session) },
+            issuer,
+        ).execute({
+            tenantId: "tenant-1",
+            transactionId: "transaction-1",
+            claims: {},
+        });
+
+        expect(issuer.issue).toHaveBeenCalledWith(
+            "credential-1",
+            undefined,
+            session,
+            {},
+            undefined,
+            undefined,
+        );
+        expect(markReady).toHaveBeenCalledWith(
+            "tenant-1",
+            "transaction-1",
+            "unbound-jwt",
+        );
+    });
+
     it("does not issue when the transaction is not pending", async () => {
         const issuer: DeferredCredentialIssuer = {
             issue: vi.fn(async () => "credential-jwt"),

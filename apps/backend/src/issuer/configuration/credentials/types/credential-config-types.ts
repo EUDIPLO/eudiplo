@@ -69,11 +69,22 @@ function _isSdJwtDcConfig(
 export interface BuildCredentialConfigOptions {
     /** Supported signing algorithms for the format */
     signingAlgorithms: string[] | number[];
-    /** Cryptographic binding methods (e.g., "jwk", "cose_key") */
-    bindingMethods: string[];
-    /** Proof types supported configuration */
-    proofTypesSupported: MsoMdocCredentialConfig["proof_types_supported"];
+    /**
+     * Key binding of the credential: its binding methods (e.g., "jwk",
+     * "cose_key") and the proof types it accepts. Without it, both are left
+     * out of the metadata and wallets send no proofs (OpenID4VCI 1.0
+     * Section 12.2.4).
+     */
+    keyBinding?: {
+        bindingMethods: string[];
+        proofTypesSupported: ProofTypesSupported;
+    };
 }
+
+/** `proof_types_supported` of a credential configuration. */
+export type ProofTypesSupported = NonNullable<
+    MsoMdocCredentialConfig["proof_types_supported"]
+>;
 
 /**
  * Claim path element - string (object key), number (array index), or null (any element)
@@ -115,6 +126,19 @@ export interface CredentialMetadataInput {
 }
 
 /**
+ * `cryptographic_binding_methods_supported` and `proof_types_supported`:
+ * both present or both absent (OpenID4VCI 1.0 Section 12.2.4).
+ */
+function keyBindingMetadata(options: BuildCredentialConfigOptions) {
+    if (!options.keyBinding) return {};
+    return {
+        cryptographic_binding_methods_supported:
+            options.keyBinding.bindingMethods,
+        proof_types_supported: options.keyBinding.proofTypesSupported,
+    };
+}
+
+/**
  * Build an mso_mdoc credential configuration
  */
 export function buildMsoMdocConfig(
@@ -128,8 +152,7 @@ export function buildMsoMdocConfig(
         doctype,
         credential_signing_alg_values_supported:
             options.signingAlgorithms as number[],
-        cryptographic_binding_methods_supported: options.bindingMethods,
-        proof_types_supported: options.proofTypesSupported,
+        ...keyBindingMetadata(options),
         ...(metadata && { credential_metadata: metadata }),
         ...(scope && { scope }),
     } as MsoMdocCredentialConfig;
@@ -149,8 +172,7 @@ export function buildSdJwtDcConfig(
         vct,
         credential_signing_alg_values_supported:
             options.signingAlgorithms as string[],
-        cryptographic_binding_methods_supported: options.bindingMethods,
-        proof_types_supported: options.proofTypesSupported,
+        ...keyBindingMetadata(options),
         ...(metadata && { credential_metadata: metadata }),
         ...(scope && { scope }),
     } as SdJwtDcCredentialConfig;
