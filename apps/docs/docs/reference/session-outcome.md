@@ -84,13 +84,14 @@ The same codes are used for SD-JWT VC and mDOC, in OpenID4VP and ISO 18013-7 flo
 | `x5c_missing`             | The credential is missing its issuer certificate chain.                         | The credential carries no `x5c` certificate chain.                                                                     |
 | `verification_error`      | The credential could not be verified.                                            | Any other verification error, including a malformed `x5c`, an `x5c` or `x5chain` of more than 10 certificates (the credential's, or an mDOC status list's or identifier list's), an mDOC whose certificate path, or that of its status list or identifier list, exceeds the [size limits](../trust/trust-lists.md#size-limits), an SD-JWT VC without `iss` or `kid` under OpenID Federation, and an mDOC whose only trusted authority is an OpenID Federation.                              |
 
-### DCQL claim values
+### DCQL credential types and claim values
 
 | Code                   | Message                                                                                     | Cause                                                                                                                                   |
 | ---------------------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | `claim_value_mismatch` | `Disclosed claim values do not match the requested values for credential '<id>': <paths>` | A disclosed claim is not one of the [`values`](../presentation/dcql.md#accept-specific-values) of its claim query. With `claim_sets`, no set matched and at least one disclosed claim had another value. |
+| `credential_type_mismatch` | `Credential '<id>' is not of a requested type: vct_values accepts <types>` (or `doctype_value accepts <docType>`) | The presented SD-JWT VC's `vct` is not one of the query's `meta.vct_values`, or the mDOC's docType is not its `meta.doctype_value` ([Credential type](../presentation/dcql.md#credential-type)). Also in ISO 18013-7 flows, where the wallet receives the code and message as for credential verification failures. |
 
-The message names the credential query and the claim paths, never the disclosed values. The outcome has no `credentials` entry for this code. A mismatch is reported before missing claims of the same credential.
+The messages name the credential query, the claim paths and the accepted types from the configuration, never the disclosed values or the presented type. The outcome has no `credentials` entry for these codes. A type mismatch is reported before value mismatches, and a value mismatch before missing claims of the same credential.
 
 ### Wallet error responses
 

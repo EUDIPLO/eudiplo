@@ -232,6 +232,51 @@ describe("Presentation - mDOC Credential", () => {
         expect(session.body.status).toBe("completed");
     });
 
+    test("rejects a trusted mso mdoc whose docType is not doctype_value", async () => {
+        await request(app.getHttpServer())
+            .post("/verifier/config")
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .send({
+                id: "mdl-only",
+                description: "mDL query answered with a PID",
+                dcql_query: {
+                    credentials: [
+                        {
+                            id: "pid-mso-mdoc",
+                            format: "mso_mdoc",
+                            meta: { doctype_value: "org.iso.18013.5.1.mDL" },
+                            trusted_authorities: FIXTURE_TRUSTED_AUTHORITIES,
+                        },
+                    ],
+                },
+            })
+            .expect(201);
+
+        // The wallet presents the eu.europa.ec.eudi.pid.1 mdoc of the
+        // trusted issuer.
+        const { res, submitRes } = await submitMdocPresentation({
+            requestId: "mdl-only",
+            privateKey: privateIssuerKey,
+            issuerCert,
+            credentialId: "pid-mso-mdoc",
+            disclosedElements: [],
+        });
+        expect(submitRes.response.status).toBe(400);
+
+        const session = await request(app.getHttpServer())
+            .get(`/session/${res.body.session}`)
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .expect(200);
+        expect(session.body.status).toBe("failed");
+        expect(session.body.failureCode).toBe("credential_type_mismatch");
+        expect(session.body.credentials).toBeNull();
+        expect(session.body.errorReason).toBe(
+            "Credential 'pid-mso-mdoc' is not of a requested type: doctype_value accepts org.iso.18013.5.1.mDL",
+        );
+    });
+
     test("present mso mdoc credential with status list", async () => {
         const requestBody: PresentationRequest = {
             response_type: ResponseType.URI,

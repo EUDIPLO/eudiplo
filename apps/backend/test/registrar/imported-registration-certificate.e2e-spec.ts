@@ -65,8 +65,11 @@ describe("Imported registration certificate without a registrar (e2e)", () => {
                 .set("Authorization", `Bearer ${authToken}`)
                 .expect(200)
         ).body;
+        const fixtureQuery = fixture.dcql_query.credentials[0];
+        // One type, so the certificate below covers the query.
         credentialQuery = {
-            ...fixture.dcql_query.credentials[0],
+            ...fixtureQuery,
+            meta: { vct_values: [fixtureQuery.meta.vct_values[0]] },
             claims: [{ path: ["given_name"] }, { path: ["family_name"] }],
         };
         vct = credentialQuery.meta.vct_values[0].replace(

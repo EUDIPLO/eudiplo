@@ -277,7 +277,7 @@ export async function preparePresentation(
 
     const credential = await createCredential({
         claims: {
-            vct: "http://localhost:3000/issuers/demo/credentials-metadata/vct/pid",
+            vct: "http://localhost:3000/issuers/root/credentials-metadata/vct/pid",
             ...status,
             // Include claims that can be selectively disclosed
             birthdate: "1990-01-01",
