@@ -25,9 +25,11 @@ import { focusAfterRenderIfLost } from '../common/focus-if-lost.util';
 import { LoadErrorComponent } from '../common/load-error.component';
 import { showFieldsToFix } from '../common/field-to-fix.util';
 import { resetDefaultsTooltip, WAIT_FOR_CHANGE } from '../common/reset-defaults';
+import { DELETED_SESSION_CREDENTIALS } from '../session-management/session-delete-question';
 import { getApiErrorMessage } from '../utils/error-message';
 import { openErrorSnackBar } from '../utils/error-snackbar';
 import { wholeNumberValidator } from '../utils/whole-number-validator';
+import type { PageWithUnsavedChanges } from '../services/unsaved-changes.service';
 
 @Component({
   selector: 'app-session-config',
@@ -50,7 +52,7 @@ import { wholeNumberValidator } from '../utils/whole-number-validator';
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './session-config.component.scss',
 })
-export class SessionConfigComponent implements OnInit {
+export class SessionConfigComponent implements OnInit, PageWithUnsavedChanges {
   configForm: FormGroup;
   isLoading = true;
   isSaving = false;
@@ -73,6 +75,9 @@ export class SessionConfigComponent implements OnInit {
   private readonly formElement?: ElementRef<HTMLFormElement>;
 
   cleanupModes = cleanupModes;
+
+  /** Shown in the Full Delete warning: what deleting a session means for its credentials. */
+  readonly deletedSessionCredentials = DELETED_SESSION_CREDENTIALS;
 
   /** Common TTLs; null clears the TTL, so the global default applies. */
   readonly ttlPresets: { label: string; seconds: number | null }[] = [
@@ -146,6 +151,10 @@ export class SessionConfigComponent implements OnInit {
     );
   }
 
+  hasUnsavedChanges(): boolean {
+    return this.hasChanges;
+  }
+
   /** The TTL field as a number, null while it is empty. */
   private formTtl(): number | null {
     const value = this.configForm.get('ttlSeconds')?.value as number | '' | null | undefined;
@@ -178,6 +187,12 @@ export class SessionConfigComponent implements OnInit {
     }
 
     const update = this.buildUpdate();
+    const question = this.saveConfirmation(update);
+    if (question && !confirm(question)) {
+      // The dialog can end with focus nowhere, as a save does.
+      focusAfterRenderIfLost(this.injector, () => this.saveButton?.nativeElement);
+      return;
+    }
     this.isSaving = true;
     try {
       this.currentConfig = await this.sessionConfigService.updateConfig(update);
@@ -218,6 +233,29 @@ export class SessionConfigComponent implements OnInit {
     });
   }
 
+  /**
+   * What to confirm before a save that lets cleanup delete sessions sooner or completely:
+   * switching to Full Delete, or a TTL that may be shorter than the one in effect while cleanup
+   * may delete. The global SESSION_TTL is not known here, so a first TTL and a cleared one count
+   * as possibly shorter. Anonymize keeps the sessions, so their credentials can still be revoked.
+   * Undefined when the save needs no confirmation.
+   */
+  private saveConfirmation(update: UpdateSessionConfigDto): string | undefined {
+    const storedMode = this.currentConfig?.cleanupMode;
+    const mode = update.cleanupMode ?? storedMode;
+    if (mode === 'anonymize') return undefined;
+    // Undefined stands for the global SESSION_TTL.
+    const storedTtl = this.currentConfig?.ttlSeconds || undefined;
+    // The TTL in effect after the save: an omitted field keeps the stored one, null clears it.
+    const ttl = update.ttlSeconds === undefined ? storedTtl : (update.ttlSeconds ?? undefined);
+    const toFullDelete = update.cleanupMode === 'full' && storedMode !== 'full';
+    const maybeShorterTtl =
+      ttl !== storedTtl && (ttl === undefined || storedTtl === undefined || ttl < storedTtl);
+    if (!toFullDelete && !maybeShorterTtl) return undefined;
+
+    return `Save the session settings? ${this.cleanupConsequence(ttl, mode)} This cannot be undone.`;
+  }
+
   private resetConfirmation(): string {
     const removed = [
       this.currentConfig?.ttlSeconds
@@ -227,11 +265,28 @@ export class SessionConfigComponent implements OnInit {
         ? `the cleanup mode "${this.cleanupModeLabel(this.currentConfig.cleanupMode)}"`
         : '',
     ].filter(Boolean);
+    // After a reset both global defaults apply, and SESSION_CLEANUP_MODE may be Full Delete.
     return (
       `Reset the session settings to the global defaults of this instance? ` +
-      `This removes ${removed.join(' and ')}. From the next cleanup run, sessions older than ` +
-      `SESSION_TTL are cleaned up with SESSION_CLEANUP_MODE, which can delete them completely. ` +
+      `This removes ${removed.join(' and ')}. ${this.cleanupConsequence(undefined, undefined)} ` +
       `This cannot be undone.`
+    );
+  }
+
+  /**
+   * What the next cleanup run does with the given settings, and what that means for the
+   * credentials of deleted sessions. An undefined TTL or mode follows the global default, whose
+   * value is not known here.
+   */
+  private cleanupConsequence(ttl: number | undefined, mode: 'full' | undefined): string {
+    const age = ttl === undefined ? 'SESSION_TTL' : this.formatTtl(ttl);
+    const cleanup =
+      mode === 'full'
+        ? 'deleted completely'
+        : 'cleaned up with SESSION_CLEANUP_MODE, which can delete them completely';
+    return (
+      `From the next cleanup run, sessions older than ${age} are ${cleanup}. ` +
+      DELETED_SESSION_CREDENTIALS
     );
   }
 

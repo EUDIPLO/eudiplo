@@ -78,8 +78,12 @@
         }}</span>
         <div class="account-summary-text">
           <span class="account-summary-client"
-            ><span class="visually-hidden">Client ID: </span>{{ apiService.getClientId() }}</span
+            ><span class="visually-hidden">{{ account.isSso ? 'User: ' : 'Client ID: ' }}</span
+            >{{ account.name }}</span
           >
+          @if (account.tenant; as tenant) {
+            <span class="account-summary-tenant">Tenant: {{ tenant }}</span>
+          }
           <span class="account-summary-instance"
             ><span class="visually-hidden">Instance: </span>{{ apiService.getBaseUrl() }}</span
           >
@@ -453,9 +457,15 @@
         </div>
       }
       <!-- Top Toolbar -->
-      <router-outlet></router-outlet>
+      <router-outlet
+        (activate)="unsavedChanges.shown($event)"
+        (deactivate)="unsavedChanges.hidden($event)"
+      ></router-outlet>
     </mat-sidenav-content>
   </mat-sidenav-container>
 } @else {
-  <router-outlet></router-outlet>
+  <router-outlet
+    (activate)="unsavedChanges.shown($event)"
+    (deactivate)="unsavedChanges.hidden($event)"
+  ></router-outlet>
 }

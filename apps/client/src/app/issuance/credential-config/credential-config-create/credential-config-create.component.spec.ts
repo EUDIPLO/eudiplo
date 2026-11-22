@@ -40,6 +40,44 @@ describe('CredentialConfigCreateComponent', () => {
     component.form.patchValue({ id: 'member', description: 'Membership', vctString: 'urn:member' });
   }
 
+  it('counts a dragged step and a chosen lifetime or document type preset as unsaved changes', () => {
+    component.addIaeAction();
+    component.addIaeAction('redirect_to_web');
+    const first = component.iaeActions.at(0);
+
+    component.form.markAsPristine();
+    // A step dropped where it was changes nothing.
+    component.dropIaeAction({ previousIndex: 0, currentIndex: 0 } as any);
+    expect(component.hasUnsavedChanges()).toBe(false);
+    component.dropIaeAction({ previousIndex: 0, currentIndex: 1 } as any);
+    expect(component.iaeActions.at(1)).toBe(first);
+    expect(component.hasUnsavedChanges()).toBe(true);
+
+    component.form.markAsPristine();
+    // Custom only opens the field for a lifetime to type.
+    component.onLifetimePresetChange(null);
+    expect(component.hasUnsavedChanges()).toBe(false);
+    component.onLifetimePresetChange(86400);
+    expect(component.form.get('lifeTime')!.value).toBe(86400);
+    expect(component.hasUnsavedChanges()).toBe(true);
+
+    component.form.markAsPristine();
+    component.onDocTypePresetChange({ value: 'eu.europa.ec.eudi.pid.1' });
+    expect(component.form.get('docType')!.value).toBe('eu.europa.ec.eudi.pid.1');
+    expect(component.hasUnsavedChanges()).toBe(true);
+  });
+
+  it('counts a changed Host VCT Metadata choice as unsaved changes', () => {
+    const other = component.vctMode === 'string' ? 'object' : 'string';
+
+    component.form.markAsPristine();
+    // The choice it already has changes nothing.
+    component.onVctModeChange(component.vctMode);
+    expect(component.hasUnsavedChanges()).toBe(false);
+    component.onVctModeChange(other);
+    expect(component.hasUnsavedChanges()).toBe(true);
+  });
+
   it('validates the current step and does not save on Continue', () => {
     component.submitCredential();
     expect(component.activeStep).toBe(0);
