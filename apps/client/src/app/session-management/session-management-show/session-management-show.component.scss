@@ -32,6 +32,17 @@ mat-card mat-card-content {
   margin-top: -16px;
 }
 
+// Stays in the accessibility tree so a change of the indicator is announced; while empty it
+// takes no room next to the status badge
+.polling-status {
+  display: inline-flex;
+  align-items: center;
+
+  &:empty {
+    margin-left: -12px;
+  }
+}
+
 .polling-indicator {
   display: inline-flex;
   align-items: center;
@@ -44,6 +55,19 @@ mat-card mat-card-content {
     height: 16px;
     font-size: 16px;
     animation: spin 2s linear infinite;
+  }
+}
+
+// Polls fail or stopped: the indicator takes the warning tone
+.polling-indicator.failing,
+.polling-indicator.paused {
+  color: var(--mat-sys-on-surface);
+
+  mat-icon {
+    width: 16px;
+    height: 16px;
+    font-size: 16px;
+    color: var(--eudiplo-warning);
   }
 }
 
