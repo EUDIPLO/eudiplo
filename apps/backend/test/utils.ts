@@ -73,7 +73,8 @@ export function readConfig<T>(path: string): T {
 export async function prepareMdocPresentation(
     nonce: string,
     privateKey: CryptoKey,
-    issuerCert: string,
+    /** PEM of the signing certificate, or the x5chain, signing certificate first. */
+    issuerCert: string | string[],
     clientId: string,
     responseUri: string,
     responseMode: string = "direct_post.jwt",
@@ -112,6 +113,11 @@ export async function prepareMdocPresentation(
         family_name: "Last",
         first_name: "First", // Keep for backward compatibility
         last_name: "Last", // Keep for backward compatibility
+        // A CBOR map, as the PID Rulebook defines place_of_birth.
+        place_of_birth: new Map([
+            ["locality", "Berlin"],
+            ["country", "DE"],
+        ]),
     });
 
     //TODO: get key from eudiplo so it matches with the trust list
@@ -119,7 +125,9 @@ export async function prepareMdocPresentation(
 
     const issuerSigned = await issuer.sign({
         signingKey: CoseKey.fromJwk(key as Jwk),
-        certificates: [new Uint8Array(new X509Certificate(issuerCert).rawData)],
+        certificates: [issuerCert]
+            .flat()
+            .map((pem) => new Uint8Array(new X509Certificate(pem).rawData)),
         algorithm: SignatureAlgorithm.ES256,
         digestAlgorithm: "SHA-256",
         deviceKeyInfo: { deviceKey: DeviceKey.fromJwk(DEVICE_JWK) },
@@ -278,7 +286,7 @@ export async function preparePresentation(
 
     const credential = await createCredential({
         claims: {
-            vct: "http://localhost:3000/issuers/demo/credentials-metadata/vct/pid",
+            vct: "http://localhost:3000/issuers/root/credentials-metadata/vct/pid",
             ...status,
             // Include claims that can be selectively disclosed
             birthdate: "1990-01-01",

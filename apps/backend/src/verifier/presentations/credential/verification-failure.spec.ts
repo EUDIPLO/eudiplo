@@ -20,6 +20,7 @@ describe("mapChainErrorToFailureType — format-neutral trust classification", (
     const CHAIN_VALIDATOR_CODES: Record<string, string> = {
         x5c_required: "x5c_missing",
         chain_build_failed: "no_trust_chain_to_root",
+        certificate_path_invalid: "no_trust_chain_to_root",
         no_trusted_entity_match: "trust_chain_not_trusted",
         trust_list_unavailable: "trust_list_unavailable",
         certificate_expired: "certificate_expired",

@@ -38,6 +38,10 @@ import {
 } from '../session-management.service';
 import { GrafanaLinkService } from '../../services/grafana-link.service';
 import { JwtService } from '../../services/jwt.service';
+import {
+  canUseIssuanceForm,
+  ISSUANCE_FORM_LOCKED_REASON,
+} from '../../issuance/issuance-offer/issuance-form-access';
 import { CredentialStatusCardComponent } from '../credential-status/credential-status-card.component';
 import {
   CREDENTIAL_STATUS_CHANGER_ROLES,
@@ -109,9 +113,31 @@ export class SessionManagementShowComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * Why Recreate Offer is shown but cannot be used: New Issuance also needs
+   * issuance:manage to load. Empty when it can be used.
+   */
+  recreateLockedReason(): string {
+    return this.isIssuanceSession() && !canUseIssuanceForm((role) => this.jwtService.hasRole(role))
+      ? ISSUANCE_FORM_LOCKED_REASON
+      : '';
+  }
+
+  /** The tooltip of Recreate Offer / Recreate Request. */
+  recreateTooltip(): string {
+    return (
+      this.recreateLockedReason() ||
+      (this.isIssuanceSession()
+        ? 'Create a new offer with the same parameters'
+        : 'Create a new request with the same parameters')
+    );
+  }
+
+  /**
    * Navigate to the appropriate offer page to recreate the offer
    */
   recreateOffer(): void {
+    // `disabledInteractive` keeps the locked button clickable.
+    if (this.recreateLockedReason()) return;
     if (this.isIssuanceSession() && this.session?.credentialPayload) {
       this.router.navigate(['/offer/issuance'], {
         state: { offerRequest: this.session.credentialPayload },

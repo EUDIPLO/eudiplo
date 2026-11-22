@@ -141,6 +141,43 @@ describe('SessionManagementShowComponent', () => {
     expect(component.canReadCredentialStatus()).toBe(false);
   });
 
+  it('locks Recreate Offer with the reason for issuance:offer without issuance:manage', () => {
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    roles = ['issuance:offer'];
+    component.session = {
+      ...issuance,
+      createdAt: '2026-10-16T07:04:22.000Z',
+      updatedAt: '2026-10-16T07:04:29.000Z',
+      notifications: [],
+    } as unknown as Session;
+    fixture.detectChanges();
+
+    const recreate = [...(fixture.nativeElement as HTMLElement).querySelectorAll('button')].find(
+      (button) => button.textContent?.includes('Recreate Offer')
+    )!;
+    expect(recreate.getAttribute('aria-disabled')).toBe('true');
+    expect(component.recreateTooltip()).toContain('also needs the issuance:manage role');
+    recreate.click();
+    expect(navigate).not.toHaveBeenCalled();
+
+    roles = ['issuance:offer', 'issuance:manage'];
+    fixture.detectChanges();
+    expect(recreate.getAttribute('aria-disabled')).not.toBe('true');
+    expect(component.recreateTooltip()).toBe('Create a new offer with the same parameters');
+    recreate.click();
+    expect(navigate).toHaveBeenCalledWith(['/offer/issuance'], {
+      state: { offerRequest: issuance.credentialPayload },
+    });
+  });
+
+  it('keeps Recreate Request available for presentation:request alone', () => {
+    roles = ['presentation:request'];
+    component.session = presentation;
+
+    expect(component.canRecreateOffer()).toBe(true);
+    expect(component.recreateLockedReason()).toBe('');
+  });
+
   describe('Cancel Offer', () => {
     let cancelSession: ReturnType<typeof vi.spyOn>;
     let getSession: ReturnType<typeof vi.spyOn>;

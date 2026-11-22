@@ -44,6 +44,7 @@ import { AttributeProviderService } from '../attribute-provider/attribute-provid
 import { FormlyJsonschema } from '@ngx-formly/core/json-schema';
 import { CredentialConfigService } from '../credential-config/credential-config.service';
 import { JwtService } from '../../services/jwt.service';
+import { canUseIssuanceForm, ISSUANCE_FORM_LOCKED_REASON } from './issuance-form-access';
 import { FormlyFieldConfig, FormlyFieldProps, FormlyModule } from '@ngx-formly/core';
 import { MatDividerModule } from '@angular/material/divider';
 import { JsonViewDialogComponent } from '../credential-config/credential-config-create/json-view-dialog/json-view-dialog.component';
@@ -53,6 +54,11 @@ import { MatStepper, MatStepperModule } from '@angular/material/stepper';
 import { STEPPER_GLOBAL_OPTIONS } from '@angular/cdk/stepper';
 import { CommonModule } from '@angular/common';
 import { getApiErrorMessage } from '../../utils/error-message';
+import {
+  CLAIM_FORMAT_MESSAGES,
+  claimFormatOf,
+  matchesClaimFormat,
+} from '../../utils/claim-formats';
 import { focusAfterRenderIfLost } from '../../common/focus-if-lost.util';
 import { LoadErrorComponent } from '../../common/load-error.component';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
@@ -322,18 +328,15 @@ export class IssuanceOfferComponent implements OnInit {
   private readonly jwtService = inject(JwtService);
 
   /**
-   * The form reads the credential configs and the issuer settings, which need
-   * `issuance:manage`; `issuance:offer` alone creates offers through the API only.
+   * Why the form cannot be used: it reads the credential configs and the issuer settings,
+   * which need `issuance:manage`; `issuance:offer` alone creates offers through the API only.
+   * The route lets `issuance:offer` in, so a deep link says this instead of offering a
+   * Retry that cannot succeed. Empty when the form can be used.
    */
-  get loadErrorHint(): string {
-    return this.canManageCredentialConfigs
+  get formLockedReason(): string {
+    return canUseIssuanceForm((role) => this.jwtService.hasRole(role))
       ? ''
-      : 'This form reads the credential configs and the issuer settings, which needs the issuance:manage role. With issuance:offer alone, create offers through the API.';
-  }
-
-  /** Creating credential configurations needs `issuance:manage`. */
-  get canManageCredentialConfigs(): boolean {
-    return this.jwtService.hasRole('issuance:manage');
+      : ISSUANCE_FORM_LOCKED_REASON;
   }
 
   constructor(
@@ -385,6 +388,11 @@ export class IssuanceOfferComponent implements OnInit {
    * settings the page shows the failure instead of a form that claims there are none.
    */
   private async load(): Promise<void> {
+    if (this.formLockedReason) {
+      // The backend would refuse every request the form needs.
+      this.loading = false;
+      return;
+    }
     this.loading = true;
     this.loadErrorMessage = '';
     this.attributeProvidersLoadFailed = false;
@@ -571,7 +579,7 @@ export class IssuanceOfferComponent implements OnInit {
       // Generate form fields from schema (only needed for pre-auth flow)
       if (schemaForForm) {
         const baseConfig = this.formlyJsonschema.toFieldConfig(schemaForForm as any, {
-          map: (field) => this.addClaimNameLabel(field),
+          map: (field, schema) => this.addClaimFormatCheck(this.addClaimNameLabel(field), schema),
         });
         this.fields.push(this.addGroupHeaders(baseConfig));
       } else {
@@ -778,6 +786,26 @@ export class IssuanceOfferComponent implements OnInit {
       field.props ??= {};
       field.props.label = String(key);
     }
+    return field;
+  }
+
+  /**
+   * A claim with a date format says what to enter and is checked as issuance checks it, since
+   * formly ignores the JSON schema `format`.
+   */
+  private addClaimFormatCheck(field: FormlyFieldConfig, schema: unknown): FormlyFieldConfig {
+    const format = claimFormatOf(schema);
+    if (!format || field.fieldGroup || field.fieldArray) return field;
+    field.props ??= {};
+    const hint = CLAIM_FORMAT_MESSAGES[format];
+    field.props.description = field.props.description ? `${field.props.description} ${hint}` : hint;
+    field.validators = {
+      ...field.validators,
+      claimFormat: {
+        expression: (control: AbstractControl) => matchesClaimFormat(format, control.value),
+        message: () => CLAIM_FORMAT_MESSAGES[format],
+      },
+    };
     return field;
   }
 

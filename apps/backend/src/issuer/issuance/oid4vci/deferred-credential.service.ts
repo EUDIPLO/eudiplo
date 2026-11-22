@@ -8,12 +8,19 @@ import { decodeJwt } from "jose";
 import { Span, TraceService } from "nestjs-otel";
 import { v4 } from "uuid";
 import type { SessionData as Session } from "../../../session/domain/session-data.js";
+import {
+    assertMaintenancePeriodOpen,
+    CredentialLifetimeExhausted,
+    maintenancePeriodEnd,
+} from "../../configuration/credentials/domain/maintenance-period.js";
 import { IssuanceService } from "../../configuration/issuance/issuance.service.js";
+import type { WalletUnitReference } from "../../status-list/domain/wallet-unit-reference.js";
 import { CorrelateCredentialTokenSession } from "./application/correlate-credential-token-session.js";
 import {
     CredentialAuthorizationError,
     ResolveAuthorizedCredentialConfiguration,
 } from "./application/resolve-authorized-credential-configuration.js";
+import type { ResolvedCredentialProofs } from "./application/resolve-credential-proofs.js";
 import { ResolveDeferredCredentialRetrieval } from "./application/resolve-deferred-credential-retrieval.js";
 import { resolveWalletAttestationPolicy } from "./authorization/domain/wallet-attestation-policy.js";
 import { CredentialAccessTokenVerifier } from "./credential-access-token.verifier.js";
@@ -50,8 +57,11 @@ const DEFERRED_TRANSACTION_TTL_HOURS = 24;
 export interface CreateDeferredTransactionParams {
     /** The parsed credential request */
     parsedCredentialRequest: {
-        proofType: "jwt" | "attestation";
-        proofs: string[];
+        /**
+         * The key proofs of the request; undefined for a configuration that
+         * needs no key proof, whose credential is bound to no key.
+         */
+        proofs?: ResolvedCredentialProofs;
         credentialConfigurationId: string;
     };
     /** The session */
@@ -64,6 +74,8 @@ export interface CreateDeferredTransactionParams {
     issuanceSetId?: string;
     /** Key attestation requirements of the requested credential configuration */
     keyAttestationsRequired?: KeyAttestationRequirements;
+    /** Whether the credential follows its wallet unit and its maintenance period */
+    revokeWithWalletUnit?: boolean;
 }
 
 /**
@@ -93,7 +105,8 @@ export class DeferredCredentialService {
      * Create a deferred credential transaction.
      * Called when the claims provider indicates that issuance should be deferred.
      * Consumes the proof nonce, verifies the single key proof and stores the
-     * holder key for later issuance.
+     * holder key for later issuance. A configuration that needs no key proof
+     * stores no holder key.
      *
      * @returns A deferred credential response with transaction_id and interval
      */
@@ -108,6 +121,7 @@ export class DeferredCredentialService {
             interval = 5,
             issuanceSetId,
             keyAttestationsRequired,
+            revokeWithWalletUnit,
         } = params;
 
         this.traceService.getSpan()?.setAttributes({
@@ -118,14 +132,63 @@ export class DeferredCredentialService {
             "oid4vci.interval": interval,
         });
 
-        if (parsedCredentialRequest.proofs.length !== 1) {
+        // Without proofs, the credential is bound to no key and no wallet unit.
+        const { holderCnf, walletUnit } = parsedCredentialRequest.proofs
+            ? await this.verifyDeferredProof(
+                  tenantId,
+                  parsedCredentialRequest.proofs,
+                  keyAttestationsRequired,
+                  { revokeWithWalletUnit, session },
+              )
+            : { holderCnf: null, walletUnit: null };
+
+        const transactionId = v4();
+        const expiresAt = new Date();
+        expiresAt.setHours(
+            expiresAt.getHours() + DEFERRED_TRANSACTION_TTL_HOURS,
+        );
+
+        await this.transactions.create({
+            transactionId,
+            tenantId,
+            sessionId: session.id,
+            credentialConfigurationId:
+                parsedCredentialRequest.credentialConfigurationId,
+            issuanceSetId,
+            holderCnf: holderCnf as Record<string, unknown> | null,
+            walletUnit,
+            status: DeferredTransactionStatus.Pending,
+            interval,
+            expiresAt,
+        });
+
+        return {
+            transaction_id: transactionId,
+            interval,
+        };
+    }
+
+    /**
+     * Consumes the proof nonce and verifies the single key proof of a
+     * deferred request; returns the proven key and its wallet unit.
+     */
+    private async verifyDeferredProof(
+        tenantId: string,
+        proofs: ResolvedCredentialProofs,
+        keyAttestationsRequired: KeyAttestationRequirements | undefined,
+        maintenance: Pick<
+            CreateDeferredTransactionParams,
+            "revokeWithWalletUnit" | "session"
+        >,
+    ): Promise<{ holderCnf: Jwk; walletUnit: WalletUnitReference | null }> {
+        if (proofs.values.length !== 1) {
             throw new CredentialRequestException(
                 "invalid_proof",
                 "Deferred issuance requires exactly one key proof",
             );
         }
 
-        const proof = parsedCredentialRequest.proofs[0];
+        const proof = proofs.values[0];
         if (!proof) {
             throw new CredentialRequestException(
                 "invalid_proof",
@@ -165,7 +228,7 @@ export class DeferredCredentialService {
             walletAttestationPolicy.walletAttestationStatusCheckMode,
         );
         const verified = await verifier
-            .verify(proof, parsedCredentialRequest.proofType)
+            .verify(proof, proofs.proofType)
             .catch((error: unknown) => {
                 // A key attestation whose status rejects it.
                 if (error instanceof InvalidCredentialProof) {
@@ -177,7 +240,7 @@ export class DeferredCredentialService {
                 throw error;
             });
         const holderKeys = verified.holderKeys;
-        if (parsedCredentialRequest.proofType === "attestation") {
+        if (proofs.proofType === "attestation") {
             if (!Array.isArray(holderKeys) || holderKeys.length === 0) {
                 throw new CredentialRequestException(
                     "invalid_proof",
@@ -191,9 +254,46 @@ export class DeferredCredentialService {
                 );
             }
         }
+        this.assertProofAllowsIssuance(
+            verified,
+            keyAttestationsRequired,
+            maintenance,
+        );
+        return {
+            holderCnf: holderKeys[0] as Jwk,
+            walletUnit: verified.keyAttestation?.walletUnit ?? null,
+        };
+    }
+
+    /**
+     * Checks the verified proof against the key attestation requirements
+     * and the status maintenance period, as protocol errors.
+     */
+    private assertProofAllowsIssuance(
+        verified: Parameters<typeof assertKeyAttestationRequirements>[1],
+        keyAttestationsRequired: KeyAttestationRequirements | undefined,
+        maintenance: Pick<
+            CreateDeferredTransactionParams,
+            "revokeWithWalletUnit" | "session"
+        >,
+    ): void {
         try {
             assertKeyAttestationRequirements(keyAttestationsRequired, verified);
+            // Refused now rather than when the transaction is completed: a
+            // maintenance period that has ended leaves no validity.
+            const bound = maintenancePeriodEnd(
+                maintenance.revokeWithWalletUnit,
+                verified.keyAttestation?.walletUnit,
+                maintenance.session.walletInstanceStatus,
+            );
+            if (bound) assertMaintenancePeriodOpen(bound);
         } catch (error) {
+            if (error instanceof CredentialLifetimeExhausted) {
+                throw new CredentialRequestException(
+                    "credential_request_denied",
+                    error.message,
+                );
+            }
             if (error instanceof InvalidCredentialProof) {
                 throw new CredentialRequestException(
                     "invalid_proof",
@@ -202,32 +302,6 @@ export class DeferredCredentialService {
             }
             throw error;
         }
-        const holderCnf = holderKeys[0] as Jwk;
-
-        const transactionId = v4();
-        const expiresAt = new Date();
-        expiresAt.setHours(
-            expiresAt.getHours() + DEFERRED_TRANSACTION_TTL_HOURS,
-        );
-
-        await this.transactions.create({
-            transactionId,
-            tenantId,
-            sessionId: session.id,
-            credentialConfigurationId:
-                parsedCredentialRequest.credentialConfigurationId,
-            issuanceSetId,
-            holderCnf: holderCnf as Record<string, unknown>,
-            walletUnit: verified.keyAttestation?.walletUnit ?? null,
-            status: DeferredTransactionStatus.Pending,
-            interval,
-            expiresAt,
-        });
-
-        return {
-            transaction_id: transactionId,
-            interval,
-        };
     }
 
     /**

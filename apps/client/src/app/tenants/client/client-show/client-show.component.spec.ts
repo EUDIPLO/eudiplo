@@ -1,3 +1,4 @@
+import { ApplicationRef } from '@angular/core';
 import { NEVER } from 'rxjs';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -366,5 +367,73 @@ describe('ClientShowComponent details', () => {
       ['Verification configs', 'pid'],
       ['Credential configs', 'All of them, including those created later'],
     ]);
+  });
+});
+
+describe('ClientShowComponent load failure', () => {
+  afterEach(() => {
+    client.setConfig({ fetch: () => new Promise<Response>(() => undefined) });
+    vi.restoreAllMocks();
+  });
+
+  it('stays on the page and offers Retry when the client cannot be loaded', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    let fail = true;
+    const fetchStub = vi.fn<typeof fetch>(async () =>
+      fail
+        ? new Response(JSON.stringify({ statusCode: 502, message: 'Bad Gateway' }), {
+            status: 502,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        : new Response(JSON.stringify({ clientId: 'shop', roles: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+    );
+    client.setConfig({ fetch: fetchStub });
+    await TestBed.configureTestingModule({
+      imports: [ClientShowComponent],
+      providers: [
+        provideRouter([]),
+        {
+          provide: ActivatedRoute,
+          useValue: { snapshot: { paramMap: convertToParamMap({ id: 'shop' }) } },
+        },
+        { provide: ApiService, useValue: { getClientId: () => 'admin', sessionEnded$: NEVER } },
+        {
+          provide: JwtService,
+          useValue: { getRoles: () => ['clients:manage'], canUseConfigPortability: () => false },
+        },
+        { provide: ConfigOwnershipService, useValue: { get: async () => undefined } },
+      ],
+    }).compileComponents();
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    const fixture = TestBed.createComponent(ClientShowComponent);
+    const page = fixture.nativeElement as HTMLElement;
+    fixture.detectChanges();
+
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(page.querySelector('app-load-error')).not.toBeNull();
+    });
+    expect(navigate).not.toHaveBeenCalled();
+    expect(page.querySelector('app-load-error')?.textContent).toContain(
+      'Failed to load client: Bad Gateway'
+    );
+
+    fail = false;
+    const retry = [...page.querySelectorAll<HTMLElement>('app-load-error button')].find((b) =>
+      b.textContent?.includes('Retry')
+    )!;
+    retry.focus();
+    retry.dispatchEvent(new MouseEvent('click'));
+    await vi.waitFor(() => expect(fixture.componentInstance.client?.clientId).toBe('shop'));
+    fixture.detectChanges();
+    TestBed.inject(ApplicationRef).tick();
+
+    expect(page.querySelector('app-load-error')).toBeNull();
+    expect(page.querySelector('h1')?.textContent).toContain('shop');
+    expect(document.activeElement).toBe(page.querySelector('h1'));
+    expect(fetchStub).toHaveBeenCalledTimes(2);
   });
 });

@@ -74,11 +74,9 @@
             <button
               matButton="tonal"
               (click)="recreateOffer()"
-              [matTooltip]="
-                isIssuanceSession()
-                  ? 'Create a new offer with the same parameters'
-                  : 'Create a new request with the same parameters'
-              "
+              [disabled]="!!recreateLockedReason()"
+              disabledInteractive
+              [matTooltip]="recreateTooltip()"
             >
               <mat-icon>replay</mat-icon>
               {{ isIssuanceSession() ? 'Recreate Offer' : 'Recreate Request' }}

@@ -119,7 +119,7 @@ async function preparePresentationWithTransactionData(
 
     const credential = await createCredentialWithStatus({
         claims: {
-            vct: "http://localhost:3000/issuers/demo/credentials-metadata/vct/pid",
+            vct: "http://localhost:3000/issuers/root/credentials-metadata/vct/pid",
             ...status,
             birthdate: "1990-01-01",
             address: {
@@ -316,7 +316,7 @@ describe("Presentation - Transaction Data", () => {
                             format: "dc+sd-jwt",
                             meta: {
                                 vct_values: [
-                                    `${host}/issuers/demo/credentials-metadata/vct/pid`,
+                                    `${host}/issuers/root/credentials-metadata/vct/pid`,
                                 ],
                             },
                             claims: [
@@ -360,7 +360,7 @@ describe("Presentation - Transaction Data", () => {
                             format: "dc+sd-jwt",
                             meta: {
                                 vct_values: [
-                                    `${host}/issuers/demo/credentials-metadata/vct/pid`,
+                                    `${host}/issuers/root/credentials-metadata/vct/pid`,
                                 ],
                             },
                             claims: [
@@ -572,7 +572,7 @@ describe("Presentation - Transaction Data", () => {
                 format: "dc+sd-jwt" as const,
                 meta: {
                     vct_values: [
-                        `${host}/issuers/demo/credentials-metadata/vct/pid`,
+                        `${host}/issuers/root/credentials-metadata/vct/pid`,
                     ],
                 },
                 claims: [{ path: ["address", "locality"] }],
@@ -702,7 +702,7 @@ describe("Presentation - Transaction Data", () => {
             format: "dc+sd-jwt" as const,
             meta: {
                 vct_values: [
-                    `${host}/issuers/demo/credentials-metadata/vct/pid`,
+                    `${host}/issuers/root/credentials-metadata/vct/pid`,
                 ],
             },
             claims: [{ path: ["address", "locality"] }],

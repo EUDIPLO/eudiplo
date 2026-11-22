@@ -282,9 +282,10 @@
         }
 
         <!-- Credential Issuance Section -->
-        @if (hasRole(['issuance:manage', 'issuance:offer'])) {
+        <!-- With issuance:offer alone nothing here can load; the dashboard says why. -->
+        @if (hasRole('issuance:manage')) {
           <app-nav-section section="issuance" icon="card_membership" label="Credential Issuance">
-            @if (hasRole('issuance:offer')) {
+            @if (canUseIssuanceForm) {
               <a
                 mat-list-item
                 [routerLink]="['/offer/issuance']"

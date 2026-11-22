@@ -1,3 +1,5 @@
+import type { ClaimFieldFormat } from "@eudiplo/config-format/claim-formats.js";
+
 type FieldType =
     | "string"
     | "number"
@@ -17,6 +19,8 @@ interface FieldDisplay {
 export interface ClaimFieldDefinition {
     path: ClaimPathElement[];
     type: FieldType;
+    /** JSON Schema format of a `string` claim; mDOC encodes dates as CBOR tags 1004 and 0. */
+    format?: ClaimFieldFormat;
     defaultValue?: unknown;
     mandatory?: boolean;
     disclosable?: boolean;

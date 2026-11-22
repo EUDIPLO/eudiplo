@@ -1,3 +1,4 @@
+import { cborDecode, cborEncode, DateOnly } from "@owf/cose";
 import { DeviceResponse, Verifier } from "@owf/mdoc";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CertificatePathLimitExceeded } from "../../../../shared/utils/certificate-path.util.js";
@@ -68,6 +69,7 @@ describe("MdocverifierService failure classification", () => {
 
         expect(map("x5c_required")).toBe("x5c_missing");
         expect(map("chain_build_failed")).toBe("no_trust_chain_to_root");
+        expect(map("certificate_path_invalid")).toBe("no_trust_chain_to_root");
         expect(map("no_trusted_entity_match")).toBe("trust_chain_not_trusted");
         expect(map("trust_list_unavailable")).toBe("trust_list_unavailable");
         expect(map("certificate_expired")).toBe("certificate_expired");
@@ -555,6 +557,79 @@ describe("MdocverifierService x5chain length limit", () => {
     });
 });
 
+describe("MdocverifierService claims", () => {
+    it("returns a data element whose value is a CBOR map as a JSON object", async () => {
+        vi.restoreAllMocks();
+        const service = new MdocverifierService(
+            {
+                getTrustedCertificateEntries: vi.fn().mockResolvedValue([]),
+            } as any,
+            {} as any,
+            {
+                setContext: vi.fn(),
+                warn: vi.fn(),
+                error: vi.fn(),
+                debug: vi.fn(),
+            } as any,
+        );
+        const namespace = "eu.europa.ec.eudi.pid.1";
+        // Element values as @owf/mdoc decodes them: CBOR maps become Maps.
+        const prettyClaims = cborDecode(
+            cborEncode(
+                new Map<string, unknown>([
+                    ["family_name", "Mustermann"],
+                    ["birth_date", new DateOnly("1964-08-12")],
+                    [
+                        "place_of_birth",
+                        new Map([
+                            ["locality", "Berlin"],
+                            ["country", "DE"],
+                        ]),
+                    ],
+                ]),
+            ),
+        ) as Map<string, unknown>;
+        vi.spyOn(DeviceResponse, "decode").mockReturnValue({
+            documents: [
+                {
+                    docType: namespace,
+                    issuerSigned: {
+                        issuerNamespaces: {
+                            issuerNamespaces: new Map([[namespace, []]]),
+                        },
+                        getPrettyClaims: vi
+                            .fn()
+                            .mockReturnValue(Object.fromEntries(prettyClaims)),
+                        issuerAuth: { x5chain: [new Uint8Array([1])] },
+                    },
+                },
+            ],
+        } as any);
+        vi.spyOn(Verifier, "verifyDeviceResponse").mockResolvedValue(
+            undefined as any,
+        );
+        vi.spyOn(
+            service as any,
+            "validateIssuerCertificateChain",
+        ).mockResolvedValue({ verified: true, matchedEntity: null });
+
+        const result = await service.verify(
+            "AA",
+            { protocol: "iso-18013-7", sessionTranscript: {} as any },
+            { trustListSource: { lotes: [] }, policy: {} } as any,
+        );
+
+        expect(result.verified).toBe(true);
+        // The claims the DCQL `values` check and the session receive.
+        expect(result.claims).toEqual({
+            family_name: "Mustermann",
+            birth_date: "1964-08-12",
+            place_of_birth: { locality: "Berlin", country: "DE" },
+        });
+        vi.restoreAllMocks();
+    });
+});
+
 describe("shortVerificationMessage", () => {
     const failureTypes: VerificationFailureType[] = [
         "signature_invalid",
@@ -607,6 +682,14 @@ describe("classifyVerificationError", () => {
                 'No trusted certificate was found while validating the X.509 chain. chain=[{"subject":"C=DE, CN=Root Tenant"}]',
             ),
         ).toBe("trust_chain_not_trusted");
+    });
+
+    it("classifies a path that breaks an RFC 5280 constraint as no_trust_chain_to_root, whatever its subject says", () => {
+        expect(
+            classify(
+                'X.509 chain verification failed at index=0. cause=Certificate path constraint: issuing certificate is not a CA (basicConstraints cA is not TRUE) (subject="C=DE, CN=Trusted signature service", index=1)',
+            ),
+        ).toBe("no_trust_chain_to_root");
     });
 
     it("still classifies signature problems as signature_invalid", () => {

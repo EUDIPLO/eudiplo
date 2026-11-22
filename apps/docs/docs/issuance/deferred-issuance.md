@@ -31,9 +31,9 @@ Answer the attribute provider request with:
 { "deferred": true, "interval": 5 }
 ```
 
-EUDIPLO stores the wallet's holder key and answers the wallet with HTTP `202` and `{ "transaction_id": "…", "interval": 5 }`. `interval` (seconds, default 5) is the polling interval suggested to the wallet.
+EUDIPLO stores the wallet's holder key (for a configuration that needs key proofs, see below) and answers the wallet with HTTP `202` and `{ "transaction_id": "…", "interval": 5 }`. `interval` (seconds, default 5) is the polling interval suggested to the wallet.
 
-Deferred requests must carry exactly one key proof with a `nonce`; batch requests (several proofs) are rejected with `invalid_proof`.
+Deferred requests for a configuration that needs key proofs must carry exactly one key proof with a `nonce`; batch requests (several proofs) are rejected with `invalid_proof`. A credential configuration that needs no key proof (an SD-JWT VC without `keyBinding` and without `config.keyAttestationsRequired`, see [Credential configuration](credential-configuration.md#4-choose-key-binding-and-proofs)) is deferred without proofs, and its credential is bound to no key.
 
 ## 2. Let the wallet poll
 
@@ -65,7 +65,7 @@ curl -X POST "$EUDIPLO_URL/api/issuer/deferred/$TRANSACTION_ID/fail" \
   -d '{ "error": "Identity verification failed" }'
 ```
 
-`error` is optional; the wallet's next poll receives `invalid_transaction_id` with it as description. `complete` answers `404` for an unknown transaction or one that is no longer pending, `fail` for an unknown transaction.
+`error` is optional; the wallet's next poll receives `invalid_transaction_id` with it as description. `complete` answers `404` for an unknown transaction or one that is no longer pending, `fail` for an unknown transaction. With `revokeWithWalletUnit`, `complete` marks the transaction failed instead of issuing when the status maintenance period of its wallet or key attestation has ended in the meantime, and returns it with status `failed` ([Expiry within the status maintenance period](../trust/attestation.md#expiry-within-the-status-maintenance-period)).
 
 :::caution[Transaction ID]
 EUDIPLO currently does not send the `transaction_id` to your backend: the attribute provider request carries only the session ID, and no management endpoint lists transactions. Only the wallet receives the ID.

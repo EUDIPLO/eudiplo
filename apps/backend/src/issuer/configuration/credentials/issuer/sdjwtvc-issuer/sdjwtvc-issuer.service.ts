@@ -15,13 +15,18 @@ import {
 } from "../../credential-settings.js";
 import type { CredentialConfiguration } from "../../domain/credential-configuration.js";
 import { hostedVctUrl } from "../../domain/hosted-vct.js";
+import {
+    boundCredentialExpiry,
+    maintenancePeriodEnd,
+} from "../../domain/maintenance-period.js";
 import { SdJwtTrustFormat } from "../../entities/credential.entity.js";
 import { buildDisclosureFrame } from "../../utils/index.js";
 import { roundedCredentialValidity } from "../credential-time.util.js";
 
 export interface SdJwtVcIssueOptions {
     credentialConfiguration: CredentialConfiguration;
-    holderCnf: Jwk;
+    /** The proven holder key; absent when the configuration needs no key proof. */
+    holderCnf?: Jwk;
     session: Session;
     claims: Record<string, any>;
     federationEntityId?: string;
@@ -86,8 +91,17 @@ export class SdjwtvcIssuerService {
         const { issuedAt: iat, expiresAt } = roundedCredentialValidity(
             credentialConfiguration.lifeTime ?? 0,
         );
-        // Set expiration time if lifeTime is defined
-        const exp = credentialConfiguration.lifeTime ? expiresAt : undefined;
+        // Set expiration time if lifeTime is defined, ending before the
+        // status maintenance period of the attestations the credential
+        // follows (which also gives one to a credential without lifeTime).
+        const exp = boundCredentialExpiry(
+            credentialConfiguration.lifeTime ? expiresAt : undefined,
+            maintenancePeriodEnd(
+                credentialConfiguration.revokeWithWalletUnit,
+                walletUnit,
+                session.walletInstanceStatus,
+            ),
+        );
 
         // If status management is enabled, create a status entry
         let status: { status: StatusClaim } | undefined;
@@ -105,14 +119,25 @@ export class SdjwtvcIssuerService {
         // If key binding is enabled, include the JWK in the cnf
         let cnf: { jwk: Jwk } | undefined;
         if (credentialConfiguration.keyBinding) {
+            // keyBinding makes requests carry a key proof (`requiresKeyProof`).
+            if (!holderCnf) {
+                throw new Error(
+                    "A key-bound SD-JWT VC needs the holder key of a key proof",
+                );
+            }
             cnf = {
                 jwk: holderCnf,
             };
         }
 
         const host = this.settings.publicUrl;
+        // Built from the claims being issued: an element path (`null` or an
+        // index) needs the elements of the issued array
         const disclosureFrame =
-            buildDisclosureFrame(credentialConfiguration.fields as any) ?? {};
+            buildDisclosureFrame(
+                credentialConfiguration.fields as any,
+                claims,
+            ) ?? {};
 
         const vct =
             typeof credentialConfiguration.vct === "string"

@@ -238,6 +238,9 @@ function buildLeafSchema(field: ClaimFieldDefinition): JsonSchema {
         ...sanitizeClaimConstraints(field.constraints).constraints,
         type: field.type,
     };
+    if (field.format) {
+        leafSchema.format = field.format;
+    }
 
     const title = getDisplayTitle(field.display);
     if (title) {
@@ -427,10 +430,114 @@ export function buildClaims(
     return claims;
 }
 
+/** Whether a path segment is a valid array index (a non-negative integer). */
+function isElementIndex(segment: Segment): segment is number {
+    return (
+        typeof segment === "number" &&
+        Number.isSafeInteger(segment) &&
+        segment >= 0
+    );
+}
+
+/** The indices of `value` that an array path segment selects. */
+function elementIndices(value: unknown, segment: null | number): number[] {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+    if (segment === null) {
+        return value.map((_, index) => index);
+    }
+    return isElementIndex(segment) && segment < value.length ? [segment] : [];
+}
+
+/**
+ * The concrete paths a claim path selects in `claims`: `null` stands for
+ * every element and an index for one element of the array found at that
+ * point, so both become the indices present in the issued value. A path
+ * without such segments is returned as it is, whatever the claims hold.
+ * Numbers that are no valid index (negative or fractional) stay object
+ * keys, as before and as in the published claims metadata.
+ */
+function concretePaths(path: Segment[], claims: unknown): Segment[][] {
+    const isElementStep = (segment: Segment): segment is null | number =>
+        segment === null || isElementIndex(segment);
+    if (!path.some(isElementStep)) {
+        return [path];
+    }
+
+    let selected: Array<{ path: Segment[]; value: unknown }> = [
+        { path: [], value: claims },
+    ];
+    for (const segment of path) {
+        selected = selected.flatMap(({ path: prefix, value }) => {
+            if (isElementStep(segment)) {
+                return elementIndices(value, segment).map((index) => ({
+                    path: [...prefix, index],
+                    value: (value as unknown[])[index],
+                }));
+            }
+            const key = segmentToKey(segment);
+            const child =
+                typeof value === "object" &&
+                value !== null &&
+                !Array.isArray(value)
+                    ? getOwn(value, key)
+                    : undefined;
+            return [{ path: [...prefix, key], value: child }];
+        });
+    }
+    return selected.map((entry) => entry.path);
+}
+
+/** The `_sd` list of each frame node, with its entries as a set. */
+type SdEntries = WeakMap<
+    object,
+    { list: Array<string | number>; entries: Set<string | number> }
+>;
+
+/** Lists the last segment of `path` in `_sd` of its parent's frame node, once. */
+function listInSd(
+    frame: Record<string, unknown>,
+    listed: SdEntries,
+    path: Segment[],
+): void {
+    const lastSegment = path.at(-1) ?? "";
+    // Only `concretePaths` puts valid indices into a path
+    const leaf = isElementIndex(lastSegment)
+        ? lastSegment
+        : segmentToKey(lastSegment);
+
+    const node = ensureFrameNode(frame, path.slice(0, -1));
+    let sd = listed.get(node);
+    // A path through a segment named `_sd` may have replaced the list
+    if (!sd || node._sd !== sd.list) {
+        const list = Array.isArray(node._sd) ? node._sd : [];
+        sd = { list, entries: new Set(list) };
+        listed.set(node, sd);
+        node._sd = list;
+    }
+    if (!sd.entries.has(leaf)) {
+        sd.entries.add(leaf);
+        sd.list.push(leaf);
+    }
+}
+
+/**
+ * The disclosure frame of `@sd-jwt/core` for the disclosable fields.
+ * Object properties are listed by name in `_sd` of their parent; array
+ * elements by index in `_sd` of the array, and the frames of element values
+ * under their index. Element paths (`null` or an index) are resolved
+ * against `claims`, the claims being issued: an element that is not in the
+ * issued array gets no entry.
+ */
 export function buildDisclosureFrame(
     fields: ClaimFieldDefinition[],
+    claims: Record<string, unknown>,
 ): Record<string, unknown> | undefined {
     const frame: Record<string, unknown> = {};
+    // The entries of each `_sd` list, so that an array of N elements is not
+    // checked for duplicates in O(N²)
+    const listed: SdEntries = new WeakMap();
     let hasDisclosure = false;
 
     for (const field of flattenFields(fields)) {
@@ -438,17 +545,10 @@ export function buildDisclosureFrame(
             continue;
         }
 
-        const parentPath = field.path.slice(0, -1);
-        const leaf = segmentToKey(field.path.at(-1) ?? "");
-
-        const node = ensureFrameNode(frame, parentPath);
-        const existing = Array.isArray(node._sd) ? node._sd : [];
-        if (!existing.includes(leaf)) {
-            existing.push(leaf);
-            node._sd = existing;
+        for (const path of concretePaths(field.path, claims)) {
+            listInSd(frame, listed, path);
+            hasDisclosure = true;
         }
-
-        hasDisclosure = true;
     }
 
     return hasDisclosure ? frame : undefined;
@@ -460,8 +560,15 @@ export function buildClaimsMetadata(
     return flattenFields(fields)
         .filter((field) => field.path.length > 0)
         .map((field) => {
+            // A claims path pointer (OID4VCI 1.0 Appendix C): `null` selects
+            // every array element and a non-negative integer one element.
+            // Other numbers are no valid index and stay strings, as before.
             const metadata: ClaimMetadata = {
-                path: field.path.map((segment) => segmentToKey(segment)),
+                path: field.path.map((segment) =>
+                    segment === null || isElementIndex(segment)
+                        ? segment
+                        : segmentToKey(segment),
+                ),
             };
             if (field.namespace) {
                 metadata.path = [field.namespace, ...metadata.path];
@@ -499,6 +606,17 @@ export function buildJsonSchema(fields: ClaimFieldDefinition[]): JsonSchema {
     return root;
 }
 
+/** The path of a field's value within its namespace: without a leading namespace segment. */
+function namespaceRelativePath(
+    field: ClaimFieldDefinition,
+    namespace: string,
+): Segment[] {
+    return field.path.length > 0 &&
+        segmentToKey(field.path[0] ?? "") === namespace
+        ? field.path.slice(1)
+        : field.path;
+}
+
 export function buildClaimsByNamespace(
     fields: ClaimFieldDefinition[],
 ): Record<string, Record<string, unknown>> {
@@ -522,11 +640,7 @@ export function buildClaimsByNamespace(
             setOwn(byNamespace, namespace, namespaceTarget);
         }
 
-        const normalizedPath =
-            field.path.length > 0 &&
-            segmentToKey(field.path[0] ?? "") === namespace
-                ? field.path.slice(1)
-                : field.path;
+        const normalizedPath = namespaceRelativePath(field, namespace);
 
         if (normalizedPath.length === 0) {
             continue;
@@ -536,4 +650,36 @@ export function buildClaimsByNamespace(
     }
 
     return byNamespace;
+}
+
+/** A claim field that declares a `format`, with where its value is found. */
+export interface FormattedClaimField {
+    format: NonNullable<ClaimFieldDefinition["format"]>;
+    /** Path of the value in the claims, as validated against {@link buildJsonSchema}. */
+    path: Segment[];
+    /** Namespace of the value in {@link buildClaimsByNamespace}, if the field has one. */
+    namespace?: string;
+    /** Path of the value within that namespace. */
+    namespacePath: Segment[];
+}
+
+/** Every field, nested ones included, that declares a `format`. */
+export function formattedClaimFields(
+    fields: ClaimFieldDefinition[],
+): FormattedClaimField[] {
+    const result: FormattedClaimField[] = [];
+    for (const field of flattenFields(fields)) {
+        if (!field.format || field.path.length === 0) continue;
+        const namespace = getFieldNamespace(field);
+        result.push({
+            format: field.format,
+            path: field.path,
+            namespace,
+            namespacePath:
+                namespace === undefined
+                    ? field.path
+                    : namespaceRelativePath(field, namespace),
+        });
+    }
+    return result;
 }

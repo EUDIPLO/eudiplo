@@ -39,6 +39,7 @@ import {
     ImportPhase,
 } from "../../platform/config-import/config-import-orchestrator.service.js";
 import type { SessionData as Session } from "../../session/domain/session-data.js";
+import type { AttestationKind } from "../../trust/domain/attestation-status-claims.js";
 import type { CredentialConfiguration } from "../configuration/credentials/domain/credential-configuration.js";
 import {
     assertStatusTransitionAllowed,
@@ -695,7 +696,7 @@ export class StatusListService implements OnApplicationBootstrap {
             "Could not allocate status entry after maximum retries",
         );
 
-        if (walletUnit && credentialConfiguration?.revokeWithWalletUnit) {
+        if (credentialConfiguration?.revokeWithWalletUnit) {
             await this.recordWalletUnit(
                 session,
                 credentialConfigurationId,
@@ -716,28 +717,38 @@ export class StatusListService implements OnApplicationBootstrap {
     }
 
     /**
-     * Record the wallet unit attestation of a new status entry, so that the
-     * background check revokes the entry when the wallet unit is revoked,
-     * until the credential expires.
+     * Record the wallet unit attestations of a new status entry, so that the
+     * background check revokes the entry when either is revoked, until the
+     * credential expires: the key attestation of the proof, and the wallet
+     * attestation the session's token endpoint accepted (TS3 1.5 section
+     * 2.4.3: "If either is revoked, the PID Provider SHALL revoke the PID").
      */
     private async recordWalletUnit(
         session: Session,
         credentialConfigurationId: string,
         entry: AllocatedStatusEntry,
-        walletUnit: WalletUnitReference,
+        keyAttestation: WalletUnitReference | undefined,
         credentialExpiresAt: Date | undefined,
     ): Promise<void> {
-        await this.credentialWalletUnitRepository.insert({
-            tenantId: session.tenantId,
-            statusListId: entry.statusListId,
-            index: entry.index,
-            sessionId: session.id,
-            credentialConfigurationId,
-            walletUnitStatusUri: walletUnit.statusUri,
-            walletUnitStatusIdx: walletUnit.statusIdx,
-            walletUnitCertificates: walletUnit.certificates,
-            credentialExpiresAt: credentialExpiresAt ?? null,
-        });
+        const followed: [AttestationKind, WalletUnitReference][] = [];
+        if (keyAttestation) followed.push(["key", keyAttestation]);
+        if (session.walletInstanceStatus)
+            followed.push(["wallet", session.walletInstanceStatus]);
+        if (followed.length === 0) return;
+        await this.credentialWalletUnitRepository.insert(
+            followed.map(([attestationKind, reference]) => ({
+                tenantId: session.tenantId,
+                statusListId: entry.statusListId,
+                index: entry.index,
+                attestationKind,
+                sessionId: session.id,
+                credentialConfigurationId,
+                walletUnitStatusUri: reference.statusUri,
+                walletUnitStatusIdx: reference.statusIdx,
+                walletUnitCertificates: reference.certificates,
+                credentialExpiresAt: credentialExpiresAt ?? null,
+            })),
+        );
     }
 
     private async allocateAndClaimEntry(params: {
@@ -1583,6 +1594,156 @@ export class StatusListService implements OnApplicationBootstrap {
         });
         await this.setEntries(tenantId, toRevoke, STATUS_REVOKED);
         return toRevoke;
+    }
+
+    /**
+     * Revoke every status entry a tenant allocated for one credential
+     * configuration, in all of the tenant's lists. Entries of other
+     * configurations that share a list are left as they are, and so are
+     * entries that are already revoked.
+     *
+     * The work is done one list at a time: one versioned write of the list's
+     * elements and one publication of the list (when the tenant publishes on
+     * every update), however many entries of the list are revoked. Lists
+     * already done stay revoked when a later list fails, so calling this
+     * again after a failure finishes the job.
+     * @returns The number of entries this call revoked
+     */
+    async revokeCredentialConfigurationEntries(
+        tenantId: string,
+        credentialConfigurationId: string,
+    ): Promise<number> {
+        const lists: { statusListId: string }[] =
+            await this.statusMappingRepository
+                .createQueryBuilder("mapping")
+                .select("mapping.statusListId", "statusListId")
+                .distinct(true)
+                .where("mapping.tenantId = :tenantId", { tenantId })
+                .andWhere(
+                    "mapping.credentialConfigurationId = :credentialConfigurationId",
+                    { credentialConfigurationId },
+                )
+                .orderBy("mapping.statusListId", "ASC")
+                .getRawMany();
+        let revoked = 0;
+        for (const { statusListId } of lists) {
+            const mappings = await this.statusMappingRepository.find({
+                select: { index: true },
+                where: { tenantId, credentialConfigurationId, statusListId },
+            });
+            revoked += await this.revokeListIndexes(
+                tenantId,
+                statusListId,
+                mappings.map((mapping) => mapping.index),
+            );
+        }
+        return revoked;
+    }
+
+    /**
+     * Revoke the given indexes of one list in a single versioned write,
+     * retried on concurrent changes of the list, then publish the list once.
+     * @returns The number of indexes that were not revoked before
+     */
+    private async revokeListIndexes(
+        tenantId: string,
+        listId: string,
+        indexes: readonly number[],
+    ): Promise<number> {
+        const revoked = await this.retryOnConcurrency(
+            () =>
+                this.runSerialized(() =>
+                    this.revokeListIndexesTransaction(
+                        tenantId,
+                        listId,
+                        indexes,
+                    ),
+                ),
+            "Could not update status entries after maximum retries",
+        );
+        // Published even when nothing changed: a repeated call after the
+        // publication failed has nothing left to revoke, but must still
+        // publish what the earlier call stored.
+        const effectiveConfig =
+            await this.statusListConfigService.getEffectiveConfig(tenantId);
+        if (effectiveConfig.immediateUpdate) {
+            await this.regenerateListTokensAfterUpdate(tenantId, listId);
+        }
+        return revoked;
+    }
+
+    /** The transactional part of {@link revokeListIndexes}. */
+    private async revokeListIndexesTransaction(
+        tenantId: string,
+        listId: string,
+        indexes: readonly number[],
+    ): Promise<number> {
+        const queryRunner = this.dataSource.createQueryRunner();
+        try {
+            await queryRunner.connect();
+            await queryRunner.startTransaction();
+            const manager = queryRunner.manager;
+            const entry = await manager.findOne(StatusListEntity, {
+                where: { id: listId, tenantId },
+            });
+            // Mappings are deleted with their list; a list deleted while this
+            // runs has nothing left to revoke.
+            const changed = entry
+                ? indexes.filter(
+                      (index) =>
+                          (entry.elements[index] ?? 0) !== STATUS_REVOKED,
+                  )
+                : [];
+            if (!entry || changed.length === 0) {
+                await queryRunner.commitTransaction();
+                return 0;
+            }
+            const updatedElements = [...entry.elements];
+            for (const index of changed) {
+                updatedElements[index] = STATUS_REVOKED;
+            }
+            const updateResult = await manager.update(
+                StatusListEntity,
+                { id: listId, tenantId, version: entry.version },
+                {
+                    elements: updatedElements,
+                    version: () => "version + 1",
+                },
+            );
+            if (updateResult.affected === 0) {
+                throw new ConflictException(
+                    "Status list version changed concurrently",
+                );
+            }
+            const updatedAt = new Date();
+            for (
+                let start = 0;
+                start < changed.length;
+                start += MAPPING_LOOKUP_CHUNK_SIZE
+            ) {
+                await manager.update(
+                    StatusMapping,
+                    {
+                        tenantId,
+                        statusListId: listId,
+                        index: In(
+                            changed.slice(
+                                start,
+                                start + MAPPING_LOOKUP_CHUNK_SIZE,
+                            ),
+                        ),
+                    },
+                    { statusUpdatedAt: updatedAt },
+                );
+            }
+            await queryRunner.commitTransaction();
+            return changed.length;
+        } catch (error) {
+            await this.safeRollback(queryRunner);
+            throw error;
+        } finally {
+            await queryRunner.release();
+        }
     }
 
     /**

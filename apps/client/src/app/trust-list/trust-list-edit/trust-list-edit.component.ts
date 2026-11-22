@@ -666,13 +666,16 @@ export class TrustListEditComponent implements OnInit, PageWithUnsavedChanges {
   }
 
   /**
-   * Parse entities from the trust list data (fallback when entityConfig is not available).
-   * All entities are loaded as external since we have the PEM data.
+   * Parse entities from the trust list data (fallback when entityConfig is not available,
+   * as for lists created before EUDIPLO stored it). All entities are loaded as external
+   * since we have the PEM data. The list sits under `LoTE` since 9.0, also for older lists
+   * once renewed; lists not rewritten since an earlier release lack that wrapper.
    */
   private loadEntitiesFromData(data: any): void {
-    if (!data?.TrustedEntitiesList) return;
+    const lote = data?.LoTE ?? data;
+    if (!Array.isArray(lote?.TrustedEntitiesList)) return;
 
-    for (const entity of data.TrustedEntitiesList) {
+    for (const entity of lote.TrustedEntitiesList) {
       const info = entity.TrustedEntityInformation;
       const services = entity.TrustedEntityServices || [];
 

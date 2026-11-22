@@ -58,6 +58,10 @@ import { getApiErrorMessage } from '../../utils/error-message';
 import { focusAfterRenderIfLost } from '../../common/focus-if-lost.util';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { ItemRoutePipe } from '../../common/item-route.pipe';
+import {
+  canUseIssuanceForm,
+  ISSUANCE_FORM_LOCKED_REASON,
+} from '../../issuance/issuance-offer/issuance-form-access';
 
 // Define the SessionStatus type
 export type SessionStatus = 'active' | 'fetched' | 'completed' | 'expired' | 'failed' | 'cancelled';
@@ -449,11 +453,18 @@ export class SessionManagementListComponent implements OnInit, AfterViewInit {
     }
   }
 
-  /** Fill the configuration selector with the tenant's configurations. */
+  /**
+   * Fill the configuration selector with the tenant's configurations. A list the caller's
+   * roles may not read is not requested; `configFilterHint` says which are left out.
+   */
   private async loadConfigOptions(): Promise<void> {
     const [credentials, presentations] = await Promise.all([
-      this.credentialConfigService.loadConfigurations().catch(() => []),
-      this.presentationManagementService.loadConfigurations().catch(() => []),
+      this.canReadCredentialConfigs
+        ? this.credentialConfigService.loadConfigurations().catch(() => [])
+        : [],
+      this.canReadPresentationConfigs
+        ? this.presentationManagementService.loadConfigurations().catch(() => [])
+        : [],
     ]);
     this.issuanceConfigOptions = credentials.map((config) => ({
       value: `issuance:${config.id}`,
@@ -465,7 +476,41 @@ export class SessionManagementListComponent implements OnInit, AfterViewInit {
     }));
   }
 
+  /** As the backend's credential config endpoints. */
+  private readonly canReadCredentialConfigs = this.jwtService.hasRole('issuance:manage');
+  /** As the backend's verification config endpoints. */
+  private readonly canReadPresentationConfigs = this.jwtService.hasRole([
+    'presentation:manage',
+    'presentation:request',
+  ]);
+
+  /**
+   * Which configurations the Configuration filter leaves out, for session types the caller
+   * reads (as the backend's session scope) but whose configurations it may not read.
+   */
+  readonly configFilterHint = (() => {
+    const missing: string[] = [];
+    if (
+      !this.canReadCredentialConfigs &&
+      this.jwtService.hasRole(['issuance:offer', 'issuance:manage', 'sessions:read'])
+    ) {
+      missing.push('credential configs need issuance:manage');
+    }
+    if (
+      !this.canReadPresentationConfigs &&
+      this.jwtService.hasRole(['presentation:request', 'presentation:manage', 'sessions:read'])
+    ) {
+      missing.push('verification configs need presentation:manage or presentation:request');
+    }
+    return missing.length
+      ? `Not listed, as your roles cannot read them: ${missing.join('; ')}.`
+      : '';
+  })();
+
   readonly canOfferIssuance = this.jwtService.hasRole('issuance:offer');
+  /** Issuance Offer opens New Issuance, which also needs issuance:manage to load. */
+  readonly canUseIssuanceForm = canUseIssuanceForm((role) => this.jwtService.hasRole(role));
+  readonly issuanceFormLockedReason = ISSUANCE_FORM_LOCKED_REASON;
   readonly canRequestPresentation = this.jwtService.hasRole('presentation:request');
   readonly readOnlyRowHint = 'Your roles let you read this session but not cancel or delete it';
   /**

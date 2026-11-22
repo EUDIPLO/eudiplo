@@ -178,7 +178,7 @@ export class ExchangeAccessToken {
             findBuiltInAuthorizationServer(issuanceConfig),
         );
 
-        await this.clientAttestation
+        const walletInstanceStatus = await this.clientAttestation
             .verify(
                 tenantId,
                 parsed.clientAttestation,
@@ -448,6 +448,8 @@ export class ExchangeAccessToken {
                     consumed: true,
                     dpop_jkt: dpop?.jwkThumbprint ?? session.dpop_jkt,
                     client_key_jkt: clientKeyJkt,
+                    // Credentials of the session follow this wallet instance.
+                    walletInstanceStatus: walletInstanceStatus ?? null,
                     ...(tokenResponse.refresh_token
                         ? {
                               refresh_token: hashRefreshToken(
@@ -464,6 +466,12 @@ export class ExchangeAccessToken {
                     "The credential offer has already been used",
                 );
             }
+        } else if (walletInstanceStatus) {
+            // A refresh presents the client's current wallet attestation:
+            // credentials issued from now on follow its entry.
+            await this.sessions.updateForTenant(session.tenantId, session.id, {
+                walletInstanceStatus,
+            });
         }
 
         return tokenResponse;

@@ -1,3 +1,4 @@
+import type { WalletInstanceStatus } from "../../../../../session/domain/session-data.js";
 import type {
     RevocationCheckMode,
     TrustListRef,
@@ -19,6 +20,10 @@ export interface ClientAttestation {
  * wallet. A server-side failure, such as trust lists that cannot be loaded,
  * has a fixed message and its reason as `cause`, for the log
  * (`clientAttestationLogDetail`).
+ *
+ * Resolves to the status list entry of an accepted attestation, so that
+ * credentials issued for the session can be revoked with the wallet
+ * instance; undefined without attestation or without entry.
  */
 export interface ClientAttestationVerifier {
     verify(
@@ -28,7 +33,7 @@ export interface ClientAttestationVerifier {
         required: boolean,
         trustLists: TrustListRef[],
         statusCheckMode: RevocationCheckMode,
-    ): Promise<void>;
+    ): Promise<WalletInstanceStatus | undefined>;
 }
 
 export const CLIENT_ATTESTATION_VERIFIER = Symbol(

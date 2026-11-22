@@ -11,7 +11,7 @@
     <mat-card appearance="outlined" class="hero">
       <span class="hero-avatar" aria-hidden="true"><mat-icon>person</mat-icon></span>
       <div class="hero-copy">
-        <h1>{{ user.username }}</h1>
+        <h1 #pageHeading tabindex="-1">{{ user.username }}</h1>
         <div class="hero-meta">
           <span class="badge" [class.status-active]="user.enabled">{{
             user.enabled ? 'Enabled' : 'Disabled'
@@ -74,6 +74,10 @@
         </a>
       </mat-card-content>
     </mat-card>
+  } @else if (loadError) {
+    <app-load-error [message]="loadError" (retry)="load()">
+      <a matButton routerLink="../">Back to the list</a>
+    </app-load-error>
   } @else {
     <div class="loading-state">
       <mat-spinner diameter="40" aria-label="Loading user"></mat-spinner>

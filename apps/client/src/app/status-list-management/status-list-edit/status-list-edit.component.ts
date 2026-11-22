@@ -34,6 +34,8 @@ import { SourceLoadState, loadSource, reportSourceFailures } from '../../common/
 import { copyToClipboard } from '../../utils/copy-to-clipboard';
 import { wholeNumberValidator } from '../../utils/whole-number-validator';
 import { showFieldsToFix } from '../../common/field-to-fix.util';
+import { focusAfterRenderIfLost } from '../../common/focus-if-lost.util';
+import { LoadErrorComponent } from '../../common/load-error.component';
 import type { PageWithUnsavedChanges } from '../../services/unsaved-changes.service';
 
 /** The sources of the options of the form's selects. */
@@ -58,6 +60,7 @@ type StatusListEditSource = 'credentialConfigs' | 'keyChains';
     RouterModule,
     ConfigOwnershipDirective,
     ConfigOwnershipNoticeComponent,
+    LoadErrorComponent,
   ],
   templateUrl: './status-list-edit.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
@@ -68,6 +71,8 @@ export class StatusListEditComponent implements OnInit, PageWithUnsavedChanges {
   form!: FormGroup;
   isLoading = true;
   isSaving = false;
+  /** Set when the status list could not be loaded; the page then offers Retry instead of a form. */
+  loadError = '';
 
   /** The loaded status list (for edit mode) */
   statusList?: StatusListResponseDto;
@@ -97,6 +102,8 @@ export class StatusListEditComponent implements OnInit, PageWithUnsavedChanges {
 
   private readonly injector = inject(Injector);
   private readonly formElement = viewChild<ElementRef<HTMLFormElement>>('formElement');
+  /** Takes the focus after a successful Retry, which removed the focused Retry button. */
+  private readonly pageHeading = viewChild<ElementRef<HTMLElement>>('pageHeading');
 
   constructor(
     private readonly route: ActivatedRoute,
@@ -170,9 +177,23 @@ export class StatusListEditComponent implements OnInit, PageWithUnsavedChanges {
     }
   }
 
+  /** Loads the status list again after a failed load, keeping the loaded options. */
+  async retryLoad(): Promise<void> {
+    this.isLoading = true;
+    try {
+      await this.loadStatusList();
+    } finally {
+      this.isLoading = false;
+    }
+    if (!this.loadError) {
+      focusAfterRenderIfLost(this.injector, () => this.pageHeading()?.nativeElement);
+    }
+  }
+
   private async loadStatusList(): Promise<void> {
     if (!this.listId) return;
 
+    this.loadError = '';
     try {
       this.statusList = await this.statusListService.getList(this.listId);
       this.form.patchValue({
@@ -181,8 +202,7 @@ export class StatusListEditComponent implements OnInit, PageWithUnsavedChanges {
       });
     } catch (error) {
       console.error('Failed to load status list:', error);
-      openErrorSnackBar(this.snackBar, getApiErrorMessage(error, 'Failed to load status list'));
-      this.router.navigate(['/status-lists']);
+      this.loadError = getApiErrorMessage(error, 'Failed to load status list');
     }
   }
 

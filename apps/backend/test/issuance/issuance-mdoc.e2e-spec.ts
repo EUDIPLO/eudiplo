@@ -2,7 +2,7 @@ import { INestApplication } from "@nestjs/common";
 import { clientAuthenticationAnonymous } from "@openid4vc/oauth2";
 import { Openid4vciClient } from "@openid4vc/openid4vci";
 import { Jwk, type JwsSignerJwk } from "@owf/jose";
-import { Issuer, IssuerSigned } from "@owf/mdoc";
+import { DateOnly, Issuer, IssuerSigned } from "@owf/mdoc";
 import { exportJWK, generateKeyPair } from "jose";
 import request from "supertest";
 import { App } from "supertest/types";
@@ -171,9 +171,19 @@ describe("Issuance - mDOC Credentials", () => {
             expect.objectContaining({
                 age_birth_year: 1964,
                 age_over_18: true,
-                birth_date: "1964-08-12",
+                birth_date: new DateOnly("1964-08-12"),
             }),
         );
+
+        // The PID Rulebook's date elements are full-date (CBOR tag 1004).
+        const issued = IssuerSigned.fromEncodedForOid4Vci(
+            credential,
+        ).getPrettyClaims("eu.europa.ec.eudi.pid.1")!;
+        for (const element of ["birth_date", "issuance_date", "expiry_date"]) {
+            expect(issued[element]).toBeInstanceOf(DateOnly);
+        }
+        expect(String(issued.birth_date)).toBe("1964-08-12");
+        expect(issued.family_name).toBeTypeOf("string");
     });
 
     test.each(["ES384", "ES512"] as const)(
@@ -378,7 +388,7 @@ describe("Issuance - mDOC Credentials", () => {
         expect(addNamespaceSpy).toHaveBeenCalledWith(
             "eu.europa.ec.eudi.pid.1",
             expect.objectContaining({
-                birth_date: "1999-12-31",
+                birth_date: new DateOnly("1999-12-31"),
                 family_name: "OFFER_OVERRIDE",
                 age_birth_year: 1964,
             }),

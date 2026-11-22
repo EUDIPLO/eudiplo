@@ -2072,6 +2072,10 @@ export type ClaimFieldDefinitionDto = {
      */
     type: 'string' | 'number' | 'integer' | 'boolean' | 'object' | 'array';
     /**
+     * JSON Schema format of a "string" claim. "date" requires an RFC 3339 full-date (YYYY-MM-DD) and "date-time" an RFC 3339 date-time; claims that do not match are refused at issuance. mDOC credentials encode the claim as full-date (CBOR tag 1004, RFC 8943) or tdate (CBOR tag 0, in UTC with whole seconds), SD-JWT VC credentials issue the string unchanged. Without a format, mDOC credentials issue the claim as a text string.
+     */
+    format?: 'date' | 'date-time';
+    /**
      * Default value
      */
     defaultValue?: string | number | boolean | {
@@ -2095,7 +2099,7 @@ export type ClaimFieldDefinitionDto = {
         description?: string;
     }>;
     /**
-     * JSON Schema 2020-12 validation keywords for this field. Only the JSON Schema keywords listed under Constraints in the claims documentation are accepted (validation keywords such as pattern, minLength or enum, subschemas such as items or properties, and annotations); other keys, such as format or $ref, are refused.
+     * JSON Schema 2020-12 validation keywords for this field. Only the JSON Schema keywords listed under Constraints in the claims documentation are accepted (validation keywords such as pattern, minLength or enum, subschemas such as items or properties, and annotations); other keys, such as $ref or format (use the field's format instead), are refused.
      */
     constraints?: ClaimConstraints;
     /**
@@ -2271,10 +2275,11 @@ export type CredentialConfig = {
      */
     activeCredentials?: ActiveCredentialPolicy | null;
     /**
-     * Revoke issued credentials when the wallet unit attestation they were
+     * Revoke issued credentials when a wallet unit attestation they were
      * bound to is revoked: the key attestation of the proof (OpenID4VCI 1.0,
-     * Appendix D.1), whose status list entry is recorded with each
-     * credential and checked every `WALLET_UNIT_STATUS_CHECK_INTERVAL`
+     * Appendix D.1) or the wallet attestation the built-in authorization
+     * server accepted (Appendix E), whose status list entries are recorded
+     * with each credential and checked every `WALLET_UNIT_STATUS_CHECK_INTERVAL`
      * seconds until the credential is revoked or expires.
      *
      * Requires `statusManagement` and `config.keyAttestationsRequired`.
@@ -2347,10 +2352,11 @@ export type CredentialConfigCreate = {
      */
     activeCredentials?: ActiveCredentialPolicy | null;
     /**
-     * Revoke issued credentials when the wallet unit attestation they were
+     * Revoke issued credentials when a wallet unit attestation they were
      * bound to is revoked: the key attestation of the proof (OpenID4VCI 1.0,
-     * Appendix D.1), whose status list entry is recorded with each
-     * credential and checked every `WALLET_UNIT_STATUS_CHECK_INTERVAL`
+     * Appendix D.1) or the wallet attestation the built-in authorization
+     * server accepted (Appendix E), whose status list entries are recorded
+     * with each credential and checked every `WALLET_UNIT_STATUS_CHECK_INTERVAL`
      * seconds until the credential is revoked or expires.
      *
      * Requires `statusManagement` and `config.keyAttestationsRequired`.
@@ -2423,10 +2429,11 @@ export type CredentialConfigUpdate = {
      */
     activeCredentials?: ActiveCredentialPolicy | null;
     /**
-     * Revoke issued credentials when the wallet unit attestation they were
+     * Revoke issued credentials when a wallet unit attestation they were
      * bound to is revoked: the key attestation of the proof (OpenID4VCI 1.0,
-     * Appendix D.1), whose status list entry is recorded with each
-     * credential and checked every `WALLET_UNIT_STATUS_CHECK_INTERVAL`
+     * Appendix D.1) or the wallet attestation the built-in authorization
+     * server accepted (Appendix E), whose status list entries are recorded
+     * with each credential and checked every `WALLET_UNIT_STATUS_CHECK_INTERVAL`
      * seconds until the credential is revoked or expires.
      *
      * Requires `statusManagement` and `config.keyAttestationsRequired`.
@@ -4523,7 +4530,7 @@ export type CredentialStatusDto = {
      */
     bits: 1 | 2 | 4 | 8;
     /**
-     * When the status value last changed, through POST /api/session/revoke or when activeCredentials revokes a previous credential (ISO 8601). Absent if it has not changed since issuance, or only changed before this field was recorded.
+     * When the status value last changed, through POST /api/session/revoke, when activeCredentials revokes a previous credential, when revokeWithWalletUnit revokes it, or when a change of the embedded disclosure policy revokes it (ISO 8601). Absent if it has not changed since issuance, or only changed before this field was recorded.
      */
     statusUpdatedAt?: string;
 };
@@ -7737,8 +7744,24 @@ export type CredentialConfigControllerUpdateCredentialConfigurationData = {
     path: {
         id: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Revoke the credentials issued under this configuration when the update adds, changes or deletes its embedded disclosure policy. Not stored. Default false: the update revokes nothing.
+         */
+        revokeOnDisclosurePolicyChange?: boolean;
+    };
     url: '/api/issuer/credentials/{id}';
+};
+
+export type CredentialConfigControllerUpdateCredentialConfigurationErrors = {
+    /**
+     * The body is invalid, or revokeOnDisclosurePolicyChange is neither true nor false
+     */
+    400: unknown;
+    /**
+     * revokeOnDisclosurePolicyChange=true from a client limited to other credential configurations (allowedIssuanceConfigs)
+     */
+    403: unknown;
 };
 
 export type CredentialConfigControllerUpdateCredentialConfigurationResponses = {

@@ -79,6 +79,15 @@ describe('unsupportedConstraintsError', () => {
     );
   });
 
+  it('compiles fields with a date format, as issuance does', () => {
+    expect(
+      claimSchemaError([
+        { path: ['birth_date'], type: 'string', format: 'date' },
+        { path: ['issued_at'], type: 'string', format: 'date-time' },
+      ])
+    ).toBeUndefined();
+  });
+
   it('asks for an object and accepts allow-listed keywords', () => {
     expect(unsupportedConstraintsError(['pattern'])).toContain('Enter a JSON object');
     expect(

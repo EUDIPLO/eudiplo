@@ -34,6 +34,7 @@ import { SessionLoggerService } from "../../../session/logging/session-logger.se
 import { CredentialsService } from "../../configuration/credentials/credentials.service.js";
 import { CredentialClaimsResolutionError } from "../../configuration/credentials/domain/credential-claims.js";
 import { InvalidCredentialClaims } from "../../configuration/credentials/domain/credential-claims-validation.js";
+import { CredentialLifetimeExhausted } from "../../configuration/credentials/domain/maintenance-period.js";
 import { CredentialProofType } from "../../configuration/credentials/entities/credential.entity.js";
 import { InvalidClaimsException } from "../../configuration/credentials/exceptions/invalid-claims.exception.js";
 import { IssuanceService } from "../../configuration/issuance/issuance.service.js";
@@ -58,6 +59,7 @@ import {
 import {
     CredentialProofResolutionError,
     ResolveCredentialProofs,
+    type ResolvedCredentialProofs,
 } from "./application/resolve-credential-proofs.js";
 import { ResolveCredentialSession } from "./application/resolve-credential-session.js";
 import { resolveWalletAttestationPolicy } from "./authorization/domain/wallet-attestation-policy.js";
@@ -69,6 +71,7 @@ import { DeferredCredentialService } from "./deferred-credential.service.js";
 import { AuthorizationServerError } from "./domain/authorization-server-errors.js";
 import { InvalidCredentialOffer } from "./domain/credential-offer-errors.js";
 import { InvalidCredentialProof } from "./domain/credential-proof-errors.js";
+import { findMalformedKeyProof } from "./domain/credential-proof-format.js";
 import {
     checkCredentialRequestJweHeader,
     InvalidCredentialRequestEncryption,
@@ -80,13 +83,6 @@ import { CredentialRequestException } from "./exceptions/index.js";
 import { NonceService } from "./nonce.service.js";
 import { Oid4vciSdkFactory } from "./oid4vci-sdk.factory.js";
 import type { Oid4vciRequestContext } from "./request-context.js";
-
-type SupportedCredentialProofType = "jwt" | "attestation";
-
-interface ParsedCredentialProofs {
-    proofType: SupportedCredentialProofType;
-    values: string[];
-}
 
 /**
  * Service for handling OID4VCI (OpenID 4 Verifiable Credential Issuance) operations.
@@ -235,6 +231,16 @@ export class Oid4vciService {
                 error.message,
             );
         }
+        // The maintenance period of the attestations the credential follows
+        // has ended. The attestations are valid; the issuer does not accept
+        // them for this credential (OID4VCI 1.0 Section 8.3.1.2), and the
+        // same proof would fail again.
+        if (error instanceof CredentialLifetimeExhausted) {
+            throw new CredentialRequestException(
+                "credential_request_denied",
+                error.message,
+            );
+        }
 
         if (
             error instanceof ConflictException &&
@@ -268,27 +274,69 @@ export class Oid4vciService {
     }
 
     /**
-     * Reject proof types the credential configuration does not support and
-     * return its key attestation requirements, which every proof must meet.
+     * Resolve the key proofs of the request against the proof requirements
+     * of the credential configuration: none for a configuration that needs
+     * no key proof (proofs sent anyway are ignored), otherwise exactly one
+     * supported proof type. Returns the key attestation requirements every
+     * proof must meet as well, and whether its credentials follow the
+     * wallet unit.
      */
-    private async enforceProofTypePolicy(
+    private async resolveProofsForConfiguration(
         tenantId: string,
         credentialConfigurationId: string,
-        proofType: SupportedCredentialProofType,
-    ): Promise<KeyAttestationRequirements | undefined> {
-        const { proofTypes, keyAttestationsRequired } =
-            await this.credentialsService.getProofRequirementsForCredentialConfig(
-                tenantId,
-                credentialConfigurationId,
-            );
+        proofs: unknown,
+    ): Promise<{
+        parsedProofs?: ResolvedCredentialProofs;
+        keyAttestationsRequired?: KeyAttestationRequirements;
+        revokeWithWalletUnit: boolean;
+    }> {
+        let requirements: Awaited<
+            ReturnType<
+                CredentialsService["getProofRequirementsForCredentialConfig"]
+            >
+        >;
+        try {
+            requirements =
+                await this.credentialsService.getProofRequirementsForCredentialConfig(
+                    tenantId,
+                    credentialConfigurationId,
+                );
+        } catch (error) {
+            this.mapToCredentialRequestException(error);
+        }
 
-        if (!proofTypes.includes(proofType as CredentialProofType)) {
+        let parsedProofs: ResolvedCredentialProofs | undefined;
+        try {
+            parsedProofs = this.resolveCredentialProofs.execute(proofs, {
+                required: requirements.keyProofRequired,
+            });
+        } catch (error) {
+            if (error instanceof CredentialProofResolutionError) {
+                throw new CredentialRequestException(
+                    "invalid_proof",
+                    error.message,
+                );
+            }
+            throw error;
+        }
+        if (!parsedProofs) {
+            return { revokeWithWalletUnit: requirements.revokeWithWalletUnit };
+        }
+
+        const { proofType } = parsedProofs;
+        if (
+            !requirements.proofTypes.includes(proofType as CredentialProofType)
+        ) {
             throw new CredentialRequestException(
                 "invalid_proof",
                 `Proof type '${proofType}' is not supported for credential_configuration_id '${credentialConfigurationId}'`,
             );
         }
-        return keyAttestationsRequired;
+        return {
+            parsedProofs,
+            keyAttestationsRequired: requirements.keyAttestationsRequired,
+            revokeWithWalletUnit: requirements.revokeWithWalletUnit,
+        };
     }
 
     /**
@@ -486,6 +534,21 @@ export class Oid4vciService {
                     err.errorResponse.error_description,
                 );
             }
+            // The library refuses a key proof that is not a signed compact
+            // JWT, such as an unsecured one (alg none), as a malformed
+            // request; the wallet learns that the proof is the problem. When
+            // the request has other faults as well, the proof is named.
+            const malformedProofType =
+                err instanceof Oauth2ServerErrorResponseError &&
+                err.errorResponse.error === "invalid_credential_request"
+                    ? findMalformedKeyProof(requestBody)
+                    : undefined;
+            if (malformedProofType) {
+                throw new CredentialRequestException(
+                    "invalid_proof",
+                    `A key proof of type '${malformedProofType}' is not a signed compact JWT`,
+                );
+            }
             throw new CredentialRequestException(
                 "invalid_credential_request",
                 err instanceof Error
@@ -494,23 +557,8 @@ export class Oid4vciService {
             );
         }
 
-        let parsedProofs: ParsedCredentialProofs;
-        try {
-            parsedProofs = this.resolveCredentialProofs.execute(
-                parsedCredentialRequest?.proofs,
-            );
-        } catch (error) {
-            if (error instanceof CredentialProofResolutionError) {
-                throw new CredentialRequestException(
-                    "invalid_proof",
-                    error.message,
-                );
-            }
-            throw error;
-        }
-
         this.logger.debug(
-            `[${tenantId}] OID4VCI credential request parsed: proofType=${parsedProofs.proofType}, proofCount=${parsedProofs.values.length}, hasResponseEncryption=${!!requestBody.credential_response_encryption}`,
+            `[${tenantId}] OID4VCI credential request parsed: hasResponseEncryption=${!!requestBody.credential_response_encryption}`,
         );
 
         // Verify access token
@@ -548,16 +596,19 @@ export class Oid4vciService {
             throw error;
         }
 
-        let keyAttestationsRequired: KeyAttestationRequirements | undefined;
-        try {
-            keyAttestationsRequired = await this.enforceProofTypePolicy(
+        // The proofs are resolved once the configuration is known: one that
+        // needs no key proof accepts a request without `proofs`.
+        const { parsedProofs, keyAttestationsRequired, revokeWithWalletUnit } =
+            await this.resolveProofsForConfiguration(
                 tenantId,
                 credentialConfigurationId,
-                parsedProofs.proofType,
+                parsedCredentialRequest.proofs,
             );
-        } catch (error) {
-            this.mapToCredentialRequestException(error);
-        }
+        const proofType = parsedProofs?.proofType ?? "none";
+        const proofCount = parsedProofs?.values.length ?? 0;
+        this.logger.debug(
+            `[${tenantId}] OID4VCI credential request proofs: proofType=${proofType}, proofCount=${proofCount}`,
+        );
 
         const { session, claimsResult, isExternalAsToken, isChainedAsToken } =
             await this.resolveSessionAndClaims(
@@ -576,8 +627,8 @@ export class Oid4vciService {
             "session.id": session.id,
             "session.tenantId": session.tenantId,
             "oid4vci.credentialConfigurationId": credentialConfigurationId,
-            "oid4vci.proofCount": parsedProofs.values.length,
-            "oid4vci.proofType": parsedProofs.proofType,
+            "oid4vci.proofCount": proofCount,
+            "oid4vci.proofType": proofType,
             "oid4vci.isExternalAs": isExternalAsToken,
             "oid4vci.isChainedAs": isChainedAsToken,
         });
@@ -592,8 +643,8 @@ export class Oid4vciService {
 
         this.auditLogger.logFlowStart(logContext, {
             credentialConfigurationId,
-            proofCount: parsedProofs.values.length,
-            proofType: parsedProofs.proofType,
+            proofCount,
+            proofType,
             isExternalAs: isExternalAsToken,
             isChainedAs: isChainedAsToken,
         });
@@ -606,8 +657,7 @@ export class Oid4vciService {
                 return this.deferredCredentialService
                     .createDeferredTransaction({
                         parsedCredentialRequest: {
-                            proofs: parsedProofs.values,
-                            proofType: parsedProofs.proofType,
+                            proofs: parsedProofs,
                             credentialConfigurationId,
                         },
                         session,
@@ -615,27 +665,30 @@ export class Oid4vciService {
                         interval: claimsResult.interval,
                         issuanceSetId,
                         keyAttestationsRequired,
+                        revokeWithWalletUnit,
                     })
                     .catch((error: unknown) => {
                         throw toHttpError(error);
                     });
             }
 
-            // Validate and consume nonces
-            await this.nonceService.validateAndConsume(
-                parsedProofs.values,
-                parsedProofs.proofType,
-                tenantId,
-                logContext,
-                credentialConfigurationId,
-            );
+            // Validate and consume the nonces of the proofs; a request
+            // without proofs has none.
+            if (parsedProofs) {
+                await this.nonceService.validateAndConsume(
+                    parsedProofs.values,
+                    parsedProofs.proofType,
+                    tenantId,
+                    logContext,
+                    credentialConfigurationId,
+                );
+            }
 
-            // Issue credentials for each proof
+            // Issue one credential per proven key, or one bound to no key
             const walletAttestationPolicy =
                 resolveWalletAttestationPolicy(issuanceConfig);
             const credentials = await this.issueCredentialsFromProofs.execute({
-                proofs: parsedProofs.values,
-                proofType: parsedProofs.proofType,
+                proofs: parsedProofs,
                 session,
                 credentialConfigurationId,
                 claims: claimsResult?.claims,
@@ -645,11 +698,15 @@ export class Oid4vciService {
                 keyAttestationStatusCheckMode:
                     walletAttestationPolicy.walletAttestationStatusCheckMode,
                 keyAttestationsRequired,
+                revokeWithWalletUnit,
                 onIssued: (credentialSize) =>
                     this.auditLogger.logCredentialIssuance(
                         logContext,
                         credentialConfigurationId,
-                        { credentialSize, proofVerified: true },
+                        {
+                            credentialSize,
+                            proofVerified: parsedProofs !== undefined,
+                        },
                     ),
             });
 

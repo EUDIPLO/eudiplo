@@ -1,4 +1,4 @@
-import { ApiProperty } from "@nestjs/swagger";
+import { ApiHideProperty, ApiProperty } from "@nestjs/swagger";
 import { CredentialOfferObject } from "@openid4vc/openid4vci";
 import { VerificationResult } from "@sd-jwt/sd-jwt-vc";
 import { JWK } from "jose";
@@ -20,7 +20,10 @@ import {
 } from "../../platform/data-encryption/index.js";
 import { TransactionData } from "../../verifier/presentations/entities/presentation-config.entity.js";
 import { WebhookConfig } from "../../webhook/webhook.dto.js";
-import type { Notification } from "../domain/session-data.js";
+import type {
+    Notification,
+    WalletInstanceStatus,
+} from "../domain/session-data.js";
 import { SessionOutcome } from "../domain/session-outcome.js";
 import { SessionStatus } from "../domain/session-state.js";
 import { SessionOutcomeDto } from "../dto/session-outcome.dto.js";
@@ -140,6 +143,15 @@ export class Session {
      */
     @Column("varchar", { nullable: true })
     client_key_jkt?: string;
+    /**
+     * Status list entry and `x5c` of the latest wallet attestation a token
+     * endpoint accepted for the session. Credentials issued with
+     * `revokeWithWalletUnit` are recorded with it, so that they are revoked
+     * with the wallet instance. Internal: not part of the API schema.
+     */
+    @ApiHideProperty()
+    @Column("json", { nullable: true })
+    walletInstanceStatus?: WalletInstanceStatus | null;
     /**
      * SHA-256 hash of the refresh token for the session, which is used to
      * obtain a new access token. The token itself is not stored.

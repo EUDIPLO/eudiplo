@@ -428,6 +428,58 @@ describe('TrustListEditComponent loading the trust list', () => {
     expect(document.activeElement).not.toBe(page.querySelector('h2'));
   });
 
+  /** A trust list without entityConfig, as lists created before EUDIPLO stored it. */
+  const publishedEntity = {
+    TrustedEntityInformation: {
+      TEName: [{ lang: 'de', value: 'Published Issuer' }],
+      TEAddress: {
+        TEPostalAddress: [{ lang: 'de', Country: 'DE', Locality: 'Berlin' }],
+      },
+    },
+    TrustedEntityServices: [
+      {
+        ServiceInformation: {
+          ServiceTypeIdentifier: 'http://uri.etsi.org/19602/SvcType/PubEAA/Issuance',
+          ServiceDigitalIdentity: { X509Certificates: [{ val: 'SVNTVUVS' }] },
+        },
+      },
+      {
+        ServiceInformation: {
+          ServiceTypeIdentifier: 'http://uri.etsi.org/19602/SvcType/PubEAA/Revocation',
+          ServiceDigitalIdentity: { X509Certificates: [{ val: 'UkVWT0tF' }] },
+        },
+      },
+    ],
+  };
+
+  for (const [shape, data] of [
+    // Since 9.0, and for older lists once renewed
+    ['under LoTE', { LoTE: { TrustedEntitiesList: [publishedEntity] } }],
+    // Lists not rewritten since an earlier release
+    ['without the LoTE wrapper', { TrustedEntitiesList: [publishedEntity] }],
+  ] as const) {
+    it(`opens a list without stored entities with its published entities (${shape})`, async () => {
+      answers.trustList = { status: 200, body: { ...trustList, entityConfig: null, data } };
+      const { harness, component, page } = await render();
+      await vi.waitFor(() => {
+        harness.detectChanges();
+        expect(page.querySelector('form')).not.toBeNull();
+      });
+
+      expect(component.entitiesArray.length).toBe(1);
+      expect(component.entitiesArray.at(0).getRawValue()).toMatchObject({
+        type: 'external',
+        providerType: 'attestation-provider',
+        issuerCertPem: '-----BEGIN CERTIFICATE-----\nSVNTVUVS\n-----END CERTIFICATE-----',
+        revocationCertPem: '-----BEGIN CERTIFICATE-----\nUkVWT0tF\n-----END CERTIFICATE-----',
+        infoName: 'Published Issuer',
+        infoLang: 'de',
+        infoCountry: 'DE',
+        infoLocality: 'Berlin',
+      });
+    });
+  }
+
   // A defence: the page loads the trust list again only after a failed load, which leaves no entities.
   it('replaces the entities of an earlier load instead of adding to them', async () => {
     const { component } = await render();

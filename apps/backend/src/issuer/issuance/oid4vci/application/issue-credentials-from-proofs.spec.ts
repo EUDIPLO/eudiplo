@@ -21,8 +21,7 @@ describe("IssueCredentialsFromProofs", () => {
 
         await expect(
             useCase.execute({
-                proofs: ["proof-1", "proof-2"],
-                proofType: "jwt",
+                proofs: { values: ["proof-1", "proof-2"], proofType: "jwt" },
                 session,
                 credentialConfigurationId: "config-1",
                 claims: { name: "Ada" },
@@ -64,8 +63,7 @@ describe("IssueCredentialsFromProofs", () => {
 
         await expect(
             useCase.execute({
-                proofs: ["attestation"],
-                proofType: "attestation",
+                proofs: { values: ["attestation"], proofType: "attestation" },
                 session,
                 credentialConfigurationId: "config-1",
                 issuanceSetId: "set-1",
@@ -94,8 +92,7 @@ describe("IssueCredentialsFromProofs", () => {
 
         await expect(
             useCase.execute({
-                proofs: ["proof"],
-                proofType: "jwt",
+                proofs: { values: ["proof"], proofType: "jwt" },
                 session,
                 credentialConfigurationId: "config-1",
                 issuanceSetId: "set-1",
@@ -125,8 +122,10 @@ describe("IssueCredentialsFromProofs", () => {
                 { execute: issue } as any,
             );
             const result = useCase.execute({
-                proofs: verified.map((_, index) => `proof-${index}`),
-                proofType: "jwt",
+                proofs: {
+                    values: verified.map((_, index) => `proof-${index}`),
+                    proofType: "jwt",
+                },
                 session,
                 credentialConfigurationId: "config-1",
                 issuanceSetId: "set-1",
@@ -225,8 +224,7 @@ describe("IssueCredentialsFromProofs", () => {
         );
 
         await useCase.execute({
-            proofs: ["proof-1", "proof-2"],
-            proofType: "jwt",
+            proofs: { values: ["proof-1", "proof-2"], proofType: "jwt" },
             session,
             credentialConfigurationId: "config-1",
             issuanceSetId: "set-1",
@@ -243,5 +241,124 @@ describe("IssueCredentialsFromProofs", () => {
         expect(issue.mock.calls.map(([command]) => command.walletUnit)).toEqual(
             [walletUnit, undefined],
         );
+    });
+
+    it("issues one credential bound to no key, verifying nothing, without proofs", async () => {
+        const prepare = vi.fn();
+        const issue = vi.fn().mockResolvedValue(["unbound"]);
+        const onIssued = vi.fn();
+        const useCase = new IssueCredentialsFromProofs(
+            { prepare } as unknown as CredentialProofVerifier,
+            { execute: issue } as any,
+        );
+
+        await expect(
+            useCase.execute({
+                session,
+                credentialConfigurationId: "config-1",
+                claims: { name: "Ada" },
+                issuanceSetId: "set-1",
+                batchSize: 5,
+                trustLists: [],
+                keyAttestationStatusCheckMode: RevocationCheckMode.Strict,
+                onIssued,
+            }),
+        ).resolves.toEqual([{ credential: "unbound" }]);
+
+        expect(prepare).not.toHaveBeenCalled();
+        expect(issue).toHaveBeenCalledOnce();
+        expect(issue).toHaveBeenCalledWith({
+            credentialConfigurationId: "config-1",
+            holderKeys: undefined,
+            session,
+            claims: { name: "Ada" },
+            issuanceSetId: "set-1",
+            walletUnit: undefined,
+        });
+        expect(onIssued).toHaveBeenCalledOnce();
+    });
+
+    describe("status maintenance period", () => {
+        const now = () => Math.floor(Date.now() / 1000);
+        function run(options: {
+            revokeWithWalletUnit: boolean;
+            keyMaintainedUntil?: number;
+            walletMaintainedUntil?: number;
+        }) {
+            const walletUnit = {
+                statusUri: "https://wp.example/wua-status",
+                statusIdx: 7,
+                certificates: ["leaf"],
+                maintainedUntil: options.keyMaintainedUntil,
+            };
+            const verify = vi.fn().mockResolvedValue({
+                holderKeys: [{ kid: "one" }],
+                keyAttestation: { attestedKeys: [{ kid: "one" }], walletUnit },
+            });
+            const issue = vi.fn().mockResolvedValue(["credential"]);
+            const useCase = new IssueCredentialsFromProofs(
+                {
+                    prepare: vi.fn().mockResolvedValue({ verify }),
+                } as unknown as CredentialProofVerifier,
+                { execute: issue } as any,
+            );
+            const result = useCase.execute({
+                proofs: { values: ["proof-1", "proof-2"], proofType: "jwt" },
+                session: {
+                    ...session,
+                    walletInstanceStatus: {
+                        statusUri: "https://wp.example/wia",
+                        statusIdx: 1,
+                        certificates: ["leaf"],
+                        maintainedUntil: options.walletMaintainedUntil,
+                    },
+                } as any,
+                credentialConfigurationId: "config-1",
+                issuanceSetId: "set-1",
+                trustLists: [],
+                keyAttestationStatusCheckMode: RevocationCheckMode.Strict,
+                revokeWithWalletUnit: options.revokeWithWalletUnit,
+                onIssued: vi.fn(),
+            });
+            return { result, issue };
+        }
+
+        it.each([
+            ["key", { keyMaintainedUntil: now() - 1 }],
+            ["wallet", { walletMaintainedUntil: now() }],
+        ] as const)(
+            "refuses the whole batch before issuing when the %s attestation's period has ended",
+            async (attestation, periods) => {
+                const { result, issue } = run({
+                    revokeWithWalletUnit: true,
+                    ...periods,
+                });
+
+                await expect(result).rejects.toMatchObject({
+                    name: "CredentialLifetimeExhausted",
+                    attestation,
+                });
+                expect(issue).not.toHaveBeenCalled();
+            },
+        );
+
+        it("issues when the period has not ended", async () => {
+            const { result } = run({
+                revokeWithWalletUnit: true,
+                keyMaintainedUntil: now() + 86_400,
+                walletMaintainedUntil: now() + 3600,
+            });
+
+            await expect(result).resolves.toHaveLength(2);
+        });
+
+        it("ignores the period for a configuration that does not follow the wallet unit", async () => {
+            const { result } = run({
+                revokeWithWalletUnit: false,
+                keyMaintainedUntil: now() - 1,
+            });
+
+            await expect(result).resolves.toHaveLength(2);
+        });
     });
 });

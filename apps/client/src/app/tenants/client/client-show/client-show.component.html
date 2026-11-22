@@ -12,7 +12,7 @@
     <mat-card appearance="outlined" class="hero">
       <span class="hero-avatar" aria-hidden="true"><mat-icon>key</mat-icon></span>
       <div class="hero-copy">
-        <h1>{{ client.clientId }}</h1>
+        <h1 #pageHeading tabindex="-1">{{ client.clientId }}</h1>
         <div class="hero-meta">
           <span class="badge">{{ roleCount }} {{ roleCount === 1 ? 'role' : 'roles' }}</span>
           <button matButton type="button" class="copy-id" (click)="copyId()">
@@ -115,6 +115,10 @@
         </mat-card-content>
       </mat-card>
     </div>
+  } @else if (loadError) {
+    <app-load-error [message]="loadError" (retry)="load()">
+      <a matButton routerLink="../">Back to the list</a>
+    </app-load-error>
   } @else {
     <div class="loading-state">
       <mat-spinner diameter="40" aria-label="Loading client"></mat-spinner>
