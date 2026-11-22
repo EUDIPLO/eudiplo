@@ -8,6 +8,11 @@ import { decodeJwt } from "jose";
 import { Span, TraceService } from "nestjs-otel";
 import { v4 } from "uuid";
 import type { SessionData as Session } from "../../../session/domain/session-data.js";
+import {
+    assertMaintenancePeriodOpen,
+    CredentialLifetimeExhausted,
+    maintenancePeriodEnd,
+} from "../../configuration/credentials/domain/maintenance-period.js";
 import { IssuanceService } from "../../configuration/issuance/issuance.service.js";
 import { CorrelateCredentialTokenSession } from "./application/correlate-credential-token-session.js";
 import {
@@ -64,6 +69,8 @@ export interface CreateDeferredTransactionParams {
     issuanceSetId?: string;
     /** Key attestation requirements of the requested credential configuration */
     keyAttestationsRequired?: KeyAttestationRequirements;
+    /** Whether the credential follows its wallet unit and its maintenance period */
+    revokeWithWalletUnit?: boolean;
 }
 
 /**
@@ -108,6 +115,7 @@ export class DeferredCredentialService {
             interval = 5,
             issuanceSetId,
             keyAttestationsRequired,
+            revokeWithWalletUnit,
         } = params;
 
         this.traceService.getSpan()?.setAttributes({
@@ -193,7 +201,21 @@ export class DeferredCredentialService {
         }
         try {
             assertKeyAttestationRequirements(keyAttestationsRequired, verified);
+            // Refused now rather than when the transaction is completed: a
+            // maintenance period that has ended leaves no validity.
+            const bound = maintenancePeriodEnd(
+                revokeWithWalletUnit,
+                verified.keyAttestation?.walletUnit,
+                session.walletInstanceStatus,
+            );
+            if (bound) assertMaintenancePeriodOpen(bound);
         } catch (error) {
+            if (error instanceof CredentialLifetimeExhausted) {
+                throw new CredentialRequestException(
+                    "credential_request_denied",
+                    error.message,
+                );
+            }
             if (error instanceof InvalidCredentialProof) {
                 throw new CredentialRequestException(
                     "invalid_proof",

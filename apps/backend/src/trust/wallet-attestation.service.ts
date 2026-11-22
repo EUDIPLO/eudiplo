@@ -8,13 +8,16 @@ import {
 import { Openid4vciIssuer } from "@openid4vc/openid4vci";
 import type { StatusListReference } from "@owf/token-status-list";
 import * as x509 from "@peculiar/x509";
-import { decodeProtectedHeader, JWK } from "jose";
+import { decodeJwt, decodeProtectedHeader, JWK } from "jose";
 import { Span } from "nestjs-otel";
 import { CryptoService } from "../crypto/crypto.service.js";
 import { CryptoImplementationService } from "../crypto/key/crypto-implementation/crypto-implementation.service.js";
 import { TrustListRef } from "../verifier/presentations/entities/presentation-config.entity.js";
 import { isAttestationChainRejection } from "./domain/attestation-certificate-validity.js";
-import type { AttestationKind } from "./domain/attestation-status-claims.js";
+import {
+    type AttestationKind,
+    attestationMaintenanceEnd,
+} from "./domain/attestation-status-claims.js";
 import { AttestationStatusRejected } from "./domain/attestation-status-rejected.js";
 import {
     discardedTrustListsNote,
@@ -53,20 +56,36 @@ export interface ClientAttestation {
     clientAttestationPopJwt?: string;
 }
 
+/** The status list entry of an accepted wallet or key attestation. */
+export interface AttestationStatusReference extends StatusListReference {
+    /**
+     * End of the provider's status maintenance period, epoch seconds
+     * (`client_status.exp` or `key_storage_status.exp`, TS3 1.5), when the
+     * attestation has one.
+     */
+    maintainedUntil?: number;
+}
+
 /**
  * The status list entry of an accepted wallet attestation, to follow the
  * wallet instance after issuance (TS3 1.5 section 2.4.3).
  */
-export interface WalletAttestationStatusReference {
-    /** `status_list.uri` the attestation names. */
-    uri: string;
-    /** `status_list.idx` the attestation names. */
-    idx: number;
+export interface WalletAttestationStatusReference
+    extends AttestationStatusReference {
     /**
      * `x5c` of the attestation, leaf first, to match its provider again and
      * check who signs the status list.
      */
     certificates: string[];
+}
+
+function withMaintenanceEnd(
+    entry: StatusListReference,
+    maintainedUntil: number | undefined,
+): AttestationStatusReference {
+    return maintainedUntil === undefined
+        ? entry
+        : { ...entry, maintainedUntil };
 }
 
 /** Answer when the wallet-provider trust lists cannot be loaded. */
@@ -343,7 +362,7 @@ export class WalletAttestationService {
         matchedEntity: MatchedTrustedEntity,
         trustStore: BuiltTrustStore,
         statusCheckMode: RevocationCheckMode,
-    ): Promise<StatusListReference | undefined> {
+    ): Promise<AttestationStatusReference | undefined> {
         try {
             return await this.validateAttestationStatus(
                 tenantId,
@@ -474,9 +493,12 @@ export class WalletAttestationService {
      * @param kind Whether it is a wallet or a key attestation; decides the
      * TS3 claim that is read and how messages name the attestation
      * @returns The `status_list` reference to follow for the attestation:
-     * that of its TS3 claim if it has one, else that of its `status` claim
+     * that of its TS3 claim if it has one, else that of its `status` claim,
+     * with the end of its status maintenance period (`client_status.exp` or
+     * `key_storage_status.exp`) when the attestation has one
      * @throws UnauthorizedException if the attestation has been revoked or
-     * suspended, or if the status check failed and the mode does not tolerate it
+     * suspended, or if the status check failed and the mode does not
+     * tolerate it, including a TS3 `exp` that is not a NumericDate
      */
     private async validateAttestationStatus(
         tenantId: string,
@@ -485,7 +507,7 @@ export class WalletAttestationService {
         trustStore: BuiltTrustStore | null,
         statusCheckMode: RevocationCheckMode,
         kind: AttestationKind = "wallet",
-    ): Promise<StatusListReference | undefined> {
+    ): Promise<AttestationStatusReference | undefined> {
         const label: AttestationLabel =
             kind === "key" ? "Key attestation" : "Wallet attestation";
         const policy = revocationModeToPolicy(statusCheckMode);
@@ -494,18 +516,31 @@ export class WalletAttestationService {
                 `${label} status check disabled - skipping status check`,
             );
             // Malformed claims are accepted when the check is disabled.
+            let entry: StatusListReference | undefined;
             try {
-                return this.statusListVerifierService.getAttestationStatusEntries(
-                    attestationJwt,
-                    kind,
-                    { skipMalformed: true },
-                )[0];
+                entry =
+                    this.statusListVerifierService.getAttestationStatusEntries(
+                        attestationJwt,
+                        kind,
+                        { skipMalformed: true },
+                    )[0];
             } catch {
                 return undefined;
             }
+            let maintainedUntil: number | undefined;
+            try {
+                maintainedUntil = attestationMaintenanceEnd(
+                    decodeJwt(attestationJwt),
+                    kind,
+                );
+            } catch {
+                maintainedUntil = undefined;
+            }
+            return entry && withMaintenanceEnd(entry, maintainedUntil);
         }
 
         let statusEntries: StatusListReference[];
+        let maintainedUntil: number | undefined;
         try {
             // A malformed status claim throws and rejects in both strict and
             // best_effort.
@@ -514,6 +549,10 @@ export class WalletAttestationService {
                     attestationJwt,
                     kind,
                 );
+            maintainedUntil = attestationMaintenanceEnd(
+                decodeJwt(attestationJwt),
+                kind,
+            );
         } catch (err) {
             this.handleStatusCheckError(err, policy.failClosed, label);
             return undefined;
@@ -539,7 +578,7 @@ export class WalletAttestationService {
                 label,
             );
         }
-        return statusEntries[0];
+        return withMaintenanceEnd(statusEntries[0], maintainedUntil);
     }
 
     /**

@@ -89,6 +89,9 @@ function toWalletInstanceStatus(
         statusUri: reference.uri,
         statusIdx: reference.idx,
         certificates: reference.certificates,
+        ...(reference.maintainedUntil !== undefined && {
+            maintainedUntil: reference.maintainedUntil,
+        }),
     };
 }
 

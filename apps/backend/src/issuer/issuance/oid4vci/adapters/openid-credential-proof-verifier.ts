@@ -167,6 +167,9 @@ export class OpenIdCredentialProofVerifier implements CredentialProofVerifier {
             statusUri: entry.uri,
             statusIdx: entry.idx,
             certificates: provider.certificates,
+            ...(entry.maintainedUntil !== undefined && {
+                maintainedUntil: entry.maintainedUntil,
+            }),
         };
     }
 }

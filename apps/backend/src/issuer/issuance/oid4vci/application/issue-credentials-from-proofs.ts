@@ -4,6 +4,10 @@ import type {
     RevocationCheckMode,
     TrustListRef,
 } from "../../../../trust/types.js";
+import {
+    assertMaintenancePeriodOpen,
+    maintenancePeriodEnd,
+} from "../../../configuration/credentials/domain/maintenance-period.js";
 import type { WalletUnitReference } from "../../../status-list/domain/wallet-unit-reference.js";
 import { InvalidCredentialProof } from "../domain/credential-proof-errors.js";
 import {
@@ -34,6 +38,11 @@ export class IssueCredentialsFromProofs {
         keyAttestationStatusCheckMode: RevocationCheckMode;
         /** Key attestation requirements of the credential configuration. */
         keyAttestationsRequired?: KeyAttestationRequirements;
+        /**
+         * Whether the credentials follow their wallet unit, so that the
+         * status maintenance period of its attestations bounds them.
+         */
+        revokeWithWalletUnit?: boolean;
         onIssued: (credentialSize: number) => void;
     }): Promise<{ credential: string }[]> {
         const verifier = await this.verifier.prepare(
@@ -64,6 +73,14 @@ export class IssueCredentialsFromProofs {
                 command.keyAttestationsRequired,
                 verified,
             );
+            // Refused before anything is issued: a maintenance period that
+            // has ended leaves no credential of the batch any validity.
+            const bound = maintenancePeriodEnd(
+                command.revokeWithWalletUnit,
+                verified.keyAttestation?.walletUnit,
+                command.session.walletInstanceStatus,
+            );
+            if (bound) assertMaintenancePeriodOpen(bound);
             verifiedProofs.push({
                 holderKeys,
                 walletUnit: verified.keyAttestation?.walletUnit,

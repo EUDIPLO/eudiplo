@@ -312,6 +312,8 @@ export class CredentialsService {
     ): Promise<{
         proofTypes: CredentialProofType[];
         keyAttestationsRequired?: CredentialConfig["config"]["keyAttestationsRequired"];
+        /** Whether credentials follow the wallet unit and its maintenance period. */
+        revokeWithWalletUnit: boolean;
     }> {
         const config =
             await this.credentialConfigurationRepository.findForTenant(
@@ -329,6 +331,7 @@ export class CredentialsService {
             proofTypes: this.resolveConfiguredProofTypes(config.config),
             keyAttestationsRequired:
                 config.config.keyAttestationsRequired ?? undefined,
+            revokeWithWalletUnit: config.revokeWithWalletUnit === true,
         };
     }
 

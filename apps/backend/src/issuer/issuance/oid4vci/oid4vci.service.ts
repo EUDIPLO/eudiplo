@@ -34,6 +34,7 @@ import { SessionLoggerService } from "../../../session/logging/session-logger.se
 import { CredentialsService } from "../../configuration/credentials/credentials.service.js";
 import { CredentialClaimsResolutionError } from "../../configuration/credentials/domain/credential-claims.js";
 import { InvalidCredentialClaims } from "../../configuration/credentials/domain/credential-claims-validation.js";
+import { CredentialLifetimeExhausted } from "../../configuration/credentials/domain/maintenance-period.js";
 import { CredentialProofType } from "../../configuration/credentials/entities/credential.entity.js";
 import { InvalidClaimsException } from "../../configuration/credentials/exceptions/invalid-claims.exception.js";
 import { IssuanceService } from "../../configuration/issuance/issuance.service.js";
@@ -235,6 +236,16 @@ export class Oid4vciService {
                 error.message,
             );
         }
+        // The maintenance period of the attestations the credential follows
+        // has ended. The attestations are valid; the issuer does not accept
+        // them for this credential (OID4VCI 1.0 Section 8.3.1.2), and the
+        // same proof would fail again.
+        if (error instanceof CredentialLifetimeExhausted) {
+            throw new CredentialRequestException(
+                "credential_request_denied",
+                error.message,
+            );
+        }
 
         if (
             error instanceof ConflictException &&
@@ -269,14 +280,18 @@ export class Oid4vciService {
 
     /**
      * Reject proof types the credential configuration does not support and
-     * return its key attestation requirements, which every proof must meet.
+     * return its key attestation requirements, which every proof must meet,
+     * and whether its credentials follow the wallet unit.
      */
     private async enforceProofTypePolicy(
         tenantId: string,
         credentialConfigurationId: string,
         proofType: SupportedCredentialProofType,
-    ): Promise<KeyAttestationRequirements | undefined> {
-        const { proofTypes, keyAttestationsRequired } =
+    ): Promise<{
+        keyAttestationsRequired?: KeyAttestationRequirements;
+        revokeWithWalletUnit: boolean;
+    }> {
+        const { proofTypes, keyAttestationsRequired, revokeWithWalletUnit } =
             await this.credentialsService.getProofRequirementsForCredentialConfig(
                 tenantId,
                 credentialConfigurationId,
@@ -288,7 +303,7 @@ export class Oid4vciService {
                 `Proof type '${proofType}' is not supported for credential_configuration_id '${credentialConfigurationId}'`,
             );
         }
-        return keyAttestationsRequired;
+        return { keyAttestationsRequired, revokeWithWalletUnit };
     }
 
     /**
@@ -549,12 +564,14 @@ export class Oid4vciService {
         }
 
         let keyAttestationsRequired: KeyAttestationRequirements | undefined;
+        let revokeWithWalletUnit = false;
         try {
-            keyAttestationsRequired = await this.enforceProofTypePolicy(
-                tenantId,
-                credentialConfigurationId,
-                parsedProofs.proofType,
-            );
+            ({ keyAttestationsRequired, revokeWithWalletUnit } =
+                await this.enforceProofTypePolicy(
+                    tenantId,
+                    credentialConfigurationId,
+                    parsedProofs.proofType,
+                ));
         } catch (error) {
             this.mapToCredentialRequestException(error);
         }
@@ -615,6 +632,7 @@ export class Oid4vciService {
                         interval: claimsResult.interval,
                         issuanceSetId,
                         keyAttestationsRequired,
+                        revokeWithWalletUnit,
                     })
                     .catch((error: unknown) => {
                         throw toHttpError(error);
@@ -645,6 +663,7 @@ export class Oid4vciService {
                 keyAttestationStatusCheckMode:
                     walletAttestationPolicy.walletAttestationStatusCheckMode,
                 keyAttestationsRequired,
+                revokeWithWalletUnit,
                 onIssued: (credentialSize) =>
                     this.auditLogger.logCredentialIssuance(
                         logContext,

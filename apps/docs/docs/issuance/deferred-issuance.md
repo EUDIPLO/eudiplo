@@ -65,7 +65,7 @@ curl -X POST "$EUDIPLO_URL/api/issuer/deferred/$TRANSACTION_ID/fail" \
   -d '{ "error": "Identity verification failed" }'
 ```
 
-`error` is optional; the wallet's next poll receives `invalid_transaction_id` with it as description. `complete` answers `404` for an unknown transaction or one that is no longer pending, `fail` for an unknown transaction.
+`error` is optional; the wallet's next poll receives `invalid_transaction_id` with it as description. `complete` answers `404` for an unknown transaction or one that is no longer pending, `fail` for an unknown transaction. With `revokeWithWalletUnit`, `complete` marks the transaction failed instead of issuing when the status maintenance period of its wallet or key attestation has ended in the meantime, and returns it with status `failed` ([Expiry within the status maintenance period](../trust/attestation.md#expiry-within-the-status-maintenance-period)).
 
 :::caution[Transaction ID]
 EUDIPLO currently does not send the `transaction_id` to your backend: the attribute provider request carries only the session ID, and no management endpoint lists transactions. Only the wallet receives the ID.

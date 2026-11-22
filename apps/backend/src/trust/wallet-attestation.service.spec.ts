@@ -1016,7 +1016,7 @@ describe("WalletAttestationService status list signer", () => {
                     )
                         .validateAttestationStatus(
                             "tenant",
-                            "attestation",
+                            unsignedJwt({}),
                             matchedEntity,
                             trustStore,
                             mode,
@@ -1040,7 +1040,7 @@ describe("WalletAttestationService status list signer", () => {
                     const error = await service
                         .checkKeyAttestationStatus(
                             "tenant",
-                            "key-attestation",
+                            unsignedJwt({}),
                             matchedEntity,
                             trustStore as never,
                             mode,
@@ -1434,7 +1434,7 @@ describe("WalletAttestationService status check mode", () => {
 
             await expect(
                 check(service, RevocationCheckMode.Strict, ts3Payload),
-            ).resolves.toEqual(ts3Entry);
+            ).resolves.toEqual({ ...ts3Entry, maintainedUntil: 2_000_000_000 });
             expect(
                 statusListVerifierService.getStatusListJwt,
             ).toHaveBeenCalledWith(ts3Entry.uri, "tenant-a");
@@ -1469,7 +1469,7 @@ describe("WalletAttestationService status check mode", () => {
 
             await expect(
                 check(service, RevocationCheckMode.BestEffort, ts3Payload),
-            ).resolves.toEqual(ts3Entry);
+            ).resolves.toEqual({ ...ts3Entry, maintainedUntil: 2_000_000_000 });
         });
 
         it.each([
@@ -1494,6 +1494,35 @@ describe("WalletAttestationService status check mode", () => {
             },
         );
 
+        it.each([RevocationCheckMode.Strict, RevocationCheckMode.BestEffort])(
+            "%s rejects a client_status.exp that is not a NumericDate",
+            async (mode) => {
+                const { service } = createService({});
+
+                await expect(
+                    check(service, mode, {
+                        client_status: {
+                            status: { status_list: ts3Entry },
+                            exp: "soon",
+                        },
+                    }),
+                ).rejects.toThrow(/^Wallet attestation status check failed$/);
+            },
+        );
+
+        it("disabled leaves out a client_status.exp that is not a NumericDate", async () => {
+            const { service } = createService({});
+
+            await expect(
+                check(service, RevocationCheckMode.Disabled, {
+                    client_status: {
+                        status: { status_list: ts3Entry },
+                        exp: "soon",
+                    },
+                }),
+            ).resolves.toEqual(ts3Entry);
+        });
+
         it("disabled returns the client_status reference without fetching", async () => {
             const { service, statusListVerifierService } = createService({});
 
@@ -1502,7 +1531,7 @@ describe("WalletAttestationService status check mode", () => {
                     ...ts3Payload,
                     status: "malformed",
                 }),
-            ).resolves.toEqual(ts3Entry);
+            ).resolves.toEqual({ ...ts3Entry, maintainedUntil: 2_000_000_000 });
             expect(
                 statusListVerifierService.getStatusListJwt,
             ).not.toHaveBeenCalled();
@@ -1521,7 +1550,10 @@ describe("WalletAttestationService status check mode", () => {
 
                 await expect(
                     check(service, RevocationCheckMode.Strict, both),
-                ).resolves.toEqual(ts3Entry);
+                ).resolves.toEqual({
+                    ...ts3Entry,
+                    maintainedUntil: 2_000_000_000,
+                });
                 expect(
                     statusListVerifierService.getStatusListJwt.mock.calls,
                 ).toEqual([

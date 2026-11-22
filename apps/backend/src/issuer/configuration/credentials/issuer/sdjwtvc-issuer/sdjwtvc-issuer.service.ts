@@ -15,6 +15,10 @@ import {
 } from "../../credential-settings.js";
 import type { CredentialConfiguration } from "../../domain/credential-configuration.js";
 import { hostedVctUrl } from "../../domain/hosted-vct.js";
+import {
+    boundCredentialExpiry,
+    maintenancePeriodEnd,
+} from "../../domain/maintenance-period.js";
 import { SdJwtTrustFormat } from "../../entities/credential.entity.js";
 import { buildDisclosureFrame } from "../../utils/index.js";
 import { roundedCredentialValidity } from "../credential-time.util.js";
@@ -86,8 +90,17 @@ export class SdjwtvcIssuerService {
         const { issuedAt: iat, expiresAt } = roundedCredentialValidity(
             credentialConfiguration.lifeTime ?? 0,
         );
-        // Set expiration time if lifeTime is defined
-        const exp = credentialConfiguration.lifeTime ? expiresAt : undefined;
+        // Set expiration time if lifeTime is defined, ending before the
+        // status maintenance period of the attestations the credential
+        // follows (which also gives one to a credential without lifeTime).
+        const exp = boundCredentialExpiry(
+            credentialConfiguration.lifeTime ? expiresAt : undefined,
+            maintenancePeriodEnd(
+                credentialConfiguration.revokeWithWalletUnit,
+                walletUnit,
+                session.walletInstanceStatus,
+            ),
+        );
 
         // If status management is enabled, create a status entry
         let status: { status: StatusClaim } | undefined;

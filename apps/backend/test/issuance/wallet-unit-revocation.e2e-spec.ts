@@ -212,6 +212,10 @@ describe("Issuance - revocation with the wallet unit", () => {
              * {@link WALLET_INSTANCE_IDX} of the provider's list.
              */
             walletAttestation?: boolean;
+            /** Seconds from now until `client_status.exp` (default 31 days). */
+            walletMaintainedFor?: number;
+            /** Seconds from now until `key_storage_status.exp` (default 31 days). */
+            keyMaintainedFor?: number;
         } = {},
     ): Promise<{ sessionId: string; credential: string }> {
         const offer = await request(app.getHttpServer())
@@ -261,7 +265,7 @@ describe("Issuance - revocation with the wallet unit", () => {
                             idx: WALLET_INSTANCE_IDX,
                         },
                     },
-                    exp: now + 31 * 86400,
+                    exp: now + (options.walletMaintainedFor ?? 31 * 86400),
                 },
             })
                 .setProtectedHeader({
@@ -323,7 +327,9 @@ describe("Issuance - revocation with the wallet unit", () => {
                 ? {
                       key_storage_status: {
                           status: walletUnitStatus,
-                          exp: Math.floor(Date.now() / 1000) + 31 * 86400,
+                          exp:
+                              Math.floor(Date.now() / 1000) +
+                              (options.keyMaintainedFor ?? 31 * 86400),
                       },
                   }
                 : { status: walletUnitStatus }),
@@ -678,6 +684,111 @@ describe("Issuance - revocation with the wallet unit", () => {
                 },
             });
         });
+    });
+
+    describe("bounded by the status maintenance period (TS3 1.5 section 2.4.3)", () => {
+        const expOf = (credential: string) =>
+            decodeJwt(credential.split("~")[0]).exp as number;
+
+        test("ends the credential before client_status.exp and records that expiry", async () => {
+            await useTrustedProvider();
+            serveStatusList(await walletUnitStatusList(provider, false));
+            const before = Math.floor(Date.now() / 1000);
+            const { sessionId, credential } = await issue(
+                "attestation",
+                configId,
+                {
+                    ts3: true,
+                    walletAttestation: true,
+                    walletMaintainedFor: 86400,
+                },
+            );
+            const after = Math.floor(Date.now() / 1000);
+
+            // The configuration gives 7 days; the wallet instance's status
+            // is maintained for one.
+            const exp = expOf(credential);
+            expect(exp).toBeGreaterThanOrEqual(before + 86400 - 1);
+            expect(exp).toBeLessThanOrEqual(after + 86400 - 1);
+            const records = await app
+                .get(DataSource)
+                .getRepository(CredentialWalletUnit)
+                .findBy({ sessionId });
+            expect(
+                records.map((record) => record.credentialExpiresAt?.getTime()),
+            ).toEqual([exp * 1000, exp * 1000]);
+        });
+
+        test("ends the credential before key_storage_status.exp", async () => {
+            await useTrustedProvider();
+            serveStatusList(await walletUnitStatusList(provider, false));
+            const before = Math.floor(Date.now() / 1000);
+            const { credential } = await issue("jwt", configId, {
+                ts3: true,
+                keyMaintainedFor: 2 * 86400,
+            });
+
+            const after = Math.floor(Date.now() / 1000);
+            expect(expOf(credential)).toBeLessThanOrEqual(
+                after + 2 * 86400 - 1,
+            );
+            expect(expOf(credential)).toBeGreaterThanOrEqual(
+                before + 2 * 86400 - 1,
+            );
+        });
+
+        test("does not bound a configuration that does not follow the wallet unit", async () => {
+            await useTrustedProvider();
+            serveStatusList(await walletUnitStatusList(provider, false));
+            const before = Math.floor(Date.now() / 1000);
+            const { credential } = await issue("attestation", plainConfigId, {
+                ts3: true,
+                walletAttestation: true,
+                walletMaintainedFor: 86400,
+            });
+
+            expect(expOf(credential)).toBeGreaterThanOrEqual(
+                before + 7 * 86400,
+            );
+        });
+
+        test.each([
+            [
+                "key_storage_status.exp",
+                { keyMaintainedFor: -60 },
+                "credential_request_denied",
+            ],
+            [
+                "client_status.exp",
+                { walletAttestation: true, walletMaintainedFor: -60 },
+                "credential_request_denied",
+            ],
+        ] as const)(
+            "refuses the credential when %s has passed",
+            async (claim, periods, error) => {
+                await useTrustedProvider();
+                serveStatusList(await walletUnitStatusList(provider, false));
+
+                const response = await issue("attestation", configId, {
+                    ts3: true,
+                    ...periods,
+                }).then(
+                    () => {
+                        throw new Error(
+                            "Expected the credential request to fail",
+                        );
+                    },
+                    (e: Openid4vciRetrieveCredentialsError) =>
+                        e.response.credentialErrorResponseResult?.data,
+                );
+                expect(response).toEqual({
+                    error,
+                    error_description: expect.stringContaining(
+                        claim.split(".")[0],
+                    ),
+                });
+            },
+        );
     });
 
     test("stops following the wallet unit once the configuration turns it off", async () => {
