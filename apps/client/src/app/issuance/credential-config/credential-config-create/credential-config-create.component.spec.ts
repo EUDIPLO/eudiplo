@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
-import { EMPTY } from 'rxjs';
+import { EMPTY, of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ClaimFieldDefinitionDto, client } from '@eudiplo/sdk-core';
 import { CredentialConfigCreateComponent } from './credential-config-create.component';
@@ -168,21 +168,23 @@ describe('CredentialConfigCreateComponent', () => {
     expect(page.form.pristine).toBe(true);
   });
 
-  it('goes back to the list after creating when no form opened it', async () => {
+  it("opens the new config's page after creating when no form opened it", async () => {
     const { page, router } = openedWith({});
 
     page.submitCredential();
 
     await vi.waitFor(() => expect(router.navigate).toHaveBeenCalled());
+    expect(router.navigate.mock.lastCall?.[0]).toEqual(['../', 'member']);
     expect(page.createdForForm).toBeNull();
   });
 
-  it('leaves edit mode as before even when a form opened it', async () => {
+  it("returns to the config's page after editing, even when a form opened it", async () => {
     const { page, router } = openedWith({ from: 'form' }, { id: 'member' });
 
     page.submitCredential();
 
     await vi.waitFor(() => expect(router.navigate).toHaveBeenCalled());
+    expect(router.navigate.mock.lastCall?.[0]).toEqual(['../']);
     expect(page.createdForForm).toBeNull();
   });
 
@@ -716,6 +718,64 @@ describe('CredentialConfigCreateComponent', () => {
     expect((component as any).buildFieldsPayload([field.value])[0]).not.toHaveProperty(
       'defaultValue'
     );
+  });
+
+  it('asks before a template replaces settings the user changed, and keeps the ID', () => {
+    const pid = configs.find((template) => template.name.startsWith('PID'))!;
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    component.form.get('id')!.setValue('my-pid');
+    component.form.get('id')!.markAsDirty();
+
+    // Only the ID was entered, which the template keeps: no question.
+    component.loadPredefinedConfig(pid);
+    expect(confirm).not.toHaveBeenCalled();
+    expect(component.form.get('id')!.value).toBe('my-pid');
+    expect(component.fields.length).toBeGreaterThan(0);
+
+    component.form.get('lifeTime')!.setValue(60);
+    component.form.get('lifeTime')!.markAsDirty();
+    component.loadPredefinedConfig(pid);
+    expect(confirm).toHaveBeenCalledWith(
+      `Load the template "${pid.name}"? It replaces all settings except ID and Description.`
+    );
+    // Declined: the user's lifetime stays.
+    expect(component.form.get('lifeTime')!.value).toBe(60);
+    confirm.mockRestore();
+  });
+
+  it('keeps the ID and description when the user accepts the template', () => {
+    const pid = configs.find((template) => template.name.startsWith('PID'))!;
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    component.form.get('id')!.setValue('my-pid');
+    component.form.get('description')!.setValue('Our PID');
+    component.form.get('description')!.markAsDirty();
+    component.form.get('lifeTime')!.setValue(60);
+    component.form.get('lifeTime')!.markAsDirty();
+
+    component.loadPredefinedConfig(pid);
+
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(component.form.get('id')!.value).toBe('my-pid');
+    expect(component.form.get('description')!.value).toBe('Our PID');
+    expect(component.form.get('lifeTime')!.value).not.toBe(60);
+    expect(component.fields.length).toBeGreaterThan(0);
+    confirm.mockRestore();
+  });
+
+  it('asks before a template replaces a document applied in JSON View', () => {
+    const pid = configs.find((template) => template.name.startsWith('PID'))!;
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    (component as any).dialog = {
+      open: () => ({ afterClosed: () => of({ ...pid.config, id: 'from-json', lifeTime: 120 }) }),
+    };
+
+    component.viewAsJson();
+    expect(component.form.get('lifeTime')!.value).toBe(120);
+    component.loadPredefinedConfig(pid);
+
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(component.form.get('lifeTime')!.value).toBe(120);
+    confirm.mockRestore();
   });
 
   it('keeps a date format through the form and checks the default against it', () => {

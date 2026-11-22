@@ -30,7 +30,7 @@ function iconButton(page: Page, tooltip: string) {
 
 async function createKeyChain(page: Page, choices: string[], description: string) {
   await openNav(page, 'Keys');
-  await iconButton(page, 'Create Key').click();
+  await page.locator('a[mattooltip="Create Key"]').click();
   for (const choice of choices) {
     await page.getByRole('radio', { name: choice }).check();
     await page.getByRole('button', { name: /^(Next|Configure Key)/ }).click();
@@ -191,8 +191,8 @@ test('issue and verify cookbook', async ({ page }) => {
 
     // Review
     await page.getByRole('button', { name: 'Create Configuration' }).click();
-    await expect(page).toHaveURL(/\/credential-config$/);
-    await expect(page.getByText('membership', { exact: true })).toBeVisible();
+    await expect(page).toHaveURL(/\/credential-config\/membership$/);
+    await expect(page.locator('code.id-badge')).toHaveText('membership');
   });
 
   await test.step('chapter 2, step 5: send an offer to the wallet', async () => {
@@ -249,12 +249,8 @@ test('issue and verify cookbook', async ({ page }) => {
     await page.getByRole('textbox', { name: 'E-mail Address' }).fill('info@membership.example');
     await page.getByRole('textbox', { name: 'Website' }).fill('https://membership.example/');
     await page.getByRole('button', { name: 'Create Trust List' }).click();
-    await expect(page).toHaveURL(/\/trust-list$/);
-
-    await page
-      .getByRole('row', { name: /membership-issuers/ })
-      .locator('button[mattooltip="View details"]')
-      .click();
+    // Saving opens the trust list's page.
+    await expect(page).toHaveURL(/\/trust-list\/membership-issuers$/);
     const trustListUrl = `${resolvedE2EConfig.apiBaseUrl}/issuers/${tenantId}/trust-list/membership-issuers`;
     await expect(page.getByRole('textbox', { name: 'Trust List URL' })).toHaveValue(trustListUrl);
     // The URL serves the signed trust list JWT.

@@ -42,11 +42,14 @@ describe('TrustListListComponent', () => {
     const element = await render({ getAll: async () => [trustList] });
 
     const row = element.querySelector('tr[mat-row]') as HTMLElement;
-    expect([...row.querySelectorAll('button')].map((b) => b.getAttribute('aria-label'))).toEqual([
+    const actions = [...row.querySelectorAll('.row-actions a, .row-actions button')];
+    expect(actions.map((b) => b.getAttribute('aria-label'))).toEqual([
       'View trust list membership-issuers',
       'Edit trust list membership-issuers',
       'Download the configuration of trust list membership-issuers',
     ]);
+    // View and Edit are links, so they open in a new tab too.
+    expect(actions.map((action) => action.tagName)).toEqual(['A', 'A', 'BUTTON']);
   });
 
   it('downloads the configuration of the clicked trust list', async () => {

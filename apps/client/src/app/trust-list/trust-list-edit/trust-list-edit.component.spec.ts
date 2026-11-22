@@ -752,6 +752,11 @@ describe('TrustListEditComponent loading the trust list', () => {
     const body = (await update!.json()) as Record<string, unknown>;
     expect(body).not.toHaveProperty('keyChainId');
     expect(body['entities']).toHaveLength(2);
+    // The saved list's page, as federation trust anchors open theirs
+    expect(TestBed.inject(Router).navigate).toHaveBeenCalledWith([
+      '/trust-list',
+      'membership-issuers',
+    ]);
   });
 
   it('on edit, does not save with a signing key chain of another usage, selected or kept', async () => {

@@ -33,8 +33,9 @@ test('create credential config', async ({ page }) => {
     await page.getByRole('button', { name: 'Continue' }).click();
   }
   await page.getByRole('button', { name: 'Create Configuration' }).click();
-  await expect(page).toHaveURL(/\/credential-config$/);
-  await expect(page.getByText(id, { exact: true })).toBeVisible();
+  // The new config's page, as for a verification config
+  await expect(page).toHaveURL(new RegExp(`/credential-config/${id}$`));
+  await expect(page.locator('code.id-badge')).toHaveText(id);
 });
 
 test('a failed load says why and loads again on Retry', async ({ page }) => {
@@ -257,7 +258,7 @@ test('creates a configuration whose display has only a name', async ({ page, req
 
   try {
     await page.getByRole('button', { name: 'Create Configuration' }).click();
-    await expect(page).toHaveURL(/\/credential-config$/);
+    await expect(page).toHaveURL(new RegExp(`/credential-config/${id}$`));
 
     const response = await request.get(`${url}/${id}`, { headers });
     expect(response.ok(), `GET ${id}`).toBe(true);
@@ -610,12 +611,18 @@ test('loading a template over existing claims shows and edits the loaded claims'
   await page.getByRole('button', { name: 'Add Field' }).click();
   await page.getByRole('textbox', { name: 'Path' }).fill('custom_claim');
 
+  // The template replaces the entered claim, so it asks first.
   await page.getByRole('button', { name: 'Templates' }).click();
-  await page
+  const question = page.waitForEvent('dialog');
+  const pick = page
     .getByRole('menuitem', {
       name: 'PID (Personal Identity Document) German Personal Identity Document configuration',
     })
     .click();
+  const dialog = await question;
+  expect(dialog.message()).toContain('It replaces all settings except ID and Description.');
+  await dialog.accept();
+  await pick;
   await expect(page.getByRole('button', { name: /^custom_claim/ })).toHaveCount(0);
   await page.getByRole('button', { name: /^address\.country string/ }).click();
   const path = page

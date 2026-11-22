@@ -9,11 +9,11 @@
         <mat-icon>dns</mat-icon>
         KMS Providers
       </a>
-      <!-- The cookbook and its E2E test name this button by its tooltip. -->
-      <button matButton="filled" [routerLink]="['create']" matTooltip="Create Key">
+      <!-- The cookbook and its E2E test name this link by its tooltip. -->
+      <a matButton="filled" [routerLink]="['create']" matTooltip="Create Key">
         <mat-icon>add</mat-icon>
         Create key
-      </button>
+      </a>
     </div>
   </header>
 
@@ -47,10 +47,10 @@
       <span class="empty-icon"><mat-icon>vpn_key</mat-icon></span>
       <h2>No keys configured</h2>
       <p>Create your first key to get started with credential issuance.</p>
-      <button matButton="filled" [routerLink]="['create']">
+      <a matButton="filled" [routerLink]="['create']">
         <mat-icon>add</mat-icon>
         Create Key
-      </button>
+      </a>
     </div>
   } @else {
     <mat-card appearance="outlined" class="table-card">
@@ -203,17 +203,17 @@
               </th>
               <td mat-cell *matCellDef="let item">
                 <div class="key-actions">
-                  <button
+                  <a
                     mat-icon-button
                     [routerLink]="item.id | itemRoute: 'edit'"
                     matTooltip="Edit"
-                    aria-label="Edit"
+                    [attr.aria-label]="'Edit key chain ' + getDisplayName(item)"
                     appConfigManaged
                     managedKind="KeyChain"
                     [managedResourceId]="item.id"
                   >
                     <mat-icon>edit</mat-icon>
-                  </button>
+                  </a>
                   @if (canToggleDefault(item)) {
                     <button
                       mat-icon-button

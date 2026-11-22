@@ -151,6 +151,8 @@ export class CredentialConfigCreateComponent implements OnInit, PageWithUnsavedC
   public loading = false;
   /** While the configuration to edit loads; saving before would overwrite it with defaults. */
   loadingConfig = false;
+  /** Whether a document from JSON View was applied since the last template. */
+  private editedInJsonView = false;
   /** Set when the configuration to edit could not be loaded; the form stays hidden. */
   loadError = '';
   /** Load state of the options of each select, so a failed load is not shown as "none exist". */
@@ -600,7 +602,10 @@ export class CredentialConfigCreateComponent implements OnInit, PageWithUnsavedC
               'Close',
               { duration: 3000 }
             );
-            this.router.navigate(['../'], { relativeTo: this.route });
+            // Both open the config's page, as the verification config editor does.
+            this.router.navigate(this.create ? ['../', formValue.id] : ['../'], {
+              relativeTo: this.route,
+            });
           },
           (error) => {
             console.error('Error saving configuration:', error);
@@ -1449,6 +1454,7 @@ export class CredentialConfigCreateComponent implements OnInit, PageWithUnsavedC
         this.loadConfigurationFromJson(result);
         // A document from JSON View is a change, although patching does not mark it as one
         this.form.markAsDirty();
+        this.editedInJsonView = true;
       }
     });
   }
@@ -1888,13 +1894,34 @@ export class CredentialConfigCreateComponent implements OnInit, PageWithUnsavedC
     }
   }
 
+  /** Whether the user changed settings a template replaces, as the verification config editor asks. */
+  private hasEditedSettingsBeyondName(): boolean {
+    // A JSON View document is patched in, which marks none of the controls dirty.
+    if (this.editedInJsonView) return true;
+    return Object.entries(this.form.controls).some(
+      ([name, control]) => name !== 'id' && name !== 'description' && control.dirty
+    );
+  }
+
   /**
    * Load a predefined configuration
    */
   loadPredefinedConfig(configTemplate: any): void {
+    if (
+      this.hasEditedSettingsBeyondName() &&
+      !confirm(
+        `Load the template "${configTemplate.name}"? It replaces all settings except ID and Description.`
+      )
+    ) {
+      return;
+    }
     const config = structuredClone(configTemplate.config);
+    // A template is a starting point: it keeps the ID and description the user entered.
+    config.id = this.form.get('id')?.value || config.id;
+    config.description = this.form.get('description')?.value || config.description;
 
     this.loadConfigurationFromJson(config);
+    this.editedInJsonView = false;
 
     this.snackBar.open(`${configTemplate.name} template loaded successfully`, 'OK', {
       duration: 3000,

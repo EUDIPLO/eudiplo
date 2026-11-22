@@ -143,6 +143,10 @@
               <mat-label>Credential Config</mat-label>
               <mat-select formControlName="credentialConfigurationId">
                 <mat-option [value]="null">Shared (no binding)</mat-option>
+                @if (unlistedCredentialConfig; as unlisted) {
+                  <mat-option [value]="unlisted.id">{{ unlisted.label }}</mat-option>
+                }
+
                 @for (config of credentialConfigs; track config.id) {
                   <mat-option [value]="config.id">{{ config.id }}</mat-option>
                 }
@@ -172,6 +176,10 @@
               <mat-label>Key Chain</mat-label>
               <mat-select formControlName="keyChainId">
                 <mat-option [value]="null">Default (auto-managed)</mat-option>
+                @if (unlistedKeyChain; as unlisted) {
+                  <mat-option [value]="unlisted.id">{{ unlisted.label }}</mat-option>
+                }
+
                 @for (keyChain of keyChains; track keyChain.id) {
                   <mat-option [value]="keyChain.id"
                     >{{ keyChain.id }} ({{ keyChain.usageType }})</mat-option

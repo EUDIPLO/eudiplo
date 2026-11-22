@@ -419,4 +419,13 @@ describe('KeyManagementListComponent filters', () => {
     // The actions are not part of the link
     expect(row.querySelector('a.key-link button')).toBeNull();
   });
+
+  it('names the row in Edit, which is a link that opens in a new tab too', async () => {
+    const { page } = await render();
+
+    const row = page.querySelector('tr.mat-mdc-row')!;
+    const edit = row.querySelector('.key-actions a[mattooltip="Edit"]');
+    expect(edit?.getAttribute('href')).toBe('/a/edit');
+    expect(edit?.getAttribute('aria-label')).toMatch(/^Edit key chain \S/);
+  });
 });

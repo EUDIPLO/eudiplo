@@ -241,9 +241,9 @@ describe('StatusListEditComponent Save', () => {
     expect(updateList).toHaveBeenLastCalledWith('list-1', { credentialConfigurationId: null });
   });
 
-  it('sends no binding for a shared list on the default key chain that was not changed', async () => {
+  it('sends nothing and says so when no binding of the list was changed', async () => {
     const updateList = vi.fn().mockResolvedValue({});
-    const { save } = await render(vi.fn(), {
+    const { fixture, save } = await render(vi.fn(), {
       listId: 'list-1',
       getList: vi.fn().mockResolvedValue({
         id: 'list-1',
@@ -259,11 +259,53 @@ describe('StatusListEditComponent Save', () => {
       updateList,
     });
 
+    // The component's MatSnackBarModule provides its own snackbar service.
+    const open = vi.spyOn(fixture.debugElement.injector.get(MatSnackBar), 'open');
     save.click();
-    await vi.waitFor(() => expect(updateList).toHaveBeenCalledOnce());
+    await vi.waitFor(() =>
+      expect(open).toHaveBeenCalledWith('No changes to save', 'Close', { duration: 3000 })
+    );
 
-    // A key chain sent again, also as null, would discard the signed list.
-    expect(updateList).toHaveBeenCalledWith('list-1', {});
+    // An empty update would change nothing, yet report success.
+    expect(updateList).not.toHaveBeenCalled();
+    expect(TestBed.inject(Router).navigate).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.isSaving).toBe(false);
+  });
+
+  it('shows a stored binding the selects do not offer, and why', async () => {
+    const list = {
+      id: 'list-1',
+      tenantId: 'tenant',
+      capacity: 10000,
+      usedEntries: 0,
+      availableEntries: 10000,
+      bits: 1,
+      uri: 'https://x/status/list-1',
+      credentialConfigurationId: 'deleted-config',
+      keyChainId: 'gone-keys',
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    };
+    const { fixture } = await render(vi.fn(), {
+      listId: 'list-1',
+      getList: vi.fn().mockResolvedValue(list),
+    });
+    const element = fixture.nativeElement as HTMLElement;
+    const shown = (control: string) =>
+      element.querySelector(`mat-select[formcontrolname="${control}"]`)?.textContent?.trim();
+    fixture.detectChanges();
+
+    expect(shown('credentialConfigurationId')).toBe('deleted-config (does not exist)');
+    expect(shown('keyChainId')).toBe('gone-keys (does not exist)');
+
+    // A key chain that exists with another usage says so.
+    (fixture.componentInstance as unknown as { allKeyChains: object[] }).allKeyChains = [
+      { id: 'gone-keys', usageType: 'access' },
+    ];
+    fixture.detectChanges();
+    expect(shown('keyChainId')).toBe(
+      'gone-keys (not a Status List or Credential Signing key chain)'
+    );
   });
 
   it('waits while the status list is created: a second click sends nothing', async () => {

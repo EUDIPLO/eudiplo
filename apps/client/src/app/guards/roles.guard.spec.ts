@@ -13,7 +13,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiService } from '../core';
 import { AuthGuard } from './auth.guard';
-import { RoleGuard } from './roles.guard';
+import { accessDeniedMessage, RoleGuard } from './roles.guard';
+import { errorSnackBarDuration } from '../utils/error-snackbar';
 
 @Component({ template: '' })
 class PageStub {}
@@ -66,7 +67,10 @@ describe('RoleGuard', () => {
     expect(await TestBed.inject(RoleGuard).canActivate(route, state)).toBe(false);
 
     expect(navigate).toHaveBeenCalledWith(['/']);
-    expect(open).toHaveBeenCalledWith('Access denied', 'Close', { duration: 3000 });
+    const message = 'Access denied to /issuance-config: it needs the issuance:manage role.';
+    expect(open).toHaveBeenCalledWith(message, 'Close', {
+      duration: errorSnackBarDuration(message),
+    });
   });
 
   it('stays on the current page and only says why the roles could not be loaded', async () => {
@@ -142,5 +146,19 @@ describe('RoleGuard below a route with AuthGuard', () => {
 
     expect(await router.navigateByUrl('/offer/issuance')).toBe(false);
     expect(requests).toBe(2);
+  });
+});
+
+describe('accessDeniedMessage', () => {
+  it('names every role that opens the page, and leaves out the query', () => {
+    expect(
+      accessDeniedMessage('/session-management?status=active', [
+        'issuance:offer',
+        'presentation:request',
+        'sessions:read',
+      ])
+    ).toBe(
+      'Access denied to /session-management: it needs the issuance:offer, presentation:request or sessions:read role.'
+    );
   });
 });

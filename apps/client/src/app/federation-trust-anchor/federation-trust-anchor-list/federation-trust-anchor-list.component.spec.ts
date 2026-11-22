@@ -54,13 +54,14 @@ describe('FederationTrustAnchorListComponent', () => {
       'EU federation',
       '2',
     ]);
-    expect(
-      [...element.querySelectorAll('tr[mat-row] button')].map((b) => b.getAttribute('aria-label'))
-    ).toEqual([
+    const actions = [...element.querySelectorAll('tr[mat-row] .row-actions a, tr[mat-row] button')];
+    expect(actions.map((b) => b.getAttribute('aria-label'))).toEqual([
       'View trust anchor eu-federation',
       'Edit trust anchor eu-federation',
       'Download the configuration of trust anchor eu-federation',
     ]);
+    // View and Edit are links, so they open in a new tab too.
+    expect(actions.map((action) => action.tagName)).toEqual(['A', 'A', 'BUTTON']);
   });
 });
 

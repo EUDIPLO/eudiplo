@@ -82,6 +82,9 @@ export class StatusListEditComponent implements OnInit, PageWithUnsavedChanges {
   /** Available key chains with statusList or attestation usage */
   keyChains: KeyChainResponseDto[] = [];
 
+  /** All key chains of the tenant, to tell why a stored key chain is not offered. */
+  private allKeyChains: KeyChainResponseDto[] = [];
+
   /** Load state of each select's options, so a failed load is not shown as "none exist". */
   readonly loadState: Record<StatusListEditSource, SourceLoadState> = {
     credentialConfigs: 'loading',
@@ -143,7 +146,8 @@ export class StatusListEditComponent implements OnInit, PageWithUnsavedChanges {
       }),
     keyChains: () =>
       loadSource(this.loadState, 'keyChains', 'key chains', async () => {
-        this.keyChains = (await this.keyChainService.getAll()).filter(
+        this.allKeyChains = await this.keyChainService.getAll();
+        this.keyChains = this.allKeyChains.filter(
           (kc: KeyChainResponseDto) =>
             kc.usageType === 'statusList' || kc.usageType === 'attestation'
         );
@@ -245,6 +249,37 @@ export class StatusListEditComponent implements OnInit, PageWithUnsavedChanges {
     }
   }
 
+  /**
+   * The bound credential config when the select does not offer it, so the select shows its ID
+   * instead of looking empty; once the configs are loaded, the label says it does not exist.
+   */
+  get unlistedCredentialConfig(): { id: string; label: string } | undefined {
+    const id: unknown = this.form?.get('credentialConfigurationId')?.value;
+    if (typeof id !== 'string' || !id) return undefined;
+    if (this.credentialConfigs.some((config) => config.id === id)) return undefined;
+    return {
+      id,
+      label: this.loadState.credentialConfigs === 'loaded' ? `${id} (does not exist)` : id,
+    };
+  }
+
+  /**
+   * The pinned key chain when the select does not offer it, as the trust list form shows one:
+   * once the key chains are loaded, the label says whether it has another usage or does not exist.
+   */
+  get unlistedKeyChain(): { id: string; label: string } | undefined {
+    const id: unknown = this.form?.get('keyChainId')?.value;
+    if (typeof id !== 'string' || !id) return undefined;
+    if (this.keyChains.some((keyChain) => keyChain.id === id)) return undefined;
+    if (this.loadState.keyChains !== 'loaded') return { id, label: id };
+    return {
+      id,
+      label: this.allKeyChains.some((keyChain) => keyChain.id === id)
+        ? `${id} (not a Status List or Credential Signing key chain)`
+        : `${id} (does not exist)`,
+    };
+  }
+
   /** Puts a preset into Capacity, as typing it would. */
   setCapacity(capacity: number): void {
     const control = this.form.get('capacity');
@@ -306,6 +341,12 @@ export class StatusListEditComponent implements OnInit, PageWithUnsavedChanges {
         const keyChainId: string | null = formValue.keyChainId || null;
         if (keyChainId !== (this.statusList?.keyChainId ?? null)) {
           dto.keyChainId = keyChainId;
+        }
+        if (Object.keys(dto).length === 0) {
+          // An empty update would change nothing, yet report success.
+          this.form.markAsPristine();
+          this.snackBar.open('No changes to save', 'Close', { duration: 3000 });
+          return;
         }
         await this.statusListService.updateList(this.listId!, dto);
         this.snackBar.open('Status list updated successfully', 'Close', { duration: 3000 });

@@ -36,7 +36,11 @@ describe.each([
   it(`denies ${page} to clients that can only start sessions`, async () => {
     expect(await canOpen(['issuance:offer', 'presentation:request'])).toBe(false);
     expect(guard.navigate).toHaveBeenCalledWith(['/']);
-    expect(guard.openSnackBar).toHaveBeenCalledWith('Access denied', 'Close', { duration: 3000 });
+    expect(guard.openSnackBar).toHaveBeenCalledWith(
+      expect.stringMatching(/^Access denied to \/: it needs the /),
+      'Close',
+      expect.anything()
+    );
   });
 });
 

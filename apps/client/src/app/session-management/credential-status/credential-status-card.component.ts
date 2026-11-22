@@ -6,6 +6,7 @@ import {
   Injector,
   Input,
   type OnChanges,
+  type SimpleChanges,
   ViewChild,
   inject,
 } from '@angular/core';
@@ -76,6 +77,11 @@ export class CredentialStatusCardComponent implements OnChanges {
   groups: CredentialStatusGroup[] = [];
   /** Why the status could not be read; the card then shows this instead of the status. */
   loadError = '';
+  /**
+   * Set when a Retry found no credentials with a status: the card then says so instead of
+   * vanishing with the focused Retry, so its title can take the focus.
+   */
+  emptyAfterRetry = false;
   updating = false;
 
   readonly statusLabel = statusLabel;
@@ -83,7 +89,9 @@ export class CredentialStatusCardComponent implements OnChanges {
   readonly revoked = STATUS_REVOKED;
   readonly suspended = STATUS_SUSPENDED;
 
-  ngOnChanges(): void {
+  ngOnChanges(changes: SimpleChanges): void {
+    // Another session: its card is hidden while it has no status entries, as on a first load.
+    if (changes['sessionId']) this.emptyAfterRetry = false;
     void this.load();
   }
 
@@ -103,6 +111,8 @@ export class CredentialStatusCardComponent implements OnChanges {
   async retryLoad(): Promise<void> {
     await this.load();
     if (!this.loadError) {
+      this.emptyAfterRetry = this.groups.length === 0;
+      this.changeDetector.markForCheck();
       focusAfterRenderIfLost(this.injector, () => this.cardTitle?.nativeElement);
     }
   }

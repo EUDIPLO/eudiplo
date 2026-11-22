@@ -68,15 +68,15 @@
             </th>
             <td mat-cell *matCellDef="let list">
               <span class="row-actions">
-                <button
+                <a
                   matIconButton
                   [routerLink]="list.id | itemRoute"
                   matTooltip="View details"
                   [attr.aria-label]="'View trust list ' + list.id"
                 >
                   <mat-icon>visibility</mat-icon>
-                </button>
-                <button
+                </a>
+                <a
                   matIconButton
                   [routerLink]="list.id | itemRoute: 'edit'"
                   matTooltip="Edit"
@@ -86,7 +86,7 @@
                   [attr.aria-label]="'Edit trust list ' + list.id"
                 >
                   <mat-icon>edit</mat-icon>
-                </button>
+                </a>
                 <button
                   matIconButton
                   (click)="downloadConfig(list)"
