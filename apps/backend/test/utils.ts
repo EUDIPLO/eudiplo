@@ -72,7 +72,8 @@ export function readConfig<T>(path: string): T {
 export async function prepareMdocPresentation(
     nonce: string,
     privateKey: CryptoKey,
-    issuerCert: string,
+    /** PEM of the signing certificate, or the x5chain, signing certificate first. */
+    issuerCert: string | string[],
     clientId: string,
     responseUri: string,
     responseMode: string = "direct_post.jwt",
@@ -118,7 +119,9 @@ export async function prepareMdocPresentation(
 
     const issuerSigned = await issuer.sign({
         signingKey: CoseKey.fromJwk(key as Jwk),
-        certificates: [new Uint8Array(new X509Certificate(issuerCert).rawData)],
+        certificates: [issuerCert]
+            .flat()
+            .map((pem) => new Uint8Array(new X509Certificate(pem).rawData)),
         algorithm: SignatureAlgorithm.ES256,
         digestAlgorithm: "SHA-256",
         deviceKeyInfo: { deviceKey: DeviceKey.fromJwk(DEVICE_JWK) },

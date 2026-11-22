@@ -68,6 +68,7 @@ describe("MdocverifierService failure classification", () => {
 
         expect(map("x5c_required")).toBe("x5c_missing");
         expect(map("chain_build_failed")).toBe("no_trust_chain_to_root");
+        expect(map("certificate_path_invalid")).toBe("no_trust_chain_to_root");
         expect(map("no_trusted_entity_match")).toBe("trust_chain_not_trusted");
         expect(map("trust_list_unavailable")).toBe("trust_list_unavailable");
         expect(map("certificate_expired")).toBe("certificate_expired");
@@ -607,6 +608,14 @@ describe("classifyVerificationError", () => {
                 'No trusted certificate was found while validating the X.509 chain. chain=[{"subject":"C=DE, CN=Root Tenant"}]',
             ),
         ).toBe("trust_chain_not_trusted");
+    });
+
+    it("classifies a path that breaks an RFC 5280 constraint as no_trust_chain_to_root, whatever its subject says", () => {
+        expect(
+            classify(
+                'X.509 chain verification failed at index=0. cause=Certificate path constraint: issuing certificate is not a CA (basicConstraints cA is not TRUE) (subject="C=DE, CN=Trusted signature service", index=1)',
+            ),
+        ).toBe("no_trust_chain_to_root");
     });
 
     it("still classifies signature problems as signature_invalid", () => {
