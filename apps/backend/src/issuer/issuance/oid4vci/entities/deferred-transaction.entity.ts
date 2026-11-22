@@ -61,10 +61,11 @@ export class DeferredTransactionEntity {
 
     /**
      * The holder's public key (CNF) for key binding.
-     * Stored as JSON.
+     * Stored as JSON. Null when the credential configuration needs no key
+     * proof, so the credential is bound to no key.
      */
-    @Column("json")
-    holderCnf!: Record<string, unknown>;
+    @Column("json", { nullable: true })
+    holderCnf!: Record<string, unknown> | null;
 
     /**
      * The wallet unit attestation that attested `holderCnf`: status list

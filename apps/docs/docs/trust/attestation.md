@@ -74,6 +74,8 @@ Key attestations are configured per credential type, in the credential configura
 }
 ```
 
+The settings and checks in this section apply to configurations whose credential requests carry key proofs: mDOCs, SD-JWT VCs with `keyBinding: true`, and configurations with `keyAttestationsRequired`. An SD-JWT VC with neither `keyBinding` nor `keyAttestationsRequired` takes requests without proofs; a key attestation that a wallet sends to it anyway is ignored, so no wallet unit is recorded ([Credential configuration](../issuance/credential-configuration.md#4-choose-key-binding-and-proofs)).
+
 - `proofTypesSupported` limits the accepted proof types, `jwt` and `attestation` (default: both). A proof of another type is rejected with `invalid_proof`.
 - `keyAttestationsRequired` is published as `key_attestations_required` for every supported proof type in the issuer metadata and enforced at the credential endpoint:
     - Every proof must carry a key attestation: an `attestation` proof or a `jwt` proof with `key_attestation`.

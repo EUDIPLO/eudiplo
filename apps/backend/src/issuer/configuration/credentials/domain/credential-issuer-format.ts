@@ -5,7 +5,11 @@ import type { CredentialConfiguration } from "./credential-configuration.js";
 
 export interface CredentialIssuanceContext {
     credentialConfiguration: CredentialConfiguration;
-    holderKey: Jwk;
+    /**
+     * The key the wallet proved possession of; absent when the configuration
+     * needs no key proof (`requiresKeyProof`).
+     */
+    holderKey?: Jwk;
     session: SessionData;
     claims: Record<string, unknown>;
     federationEntityId?: string;

@@ -11,7 +11,7 @@ export class CredentialsServiceDeferredCredentialIssuer
 
     issue(
         credentialConfigurationId: string,
-        holderCnf: Jwk,
+        holderCnf: Jwk | undefined,
         session: SessionData,
         claims: Record<string, unknown>,
         issuanceSetId?: string,

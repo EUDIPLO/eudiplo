@@ -25,7 +25,7 @@ export class IssueCredential {
      */
     async execute(command: {
         credentialConfigurationId: string;
-        holderKey: Jwk;
+        holderKey?: Jwk;
         session: SessionData;
         preloadedClaims?: Record<string, unknown>;
         issuanceSetId?: string;

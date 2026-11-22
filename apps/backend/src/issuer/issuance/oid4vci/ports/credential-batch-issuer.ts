@@ -7,7 +7,8 @@ export const CREDENTIAL_BATCH_ISSUER = Symbol("CREDENTIAL_BATCH_ISSUER");
 export interface CredentialBatchIssuer {
     issue(
         credentialConfigurationId: string,
-        holderKey: Jwk,
+        /** Absent for a configuration that needs no key proof. */
+        holderKey: Jwk | undefined,
         session: SessionData,
         claims?: Record<string, unknown>,
         issuanceSetId?: string,

@@ -122,6 +122,8 @@ describe("Oid4vciService credential request error mapping", () => {
         updateForTenant?: ReturnType<typeof vi.fn>;
         executeFrom?: ReturnType<typeof vi.fn>;
         keyAttestationsRequired?: Record<string, string[]>;
+        keyProofRequired?: boolean;
+        validateAndConsume?: ReturnType<typeof vi.fn>;
         parseCredentialRequest?: (options: never) => unknown;
         onIssuer?: (decryptJwe: unknown) => void;
         metadata?: unknown;
@@ -185,6 +187,7 @@ describe("Oid4vciService credential request error mapping", () => {
                 getProofRequirementsForCredentialConfig: vi
                     .fn()
                     .mockResolvedValue({
+                        keyProofRequired: overrides.keyProofRequired ?? true,
                         proofTypes: ["jwt"],
                         keyAttestationsRequired:
                             overrides.keyAttestationsRequired,
@@ -206,7 +209,9 @@ describe("Oid4vciService credential request error mapping", () => {
                 logFlowComplete: vi.fn(),
                 logCredentialIssuance: vi.fn(),
             },
-            nonceService: { validateAndConsume: vi.fn() },
+            nonceService: {
+                validateAndConsume: overrides.validateAndConsume ?? vi.fn(),
+            },
             issueCredentialsFromProofs: {
                 execute:
                     overrides.issue ??
@@ -536,6 +541,60 @@ describe("Oid4vciService credential request error mapping", () => {
                 keyAttestationsRequired: { key_storage: ["iso_18045_high"] },
             }),
         );
+    });
+
+    describe("configuration that needs no key proof", () => {
+        it.each([
+            ["without proofs", undefined],
+            ["with proofs, which are ignored", { jwt: ["proof-jwt"] }],
+            [
+                "with a batch of proofs, which add no credentials",
+                { jwt: ["proof-1", "proof-2", "proof-3"] },
+            ],
+        ])(
+            "issues one unbound credential %s and consumes no nonce",
+            async (_label, proofs) => {
+                const issue = vi
+                    .fn()
+                    .mockResolvedValue([{ credential: "credential" }]);
+                const validateAndConsume = vi.fn();
+
+                await expect(
+                    setup({
+                        issue,
+                        validateAndConsume,
+                        keyProofRequired: false,
+                        parseCredentialRequest: () => ({
+                            proofs,
+                            credentialConfigurationId: "pid",
+                        }),
+                    }).getCredential(request, "tenant"),
+                ).resolves.toEqual({ credentialResponse: {} });
+
+                expect(validateAndConsume).not.toHaveBeenCalled();
+                expect(issue).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        proofs: undefined,
+                        keyAttestationsRequired: undefined,
+                    }),
+                );
+            },
+        );
+
+        it("still answers invalid_proof without proofs when a proof is required", async () => {
+            const error = await rejection(
+                setup({
+                    parseCredentialRequest: () => ({
+                        credentialConfigurationId: "pid",
+                    }),
+                }).getCredential(request, "tenant"),
+            );
+            expect(protocolError(error)).toEqual({
+                error: "invalid_proof",
+                error_description:
+                    "The proofs parameter is missing or does not contain supported proof types (jwt, attestation)",
+            });
+        });
     });
 
     it("maps InvalidCredentialProof to invalid_proof", async () => {
