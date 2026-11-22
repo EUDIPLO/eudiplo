@@ -111,6 +111,11 @@ export async function prepareMdocPresentation(
         family_name: "Last",
         first_name: "First", // Keep for backward compatibility
         last_name: "Last", // Keep for backward compatibility
+        // A CBOR map, as the PID Rulebook defines place_of_birth.
+        place_of_birth: new Map([
+            ["locality", "Berlin"],
+            ["country", "DE"],
+        ]),
     });
 
     //TODO: get key from eudiplo so it matches with the trust list
