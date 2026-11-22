@@ -167,8 +167,13 @@ export class TokenExpiryService implements OnDestroy {
    * returns to this page.
    */
   private logInAgain(expired: boolean): void {
-    // The user may stay to copy unsaved changes; the next check opens the notice again.
-    if (!this.unsavedChanges.confirmLeave()) return;
+    if (!this.unsavedChanges.confirmLeave()) {
+      // The user stays to copy unsaved changes. The action closes the notice, so open it again
+      // at once instead of with the next check.
+      this.notice = undefined;
+      void this.check();
+      return;
+    }
     const returnUrl = this.router.url;
     // After an expired SSO session the next SSO sign-in is the same person's.
     const sameSso = expired && this.apiService.usesSso();

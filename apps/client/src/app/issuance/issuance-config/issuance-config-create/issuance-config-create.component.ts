@@ -1441,6 +1441,8 @@ export class IssuanceConfigCreateComponent implements OnInit, PageWithUnsavedCha
     const target = this.authorizationServers.at(targetIndex);
     this.authorizationServers.setControl(index, target);
     this.authorizationServers.setControl(targetIndex, current);
+    // A row button changes the form without marking it dirty.
+    this.authorizationServers.markAsDirty();
 
     // The panel moves with its server, which can take focus off the pressed button. At the first
     // or last position that button stays focusable, with the reason in its tooltip.

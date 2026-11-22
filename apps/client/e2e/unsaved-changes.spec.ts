@@ -10,6 +10,8 @@ import { createTenant, type TestTenant } from './support/tenants';
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
+const leaveQuestion = 'Leave this page? Your unsaved changes will be lost.';
+
 let tenant: TestTenant;
 
 test.beforeAll(async () => {
@@ -45,11 +47,12 @@ test('asks before unsaved changes are left behind and not after they were saved'
   await expect(page.getByText('Unsaved changes')).toBeVisible();
 
   // Declining keeps the page and what was typed.
-  page.once('dialog', (dialog) => {
-    expect(dialog.message()).toBe('Leave this page? Your unsaved changes will be lost.');
-    void dialog.dismiss();
-  });
-  await page.getByRole('link', { name: 'Cancel', exact: true }).click();
+  const declined = page.waitForEvent('dialog');
+  const cancel = page.getByRole('link', { name: 'Cancel', exact: true }).click();
+  const declinedDialog = await declined;
+  expect(declinedDialog.message()).toBe(leaveQuestion);
+  await declinedDialog.dismiss();
+  await cancel;
   await expect(page).toHaveURL(/\/webhook-endpoints\/create$/);
   await expect(name).toHaveValue('Draft events');
 
@@ -67,8 +70,15 @@ test('asks before unsaved changes are left behind and not after they were saved'
   await page.goto('/webhook-endpoints/draft-events/edit');
   await expect(name).toHaveValue('Draft events');
   await name.fill('Renamed events');
-  page.once('dialog', (dialog) => void dialog.accept());
-  await page.locator('mat-sidenav').getByText('Webhook Endpoints', { exact: true }).click();
+  const agreed = page.waitForEvent('dialog');
+  const toList = page
+    .locator('mat-sidenav')
+    .getByText('Webhook Endpoints', { exact: true })
+    .click();
+  const agreedDialog = await agreed;
+  expect(agreedDialog.message()).toBe(leaveQuestion);
+  await agreedDialog.accept();
+  await toList;
   await expect(page).toHaveURL(/\/webhook-endpoints$/);
 
   // Reloading, closing the tab or leaving for another site has the browser ask.

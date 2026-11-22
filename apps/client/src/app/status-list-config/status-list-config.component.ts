@@ -157,11 +157,11 @@ export class StatusListConfigComponent implements OnInit, PageWithUnsavedChanges
     return resetDefaultsTooltip(this.isSaving, this.hasStoredOverride);
   }
 
-  /** Save stays focusable while another change runs, so its tooltip says why it waits. */
   hasUnsavedChanges(): boolean {
     return this.configForm.dirty;
   }
 
+  /** Save stays focusable while another change runs, so its tooltip says why it waits. */
   get saveTooltip(): string {
     return this.isSaving ? WAIT_FOR_CHANGE : '';
   }

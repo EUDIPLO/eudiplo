@@ -891,7 +891,10 @@ export class CredentialConfigCreateComponent implements OnInit, PageWithUnsavedC
       this.customLifetime = true;
     } else {
       this.customLifetime = false;
-      this.form.get('lifeTime')?.setValue(presetValue);
+      const lifeTime = this.form.get('lifeTime');
+      lifeTime?.setValue(presetValue);
+      // The preset select is not bound to the form, so its choice does not mark it dirty.
+      lifeTime?.markAsDirty();
     }
   }
 
@@ -899,6 +902,7 @@ export class CredentialConfigCreateComponent implements OnInit, PageWithUnsavedC
    * Handle VCT mode change
    */
   onVctModeChange(mode: 'string' | 'object'): void {
+    const changed = mode !== this.vctMode;
     this.vctMode = mode;
     const vctStringControl = this.form.get('vctString');
     if (mode === 'string') {
@@ -914,6 +918,8 @@ export class CredentialConfigCreateComponent implements OnInit, PageWithUnsavedC
       vctStringControl?.clearValidators();
     }
     vctStringControl?.updateValueAndValidity();
+    // The toggle is not bound to the form, so its choice does not mark it dirty.
+    if (changed) vctStringControl?.markAsDirty();
   }
 
   /**
@@ -930,7 +936,10 @@ export class CredentialConfigCreateComponent implements OnInit, PageWithUnsavedC
    * Handle docType preset selection
    */
   onDocTypePresetChange(preset: { value: string }): void {
-    this.form.get('docType')?.setValue(preset.value);
+    const docType = this.form.get('docType');
+    docType?.setValue(preset.value);
+    // The preset select is not bound to the form, so its choice does not mark it dirty.
+    docType?.markAsDirty();
   }
 
   /** Formats a lifetime in seconds as on the list and the configuration's page. */
@@ -1364,6 +1373,8 @@ export class CredentialConfigCreateComponent implements OnInit, PageWithUnsavedC
   dropIaeAction(event: CdkDragDrop<FormGroup[]>): void {
     moveItemInArray(this.iaeActions.controls, event.previousIndex, event.currentIndex);
     this.iaeActions.updateValueAndValidity();
+    // Dragging a row changes the form without marking it dirty.
+    if (event.previousIndex !== event.currentIndex) this.iaeActions.markAsDirty();
   }
 
   /** Why JSON View cannot be opened right now, or '' when it can; its tooltip. */

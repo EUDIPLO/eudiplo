@@ -41,6 +41,7 @@ describe('UnsavedChangesService', () => {
         provideRouter([
           { path: 'form', component: FormPage, canDeactivate: [unsavedChangesGuard] },
           { path: 'other', component: OtherPage },
+          { path: 'blocked', component: OtherPage, canActivate: [() => false] },
         ]),
       ],
     });
@@ -87,17 +88,16 @@ describe('UnsavedChangesService', () => {
     expect(router.url).toBe('/other');
   });
 
-  it('asks again once the navigation it agreed to has ended', async () => {
-    const page = { hasUnsavedChanges: () => true };
-    service.shown(page);
+  it('asks again once another guard has stopped the navigation it agreed to', async () => {
+    service.shown({ hasUnsavedChanges: () => true });
     confirm.mockReturnValue(true);
     expect(service.confirmLeave()).toBe(true);
     // Agreed once, so the navigation that follows does not ask again.
     expect(service.confirmLeave()).toBe(true);
     expect(confirm).toHaveBeenCalledTimes(1);
 
-    await router.navigateByUrl('/other');
-    service.shown(page);
+    // The page stays shown: only the cancelled navigation takes the agreement back.
+    expect(await router.navigateByUrl('/blocked')).toBe(false);
     expect(service.confirmLeave()).toBe(true);
     expect(confirm).toHaveBeenCalledTimes(2);
   });

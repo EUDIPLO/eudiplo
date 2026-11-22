@@ -311,7 +311,10 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy, PageWithUnsa
     this.destroyed = true;
   }
 
-  /** The steps before Configure hold choices only; Configure holds what was typed or pasted. */
+  /**
+   * The steps before Configure hold choices only; Configure holds what was typed, pasted or
+   * read from a selected file.
+   */
   hasUnsavedChanges(): boolean {
     return this.configForm.dirty;
   }
@@ -847,12 +850,18 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy, PageWithUnsa
   async onPrivateKeyFileSelected(event: Event): Promise<void> {
     const file = (event.target as HTMLInputElement).files?.[0];
     if (!file) return;
-    this.configForm.patchValue({ externalPrivateKey: await file.text() });
+    const control = this.configForm.get('externalPrivateKey')!;
+    control.setValue(await file.text());
+    // A selected file fills the field without marking it dirty.
+    control.markAsDirty();
   }
 
   async onCertificateFilesSelected(event: Event): Promise<void> {
     const files = (event.target as HTMLInputElement).files;
     if (!files?.length) return;
-    this.configForm.patchValue({ externalCertificate: await readCertificateFiles(files) });
+    const control = this.configForm.get('externalCertificate')!;
+    control.setValue(await readCertificateFiles(files));
+    // The selected files fill the field without marking it dirty.
+    control.markAsDirty();
   }
 }

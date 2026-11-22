@@ -308,6 +308,8 @@ export class OidcClientCreateComponent implements OnInit, PageWithUnsavedChanges
 
   removeRedirectUri(index: number): void {
     this.redirectUris.removeAt(index);
+    // A row button changes the form without marking it dirty.
+    this.redirectUris.markAsDirty();
     focusRowAfterRemoval(
       this.injector,
       () => this.redirectUriInputs?.map((input) => input.nativeElement),
@@ -328,6 +330,8 @@ export class OidcClientCreateComponent implements OnInit, PageWithUnsavedChanges
 
   removeScope(index: number): void {
     this.scopes.removeAt(index);
+    // A row button changes the form without marking it dirty.
+    this.scopes.markAsDirty();
     focusRowAfterRemoval(
       this.injector,
       () => this.scopeInputs?.map((input) => input.nativeElement),
