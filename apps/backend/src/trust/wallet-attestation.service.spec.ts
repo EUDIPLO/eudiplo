@@ -1,6 +1,7 @@
 import { type Logger, UnauthorizedException } from "@nestjs/common";
 import { ES256 } from "@owf/crypto";
 import * as x509 from "@peculiar/x509";
+import { base64url } from "jose";
 import { describe, expect, it, vi } from "vitest";
 import { acceptedSequenceNumbersFake } from "../../test/trust/accepted-trust-list-sequence-numbers.fake.js";
 import {
@@ -22,6 +23,7 @@ import { RevocationListUnavailableError } from "./revocation-policy.util.js";
 import {
     InvalidStatusListTokenError,
     StatusListIndexOutOfRange,
+    StatusListVerifierService,
 } from "./status-list-verifier.service.js";
 import { TrustStoreService } from "./trust-store.service.js";
 import {
@@ -893,7 +895,7 @@ describe("WalletAttestationService status list signer", () => {
                             getTrustStore: async () => trustStore,
                         },
                         statusListVerifierService: {
-                            getStatusEntryFromJwt: () => statusEntry,
+                            getAttestationStatusEntries: () => [statusEntry],
                             getStatusListJwt: async () => statusListJwt,
                             getStatusFromStatusListJwt,
                         },
@@ -984,22 +986,38 @@ describe("WalletAttestationService status list signer", () => {
     });
 });
 
+/** An attestation JWT with `payload`; its signature is not checked here. */
+const unsignedJwt = (payload: Record<string, unknown>) =>
+    [
+        base64url.encode(JSON.stringify({ alg: "ES256" })),
+        base64url.encode(JSON.stringify(payload)),
+        "c2ln",
+    ].join(".");
+
 describe("WalletAttestationService status check mode", () => {
     const statusEntry = { uri: "https://wp.example/status", idx: 3 };
+    const ts3Entry = { uri: "https://wp.example/wia-status", idx: 1337 };
+    /** A `status_list` without `uri`. */
+    const malformedStatus = { status: { status_list: { idx: 3 } } };
 
     /** Service whose status list fetch fails with `fetchError`, or returns a list read with `readStatus`. */
     function createService(options: {
         fetchError?: Error;
         readStatus?: () => { isValid: boolean; description: string };
-        malformedStatusClaim?: boolean;
     }) {
         const statusListVerifierService = {
-            getStatusEntryFromJwt: vi.fn(() => {
-                if (options.malformedStatusClaim) {
-                    throw new Error("The status_list claim has no uri");
-                }
-                return statusEntry;
-            }),
+            getAttestationStatusEntries: vi.fn(
+                (
+                    jwt: string,
+                    kind: "wallet" | "key",
+                    parseOptions?: { skipMalformed?: boolean },
+                ) =>
+                    StatusListVerifierService.prototype.getAttestationStatusEntries(
+                        jwt,
+                        kind,
+                        parseOptions,
+                    ),
+            ),
             getStatusListJwt: vi.fn(async () => {
                 if (options.fetchError) throw options.fetchError;
                 return "status-list-jwt";
@@ -1024,6 +1042,9 @@ describe("WalletAttestationService status check mode", () => {
     const check = (
         service: unknown,
         mode: RevocationCheckMode,
+        payload: Record<string, unknown> = {
+            status: { status_list: statusEntry },
+        },
     ): Promise<unknown> =>
         (
             service as {
@@ -1037,7 +1058,7 @@ describe("WalletAttestationService status check mode", () => {
             }
         ).validateAttestationStatus(
             "tenant-a",
-            "attestation",
+            unsignedJwt(payload),
             null,
             null,
             mode,
@@ -1094,11 +1115,9 @@ describe("WalletAttestationService status check mode", () => {
     it.each([RevocationCheckMode.Strict, RevocationCheckMode.BestEffort])(
         "%s rejects a malformed status claim",
         async (mode) => {
-            const { service, statusListVerifierService } = createService({
-                malformedStatusClaim: true,
-            });
+            const { service, statusListVerifierService } = createService({});
 
-            await expect(check(service, mode)).rejects.toThrow(
+            await expect(check(service, mode, malformedStatus)).rejects.toThrow(
                 /^Wallet attestation status check failed$/,
             );
             expect(
@@ -1108,10 +1127,10 @@ describe("WalletAttestationService status check mode", () => {
     );
 
     it("disabled does not read a malformed status claim", async () => {
-        const { service } = createService({ malformedStatusClaim: true });
+        const { service } = createService({});
 
         await expect(
-            check(service, RevocationCheckMode.Disabled),
+            check(service, RevocationCheckMode.Disabled, malformedStatus),
         ).resolves.toBeUndefined();
     });
 
@@ -1167,10 +1186,13 @@ describe("WalletAttestationService status check mode", () => {
         const checkKey = (
             service: WalletAttestationService,
             mode: RevocationCheckMode,
+            payload: Record<string, unknown> = {
+                status: { status_list: statusEntry },
+            },
         ) =>
             service.checkKeyAttestationStatus(
                 "tenant-a",
-                "key-attestation",
+                unsignedJwt(payload),
                 {} as never,
                 {} as never,
                 mode,
@@ -1219,11 +1241,39 @@ describe("WalletAttestationService status check mode", () => {
         });
 
         it("returns no reference for a malformed claim when the check is disabled", async () => {
-            const { service } = createService({ malformedStatusClaim: true });
+            const { service } = createService({});
 
             await expect(
-                checkKey(service, RevocationCheckMode.Disabled),
+                checkKey(
+                    service,
+                    RevocationCheckMode.Disabled,
+                    malformedStatus,
+                ),
             ).resolves.toBeUndefined();
+        });
+
+        it("disabled returns the key_storage_status reference without fetching", async () => {
+            const { service, statusListVerifierService } = createService({});
+
+            await expect(
+                checkKey(service, RevocationCheckMode.Disabled, {
+                    key_storage_status: { status: { status_list: ts3Entry } },
+                    status: "malformed",
+                }),
+            ).resolves.toEqual(ts3Entry);
+            expect(
+                statusListVerifierService.getStatusListJwt,
+            ).not.toHaveBeenCalled();
+        });
+
+        it("best_effort accepts and returns a key_storage_status reference whose list cannot be fetched", async () => {
+            const { service } = createService({ fetchError: unavailable() });
+
+            await expect(
+                checkKey(service, RevocationCheckMode.BestEffort, {
+                    key_storage_status: { status: { status_list: ts3Entry } },
+                }),
+            ).resolves.toEqual(ts3Entry);
         });
 
         it("returns the reference when the check is disabled", async () => {
@@ -1237,6 +1287,228 @@ describe("WalletAttestationService status check mode", () => {
             expect(
                 statusListVerifierService.getStatusListJwt,
             ).not.toHaveBeenCalled();
+        });
+
+        it("checks key_storage_status.status of a TS3 1.5 key attestation", async () => {
+            const { service, statusListVerifierService } = createService({
+                readStatus: () => ({ isValid: false, description: "INVALID" }),
+            });
+
+            const error = await checkKey(service, RevocationCheckMode.Strict, {
+                key_storage_status: {
+                    status: { status_list: ts3Entry },
+                    exp: 2_000_000_000,
+                },
+            }).catch((e) => e);
+
+            expect(error).toBeInstanceOf(AttestationStatusRejected);
+            expect(error.message).toBe("Key attestation is not valid: INVALID");
+            expect(
+                statusListVerifierService.getStatusListJwt,
+            ).toHaveBeenCalledWith(ts3Entry.uri, "tenant-a");
+        });
+
+        it("returns the key_storage_status reference of a key attestation that also has a status claim", async () => {
+            const { service, statusListVerifierService } = createService({});
+
+            await expect(
+                checkKey(service, RevocationCheckMode.Strict, {
+                    key_storage_status: { status: { status_list: ts3Entry } },
+                    status: { status_list: statusEntry },
+                }),
+            ).resolves.toEqual(ts3Entry);
+            expect(
+                statusListVerifierService.getStatusListJwt,
+            ).toHaveBeenCalledTimes(2);
+        });
+
+        it("does not read client_status in a key attestation", async () => {
+            const { service, statusListVerifierService } = createService({});
+
+            await expect(
+                checkKey(service, RevocationCheckMode.Strict, {
+                    client_status: { status: { status_list: ts3Entry } },
+                }),
+            ).resolves.toBeUndefined();
+            expect(
+                statusListVerifierService.getStatusListJwt,
+            ).not.toHaveBeenCalled();
+        });
+    });
+
+    describe("of TS3 1.5 wallet attestations", () => {
+        const ts3Payload = {
+            client_status: {
+                status: { status_list: ts3Entry },
+                exp: 2_000_000_000,
+            },
+        };
+
+        it("checks client_status.status and returns its reference", async () => {
+            const { service, statusListVerifierService } = createService({});
+
+            await expect(
+                check(service, RevocationCheckMode.Strict, ts3Payload),
+            ).resolves.toEqual(ts3Entry);
+            expect(
+                statusListVerifierService.getStatusListJwt,
+            ).toHaveBeenCalledWith(ts3Entry.uri, "tenant-a");
+        });
+
+        it.each([RevocationCheckMode.Strict, RevocationCheckMode.BestEffort])(
+            "%s rejects a revoked wallet instance",
+            async (mode) => {
+                const { service } = createService({
+                    readStatus: () => ({
+                        isValid: false,
+                        description: "INVALID",
+                    }),
+                });
+
+                await expect(check(service, mode, ts3Payload)).rejects.toThrow(
+                    "Wallet attestation is not valid: INVALID",
+                );
+            },
+        );
+
+        it("strict rejects a client_status list that cannot be fetched", async () => {
+            const { service } = createService({ fetchError: unavailable() });
+
+            await expect(
+                check(service, RevocationCheckMode.Strict, ts3Payload),
+            ).rejects.toThrow(/^Wallet attestation status check failed$/);
+        });
+
+        it("best_effort accepts a client_status list that cannot be fetched", async () => {
+            const { service } = createService({ fetchError: unavailable() });
+
+            await expect(
+                check(service, RevocationCheckMode.BestEffort, ts3Payload),
+            ).resolves.toEqual(ts3Entry);
+        });
+
+        it.each([
+            ["not an object", { client_status: "revoked" }],
+            [
+                "with a malformed status",
+                { client_status: { status: { status_list: { idx: 1 } } } },
+            ],
+        ])(
+            "rejects a client_status claim %s before fetching a list",
+            async (_case, payload) => {
+                const { service, statusListVerifierService } = createService(
+                    {},
+                );
+
+                await expect(
+                    check(service, RevocationCheckMode.BestEffort, payload),
+                ).rejects.toThrow(/^Wallet attestation status check failed$/);
+                expect(
+                    statusListVerifierService.getStatusListJwt,
+                ).not.toHaveBeenCalled();
+            },
+        );
+
+        it("disabled returns the client_status reference without fetching", async () => {
+            const { service, statusListVerifierService } = createService({});
+
+            await expect(
+                check(service, RevocationCheckMode.Disabled, {
+                    ...ts3Payload,
+                    status: "malformed",
+                }),
+            ).resolves.toEqual(ts3Entry);
+            expect(
+                statusListVerifierService.getStatusListJwt,
+            ).not.toHaveBeenCalled();
+        });
+
+        describe("that also carry a top-level status claim", () => {
+            const both = {
+                ...ts3Payload,
+                status: { status_list: statusEntry },
+            };
+
+            it("checks both entries and returns the client_status one", async () => {
+                const { service, statusListVerifierService } = createService(
+                    {},
+                );
+
+                await expect(
+                    check(service, RevocationCheckMode.Strict, both),
+                ).resolves.toEqual(ts3Entry);
+                expect(
+                    statusListVerifierService.getStatusListJwt.mock.calls,
+                ).toEqual([
+                    [ts3Entry.uri, "tenant-a"],
+                    [statusEntry.uri, "tenant-a"],
+                ]);
+            });
+
+            it("rejects when only the top-level entry is revoked", async () => {
+                const { service, statusListVerifierService } = createService(
+                    {},
+                );
+                statusListVerifierService.getStatusFromStatusListJwt.mockImplementation(
+                    (_jwt: string, entry: { uri: string }) =>
+                        entry.uri === statusEntry.uri
+                            ? { isValid: false, description: "INVALID" }
+                            : { isValid: true, description: "VALID" },
+                );
+
+                await expect(
+                    check(service, RevocationCheckMode.Strict, both),
+                ).rejects.toThrow("Wallet attestation is not valid: INVALID");
+            });
+
+            it("best_effort still checks the top-level entry when the client_status list cannot be fetched", async () => {
+                const { service, statusListVerifierService } = createService({
+                    readStatus: () => ({
+                        isValid: false,
+                        description: "INVALID",
+                    }),
+                });
+                statusListVerifierService.getStatusListJwt.mockImplementation(
+                    async (uri: string) => {
+                        if (uri === ts3Entry.uri) throw unavailable();
+                        return "status-list-jwt";
+                    },
+                );
+
+                await expect(
+                    check(service, RevocationCheckMode.BestEffort, both),
+                ).rejects.toThrow("Wallet attestation is not valid: INVALID");
+            });
+
+            it("strict rejects when only the top-level list cannot be fetched", async () => {
+                const { service, statusListVerifierService } = createService(
+                    {},
+                );
+                statusListVerifierService.getStatusListJwt.mockImplementation(
+                    async (uri: string) => {
+                        if (uri === statusEntry.uri) throw unavailable();
+                        return "status-list-jwt";
+                    },
+                );
+
+                await expect(
+                    check(service, RevocationCheckMode.Strict, both),
+                ).rejects.toThrow(/^Wallet attestation status check failed$/);
+            });
+
+            it("checks an entry both claims name once", async () => {
+                const { service, statusListVerifierService } = createService(
+                    {},
+                );
+
+                await check(service, RevocationCheckMode.Strict, {
+                    ...ts3Payload,
+                    status: { status_list: ts3Entry },
+                });
+                expect(
+                    statusListVerifierService.getStatusListJwt,
+                ).toHaveBeenCalledTimes(1);
+            });
         });
     });
 });

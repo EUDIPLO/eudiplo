@@ -10,9 +10,12 @@ import { base64url, decodeJwt, decodeProtectedHeader } from "jose";
 import { BoundedTtlCache } from "../shared/utils/bounded-ttl-cache.js";
 import { toBuffer } from "../shared/utils/buffer.util.js";
 import {
+    type AttestationKind,
+    attestationStatusReferences,
+} from "./domain/attestation-status-claims.js";
+import {
     isAbsoluteUri,
     MalformedStatusReferenceError,
-    parseStatusListReference,
 } from "./domain/status-list-reference.js";
 import { RevocationListUnavailableError } from "./revocation-policy.util.js";
 import { TrustFetchService } from "./trust-fetch.service.js";
@@ -196,18 +199,26 @@ export class StatusListVerifierService {
     constructor(private readonly trustFetch: TrustFetchService) {}
 
     /**
-     * Get the `status_list` reference (uri and idx) of a JWT's `status`
-     * claim, see {@link parseStatusListReference}.
+     * Get the `status_list` references (uri and idx) of a wallet or key
+     * attestation: of its TS3 1.5 claim (`client_status.status` or
+     * `key_storage_status.status`) and of its top-level `status` claim, see
+     * {@link attestationStatusReferences}.
      *
-     * @param jwt The JWT that may contain a status claim
-     * @returns The status list entry reference, or undefined if the JWT has
-     * no `status_list` reference
+     * @param jwt The attestation JWT
+     * @param kind Whether it is a wallet or a key attestation
+     * @param options.skipMalformed Leave out malformed claims
+     * @returns The references, the TS3 one first; empty if the attestation
+     * has no `status_list` reference
      * @throws Error if the JWT cannot be decoded, and
-     * MalformedStatusReferenceError if its `status` claim or `status_list`
-     * reference is malformed
+     * MalformedStatusReferenceError if a status claim or `status_list`
+     * reference is malformed and `skipMalformed` is not set
      */
-    getStatusEntryFromJwt(jwt: string): StatusListReference | undefined {
-        return parseStatusListReference(decodeJwt(jwt).status);
+    getAttestationStatusEntries(
+        jwt: string,
+        kind: AttestationKind,
+        options: { skipMalformed?: boolean } = {},
+    ): StatusListReference[] {
+        return attestationStatusReferences(decodeJwt(jwt), kind, options);
     }
 
     /**

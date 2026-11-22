@@ -182,6 +182,13 @@ describe("Issuance - revocation with the wallet unit", () => {
     async function issue(
         proofType: "attestation" | "jwt" = "attestation",
         credentialConfigurationId = configId,
+        options: {
+            /**
+             * Name the wallet unit in `key_storage_status.status` (TS3 1.5)
+             * instead of the top-level `status` claim.
+             */
+            ts3?: boolean;
+        } = {},
     ): Promise<{ sessionId: string; credential: string }> {
         const offer = await request(app.getHttpServer())
             .post("/issuer/offer")
@@ -238,9 +245,19 @@ describe("Issuance - revocation with the wallet unit", () => {
         });
         // The wallet unit attestation: the key attestation with a status
         // list entry and the provider's certificate.
+        const walletUnitStatus = {
+            status_list: { uri: STATUS_URI, idx: WALLET_UNIT_IDX },
+        };
         const walletUnitAttestation = await new SignJWT({
             ...decodeJwt(attestation),
-            status: { status_list: { uri: STATUS_URI, idx: WALLET_UNIT_IDX } },
+            ...(options.ts3
+                ? {
+                      key_storage_status: {
+                          status: walletUnitStatus,
+                          exp: Math.floor(Date.now() / 1000) + 31 * 86400,
+                      },
+                  }
+                : { status: walletUnitStatus }),
         })
             .setProtectedHeader({
                 ...decodeProtectedHeader(attestation),
@@ -452,6 +469,60 @@ describe("Issuance - revocation with the wallet unit", () => {
             });
         },
     );
+
+    describe("with a TS3 1.5 key attestation (key_storage_status)", () => {
+        test.each(["attestation", "jwt"] as const)(
+            "records key_storage_status.status and revokes with it (%s)",
+            async (proofType) => {
+                await useTrustedProvider();
+                serveStatusList(await walletUnitStatusList(provider, false));
+                const { sessionId, credential } = await issue(
+                    proofType,
+                    configId,
+                    { ts3: true },
+                );
+
+                const records = app
+                    .get(DataSource)
+                    .getRepository(CredentialWalletUnit);
+                expect(await records.findBy({ sessionId })).toEqual([
+                    expect.objectContaining({
+                        walletUnitStatusUri: STATUS_URI,
+                        walletUnitStatusIdx: WALLET_UNIT_IDX,
+                    }),
+                ]);
+
+                nock.cleanAll();
+                app.get(StatusListVerifierService).clearCache();
+                serveStatusList(await walletUnitStatusList(provider, true));
+                nock(HOST).post("/revoked").reply(200);
+
+                await app.get(WalletUnitStatusCheckJob).run();
+
+                expect(await credentialStatus(credential)).toBe(1);
+            },
+        );
+
+        test("issues nothing when the key storage is already revoked", async () => {
+            await useTrustedProvider();
+            serveStatusList(await walletUnitStatusList(provider, true));
+
+            const error = await issue("attestation", configId, {
+                ts3: true,
+            }).then(
+                () => {
+                    throw new Error("Expected the credential request to fail");
+                },
+                (e: Openid4vciRetrieveCredentialsError) =>
+                    e.response.credentialErrorResponseResult?.data,
+            );
+            expect(error).toEqual({
+                error: "invalid_proof",
+                error_description:
+                    "Key attestation is not valid: Invalid/Revoked",
+            });
+        });
+    });
 
     test("stops following the wallet unit once the configuration turns it off", async () => {
         await useTrustedProvider();

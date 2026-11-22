@@ -6,9 +6,9 @@
  * wallet unit is.
  */
 export interface WalletUnitReference {
-    /** `status.status_list.uri` of the key attestation. */
+    /** `status_list.uri` the key attestation names (`key_storage_status.status`, else `status`). */
     statusUri: string;
-    /** `status.status_list.idx` of the key attestation. */
+    /** `status_list.idx` the key attestation names (`key_storage_status.status`, else `status`). */
     statusIdx: number;
     /**
      * `x5c` of the key attestation, leaf first, to match its provider in the

@@ -14,6 +14,7 @@ import { CryptoService } from "../crypto/crypto.service.js";
 import { CryptoImplementationService } from "../crypto/key/crypto-implementation/crypto-implementation.service.js";
 import { TrustListRef } from "../verifier/presentations/entities/presentation-config.entity.js";
 import { isAttestationChainRejection } from "./domain/attestation-certificate-validity.js";
+import type { AttestationKind } from "./domain/attestation-status-claims.js";
 import { AttestationStatusRejected } from "./domain/attestation-status-rejected.js";
 import {
     discardedTrustListsNote,
@@ -303,10 +304,11 @@ export class WalletAttestationService {
      * @param matchedEntity The trusted entity that signed the attestation
      * @param trustStore The trust store the entity was matched in
      * @param statusCheckMode strict, best_effort or disabled
-     * @returns The attestation's `status_list` reference, also when the
-     * check is disabled or the list could not be fetched in best_effort;
-     * undefined when the attestation has none, or its claim is malformed
-     * and the check is disabled
+     * @returns The attestation's `status_list` reference to follow
+     * (`key_storage_status.status` if it has one, else `status`), also when
+     * the check is disabled or the list could not be fetched in best_effort;
+     * undefined when the attestation has none. When the check is disabled,
+     * a malformed claim is left out and the other claim, if valid, is used.
      * @throws AttestationStatusRejected if the attestation is revoked or
      * suspended, or if the status check failed and the mode does not
      * tolerate it; the message starts with "Key attestation" or names the
@@ -326,7 +328,7 @@ export class WalletAttestationService {
                 matchedEntity,
                 trustStore,
                 statusCheckMode,
-                "Key attestation",
+                "key",
             );
         } catch (error) {
             if (error instanceof UnauthorizedException) {
@@ -348,8 +350,8 @@ export class WalletAttestationService {
      * path are, as at issuance.
      * @param tenantId The tenant whose trust lists apply
      * @param certificates The attestations' `x5c`, leaf first
-     * @param uri The attestations' `status.status_list.uri`
-     * @param indexes Their `status.status_list.idx` values
+     * @param uri The `status_list.uri` the attestations name
+     * @param indexes The `status_list.idx` values they name
      * @param trustLists The tenant's wallet-provider trust lists
      * @returns The status value per index; an index outside the list is
      * left out and logged
@@ -432,8 +434,12 @@ export class WalletAttestationService {
     }
 
     /**
-     * Validate the status of an attestation JWT if it contains a status claim.
-     * The status claim is optional per the spec, so if not present, validation passes.
+     * Validate the status of an attestation JWT if it names a status list
+     * entry: in its TS3 1.5 claim (`client_status.status` for a wallet
+     * attestation, `key_storage_status.status` for a key attestation), in
+     * its top-level `status` claim (OpenID4VCI 1.0 Appendix D.1 and E), or
+     * in both, in which case both entries are checked. Both claims are
+     * optional, so without either, validation passes.
      * Also verifies that the status list JWT is signed by a revocation certificate
      * from the same trusted entity that issued the attestation, or by
      * its wallet attestation certificate if it has no revocation certificate.
@@ -442,8 +448,10 @@ export class WalletAttestationService {
      * @param matchedEntity The matched trusted entity from certificate validation
      * @param trustStore The trust store used for validation
      * @param statusCheckMode strict, best_effort or disabled
-     * @param label How messages name the attestation
-     * @returns The attestation's `status_list` reference, if it has one
+     * @param kind Whether it is a wallet or a key attestation; decides the
+     * TS3 claim that is read and how messages name the attestation
+     * @returns The `status_list` reference to follow for the attestation:
+     * that of its TS3 claim if it has one, else that of its `status` claim
      * @throws UnauthorizedException if the attestation has been revoked or
      * suspended, or if the status check failed and the mode does not tolerate it
      */
@@ -453,8 +461,10 @@ export class WalletAttestationService {
         matchedEntity: MatchedTrustedEntity | null,
         trustStore: BuiltTrustStore | null,
         statusCheckMode: RevocationCheckMode,
-        label: AttestationLabel = "Wallet attestation",
+        kind: AttestationKind = "wallet",
     ): Promise<StatusListReference | undefined> {
+        const label: AttestationLabel =
+            kind === "key" ? "Key attestation" : "Wallet attestation";
         const policy = revocationModeToPolicy(statusCheckMode);
         if (!policy.enabled) {
             this.logger.debug(
@@ -462,31 +472,68 @@ export class WalletAttestationService {
             );
             // Malformed claims are accepted when the check is disabled.
             try {
-                return this.statusListVerifierService.getStatusEntryFromJwt(
+                return this.statusListVerifierService.getAttestationStatusEntries(
                     attestationJwt,
-                );
+                    kind,
+                    { skipMalformed: true },
+                )[0];
             } catch {
                 return undefined;
             }
         }
 
-        let statusEntry: StatusListReference | undefined;
+        let statusEntries: StatusListReference[];
         try {
-            // Get the status entry from the JWT. A malformed status claim
-            // throws and rejects in both strict and best_effort.
-            statusEntry =
-                this.statusListVerifierService.getStatusEntryFromJwt(
+            // A malformed status claim throws and rejects in both strict and
+            // best_effort.
+            statusEntries =
+                this.statusListVerifierService.getAttestationStatusEntries(
                     attestationJwt,
+                    kind,
                 );
+        } catch (err) {
+            this.handleStatusCheckError(err, policy.failClosed, label);
+            return undefined;
+        }
 
-            // No status claim in JWT - this is allowed per spec
-            if (!statusEntry) {
-                this.logger.debug(
-                    `${label} does not contain status claim - skipping status check`,
-                );
-                return undefined;
-            }
+        // No status claim in JWT - this is allowed per spec
+        if (statusEntries.length === 0) {
+            this.logger.debug(
+                `${label} does not contain status claim - skipping status check`,
+            );
+            return undefined;
+        }
 
+        // Each entry is checked on its own, so that best_effort accepting
+        // one list that cannot be fetched still checks the other.
+        for (const statusEntry of statusEntries) {
+            await this.checkStatusEntry(
+                tenantId,
+                statusEntry,
+                matchedEntity,
+                trustStore,
+                policy.failClosed,
+                label,
+            );
+        }
+        return statusEntries[0];
+    }
+
+    /**
+     * Check one status list entry of an attestation, see
+     * {@link validateAttestationStatus}.
+     * @throws UnauthorizedException if the entry is revoked or suspended, or
+     * if the check failed and the mode does not tolerate it
+     */
+    private async checkStatusEntry(
+        tenantId: string,
+        statusEntry: StatusListReference,
+        matchedEntity: MatchedTrustedEntity | null,
+        trustStore: BuiltTrustStore | null,
+        failClosed: boolean | undefined,
+        label: AttestationLabel,
+    ): Promise<void> {
+        try {
             // Fetch the status list JWT
             const statusListJwt =
                 await this.statusListVerifierService.getStatusListJwt(
@@ -539,9 +586,8 @@ export class WalletAttestationService {
                 `${label} status verified: ${statusResult.description}`,
             );
         } catch (err) {
-            this.handleStatusCheckError(err, policy.failClosed, label);
+            this.handleStatusCheckError(err, failClosed, label);
         }
-        return statusEntry;
     }
 
     /**

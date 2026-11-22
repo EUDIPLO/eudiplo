@@ -44,8 +44,8 @@ This page lists every standard and feature EUDIPLO implements, grouped by area, 
 | Notification endpoint                      | ✅     | Can be disabled per tenant                                                                                                                  | [Notifications](../issuance/notifications.md)                 |
 | Credential request and response encryption | ✅     | Offered in the issuer metadata; can be made mandatory per tenant                                                                            | [Issuance configuration](../issuance/issuance-configuration.md) |
 | Signed issuer metadata                     | ✅     | Returned for `Accept: application/jwt`, signed with the tenant's access certificate                                                         | [Issuance configuration](../issuance/issuance-configuration.md) |
-| Wallet attestation                         | ✅     | `OAuth-Client-Attestation` headers at PAR and token endpoints of hosted authorization servers; status list check `best_effort` by default (`walletAttestationStatusCheckMode`) | [Wallet and key attestation](../trust/attestation.md)         |
-| Key attestation                            | ✅     | `attestation` proof type, or a `key_attestation` header in `jwt` proofs; status list check `best_effort` by default (`walletAttestationStatusCheckMode`) | [Wallet and key attestation](../trust/attestation.md)         |
+| Wallet attestation                         | ✅     | `OAuth-Client-Attestation` headers at PAR and token endpoints of hosted authorization servers; status list check `best_effort` by default (`walletAttestationStatusCheckMode`), from `status`, TS3 1.5 `client_status`, or both | [Wallet and key attestation](../trust/attestation.md)         |
+| Key attestation                            | ✅     | `attestation` proof type, or a `key_attestation` header in `jwt` proofs; status list check `best_effort` by default (`walletAttestationStatusCheckMode`), from `status`, TS3 1.5 `key_storage_status`, or both | [Wallet and key attestation](../trust/attestation.md)         |
 
 ## OID4VP (presentation)
 
