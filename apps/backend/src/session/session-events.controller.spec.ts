@@ -59,6 +59,7 @@ describe("SessionEventsController", () => {
                 "session-1",
                 scope,
                 hideOpen,
+                {},
             );
             expect(events.getSessionEvents).toHaveBeenCalledExactlyOnceWith(
                 "tenant-1",
@@ -78,5 +79,26 @@ describe("SessionEventsController", () => {
             ),
         ).rejects.toBeInstanceOf(SessionNotFound);
         expect(events.getSessionEvents).not.toHaveBeenCalled();
+    });
+
+    it("streams only sessions within the client's configuration limits", async () => {
+        const { controller, sessions } = createController();
+        const caller = {
+            ...token([Role.PresentationRequest]),
+            client: {
+                clientId: "client-1",
+                allowedPresentationConfigs: ["pid"],
+            },
+        } as unknown as TokenPayload;
+
+        await controller.subscribeToSessionEvents("session-1", caller);
+
+        expect(sessions.getForReader).toHaveBeenCalledExactlyOnceWith(
+            "tenant-1",
+            "session-1",
+            "presentation",
+            [],
+            { presentation: ["pid"], issuance: undefined },
+        );
     });
 });

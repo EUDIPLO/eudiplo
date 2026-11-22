@@ -33,6 +33,7 @@ import { SourceLoadState, loadSource, reportSourceFailures } from '../../common/
 import { copyToClipboard } from '../../utils/copy-to-clipboard';
 import { wholeNumberValidator } from '../../utils/whole-number-validator';
 import { showFieldsToFix } from '../../common/field-to-fix.util';
+import type { PageWithUnsavedChanges } from '../../services/unsaved-changes.service';
 
 /** The sources of the options of the form's selects. */
 type StatusListEditSource = 'credentialConfigs' | 'keyChains';
@@ -61,7 +62,7 @@ type StatusListEditSource = 'credentialConfigs' | 'keyChains';
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './status-list-edit.component.scss',
 })
-export class StatusListEditComponent implements OnInit {
+export class StatusListEditComponent implements OnInit, PageWithUnsavedChanges {
   listId?: string | null;
   form!: FormGroup;
   isLoading = true;
@@ -241,6 +242,10 @@ export class StatusListEditComponent implements OnInit {
     );
   }
 
+  hasUnsavedChanges(): boolean {
+    return this.form.dirty;
+  }
+
   /** Save stays focusable while a save runs, so its tooltip says why it waits. */
   get saveTooltip(): string {
     return this.isSaving ? 'Saving the status list…' : '';
@@ -295,6 +300,7 @@ export class StatusListEditComponent implements OnInit {
         this.snackBar.open('Status list created successfully', 'Close', { duration: 3000 });
       }
 
+      this.form.markAsPristine();
       this.router.navigate(['/status-lists']);
     } catch (error) {
       console.error('Error saving status list:', error);
