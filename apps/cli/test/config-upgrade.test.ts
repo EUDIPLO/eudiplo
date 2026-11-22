@@ -425,7 +425,7 @@ describe("config upgrade", () => {
         );
         const upgraded = `${source}.upgraded.json`;
         const result = JSON.parse(await readFile(upgraded, "utf8"));
-        expect(result.$schema).toBe(schemaUrl("CredentialConfig", 4));
+        expect(result.$schema).toBe(schemaUrl("CredentialConfig", 5));
         expect(result.spec).toEqual(
             spec({ pattern: "^\\d{4}$", items: { type: "string" } }),
         );
@@ -462,7 +462,7 @@ describe("config upgrade", () => {
         );
         const upgraded = `${source}.upgraded.json`;
         const result = JSON.parse(await readFile(upgraded, "utf8"));
-        expect(result.$schema).toBe(schemaUrl("CredentialConfig", 4));
+        expect(result.$schema).toBe(schemaUrl("CredentialConfig", 5));
         expect(result.spec).toEqual(display({ background_color: "#12107C" }));
     });
 

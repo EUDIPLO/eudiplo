@@ -29,6 +29,7 @@ import { getApiErrorMessage } from '../../../utils/error-message';
 import { openErrorSnackBar } from '../../../utils/error-snackbar';
 import { LoadErrorComponent } from '../../../common/load-error.component';
 import { walletDisplayEntries } from '../../../utils/display-entries';
+import { CLAIM_FORMAT_LABELS, claimFormatOf } from '../../../utils/claim-formats';
 import { confirmAndDelete } from '../../../common/confirm-delete';
 
 interface ClaimFieldRow {
@@ -783,5 +784,11 @@ export class CredentialConfigShowComponent implements OnInit {
 
   asAny(obj: any) {
     return obj;
+  }
+
+  /** The label the create page offers for a claim's value format, or the stored value. */
+  claimFormatLabel(format: unknown): string {
+    const known = claimFormatOf({ format });
+    return known ? CLAIM_FORMAT_LABELS[known] : String(format);
   }
 }

@@ -321,7 +321,10 @@ function buildLeafSchema(field: ClaimFieldDefinition): JsonSchema {
     ...sanitizeConstraints(field.constraints),
     type: field.type
   };
-  
+  if (field.format) {
+    schema.format = field.format;
+  }
+
   const title = getDisplayTitle(field.display);
   if (title) {
     schema.title = title;

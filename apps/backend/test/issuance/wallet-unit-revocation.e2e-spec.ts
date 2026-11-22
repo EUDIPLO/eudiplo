@@ -1,6 +1,9 @@
 import "reflect-metadata";
 import { INestApplication } from "@nestjs/common";
-import { clientAuthenticationAnonymous } from "@openid4vc/oauth2";
+import {
+    clientAuthenticationAnonymous,
+    clientAuthenticationClientAttestationJwt,
+} from "@openid4vc/oauth2";
 import {
     createKeyAttestationJwt,
     Openid4vciClient,
@@ -54,6 +57,8 @@ const HOST = "http://localhost:8787";
 const STATUS_PATH = "/wua-status";
 const STATUS_URI = `${HOST}${STATUS_PATH}`;
 const WALLET_UNIT_IDX = 5;
+/** Index of the wallet instance (WIA `client_status`) in the same list. */
+const WALLET_INSTANCE_IDX = 9;
 
 type Signer = { certificate: X509Certificate; privateKey: CryptoKey };
 
@@ -68,10 +73,23 @@ async function signingKey(signer: Signer) {
     );
 }
 
-/** A status list of the wallet provider, signed with `signer` (its attestation or a revocation certificate). */
-async function walletUnitStatusList(signer: Signer, revoked: boolean) {
+/**
+ * A status list of the wallet provider, signed with `signer` (its
+ * attestation or a revocation certificate). `revoked` revokes the wallet
+ * unit's key storage, or the listed indexes.
+ */
+async function walletUnitStatusList(
+    signer: Signer,
+    revoked: boolean | number[],
+) {
     const elements = new Array(16).fill(0);
-    elements[WALLET_UNIT_IDX] = revoked ? 1 : 0;
+    for (const idx of revoked === true
+        ? [WALLET_UNIT_IDX]
+        : revoked === false
+          ? []
+          : revoked) {
+        elements[idx] = 1;
+    }
     const lst = Buffer.from(
         new StatusList(elements, 1).compressStatusListToBytes(),
     ).toString("base64url");
@@ -182,6 +200,23 @@ describe("Issuance - revocation with the wallet unit", () => {
     async function issue(
         proofType: "attestation" | "jwt" = "attestation",
         credentialConfigurationId = configId,
+        options: {
+            /**
+             * Name the wallet unit in `key_storage_status.status` (TS3 1.5)
+             * instead of the top-level `status` claim.
+             */
+            ts3?: boolean;
+            /**
+             * Authenticate at the token endpoint with a TS3 1.5 wallet
+             * attestation whose `client_status` names index
+             * {@link WALLET_INSTANCE_IDX} of the provider's list.
+             */
+            walletAttestation?: boolean;
+            /** Seconds from now until `client_status.exp` (default 31 days). */
+            walletMaintainedFor?: number;
+            /** Seconds from now until `key_storage_status.exp` (default 31 days). */
+            keyMaintainedFor?: number;
+        } = {},
     ): Promise<{ sessionId: string; credential: string }> {
         const offer = await request(app.getHttpServer())
             .post("/issuer/offer")
@@ -199,7 +234,8 @@ describe("Issuance - revocation with the wallet unit", () => {
         const providerPublicJwk = await exportJWK(provider.publicKey);
         const holder = await generateKeyPair("ES256", { extractable: true });
         const holderPublicJwk = await exportJWK(holder.publicKey);
-        const client = new Openid4vciClient({
+        const holderPrivateJwk = await exportJWK(holder.privateKey);
+        let client = new Openid4vciClient({
             callbacks: {
                 ...callbacks,
                 clientAuthentication: clientAuthenticationAnonymous(),
@@ -211,6 +247,50 @@ describe("Issuance - revocation with the wallet unit", () => {
         const issuerMetadata = await client.resolveIssuerMetadata(
             credentialOffer.credential_issuer,
         );
+        if (options.walletAttestation) {
+            const authorizationServer =
+                issuerMetadata.authorizationServers?.[0]?.issuer ??
+                credentialOffer.credential_issuer;
+            const now = Math.floor(Date.now() / 1000);
+            const clientAttestationJwt = await new SignJWT({
+                sub: "wallet-instance",
+                aud: [authorizationServer],
+                iat: now,
+                exp: now + 300,
+                cnf: { jwk: holderPublicJwk },
+                client_status: {
+                    status: {
+                        status_list: {
+                            uri: STATUS_URI,
+                            idx: WALLET_INSTANCE_IDX,
+                        },
+                    },
+                    exp: now + (options.walletMaintainedFor ?? 31 * 86400),
+                },
+            })
+                .setProtectedHeader({
+                    alg: "ES256",
+                    typ: "oauth-client-attestation+jwt",
+                    x5c: [provider.certificate.toString("base64")],
+                })
+                .sign(await signingKey(provider));
+            client = new Openid4vciClient({
+                callbacks: {
+                    ...callbacks,
+                    clientAuthentication:
+                        clientAuthenticationClientAttestationJwt({
+                            clientAttestationJwt,
+                            callbacks: {
+                                signJws: getSignJwsCallback([
+                                    holderPrivateJwk as Jwk,
+                                ]),
+                                generateRandom: callbacks.generateRandom,
+                            },
+                        }),
+                    signJws: getSignJwsCallback([holderPrivateJwk as Jwk]),
+                },
+            });
+        }
         const { accessTokenResponse } =
             await client.retrievePreAuthorizedCodeAccessTokenFromOffer({
                 credentialOffer,
@@ -238,9 +318,21 @@ describe("Issuance - revocation with the wallet unit", () => {
         });
         // The wallet unit attestation: the key attestation with a status
         // list entry and the provider's certificate.
+        const walletUnitStatus = {
+            status_list: { uri: STATUS_URI, idx: WALLET_UNIT_IDX },
+        };
         const walletUnitAttestation = await new SignJWT({
             ...decodeJwt(attestation),
-            status: { status_list: { uri: STATUS_URI, idx: WALLET_UNIT_IDX } },
+            ...(options.ts3
+                ? {
+                      key_storage_status: {
+                          status: walletUnitStatus,
+                          exp:
+                              Math.floor(Date.now() / 1000) +
+                              (options.keyMaintainedFor ?? 31 * 86400),
+                      },
+                  }
+                : { status: walletUnitStatus }),
         })
             .setProtectedHeader({
                 ...decodeProtectedHeader(attestation),
@@ -452,6 +544,252 @@ describe("Issuance - revocation with the wallet unit", () => {
             });
         },
     );
+
+    describe("with a TS3 1.5 key attestation (key_storage_status)", () => {
+        test.each(["attestation", "jwt"] as const)(
+            "records key_storage_status.status and revokes with it (%s)",
+            async (proofType) => {
+                await useTrustedProvider();
+                serveStatusList(await walletUnitStatusList(provider, false));
+                const { sessionId, credential } = await issue(
+                    proofType,
+                    configId,
+                    { ts3: true },
+                );
+
+                const records = app
+                    .get(DataSource)
+                    .getRepository(CredentialWalletUnit);
+                expect(await records.findBy({ sessionId })).toEqual([
+                    expect.objectContaining({
+                        walletUnitStatusUri: STATUS_URI,
+                        walletUnitStatusIdx: WALLET_UNIT_IDX,
+                    }),
+                ]);
+
+                nock.cleanAll();
+                app.get(StatusListVerifierService).clearCache();
+                serveStatusList(await walletUnitStatusList(provider, true));
+                nock(HOST).post("/revoked").reply(200);
+
+                await app.get(WalletUnitStatusCheckJob).run();
+
+                expect(await credentialStatus(credential)).toBe(1);
+            },
+        );
+
+        test("issues nothing when the key storage is already revoked", async () => {
+            await useTrustedProvider();
+            serveStatusList(await walletUnitStatusList(provider, true));
+
+            const error = await issue("attestation", configId, {
+                ts3: true,
+            }).then(
+                () => {
+                    throw new Error("Expected the credential request to fail");
+                },
+                (e: Openid4vciRetrieveCredentialsError) =>
+                    e.response.credentialErrorResponseResult?.data,
+            );
+            expect(error).toEqual({
+                error: "invalid_proof",
+                error_description:
+                    "Key attestation is not valid: Invalid/Revoked",
+            });
+        });
+    });
+
+    describe("with a TS3 1.5 wallet attestation at the token endpoint", () => {
+        test("records the wallet instance and revokes the credential once it is revoked", async () => {
+            await useTrustedProvider();
+            serveStatusList(await walletUnitStatusList(provider, false));
+            const { sessionId, credential } = await issue(
+                "attestation",
+                configId,
+                { ts3: true, walletAttestation: true },
+            );
+
+            const records = app
+                .get(DataSource)
+                .getRepository(CredentialWalletUnit);
+            expect(
+                (await records.findBy({ sessionId }))
+                    .map((record) => [
+                        record.attestationKind,
+                        record.walletUnitStatusIdx,
+                        record.walletUnitCertificates,
+                    ])
+                    .sort(),
+            ).toEqual([
+                [
+                    "key",
+                    WALLET_UNIT_IDX,
+                    [provider.certificate.toString("base64")],
+                ],
+                [
+                    "wallet",
+                    WALLET_INSTANCE_IDX,
+                    [provider.certificate.toString("base64")],
+                ],
+            ]);
+            const { idx: credentialIdx } = (
+                decodeJwt(credential.split("~")[0]) as {
+                    status: { status_list: { idx: number } };
+                }
+            ).status.status_list;
+
+            // Only the wallet instance is revoked, the key storage is not.
+            nock.cleanAll();
+            app.get(StatusListVerifierService).clearCache();
+            serveStatusList(
+                await walletUnitStatusList(provider, [WALLET_INSTANCE_IDX]),
+            );
+            let delivered: Record<string, unknown> | undefined;
+            nock(HOST)
+                .post("/revoked", (body) => {
+                    delivered = body;
+                    return true;
+                })
+                .reply(200);
+
+            await app.get(WalletUnitStatusCheckJob).run();
+
+            expect(await credentialStatus(credential)).toBe(1);
+            expect(delivered).toMatchObject({
+                reason: "wallet_unit_revoked",
+                session: sessionId,
+                statusEntries: [
+                    expect.objectContaining({ idx: credentialIdx }),
+                ],
+            });
+            expect(await records.findBy({ sessionId })).toEqual([]);
+        });
+
+        test("refuses the token for a wallet instance that is already revoked", async () => {
+            await useTrustedProvider();
+            serveStatusList(
+                await walletUnitStatusList(provider, [WALLET_INSTANCE_IDX]),
+            );
+
+            await expect(
+                issue("attestation", configId, {
+                    ts3: true,
+                    walletAttestation: true,
+                }),
+            ).rejects.toMatchObject({
+                errorResponse: {
+                    error: "invalid_client",
+                    error_description:
+                        expect.stringContaining("Invalid/Revoked"),
+                },
+            });
+        });
+    });
+
+    describe("bounded by the status maintenance period (TS3 1.5 section 2.4.3)", () => {
+        const expOf = (credential: string) =>
+            decodeJwt(credential.split("~")[0]).exp as number;
+
+        test("ends the credential before client_status.exp and records that expiry", async () => {
+            await useTrustedProvider();
+            serveStatusList(await walletUnitStatusList(provider, false));
+            const before = Math.floor(Date.now() / 1000);
+            const { sessionId, credential } = await issue(
+                "attestation",
+                configId,
+                {
+                    ts3: true,
+                    walletAttestation: true,
+                    walletMaintainedFor: 86400,
+                },
+            );
+            const after = Math.floor(Date.now() / 1000);
+
+            // The configuration gives 7 days; the wallet instance's status
+            // is maintained for one.
+            const exp = expOf(credential);
+            expect(exp).toBeGreaterThanOrEqual(before + 86400 - 1);
+            expect(exp).toBeLessThanOrEqual(after + 86400 - 1);
+            const records = await app
+                .get(DataSource)
+                .getRepository(CredentialWalletUnit)
+                .findBy({ sessionId });
+            expect(
+                records.map((record) => record.credentialExpiresAt?.getTime()),
+            ).toEqual([exp * 1000, exp * 1000]);
+        });
+
+        test("ends the credential before key_storage_status.exp", async () => {
+            await useTrustedProvider();
+            serveStatusList(await walletUnitStatusList(provider, false));
+            const before = Math.floor(Date.now() / 1000);
+            const { credential } = await issue("jwt", configId, {
+                ts3: true,
+                keyMaintainedFor: 2 * 86400,
+            });
+
+            const after = Math.floor(Date.now() / 1000);
+            expect(expOf(credential)).toBeLessThanOrEqual(
+                after + 2 * 86400 - 1,
+            );
+            expect(expOf(credential)).toBeGreaterThanOrEqual(
+                before + 2 * 86400 - 1,
+            );
+        });
+
+        test("does not bound a configuration that does not follow the wallet unit", async () => {
+            await useTrustedProvider();
+            serveStatusList(await walletUnitStatusList(provider, false));
+            const before = Math.floor(Date.now() / 1000);
+            const { credential } = await issue("attestation", plainConfigId, {
+                ts3: true,
+                walletAttestation: true,
+                walletMaintainedFor: 86400,
+            });
+
+            expect(expOf(credential)).toBeGreaterThanOrEqual(
+                before + 7 * 86400,
+            );
+        });
+
+        test.each([
+            [
+                "key_storage_status.exp",
+                { keyMaintainedFor: -60 },
+                "credential_request_denied",
+            ],
+            [
+                "client_status.exp",
+                { walletAttestation: true, walletMaintainedFor: -60 },
+                "credential_request_denied",
+            ],
+        ] as const)(
+            "refuses the credential when %s has passed",
+            async (claim, periods, error) => {
+                await useTrustedProvider();
+                serveStatusList(await walletUnitStatusList(provider, false));
+
+                const response = await issue("attestation", configId, {
+                    ts3: true,
+                    ...periods,
+                }).then(
+                    () => {
+                        throw new Error(
+                            "Expected the credential request to fail",
+                        );
+                    },
+                    (e: Openid4vciRetrieveCredentialsError) =>
+                        e.response.credentialErrorResponseResult?.data,
+                );
+                expect(response).toEqual({
+                    error,
+                    error_description: expect.stringContaining(
+                        claim.split(".")[0],
+                    ),
+                });
+            },
+        );
+    });
 
     test("stops following the wallet unit once the configuration turns it off", async () => {
         await useTrustedProvider();

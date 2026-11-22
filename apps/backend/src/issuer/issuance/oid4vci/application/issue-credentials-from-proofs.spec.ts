@@ -277,4 +277,88 @@ describe("IssueCredentialsFromProofs", () => {
         });
         expect(onIssued).toHaveBeenCalledOnce();
     });
+
+    describe("status maintenance period", () => {
+        const now = () => Math.floor(Date.now() / 1000);
+        function run(options: {
+            revokeWithWalletUnit: boolean;
+            keyMaintainedUntil?: number;
+            walletMaintainedUntil?: number;
+        }) {
+            const walletUnit = {
+                statusUri: "https://wp.example/wua-status",
+                statusIdx: 7,
+                certificates: ["leaf"],
+                maintainedUntil: options.keyMaintainedUntil,
+            };
+            const verify = vi.fn().mockResolvedValue({
+                holderKeys: [{ kid: "one" }],
+                keyAttestation: { attestedKeys: [{ kid: "one" }], walletUnit },
+            });
+            const issue = vi.fn().mockResolvedValue(["credential"]);
+            const useCase = new IssueCredentialsFromProofs(
+                {
+                    prepare: vi.fn().mockResolvedValue({ verify }),
+                } as unknown as CredentialProofVerifier,
+                { execute: issue } as any,
+            );
+            const result = useCase.execute({
+                proofs: { values: ["proof-1", "proof-2"], proofType: "jwt" },
+                session: {
+                    ...session,
+                    walletInstanceStatus: {
+                        statusUri: "https://wp.example/wia",
+                        statusIdx: 1,
+                        certificates: ["leaf"],
+                        maintainedUntil: options.walletMaintainedUntil,
+                    },
+                } as any,
+                credentialConfigurationId: "config-1",
+                issuanceSetId: "set-1",
+                trustLists: [],
+                keyAttestationStatusCheckMode: RevocationCheckMode.Strict,
+                revokeWithWalletUnit: options.revokeWithWalletUnit,
+                onIssued: vi.fn(),
+            });
+            return { result, issue };
+        }
+
+        it.each([
+            ["key", { keyMaintainedUntil: now() - 1 }],
+            ["wallet", { walletMaintainedUntil: now() }],
+        ] as const)(
+            "refuses the whole batch before issuing when the %s attestation's period has ended",
+            async (attestation, periods) => {
+                const { result, issue } = run({
+                    revokeWithWalletUnit: true,
+                    ...periods,
+                });
+
+                await expect(result).rejects.toMatchObject({
+                    name: "CredentialLifetimeExhausted",
+                    attestation,
+                });
+                expect(issue).not.toHaveBeenCalled();
+            },
+        );
+
+        it("issues when the period has not ended", async () => {
+            const { result } = run({
+                revokeWithWalletUnit: true,
+                keyMaintainedUntil: now() + 86_400,
+                walletMaintainedUntil: now() + 3600,
+            });
+
+            await expect(result).resolves.toHaveLength(2);
+        });
+
+        it("ignores the period for a configuration that does not follow the wallet unit", async () => {
+            const { result } = run({
+                revokeWithWalletUnit: false,
+                keyMaintainedUntil: now() - 1,
+            });
+
+            await expect(result).resolves.toHaveLength(2);
+        });
+    });
 });

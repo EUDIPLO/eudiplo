@@ -34,7 +34,7 @@ Each entry of `fields` describes one claim. `children` holds nested entries with
 
 <SchemaReference name="credential-field" mode="table" />
 
-Defaults that are not part of the schema: `mandatory` and `disclosable` are `false` when omitted. `namespace` (mDOC only) defaults to the first path segment of a nested path, otherwise to the document type (`org.iso.18013.5.1` for `org.iso.18013.5.1.mDL`). In `path`, `null` stands for every element of an array.
+Defaults that are not part of the schema: `mandatory` and `disclosable` are `false` when omitted. `namespace` (mDOC only) defaults to the first path segment of a nested path, otherwise to the document type (`org.iso.18013.5.1` for `org.iso.18013.5.1.mDL`). In `path`, `null` stands for every element of an array. `format` (`date`, `date-time`) is accepted on `string` fields only; see [Dates](../issuance/claims.md#dates) for how each credential format issues it.
 
 ## Example
 

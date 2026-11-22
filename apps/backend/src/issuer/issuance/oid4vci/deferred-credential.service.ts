@@ -8,6 +8,11 @@ import { decodeJwt } from "jose";
 import { Span, TraceService } from "nestjs-otel";
 import { v4 } from "uuid";
 import type { SessionData as Session } from "../../../session/domain/session-data.js";
+import {
+    assertMaintenancePeriodOpen,
+    CredentialLifetimeExhausted,
+    maintenancePeriodEnd,
+} from "../../configuration/credentials/domain/maintenance-period.js";
 import { IssuanceService } from "../../configuration/issuance/issuance.service.js";
 import type { WalletUnitReference } from "../../status-list/domain/wallet-unit-reference.js";
 import { CorrelateCredentialTokenSession } from "./application/correlate-credential-token-session.js";
@@ -69,6 +74,8 @@ export interface CreateDeferredTransactionParams {
     issuanceSetId?: string;
     /** Key attestation requirements of the requested credential configuration */
     keyAttestationsRequired?: KeyAttestationRequirements;
+    /** Whether the credential follows its wallet unit and its maintenance period */
+    revokeWithWalletUnit?: boolean;
 }
 
 /**
@@ -114,6 +121,7 @@ export class DeferredCredentialService {
             interval = 5,
             issuanceSetId,
             keyAttestationsRequired,
+            revokeWithWalletUnit,
         } = params;
 
         this.traceService.getSpan()?.setAttributes({
@@ -130,6 +138,7 @@ export class DeferredCredentialService {
                   tenantId,
                   parsedCredentialRequest.proofs,
                   keyAttestationsRequired,
+                  { revokeWithWalletUnit, session },
               )
             : { holderCnf: null, walletUnit: null };
 
@@ -167,6 +176,10 @@ export class DeferredCredentialService {
         tenantId: string,
         proofs: ResolvedCredentialProofs,
         keyAttestationsRequired: KeyAttestationRequirements | undefined,
+        maintenance: Pick<
+            CreateDeferredTransactionParams,
+            "revokeWithWalletUnit" | "session"
+        >,
     ): Promise<{ holderCnf: Jwk; walletUnit: WalletUnitReference | null }> {
         if (proofs.values.length !== 1) {
             throw new CredentialRequestException(
@@ -241,9 +254,46 @@ export class DeferredCredentialService {
                 );
             }
         }
+        this.assertProofAllowsIssuance(
+            verified,
+            keyAttestationsRequired,
+            maintenance,
+        );
+        return {
+            holderCnf: holderKeys[0] as Jwk,
+            walletUnit: verified.keyAttestation?.walletUnit ?? null,
+        };
+    }
+
+    /**
+     * Checks the verified proof against the key attestation requirements
+     * and the status maintenance period, as protocol errors.
+     */
+    private assertProofAllowsIssuance(
+        verified: Parameters<typeof assertKeyAttestationRequirements>[1],
+        keyAttestationsRequired: KeyAttestationRequirements | undefined,
+        maintenance: Pick<
+            CreateDeferredTransactionParams,
+            "revokeWithWalletUnit" | "session"
+        >,
+    ): void {
         try {
             assertKeyAttestationRequirements(keyAttestationsRequired, verified);
+            // Refused now rather than when the transaction is completed: a
+            // maintenance period that has ended leaves no validity.
+            const bound = maintenancePeriodEnd(
+                maintenance.revokeWithWalletUnit,
+                verified.keyAttestation?.walletUnit,
+                maintenance.session.walletInstanceStatus,
+            );
+            if (bound) assertMaintenancePeriodOpen(bound);
         } catch (error) {
+            if (error instanceof CredentialLifetimeExhausted) {
+                throw new CredentialRequestException(
+                    "credential_request_denied",
+                    error.message,
+                );
+            }
             if (error instanceof InvalidCredentialProof) {
                 throw new CredentialRequestException(
                     "invalid_proof",
@@ -252,10 +302,6 @@ export class DeferredCredentialService {
             }
             throw error;
         }
-        return {
-            holderCnf: holderKeys[0] as Jwk,
-            walletUnit: verified.keyAttestation?.walletUnit ?? null,
-        };
     }
 
     /**

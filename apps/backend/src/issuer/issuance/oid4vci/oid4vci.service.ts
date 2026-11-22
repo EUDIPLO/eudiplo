@@ -34,6 +34,7 @@ import { SessionLoggerService } from "../../../session/logging/session-logger.se
 import { CredentialsService } from "../../configuration/credentials/credentials.service.js";
 import { CredentialClaimsResolutionError } from "../../configuration/credentials/domain/credential-claims.js";
 import { InvalidCredentialClaims } from "../../configuration/credentials/domain/credential-claims-validation.js";
+import { CredentialLifetimeExhausted } from "../../configuration/credentials/domain/maintenance-period.js";
 import { CredentialProofType } from "../../configuration/credentials/entities/credential.entity.js";
 import { InvalidClaimsException } from "../../configuration/credentials/exceptions/invalid-claims.exception.js";
 import { IssuanceService } from "../../configuration/issuance/issuance.service.js";
@@ -230,6 +231,16 @@ export class Oid4vciService {
                 error.message,
             );
         }
+        // The maintenance period of the attestations the credential follows
+        // has ended. The attestations are valid; the issuer does not accept
+        // them for this credential (OID4VCI 1.0 Section 8.3.1.2), and the
+        // same proof would fail again.
+        if (error instanceof CredentialLifetimeExhausted) {
+            throw new CredentialRequestException(
+                "credential_request_denied",
+                error.message,
+            );
+        }
 
         if (
             error instanceof ConflictException &&
@@ -267,7 +278,8 @@ export class Oid4vciService {
      * of the credential configuration: none for a configuration that needs
      * no key proof (proofs sent anyway are ignored), otherwise exactly one
      * supported proof type. Returns the key attestation requirements every
-     * proof must meet as well.
+     * proof must meet as well, and whether its credentials follow the
+     * wallet unit.
      */
     private async resolveProofsForConfiguration(
         tenantId: string,
@@ -276,6 +288,7 @@ export class Oid4vciService {
     ): Promise<{
         parsedProofs?: ResolvedCredentialProofs;
         keyAttestationsRequired?: KeyAttestationRequirements;
+        revokeWithWalletUnit: boolean;
     }> {
         let requirements: Awaited<
             ReturnType<
@@ -306,7 +319,9 @@ export class Oid4vciService {
             }
             throw error;
         }
-        if (!parsedProofs) return {};
+        if (!parsedProofs) {
+            return { revokeWithWalletUnit: requirements.revokeWithWalletUnit };
+        }
 
         const { proofType } = parsedProofs;
         if (
@@ -320,6 +335,7 @@ export class Oid4vciService {
         return {
             parsedProofs,
             keyAttestationsRequired: requirements.keyAttestationsRequired,
+            revokeWithWalletUnit: requirements.revokeWithWalletUnit,
         };
     }
 
@@ -582,7 +598,7 @@ export class Oid4vciService {
 
         // The proofs are resolved once the configuration is known: one that
         // needs no key proof accepts a request without `proofs`.
-        const { parsedProofs, keyAttestationsRequired } =
+        const { parsedProofs, keyAttestationsRequired, revokeWithWalletUnit } =
             await this.resolveProofsForConfiguration(
                 tenantId,
                 credentialConfigurationId,
@@ -649,6 +665,7 @@ export class Oid4vciService {
                         interval: claimsResult.interval,
                         issuanceSetId,
                         keyAttestationsRequired,
+                        revokeWithWalletUnit,
                     })
                     .catch((error: unknown) => {
                         throw toHttpError(error);
@@ -681,6 +698,7 @@ export class Oid4vciService {
                 keyAttestationStatusCheckMode:
                     walletAttestationPolicy.walletAttestationStatusCheckMode,
                 keyAttestationsRequired,
+                revokeWithWalletUnit,
                 onIssued: (credentialSize) =>
                     this.auditLogger.logCredentialIssuance(
                         logContext,

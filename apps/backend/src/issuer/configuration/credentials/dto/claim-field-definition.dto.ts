@@ -1,3 +1,8 @@
+import {
+    CLAIM_FIELD_FORMAT_TYPE_MESSAGE,
+    CLAIM_FIELD_FORMATS,
+    claimFieldFormatAllowed,
+} from "@eudiplo/config-format/claim-formats.js";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { createZodDto } from "nestjs-zod";
 import { z } from "zod";
@@ -23,6 +28,7 @@ const ClaimFieldDefinitionSchema: z.ZodType<any> = z.lazy(() =>
                 "object",
                 "array",
             ]),
+            format: z.enum(CLAIM_FIELD_FORMATS).optional(),
             defaultValue: z.unknown().optional(),
             mandatory: z.boolean().optional(),
             disclosable: z.boolean().optional(),
@@ -31,7 +37,11 @@ const ClaimFieldDefinitionSchema: z.ZodType<any> = z.lazy(() =>
             constraints: ClaimConstraintsSchema.optional(),
             children: z.array(ClaimFieldDefinitionSchema).optional(),
         })
-        .strict(),
+        .strict()
+        .refine(claimFieldFormatAllowed, {
+            path: ["format"],
+            message: CLAIM_FIELD_FORMAT_TYPE_MESSAGE,
+        }),
 );
 
 export class FieldDisplayDto extends createZodDto(FieldDisplaySchema) {
@@ -68,6 +78,13 @@ export class ClaimFieldDefinitionDto extends createZodDto(
     type!: "string" | "number" | "integer" | "boolean" | "object" | "array";
 
     @ApiPropertyOptional({
+        description:
+            'JSON Schema format of a "string" claim. "date" requires an RFC 3339 full-date (YYYY-MM-DD) and "date-time" an RFC 3339 date-time; claims that do not match are refused at issuance. mDOC credentials encode the claim as full-date (CBOR tag 1004, RFC 8943) or tdate (CBOR tag 0, in UTC with whole seconds), SD-JWT VC credentials issue the string unchanged. Without a format, mDOC credentials issue the claim as a text string.',
+        enum: CLAIM_FIELD_FORMATS,
+    })
+    format?: "date" | "date-time";
+
+    @ApiPropertyOptional({
         description: "Default value",
         oneOf: [
             { type: "string" },
@@ -100,7 +117,7 @@ export class ClaimFieldDefinitionDto extends createZodDto(
 
     @ApiPropertyOptional({
         description:
-            "JSON Schema 2020-12 validation keywords for this field. Only the JSON Schema keywords listed under Constraints in the claims documentation are accepted (validation keywords such as pattern, minLength or enum, subschemas such as items or properties, and annotations); other keys, such as format or $ref, are refused.",
+            "JSON Schema 2020-12 validation keywords for this field. Only the JSON Schema keywords listed under Constraints in the claims documentation are accepted (validation keywords such as pattern, minLength or enum, subschemas such as items or properties, and annotations); other keys, such as $ref or format (use the field's format instead), are refused.",
         type: Object,
     })
     constraints?: Record<string, unknown>;

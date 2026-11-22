@@ -30,6 +30,7 @@ import {
 import { VerifierOptions } from "../../../../trust/types.js";
 import { pidWithoutStatusProblem } from "../../domain/pid-status-requirement.js";
 import {
+    CERTIFICATE_PATH_CONSTRAINT_FAILURE,
     CERTIFICATE_VALIDITY_FAILURE,
     mdocContext,
     withFetch,
@@ -646,6 +647,12 @@ export class MdocverifierService {
         // certificate subjects, whose words would decide otherwise.
         if (CERTIFICATE_VALIDITY_FAILURE.test(message)) {
             return "certificate_expired";
+        }
+
+        // A path that breaks an RFC 5280 constraint is no valid path to a
+        // trusted certificate, as in the SD-JWT VC chain check.
+        if (CERTIFICATE_PATH_CONSTRAINT_FAILURE.test(message)) {
+            return "no_trust_chain_to_root";
         }
 
         // A path past MAX_CERTIFICATE_PATH_LENGTH or MAX_PATH_SIGNATURE_CHECKS

@@ -101,6 +101,7 @@ describe("wallet unit storage", () => {
                 tenantId: TENANT,
                 statusListId: "list-1",
                 index: payload.status.status_list.idx,
+                attestationKind: "key",
                 sessionId: "session-1",
                 credentialConfigurationId: "pid",
                 walletUnitStatusUri: walletUnit.statusUri,
@@ -109,6 +110,121 @@ describe("wallet unit storage", () => {
                 credentialExpiresAt: expiresAt,
             },
         ]);
+    });
+
+    test("records the wallet attestation of the session next to the key attestation", async () => {
+        const walletInstance = {
+            statusUri: "https://wp.example/wia-status",
+            statusIdx: 1337,
+            certificates: ["wia-leaf"],
+        };
+        const withWia = {
+            id: "session-1",
+            tenantId: TENANT,
+            walletInstanceStatus: walletInstance,
+        } as never;
+        const both = await service.createEntry(
+            withWia,
+            "pid",
+            { statusManagement: true, revokeWithWalletUnit: true },
+            undefined,
+            walletUnit,
+        );
+        // Without key attestation, the wallet attestation alone.
+        const walletOnly = await service.createEntry(
+            withWia,
+            "pid",
+            { statusManagement: true, revokeWithWalletUnit: true },
+            undefined,
+            undefined,
+        );
+
+        const rows = (await records()).map((record) => [
+            record.index,
+            record.attestationKind,
+            record.walletUnitStatusUri,
+            record.walletUnitStatusIdx,
+            record.walletUnitCertificates,
+        ]);
+        expect(rows).toEqual(
+            expect.arrayContaining([
+                [
+                    both.status.status_list.idx,
+                    "key",
+                    walletUnit.statusUri,
+                    7,
+                    ["leaf", "ca"],
+                ],
+                [
+                    both.status.status_list.idx,
+                    "wallet",
+                    walletInstance.statusUri,
+                    1337,
+                    ["wia-leaf"],
+                ],
+                [
+                    walletOnly.status.status_list.idx,
+                    "wallet",
+                    walletInstance.statusUri,
+                    1337,
+                    ["wia-leaf"],
+                ],
+            ]),
+        );
+        expect(rows).toHaveLength(3);
+
+        // Stopping an entry stops both of its records.
+        await store.delete(TENANT, [
+            { statusListId: "list-1", index: both.status.status_list.idx },
+        ]);
+        expect((await records()).map((record) => record.index)).toEqual([
+            walletOnly.status.status_list.idx,
+        ]);
+    });
+
+    test("pages through the records of one entry that follow two attestations in the same list", async () => {
+        const now = new Date("2026-11-09T12:00:00Z");
+        for (const attestationKind of ["key", "wallet"] as const) {
+            await dataSource.getRepository(CredentialWalletUnit).insert({
+                tenantId: TENANT,
+                statusListId: "list-1",
+                index: 0,
+                attestationKind,
+                sessionId: "session-1",
+                credentialConfigurationId: "pid",
+                walletUnitStatusUri: walletUnit.statusUri,
+                walletUnitStatusIdx: attestationKind === "key" ? 1 : 2,
+                walletUnitCertificates: ["leaf"],
+                credentialExpiresAt: null,
+            });
+        }
+        const page = (after?: {
+            statusListId: string;
+            index: number;
+            attestationKind: "key" | "wallet";
+        }) =>
+            store
+                .findByStatusList(TENANT, walletUnit.statusUri, now, {
+                    after,
+                    limit: 1,
+                })
+                .then((found) => found.map((record) => record.attestationKind));
+
+        expect(await page()).toEqual(["key"]);
+        expect(
+            await page({
+                statusListId: "list-1",
+                index: 0,
+                attestationKind: "key",
+            }),
+        ).toEqual(["wallet"]);
+        expect(
+            await page({
+                statusListId: "list-1",
+                index: 0,
+                attestationKind: "wallet",
+            }),
+        ).toEqual([]);
     });
 
     test("records nothing when the configuration does not revoke with the wallet unit", async () => {
@@ -126,8 +242,72 @@ describe("wallet unit storage", () => {
             undefined,
             undefined,
         );
+        // A wallet attestation on the session is not followed either.
+        await service.createEntry(
+            {
+                id: "session-1",
+                tenantId: TENANT,
+                walletInstanceStatus: walletUnit,
+            } as never,
+            "pid",
+            { statusManagement: true },
+            undefined,
+            walletUnit,
+        );
 
         expect(await records()).toEqual([]);
+    });
+
+    test("deletes every record of the given entries of the tenant, and nothing else", async () => {
+        await dataSource.getRepository(TenantEntity).save({
+            id: "tenant-2",
+            name: "Tenant 2",
+            status: "active",
+        });
+        await dataSource.getRepository(StatusListEntity).save({
+            id: "list-1",
+            tenantId: "tenant-2",
+            credentialConfigurationId: null,
+            bits: 1,
+            stack: [],
+            elements: [0, 0, 0, 0],
+        });
+        const row = (
+            tenantId: string,
+            index: number,
+            attestationKind: "key" | "wallet",
+        ) => ({
+            tenantId,
+            statusListId: "list-1",
+            index,
+            attestationKind,
+            sessionId: "session-1",
+            credentialConfigurationId: "pid",
+            walletUnitStatusUri: walletUnit.statusUri,
+            walletUnitStatusIdx: index,
+            walletUnitCertificates: ["leaf"],
+            credentialExpiresAt: null,
+        });
+        await dataSource
+            .getRepository(CredentialWalletUnit)
+            .insert([
+                row(TENANT, 0, "key"),
+                row(TENANT, 0, "wallet"),
+                row(TENANT, 1, "key"),
+                row(TENANT, 2, "wallet"),
+                row("tenant-2", 0, "key"),
+            ]);
+
+        await store.delete(TENANT, [
+            { statusListId: "list-1", index: 0 },
+            { statusListId: "list-1", index: 2 },
+        ]);
+
+        expect(
+            (await records())
+                .map((r) => `${r.tenantId}:${r.index}:${r.attestationKind}`)
+                .sort(),
+        ).toEqual(["tenant-1:1:key", "tenant-2:0:key"]);
     });
 
     test("finds the records of credentials that have not expired and deletes the others", async () => {
@@ -141,6 +321,7 @@ describe("wallet unit storage", () => {
                 tenantId: TENANT,
                 statusListId: "list-1",
                 index,
+                attestationKind: "key",
                 sessionId: "session-1",
                 credentialConfigurationId: "pid",
                 walletUnitStatusUri: walletUnit.statusUri,
@@ -153,7 +334,11 @@ describe("wallet unit storage", () => {
         expect(await store.listStatusLists(now)).toEqual([
             { tenantId: TENANT, uri: walletUnit.statusUri },
         ]);
-        const page = (after?: { statusListId: string; index: number }) =>
+        const page = (after?: {
+            statusListId: string;
+            index: number;
+            attestationKind: "key" | "wallet";
+        }) =>
             store
                 .findByStatusList(TENANT, walletUnit.statusUri, now, {
                     after,
@@ -161,8 +346,20 @@ describe("wallet unit storage", () => {
                 })
                 .then((records) => records.map((record) => record.index));
         expect(await page()).toEqual([0]);
-        expect(await page({ statusListId: "list-1", index: 0 })).toEqual([1]);
-        expect(await page({ statusListId: "list-1", index: 1 })).toEqual([]);
+        expect(
+            await page({
+                statusListId: "list-1",
+                index: 0,
+                attestationKind: "key",
+            }),
+        ).toEqual([1]);
+        expect(
+            await page({
+                statusListId: "list-1",
+                index: 1,
+                attestationKind: "key",
+            }),
+        ).toEqual([]);
 
         await store.deleteExpired(now);
         expect((await records()).map((record) => record.index).sort()).toEqual([

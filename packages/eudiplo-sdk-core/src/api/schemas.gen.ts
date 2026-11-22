@@ -4948,6 +4948,14 @@ export const ClaimFieldDefinitionDtoSchema = {
             ],
             description: 'Claim value type'
         },
+        format: {
+            type: 'string',
+            enum: [
+                'date',
+                'date-time'
+            ],
+            description: 'JSON Schema format of a "string" claim. "date" requires an RFC 3339 full-date (YYYY-MM-DD) and "date-time" an RFC 3339 date-time; claims that do not match are refused at issuance. mDOC credentials encode the claim as full-date (CBOR tag 1004, RFC 8943) or tdate (CBOR tag 0, in UTC with whole seconds), SD-JWT VC credentials issue the string unchanged. Without a format, mDOC credentials issue the claim as a text string.'
+        },
         defaultValue: {
             description: 'Default value',
             oneOf: [
@@ -5012,7 +5020,7 @@ export const ClaimFieldDefinitionDtoSchema = {
             $ref: '#/components/schemas/ClaimConstraints',
             type: 'object',
             additionalProperties: true,
-            description: 'JSON Schema 2020-12 validation keywords for this field. Only the JSON Schema keywords listed under Constraints in the claims documentation are accepted (validation keywords such as pattern, minLength or enum, subschemas such as items or properties, and annotations); other keys, such as format or $ref, are refused.'
+            description: 'JSON Schema 2020-12 validation keywords for this field. Only the JSON Schema keywords listed under Constraints in the claims documentation are accepted (validation keywords such as pattern, minLength or enum, subschemas such as items or properties, and annotations); other keys, such as $ref or format (use the field\'s format instead), are refused.'
         },
         children: {
             items: {
@@ -5318,7 +5326,7 @@ export const CredentialConfigSchema = {
         },
         revokeWithWalletUnit: {
             type: 'boolean',
-            description: 'Revoke issued credentials when the wallet unit attestation they were\nbound to is revoked: the key attestation of the proof (OpenID4VCI 1.0,\nAppendix D.1), whose status list entry is recorded with each\ncredential and checked every `WALLET_UNIT_STATUS_CHECK_INTERVAL`\nseconds until the credential is revoked or expires.\n\nRequires `statusManagement` and `config.keyAttestationsRequired`.\nApplies to credentials issued while it is enabled.'
+            description: 'Revoke issued credentials when a wallet unit attestation they were\nbound to is revoked: the key attestation of the proof (OpenID4VCI 1.0,\nAppendix D.1) or the wallet attestation the built-in authorization\nserver accepted (Appendix E), whose status list entries are recorded\nwith each credential and checked every `WALLET_UNIT_STATUS_CHECK_INTERVAL`\nseconds until the credential is revoked or expires.\n\nRequires `statusManagement` and `config.keyAttestationsRequired`.\nApplies to credentials issued while it is enabled.'
         },
         sdJwtTrustFormat: {
             description: 'For SD-JWT credentials: determines whether to include certificate chain (x5c)\nor use federation-based trust (iss claim).\nDefault: "x5c" (federation must be explicitly selected)',
@@ -5471,7 +5479,7 @@ export const CredentialConfigCreateSchema = {
         },
         revokeWithWalletUnit: {
             type: 'boolean',
-            description: 'Revoke issued credentials when the wallet unit attestation they were\nbound to is revoked: the key attestation of the proof (OpenID4VCI 1.0,\nAppendix D.1), whose status list entry is recorded with each\ncredential and checked every `WALLET_UNIT_STATUS_CHECK_INTERVAL`\nseconds until the credential is revoked or expires.\n\nRequires `statusManagement` and `config.keyAttestationsRequired`.\nApplies to credentials issued while it is enabled.'
+            description: 'Revoke issued credentials when a wallet unit attestation they were\nbound to is revoked: the key attestation of the proof (OpenID4VCI 1.0,\nAppendix D.1) or the wallet attestation the built-in authorization\nserver accepted (Appendix E), whose status list entries are recorded\nwith each credential and checked every `WALLET_UNIT_STATUS_CHECK_INTERVAL`\nseconds until the credential is revoked or expires.\n\nRequires `statusManagement` and `config.keyAttestationsRequired`.\nApplies to credentials issued while it is enabled.'
         },
         sdJwtTrustFormat: {
             description: 'For SD-JWT credentials: determines whether to include certificate chain (x5c)\nor use federation-based trust (iss claim).\nDefault: "x5c" (federation must be explicitly selected)',
@@ -5623,7 +5631,7 @@ export const CredentialConfigUpdateSchema = {
         },
         revokeWithWalletUnit: {
             type: 'boolean',
-            description: 'Revoke issued credentials when the wallet unit attestation they were\nbound to is revoked: the key attestation of the proof (OpenID4VCI 1.0,\nAppendix D.1), whose status list entry is recorded with each\ncredential and checked every `WALLET_UNIT_STATUS_CHECK_INTERVAL`\nseconds until the credential is revoked or expires.\n\nRequires `statusManagement` and `config.keyAttestationsRequired`.\nApplies to credentials issued while it is enabled.'
+            description: 'Revoke issued credentials when a wallet unit attestation they were\nbound to is revoked: the key attestation of the proof (OpenID4VCI 1.0,\nAppendix D.1) or the wallet attestation the built-in authorization\nserver accepted (Appendix E), whose status list entries are recorded\nwith each credential and checked every `WALLET_UNIT_STATUS_CHECK_INTERVAL`\nseconds until the credential is revoked or expires.\n\nRequires `statusManagement` and `config.keyAttestationsRequired`.\nApplies to credentials issued while it is enabled.'
         },
         sdJwtTrustFormat: {
             description: 'For SD-JWT credentials: determines whether to include certificate chain (x5c)\nor use federation-based trust (iss claim).\nDefault: "x5c" (federation must be explicitly selected)',

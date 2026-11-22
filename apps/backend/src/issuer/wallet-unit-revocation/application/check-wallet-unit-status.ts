@@ -4,6 +4,7 @@ import type {
     CredentialStatusEntry,
     CredentialWalletUnitStore,
     IssuedCredentialStatus,
+    WalletUnitRecordKey,
     WalletUnitRevocationNotifier,
     WalletUnitRevocationSettingsSource,
     WalletUnitStatusReader,
@@ -71,7 +72,7 @@ export class CheckWalletUnitStatus {
     ): Promise<void> {
         const trustLists =
             await this.settings.walletProviderTrustLists(tenantId);
-        let after: CredentialStatusEntry | undefined;
+        let after: WalletUnitRecordKey | undefined;
         for (;;) {
             const page = await this.store.findByStatusList(tenantId, uri, now, {
                 after,
@@ -79,7 +80,11 @@ export class CheckWalletUnitStatus {
             });
             if (page.length === 0) return;
             const last = page[page.length - 1];
-            after = { statusListId: last.statusListId, index: last.index };
+            after = {
+                statusListId: last.statusListId,
+                index: last.index,
+                attestationKind: last.attestationKind,
+            };
             await this.checkPage(
                 tenantId,
                 uri,
@@ -183,6 +188,11 @@ export class CheckWalletUnitStatus {
         uri: string,
         records: CredentialBoundToWalletUnit[],
     ): Promise<void> {
+        // A credential whose key and wallet attestation are both revoked in
+        // this list has two records for one status entry.
+        records = [
+            ...new Map(records.map((record) => [entryKey(record), record])),
+        ].map(([, record]) => record);
         const revoked = new Set(
             (await this.credentials.revoke(tenantId, records)).map(entryKey),
         );

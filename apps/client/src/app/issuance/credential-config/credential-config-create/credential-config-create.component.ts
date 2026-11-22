@@ -57,6 +57,7 @@ import {
   webhookEndpointControllerGetAll,
   AttributeProviderEntity,
   WebhookEndpointEntity,
+  type ClaimFieldFormat,
 } from '@eudiplo/sdk-core';
 import { PresentationManagementService } from '../../../presentation/presentation-config/presentation-management.service';
 import { CredentialConfigService } from '../credential-config.service';
@@ -76,6 +77,11 @@ import { EditorComponent, extractSchema } from '../../../utils/editor/editor.com
 import { ImageFieldComponent } from '../../../utils/image-field/image-field.component';
 import { schemaFormValidator } from '../../../utils/schema-form-validator';
 import { claimSchemaError, unsupportedConstraintsError } from '../../../utils/claim-schema-check';
+import {
+  CLAIM_FORMAT_LABELS,
+  CLAIM_FORMAT_MESSAGES,
+  matchesClaimFormat,
+} from '../../../utils/claim-formats';
 import { LabelledFailure, getApiErrorMessage } from '../../../utils/error-message';
 import { hostedVctUrl } from '../../../utils/public-url';
 import {
@@ -312,6 +318,13 @@ export class CredentialConfigCreateComponent implements OnInit, PageWithUnsavedC
     'boolean',
     'object',
     'array',
+  ];
+
+  /** Formats of a string claim; empty for plain text. */
+  readonly fieldFormats: { value: ClaimFieldFormat | ''; label: string }[] = [
+    { value: '', label: 'None (text)' },
+    { value: 'date', label: CLAIM_FORMAT_LABELS.date },
+    { value: 'date-time', label: CLAIM_FORMAT_LABELS['date-time'] },
   ];
 
   // VCT mode: 'string' for simple URI, 'object' for metadata object
@@ -1146,6 +1159,7 @@ export class CredentialConfigCreateComponent implements OnInit, PageWithUnsavedC
             ? ''
             : JSON.stringify(field.defaultValue, null, 2)
       ),
+      format: new FormControl<ClaimFieldFormat | ''>(field?.format ?? ''),
       mandatory: new FormControl(!!field?.mandatory),
       disclosable: new FormControl(field?.disclosable ?? true),
       constraints: new FormControl(
@@ -1156,13 +1170,25 @@ export class CredentialConfigCreateComponent implements OnInit, PageWithUnsavedC
     });
     group.controls.defaultValue.addValidators((control) => {
       try {
-        this.parseClaimDefault(control.value, group.controls.type.value || 'string');
+        const type = group.controls.type.value || 'string';
+        const value = this.parseClaimDefault(control.value, type);
+        const format = group.controls.format.value;
+        if (type === 'string' && format && !matchesClaimFormat(format, value)) {
+          return { defaultValueType: CLAIM_FORMAT_MESSAGES[format] };
+        }
         return null;
       } catch (error) {
         return { defaultValueType: (error as Error).message };
       }
     });
-    group.controls.type.valueChanges.subscribe(() =>
+    group.controls.type.valueChanges.subscribe((type) => {
+      // A format applies to string claims only, as on save.
+      if (type !== 'string' && group.controls.format.value) {
+        group.controls.format.setValue('');
+      }
+      group.controls.defaultValue.updateValueAndValidity();
+    });
+    group.controls.format.valueChanges.subscribe(() =>
       group.controls.defaultValue.updateValueAndValidity()
     );
     group.controls.defaultValue.updateValueAndValidity();
@@ -1174,9 +1200,10 @@ export class CredentialConfigCreateComponent implements OnInit, PageWithUnsavedC
     return !!field.get('constraints')?.value?.trim();
   }
 
-  claimDefaultHint(type: string): string {
+  claimDefaultHint(type: string, format?: ClaimFieldFormat | ''): string {
     switch (type) {
       case 'string':
+        if (format) return `${CLAIM_FORMAT_MESSAGES[format]} Leave empty for no default.`;
         return 'Plain text, e.g. Max. No quotes needed. Leave empty for no default.';
       case 'boolean':
         return 'Enter true or false. Leave empty for no default.';
@@ -1623,6 +1650,9 @@ export class CredentialConfigCreateComponent implements OnInit, PageWithUnsavedC
           mandatory: !!rawField['mandatory'],
           disclosable: !!rawField['disclosable'],
           ...(namespace ? { namespace } : {}),
+          ...(rawField['type'] === 'string' && rawField['format']
+            ? { format: rawField['format'] }
+            : {}),
         };
 
         if (defaultValue !== undefined) {

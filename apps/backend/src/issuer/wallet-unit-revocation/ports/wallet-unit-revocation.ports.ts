@@ -1,3 +1,4 @@
+import type { AttestationKind } from "../../../trust/domain/attestation-status-claims.js";
 import type { TrustListRef } from "../../../trust/types.js";
 import type { WalletUnitReference } from "../../status-list/domain/wallet-unit-reference.js";
 
@@ -7,8 +8,17 @@ export interface CredentialStatusEntry {
     index: number;
 }
 
-/** An issued credential's status entry and the wallet unit it was bound to. */
-export interface CredentialBoundToWalletUnit extends CredentialStatusEntry {
+/**
+ * One record of a status entry: a credential has up to one per attestation
+ * it follows.
+ */
+export interface WalletUnitRecordKey extends CredentialStatusEntry {
+    /** `key` for the key attestation, `wallet` for the wallet attestation. */
+    attestationKind: AttestationKind;
+}
+
+/** An issued credential's status entry and a wallet unit attestation it was bound to. */
+export interface CredentialBoundToWalletUnit extends WalletUnitRecordKey {
     tenantId: string;
     sessionId: string;
     credentialConfigurationId: string;
@@ -26,15 +36,16 @@ export interface CredentialWalletUnitStore {
     listStatusLists(now: Date): Promise<{ tenantId: string; uri: string }[]>;
     /**
      * One page of the records of credentials that have not expired, of one
-     * list, in the order of their status entry, after the entry `after`.
+     * list, in the order of their status entry and attestation kind, after
+     * the record `after`.
      */
     findByStatusList(
         tenantId: string,
         uri: string,
         now: Date,
-        page: { after?: CredentialStatusEntry; limit: number },
+        page: { after?: WalletUnitRecordKey; limit: number },
     ): Promise<CredentialBoundToWalletUnit[]>;
-    /** Stop checking these entries. */
+    /** Stop checking these entries, for every attestation they follow. */
     delete(
         tenantId: string,
         entries: readonly CredentialStatusEntry[],

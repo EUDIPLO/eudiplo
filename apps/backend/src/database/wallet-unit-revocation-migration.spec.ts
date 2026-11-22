@@ -10,6 +10,7 @@ import { DeferredTransactionEntity } from "../issuer/issuance/oid4vci/entities/d
 import { CredentialWalletUnit } from "../issuer/status-list/entities/credential-wallet-unit.entity.js";
 import { StatusListEntity } from "../issuer/status-list/entities/status-list.entity.js";
 import { AddWalletUnitRevocation1786300000000 } from "./migrations/1786300000000-AddWalletUnitRevocation.js";
+import { AddWalletInstanceRevocation1786800000000 } from "./migrations/1786800000000-AddWalletInstanceRevocation.js";
 
 describe("AddWalletUnitRevocation1786300000000", () => {
     let dataSource: DataSource | undefined;
@@ -80,6 +81,8 @@ describe("AddWalletUnitRevocation1786300000000", () => {
 
     test("the migrated schema matches the entities", async () => {
         const { queryRunner } = await migrated();
+        // The entity has the primary key column added later.
+        await new AddWalletInstanceRevocation1786800000000().up(queryRunner);
         await queryRunner.release();
         const pending = await dataSource!.driver.createSchemaBuilder().log();
         expect(pending.upQueries.map((query) => query.query)).toEqual([]);

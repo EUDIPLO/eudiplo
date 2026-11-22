@@ -254,6 +254,8 @@ async function createWalletAttestationJwt(options: {
     authorizationServer: string;
     /** The status claim; tests of malformed claims pass any value. */
     status?: unknown;
+    /** Further claims, such as the TS3 1.5 `client_status`. */
+    claims?: Record<string, unknown>;
 }): Promise<string> {
     // Export the private key for jose signing
     const privateKeyArrayBuffer = await globalThis.crypto.subtle.exportKey(
@@ -277,6 +279,7 @@ async function createWalletAttestationJwt(options: {
         cnf: {
             jwk: options.holderPublicKey,
         },
+        ...options.claims,
     };
 
     // Add status claim if provided
@@ -1754,6 +1757,7 @@ describe("Issuance - Wallet Attestation", () => {
         trustListUrl: string;
         trustListJwt: string;
         status?: unknown;
+        claims?: Record<string, unknown>;
     }) {
         const trustLists = [
             {
@@ -1840,6 +1844,7 @@ describe("Issuance - Wallet Attestation", () => {
             holderPublicKey: holderPublicKeyJwk as Jwk,
             authorizationServer: authServerUrl,
             ...(options.status ? { status: options.status } : {}),
+            claims: options.claims,
         });
 
         return new Openid4vciClient({
@@ -1875,8 +1880,16 @@ describe("Issuance - Wallet Attestation", () => {
         /** The revocation certificate the trust list names; default: `revocationCert`. */
         revocationCertificate?: X509Certificate;
         revocationServiceType?: string;
+        /**
+         * Name the entry in `client_status.status` (TS3 1.5) instead of
+         * the top-level `status` claim.
+         */
+        ts3?: boolean;
     }) {
         const statusListUrl = `http://localhost:8787${options.path}`;
+        const status = {
+            status_list: { idx: options.idx ?? 0, uri: statusListUrl },
+        };
         nock("http://localhost:8787")
             .get(options.path)
             .reply(200, options.statusListJwt, {
@@ -1895,9 +1908,16 @@ describe("Issuance - Wallet Attestation", () => {
                           revocationCert.certificate),
                 options.revocationServiceType,
             ),
-            status: {
-                status_list: { idx: options.idx ?? 0, uri: statusListUrl },
-            },
+            ...(options.ts3
+                ? {
+                      claims: {
+                          client_status: {
+                              status,
+                              exp: Math.floor(Date.now() / 1000) + 31 * 86400,
+                          },
+                      },
+                  }
+                : { status }),
         });
     }
 
@@ -1908,6 +1928,56 @@ describe("Issuance - Wallet Attestation", () => {
             },
         };
     }
+
+    describe("TS3 1.5 wallet instance attestation (client_status)", () => {
+        test("accepts a wallet instance whose client_status entry is valid", async () => {
+            const list = await createStatusListJwt(
+                revocationCert,
+                "http://localhost:8787/status-list-ts3-valid",
+            );
+
+            const tokenResult = await requestTokenWithStatusList({
+                path: "/status-list-ts3-valid",
+                statusListJwt: list,
+                idx: 5,
+                ts3: true,
+            });
+
+            expect(tokenResult.accessTokenResponse.access_token).toBeDefined();
+        }, 30000);
+
+        test("rejects a wallet instance whose client_status entry is revoked", async () => {
+            const list = await createStatusListJwt(
+                revocationCert,
+                "http://localhost:8787/status-list-ts3-revoked",
+                new Map([[5, 1]]),
+            );
+
+            await expect(
+                requestTokenWithStatusList({
+                    path: "/status-list-ts3-revoked",
+                    statusListJwt: list,
+                    idx: 5,
+                    ts3: true,
+                }),
+            ).rejects.toMatchObject(rejectedWith("Invalid/Revoked"));
+        }, 30000);
+
+        test("rejects a client_status list that is not the named list", async () => {
+            const otherList = await createStatusListJwt(
+                revocationCert,
+                "http://localhost:8787/status-list-ts3-other",
+            );
+
+            await expect(
+                requestTokenWithStatusList({
+                    path: "/status-list-ts3-sub",
+                    statusListJwt: otherList,
+                    ts3: true,
+                }),
+            ).rejects.toMatchObject(rejectedWith("does not match"));
+        }, 30000);
+    });
 
     test("should fail when the status list host serves another list of the same provider", async () => {
         // The attestation names /status-list-sub. The host serves the

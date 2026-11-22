@@ -1293,6 +1293,7 @@ describe("Built-in authorization server token endpoint", () => {
                     CLIENT_KEY,
                     "sha256",
                 ),
+                walletInstanceStatus: null,
                 refresh_token: hashRefreshToken("refresh-token"),
                 refresh_token_expires_at: expect.any(Date),
             });
@@ -1360,8 +1361,43 @@ describe("Built-in authorization server token endpoint", () => {
                     consumed: true,
                     dpop_jkt: undefined,
                     client_key_jkt: undefined,
+                    walletInstanceStatus: null,
                 },
             );
+        });
+
+        it("keeps the status entry of the accepted wallet attestation with the session", async () => {
+            h.walletAttestation.verifyWalletAttestation.mockResolvedValue({
+                uri: "https://wp.example/wia",
+                idx: 1337,
+                certificates: ["wia-leaf"],
+            });
+            h.sessions.getByAuthorizationCode.mockResolvedValue(
+                preAuthorizedSession({
+                    credentialPayload: {
+                        flow: "pre_authorized_code",
+                    } as never,
+                }),
+            );
+            h.oauth.createAccessTokenResponse.mockResolvedValue({
+                access_token: "at",
+            });
+
+            await token({
+                grant_type:
+                    "urn:ietf:params:oauth:grant-type:pre-authorized_code",
+                "pre-authorized_code": "code-1",
+            });
+
+            expect(
+                h.sessions.updateIfUnconsumed.mock.calls[0][2],
+            ).toMatchObject({
+                walletInstanceStatus: {
+                    statusUri: "https://wp.example/wia",
+                    statusIdx: 1337,
+                    certificates: ["wia-leaf"],
+                },
+            });
         });
 
         it("refreshes without rotation and keeps DPoP binding for public clients", async () => {
@@ -1415,6 +1451,49 @@ describe("Built-in authorization server token endpoint", () => {
                         expectedJwkThumbprint: undefined,
                     }),
                 }),
+            );
+        });
+
+        it("keeps the wallet attestation entry of the session on a refresh without one", async () => {
+            h.sessions.getByRefreshToken.mockResolvedValue(
+                session({ refresh_token: "rt" }),
+            );
+            await token({ grant_type: "refresh_token", refresh_token: "rt" });
+            expect(h.sessions.updateForTenant).not.toHaveBeenCalledWith(
+                TENANT,
+                "session-1",
+                expect.objectContaining({
+                    walletInstanceStatus: expect.anything(),
+                }),
+            );
+        });
+
+        it("replaces the wallet attestation entry of the session on a refresh", async () => {
+            h.walletAttestation.verifyWalletAttestation.mockResolvedValue({
+                uri: "https://wp.example/wia",
+                idx: 42,
+                certificates: ["wia-leaf"],
+            });
+            h.sessions.getByRefreshToken.mockResolvedValue(
+                session({ refresh_token: "rt" }),
+            );
+            await token(
+                { grant_type: "refresh_token", refresh_token: "rt" },
+                {
+                    "oauth-client-attestation": ATTESTATION,
+                    "oauth-client-attestation-pop": ATTESTATION_POP,
+                },
+            );
+            expect(h.sessions.updateForTenant).toHaveBeenCalledWith(
+                TENANT,
+                "session-1",
+                {
+                    walletInstanceStatus: {
+                        statusUri: "https://wp.example/wia",
+                        statusIdx: 42,
+                        certificates: ["wia-leaf"],
+                    },
+                },
             );
         });
     });

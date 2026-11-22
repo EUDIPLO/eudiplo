@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SessionData } from "../../../../session/domain/session-data.js";
+import { CredentialLifetimeExhausted } from "../../../configuration/credentials/domain/maintenance-period.js";
 import { DeferredTransactionStatus } from "../domain/deferred-transaction-status.js";
 import type {
     DeferredCredentialIssuer,
@@ -34,10 +35,11 @@ describe("deferred credential lifecycle", () => {
         }));
         const repository: Pick<
             DeferredTransactionRepository,
-            "findPending" | "markReady"
+            "findPending" | "markReady" | "markFailed"
         > = {
             findPending: vi.fn(async () => transaction),
             markReady,
+            markFailed: vi.fn(),
         };
         const session = {
             id: "session-1",
@@ -120,10 +122,11 @@ describe("deferred credential lifecycle", () => {
         };
         const repository: Pick<
             DeferredTransactionRepository,
-            "findPending" | "markReady"
+            "findPending" | "markReady" | "markFailed"
         > = {
             findPending: vi.fn(async () => null),
             markReady: vi.fn(),
+            markFailed: vi.fn(),
         };
         const result = await new CompleteDeferredCredential(
             repository,
@@ -137,6 +140,44 @@ describe("deferred credential lifecycle", () => {
 
         expect(result).toBeNull();
         expect(issuer.issue).not.toHaveBeenCalled();
+    });
+
+    it("fails the transaction when the maintenance period of its attestations has ended", async () => {
+        const markFailed = vi.fn(async () => ({
+            ...transaction,
+            status: DeferredTransactionStatus.Failed,
+        }));
+        const repository: Pick<
+            DeferredTransactionRepository,
+            "findPending" | "markReady" | "markFailed"
+        > = {
+            findPending: vi.fn(async () => transaction),
+            markReady: vi.fn(),
+            markFailed,
+        };
+        const issuer: DeferredCredentialIssuer = {
+            issue: vi.fn(async () => {
+                throw new CredentialLifetimeExhausted("key");
+            }),
+        };
+
+        const result = await new CompleteDeferredCredential(
+            repository,
+            { getForTenant: vi.fn(async () => ({}) as SessionData) },
+            issuer,
+        ).execute({
+            tenantId: "tenant-1",
+            transactionId: "transaction-1",
+            claims: {},
+        });
+
+        expect(result?.status).toBe(DeferredTransactionStatus.Failed);
+        expect(markFailed).toHaveBeenCalledWith(
+            "tenant-1",
+            "transaction-1",
+            expect.stringContaining("key_storage_status.exp"),
+        );
+        expect(repository.markReady).not.toHaveBeenCalled();
     });
 
     it("uses the existing failure message or the default", async () => {

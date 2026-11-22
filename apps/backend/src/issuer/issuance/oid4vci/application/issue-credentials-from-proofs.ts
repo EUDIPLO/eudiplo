@@ -4,6 +4,10 @@ import type {
     RevocationCheckMode,
     TrustListRef,
 } from "../../../../trust/types.js";
+import {
+    assertMaintenancePeriodOpen,
+    maintenancePeriodEnd,
+} from "../../../configuration/credentials/domain/maintenance-period.js";
 import type { WalletUnitReference } from "../../../status-list/domain/wallet-unit-reference.js";
 import { InvalidCredentialProof } from "../domain/credential-proof-errors.js";
 import {
@@ -37,6 +41,11 @@ export interface IssueCredentialsFromProofsCommand {
     keyAttestationStatusCheckMode: RevocationCheckMode;
     /** Key attestation requirements of the credential configuration. */
     keyAttestationsRequired?: KeyAttestationRequirements;
+    /**
+     * Whether the credentials follow their wallet unit, so that the
+     * status maintenance period of its attestations bounds them.
+     */
+    revokeWithWalletUnit?: boolean;
     onIssued: (credentialSize: number) => void;
 }
 
@@ -49,6 +58,7 @@ export class IssueCredentialsFromProofs {
         command: IssueCredentialsFromProofsCommand,
     ): Promise<{ credential: string }[]> {
         if (!command.proofs) {
+            this.assertMaintenancePeriodOpen(command, undefined);
             return this.issueAll(command, [{}]);
         }
         const { values: proofs, proofType } = command.proofs;
@@ -77,12 +87,35 @@ export class IssueCredentialsFromProofs {
                 command.keyAttestationsRequired,
                 verified,
             );
+            this.assertMaintenancePeriodOpen(
+                command,
+                verified.keyAttestation?.walletUnit,
+            );
             verifiedProofs.push({
                 holderKeys,
                 walletUnit: verified.keyAttestation?.walletUnit,
             });
         }
         return this.issueAll(command, verifiedProofs);
+    }
+
+    /**
+     * Refuses the request before anything is issued: a status maintenance
+     * period that has ended leaves no credential of the batch any validity.
+     */
+    private assertMaintenancePeriodOpen(
+        command: Pick<
+            IssueCredentialsFromProofsCommand,
+            "revokeWithWalletUnit" | "session"
+        >,
+        walletUnit: WalletUnitReference | undefined,
+    ): void {
+        const bound = maintenancePeriodEnd(
+            command.revokeWithWalletUnit,
+            walletUnit,
+            command.session.walletInstanceStatus,
+        );
+        if (bound) assertMaintenancePeriodOpen(bound);
     }
 
     private async issueAll(
