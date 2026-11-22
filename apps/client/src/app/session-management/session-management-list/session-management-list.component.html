@@ -6,11 +6,22 @@
     </div>
     @if (canOfferIssuance || canRequestPresentation) {
       <div class="header-actions">
-        @if (canOfferIssuance) {
+        @if (canOfferIssuance && canUseIssuanceForm) {
           <a matButton="filled" [routerLink]="['/offer/issuance']">
             <mat-icon>add</mat-icon>
             Issuance Offer
           </a>
+        } @else if (canOfferIssuance) {
+          <button
+            matButton="filled"
+            type="button"
+            disabled
+            disabledInteractive
+            [matTooltip]="issuanceFormLockedReason"
+          >
+            <mat-icon>add</mat-icon>
+            Issuance Offer
+          </button>
         }
         @if (canRequestPresentation) {
           <a matButton="tonal" [routerLink]="['/offer/presentation']">
@@ -109,6 +120,9 @@
               </mat-optgroup>
             }
           </mat-select>
+          @if (configFilterHint) {
+            <mat-hint>{{ configFilterHint }}</mat-hint>
+          }
         </mat-form-field>
 
         <mat-form-field appearance="outline" subscriptSizing="dynamic">
@@ -366,11 +380,22 @@
                         wallet.
                       </p>
                       <span class="empty-actions">
-                        @if (canOfferIssuance) {
+                        @if (canOfferIssuance && canUseIssuanceForm) {
                           <a matButton="filled" [routerLink]="['/offer/issuance']">
                             <mat-icon>add</mat-icon>
                             Issuance Offer
                           </a>
+                        } @else if (canOfferIssuance) {
+                          <button
+                            matButton="filled"
+                            type="button"
+                            disabled
+                            disabledInteractive
+                            [matTooltip]="issuanceFormLockedReason"
+                          >
+                            <mat-icon>add</mat-icon>
+                            Issuance Offer
+                          </button>
                         }
                         @if (canRequestPresentation) {
                           <a matButton="tonal" [routerLink]="['/offer/presentation']">

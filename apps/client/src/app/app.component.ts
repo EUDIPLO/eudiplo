@@ -35,6 +35,7 @@ import { DiploLogoComponent } from './common/diplo-logo.component';
 import { ApiService } from './core';
 import { KEY_CHAIN_ROLES } from './key-management/key-chain.service';
 import { urlPath } from './common/url-path.util';
+import { canUseIssuanceForm } from './issuance/issuance-offer/issuance-form-access';
 
 /**
  * Whether the URL is the login page, which has no toolbar or navigation. Compares the
@@ -212,6 +213,11 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   readonly keyChainRoles = KEY_CHAIN_ROLES;
+
+  /** New Issuance needs issuance:manage besides issuance:offer; without it the form cannot load. */
+  get canUseIssuanceForm(): boolean {
+    return canUseIssuanceForm((role) => this.jwtService.hasRole(role));
+  }
 
   /**
    * Check if user has permission to manage Keycloak clients

@@ -44,6 +44,7 @@ test.describe('read and status roles', () => {
     support: { roles: ['sessions:read', 'credentials:status'] },
     auditor: { roles: ['audit:read'] },
     keys: { roles: ['keys:manage'] },
+    offer: { roles: ['issuance:offer'] },
   };
   const credentials = Object.fromEntries(
     Object.keys(clients).map((name) => [
@@ -55,6 +56,8 @@ test.describe('read and status roles', () => {
   let sessionId: string;
   /** Still open for a wallet, so read-only callers do not see it. */
   let openSessionId: string;
+  /** An issuance offer, so issuance:offer has a session to recreate. */
+  let issuanceSessionId: string;
 
   test.beforeAll(async ({ request }) => {
     test.skip(
@@ -92,6 +95,16 @@ test.describe('read and status roles', () => {
     );
     expect(cancelled.ok(), 'cancel the presentation request').toBe(true);
     openSessionId = await newRequest();
+    const offer = await request.post(`${resolvedE2EConfig.apiBaseUrl}/api/issuer/offer`, {
+      headers,
+      data: {
+        response_type: 'uri',
+        credentialConfigurationIds: ['pid'],
+        flow: 'pre_authorized_code',
+      },
+    });
+    expect(offer.ok(), `create an issuance offer: ${await offer.text()}`).toBe(true);
+    issuanceSessionId = ((await offer.json()) as { session: string }).session;
   });
 
   test.afterAll(async ({ request }) => {
@@ -140,6 +153,53 @@ test.describe('read and status roles', () => {
     await expect(page.locator('app-load-error').getByRole('alert')).toBeVisible();
     await expect(page.getByText(openSessionId)).toHaveCount(0);
     await page.getByRole('link', { name: 'Back to the list' }).click();
+    await expect(page).toHaveURL(/\/session-management$/);
+  });
+
+  // New Issuance reads the credential configs and issuer settings, which need issuance:manage.
+  test('issuance:offer alone is told why New Issuance cannot be used', async ({ page }) => {
+    const credentialConfigRequests: string[] = [];
+    page.on('request', (request) => {
+      if (new URL(request.url()).pathname.startsWith('/api/issuer/credentials')) {
+        credentialConfigRequests.push(request.url());
+      }
+    });
+    const { clientId, clientSecret } = credentials.offer;
+    await loginWithClientCredentials(page, clientId, clientSecret);
+    const nav = page.locator('mat-sidenav');
+    await expect(nav.getByText('All Sessions', { exact: true })).toBeVisible();
+    await expect(nav.getByText('New Issuance')).toHaveCount(0);
+    await expect(nav.getByRole('button', { name: 'Credential Issuance' })).toHaveCount(0);
+
+    await nav.getByText('All Sessions', { exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Sessions', exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Issuance Offer' })).toHaveCount(0);
+    const locked = page.locator('.header-actions').getByRole('button', { name: 'Issuance Offer' });
+    await expect(locked).toHaveAttribute('aria-disabled', 'true');
+    // The tooltip is the button's description, as for other locked buttons.
+    await expect(locked).toHaveAccessibleDescription(/also needs the issuance:manage role/);
+    await expect(
+      page.getByText(
+        'Not listed, as your roles cannot read them: credential configs need issuance:manage.'
+      )
+    ).toBeVisible();
+
+    await page.goto(`/session-management/${issuanceSessionId}`);
+    await expect(page.getByRole('heading', { name: 'Issuance Session' })).toBeVisible();
+    const recreate = page.getByRole('button', { name: 'Recreate Offer' });
+    await expect(recreate).toHaveAttribute('aria-disabled', 'true');
+    await expect(recreate).toHaveAccessibleDescription(/also needs the issuance:manage role/);
+    await recreate.click({ force: true });
+    await expect(page).toHaveURL(new RegExp(`/session-management/${issuanceSessionId}$`));
+
+    // A deep link says why instead of offering a Retry that cannot succeed.
+    await page.goto('/offer/issuance');
+    await expect(page.getByRole('status')).toContainText(
+      'New Issuance also needs the issuance:manage role'
+    );
+    await expect(page.getByRole('button', { name: 'Retry' })).toHaveCount(0);
+    expect(credentialConfigRequests).toEqual([]);
+    await page.getByRole('link', { name: 'Back to Sessions' }).click();
     await expect(page).toHaveURL(/\/session-management$/);
   });
 
