@@ -68,6 +68,15 @@ export class CertificatePathConstraintViolation extends Error {
     }
 }
 
+/** Whether a keyUsage extension has the keyCertSign bit set. */
+function assertsKeyCertSign(extension: x509.Extension): boolean {
+    if (!(extension instanceof x509.KeyUsagesExtension)) {
+        return false;
+    }
+    const keyCertSign = extension.usages & x509.KeyUsageFlags.keyCertSign;
+    return keyCertSign !== 0;
+}
+
 /**
  * Check the constraints of RFC 5280 section 6.1 that signatures and validity
  * periods leave out, on a path from the signing certificate (index 0) to the
@@ -147,13 +156,7 @@ function assertIssuerConstraints(
     }
 
     const keyUsage = cert.getExtension(KEY_USAGE);
-    if (
-        keyUsage &&
-        !(
-            keyUsage instanceof x509.KeyUsagesExtension &&
-            (keyUsage.usages & x509.KeyUsageFlags.keyCertSign) !== 0
-        )
-    ) {
+    if (keyUsage && !assertsKeyCertSign(keyUsage)) {
         throw new CertificatePathConstraintViolation(
             index,
             cert.subject,
