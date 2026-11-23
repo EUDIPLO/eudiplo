@@ -36,6 +36,10 @@ The **Lint Codebase** job runs on every pull request:
 
 The **Check Config Schemas** job checks that the generated schemas match the code and that published schema versions were not changed ([Configuration schemas](./configuration-schemas.md)). [SonarCloud](https://sonarcloud.io/project/overview?id=EUDIPLO_eudiplo) analyzes the backend and client sources; its findings are good first contributions.
 
+## Vulnerability scanner files
+
+The `.oss-scanner/` folder holds the build image and the threat model for Anthropic's [OSS Scanner](https://red.anthropic.com/oss-scanner/), which builds the repository from that Dockerfile and reads the threat model before it looks for vulnerabilities. No CI job uses them. Update `.oss-scanner/threat_model.md` when the [security model](../concepts/security-model.md), the public routes, the roles or the way the tests are run change.
+
 ## Git hooks
 
 `pnpm install` installs two [Husky](https://typicode.github.io/husky/) hooks:
