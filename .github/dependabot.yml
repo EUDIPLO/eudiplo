@@ -63,6 +63,7 @@ updates:
     directories:
       - "/"
       - "/.devcontainer"
+      - "/.oss-scanner"
       - "/deployment/k8s"
       - "/deployment/k8s/base"
       - "/deployment/k8s/components/postgres"
