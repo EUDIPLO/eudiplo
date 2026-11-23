@@ -49,7 +49,7 @@
     "zone.js": "~0.16.3"
   },
   "devDependencies": {
-    "@angular-eslint/builder": "22.6.0",
+    "@angular-eslint/builder": "22.7.0",
     "@angular/build": "^22.2.7",
     "@angular/cli": "^22.2.7",
     "@angular/compiler-cli": "^22.2.6",
@@ -60,7 +60,7 @@
     "@owf/jose": "^0.8.0",
     "@playwright/test": "1.65.1",
     "@sd-jwt/sd-jwt-vc": "^0.25.0",
-    "angular-eslint": "22.6.0",
+    "angular-eslint": "22.7.0",
     "eslint": "^10.15.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.7",
@@ -71,7 +71,7 @@
     "playwright-ng-schematics": "22.1.4",
     "prettier": "^3.10.1",
     "typescript": "~6.0.3",
-    "typescript-eslint": "8.72.2",
+    "typescript-eslint": "8.73.0",
     "vitest": "^5.1.0"
   },
   "packageManager": "pnpm@10.13.1+sha512.37ebf1a5c7a30d5fabe0c5df44ee8da4c965ca0c5af3dbab28c3a1681b70a256218d05c81c9c0dcf767ef6b8551eb5b960042b9ed4300c59242336377e01cfad"
