@@ -19,7 +19,7 @@
     "typecheck": "tsc",
     "typecheck:scripts": "tsc --project tsconfig.scripts.json",
     "check:sidebar": "tsx --tsconfig ../../tsconfig.scripts.json scripts/check-sidebar-orphans.ts",
-    "test": "pnpm run check:sidebar && tsx --tsconfig ../../tsconfig.scripts.json --test scripts/schema-docs/*.test.ts scripts/roles-docs/*.test.ts"
+    "test": "pnpm run check:sidebar && tsx --tsconfig ../../tsconfig.scripts.json --test scripts/schema-docs/*.test.ts scripts/roles-docs/*.test.ts src/components/WalletQaResults/*.test.ts"
   },
   "dependencies": {
     "@docsearch/core": "^5.2.0",
