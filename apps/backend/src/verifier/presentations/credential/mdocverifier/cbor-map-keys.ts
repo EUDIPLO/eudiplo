@@ -240,8 +240,9 @@ class CborMapKeyWalker {
     ): void {
         const keys = new Set<string>();
         // A map of n entries is 2n data items.
+        const itemsPerEntry = isMap ? 2n : 1n;
         const count =
-            argument === undefined ? undefined : argument * (isMap ? 2n : 1n);
+            argument === undefined ? undefined : argument * itemsPerEntry;
         for (let index = 0n; count === undefined || index < count; index++) {
             const start = this.offset;
             const item = this.item(depth + 1);
