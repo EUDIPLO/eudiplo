@@ -1,0 +1,16 @@
+# Build context for .oss-scanner/Dockerfile. Docker prefers this file over the
+# .dockerignore at the repository root, which is written for the release image
+# and leaves out the tests, the documentation and the deployment/ folder. The
+# scanner needs all of them, and the CLI build reads deployment/.
+#
+# A fresh clone, as the scanner makes it, has none of the entries below. They
+# only keep local build output and secrets out of a build from a working copy.
+**/node_modules
+**/dist
+**/.angular
+tmp
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.*.example
+**/*.db
