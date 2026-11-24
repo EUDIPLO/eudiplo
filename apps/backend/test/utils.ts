@@ -183,6 +183,7 @@ export async function prepareMdocPresentation(
                             ...DEVICE_JWK,
                             alg: "ES256",
                         }),
+                        algorithm: SignatureAlgorithm.ES256,
                     },
                 },
             ],

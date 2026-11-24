@@ -297,6 +297,7 @@ describe("MdocverifierService with a map that repeats a key", () => {
                                     ...deviceJwk,
                                     alg: "ES256",
                                 }),
+                                algorithm: SignatureAlgorithm.ES256,
                             },
                         },
                     ],

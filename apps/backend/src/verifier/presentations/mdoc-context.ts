@@ -1,11 +1,7 @@
-import { timingSafeEqual } from "node:crypto";
 import { p256, p384, p521 } from "@noble/curves/nist.js";
-import { hmac } from "@noble/hashes/hmac.js";
-import { sha256 } from "@noble/hashes/sha2.js";
 import { Curve, cborDecode, coseKeyToJwkClaim } from "@owf/cose";
 import { hex } from "@owf/identity-common";
 import { CoseKey, type MdocContext } from "@owf/mdoc";
-import { hkdf } from "@panva/hkdf";
 import * as x509 from "@peculiar/x509";
 import { X509Certificate } from "@peculiar/x509";
 import { exportJWK, importX509 } from "jose";
@@ -357,6 +353,16 @@ const verifyChainConstraints = (parsedChain: X509Certificate[]): void => {
 };
 
 /**
+ * The private key bytes (`d`) of a COSE key, which signing and the device MAC
+ * key agreement need.
+ */
+const privateKeyOf = (key: CoseKey): Uint8Array => {
+    const d = key.d;
+    if (!d) throw new Error("COSE key has no private key (d)");
+    return d;
+};
+
+/**
  * Everything @owf/mdoc needs except `fetch`, for signing, session transcripts
  * and issuance. Verifying a presented mDOC fetches the status list or
  * identifier list named in its MSO, and has to use {@link withFetch} with a
@@ -380,49 +386,14 @@ export const mdocContext: Omit<MdocContext, "fetch"> = {
         random: (length: number) => {
             return webCrypto.getRandomValues(new Uint8Array(length));
         },
-        hdkf: async (input) => {
-            const {
-                digestAlgorithm: da,
-                salt,
-                info,
-                publicKey,
-                privateKey,
-            } = input;
-            const ikm = p256
-                .getSharedSecret(privateKey, publicKey, true)
-                .slice(1);
-            let digestAlgorithm: "sha256" | "sha384" | "sha512" = "sha256";
-            if (da === "SHA-384") {
-                digestAlgorithm = "sha384";
-            } else if (da === "SHA-512") {
-                digestAlgorithm = "sha512";
-            }
-            return hkdf(digestAlgorithm, ikm, salt, info, 32);
-        },
     },
 
     cose: {
-        mac0: {
-            authenticate: async (input) => {
-                const { key, toBeAuthenticated } = input;
-                const keyBytes = key instanceof CoseKey ? key.privateKey : key;
-                return hmac(sha256, keyBytes, toBeAuthenticated);
-            },
-            verify: async (input) => {
-                const { tag, toBeAuthenticated, key } = input;
-                const keyBytes = key instanceof CoseKey ? key.privateKey : key;
-                const expectedTag = hmac(sha256, keyBytes, toBeAuthenticated);
-                if (tag.length !== expectedTag.length) {
-                    return false;
-                }
-                return timingSafeEqual(tag, expectedTag);
-            },
-        },
         sign1: {
             sign: async (input) => {
                 const { key, toBeSigned, algorithm } = input;
                 const alg = algForCoseAlgAndKey(algorithm, key);
-                return NOBLE_CURVES[alg].sign(toBeSigned, key.privateKey, {
+                return NOBLE_CURVES[alg].sign(toBeSigned, privateKeyOf(key), {
                     format: "compact",
                 });
             },
