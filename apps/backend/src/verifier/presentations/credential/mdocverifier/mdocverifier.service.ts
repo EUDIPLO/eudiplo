@@ -44,6 +44,10 @@ import {
     type VerificationFailureType,
 } from "../verification-failure.js";
 import { toProvenance } from "../verification-provenance.js";
+import {
+    assertUniqueDeviceResponseMapKeys,
+    MalformedCborError,
+} from "./cbor-map-keys.js";
 import { toJsonClaims } from "./mdoc-claim-json.js";
 
 /**
@@ -139,6 +143,9 @@ export class MdocverifierService {
             // 1) Decode the device response
             const uint8Array = Buffer.from(vp, "base64url");
             const deviceResponse = DeviceResponse.decode(uint8Array);
+            // The decoder keeps the last entry of a map that repeats a key,
+            // so a repeated COSE header label is checked on the bytes.
+            assertUniqueDeviceResponseMapKeys(uint8Array, deviceResponse);
             const mdocDocument = deviceResponse.documents?.[0];
 
             if (!mdocDocument) {
@@ -640,6 +647,12 @@ export class MdocverifierService {
     }
 
     private classifyVerificationError(error: any): VerificationFailureType {
+        // Not by its message, which names the structure ("DeviceSignature")
+        // and a map key the wallet chose.
+        if (error instanceof MalformedCborError) {
+            return "verification_error";
+        }
+
         const message = String(error?.message ?? error).toLowerCase();
 
         // A certificate of the issuer or status list path outside its

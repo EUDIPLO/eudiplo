@@ -9,6 +9,13 @@ import {
 } from "../verification-failure.js";
 import { MdocverifierService } from "./mdocverifier.service.js";
 
+// These tests replace DeviceResponse.decode with partial documents, which
+// have no bytes to check; cbor-map-keys.spec.ts covers the check itself.
+vi.mock("./cbor-map-keys.js", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("./cbor-map-keys.js")>()),
+    assertUniqueDeviceResponseMapKeys: vi.fn(),
+}));
+
 describe("MdocverifierService failure classification", () => {
     let service: MdocverifierService;
     let chainValidation: {
