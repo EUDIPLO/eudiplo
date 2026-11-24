@@ -38,7 +38,7 @@ The **Check Config Schemas** job checks that the generated schemas match the cod
 
 ## Vulnerability scanner files
 
-The `.oss-scanner/` folder holds the build image and the threat model for Anthropic's [OSS Scanner](https://red.anthropic.com/oss-scanner/), which builds the repository from that Dockerfile and reads the threat model before it looks for vulnerabilities. No CI job uses them. Update `.oss-scanner/threat_model.md` when the [security model](../concepts/security-model.md), the public routes, the roles or the way the tests are run change.
+The `.oss-scanner/` folder holds the build image and the threat model for Anthropic's [OSS Scanner](https://red.anthropic.com/oss-scanner/), which builds the repository from that Dockerfile and reads the threat model before it looks for vulnerabilities. `Dockerfile.dockerignore` in that folder replaces the root `.dockerignore` for this build, so the tests, the documentation and `deployment/` reach the image. No CI job uses these files. Update `.oss-scanner/threat_model.md` when the [security model](../concepts/security-model.md), the public routes, the roles or the way the tests are run change.
 
 ## Git hooks
 

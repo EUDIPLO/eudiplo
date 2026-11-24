@@ -4,8 +4,10 @@
 # The scanner builds this file with the repository as build context and with
 # network access, then analyses the image without any network. Everything the
 # backend, the client and their tests need must therefore be installed here.
-# The scanner removes the repository's .dockerignore before it builds, so
-# `COPY . /src` brings the tests and the documentation along.
+# The scanner keeps the repository's .dockerignore when the Dockerfile lives in
+# the repository. Dockerfile.dockerignore next to this file replaces it for this
+# build, so `COPY . /src` brings the tests, the documentation and deployment/
+# along.
 #
 # What to run inside the image is described in threat_model.md next to this file.
 
