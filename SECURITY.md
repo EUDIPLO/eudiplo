@@ -23,9 +23,9 @@ discussions, or pull requests.
 1. **GitHub Private Vulnerability Reporting**: Submit a confidential advisory
    directly via
    [GitHub Security Advisories](https://github.com/EUDIPLO/eudiplo/security/advisories/new).
-2. **Email**: Send a confidential email to the LF Decentralized Trust security
-   team:
-   - Recipient: [security@lists.lfdecentralizedtrust.org](mailto:security@lists.lfdecentralizedtrust.org)
+2. **Email**: Send a confidential email to the project's security list at
+   LF Decentralized Trust:
+   - Recipient: [eudiplo-security@lists.lfdecentralizedtrust.org](mailto:eudiplo-security@lists.lfdecentralizedtrust.org)
    - Subject: `[SECURITY] eudiplo: <brief description>`
 
 ### Information to Include
@@ -107,7 +107,7 @@ For security-related questions or concerns, please contact:
 - **Preferred Contact**:
   [GitHub Security Advisories](https://github.com/EUDIPLO/eudiplo/security/advisories/new)
 - **Security Email**:
-  [security@lists.lfdecentralizedtrust.org](mailto:security@lists.lfdecentralizedtrust.org)
+  [eudiplo-security@lists.lfdecentralizedtrust.org](mailto:eudiplo-security@lists.lfdecentralizedtrust.org)
 - **Response Time**: Within 3 business days
 
 Thank you for helping keep our project and community safe!
