@@ -1,11 +1,8 @@
 import crypto from "node:crypto";
 import { p256 } from "@noble/curves/nist.js";
-import { hmac } from "@noble/hashes/hmac.js";
-import { sha256 } from "@noble/hashes/sha2.js";
 import { coseKeyToJwkClaim } from "@owf/cose";
 import { hex } from "@owf/identity-common";
 import { CoseKey, type MdocContext } from "@owf/mdoc";
-import { hkdf } from "@panva/hkdf";
 import * as x509 from "@peculiar/x509";
 import { X509Certificate } from "@peculiar/x509";
 import { exportJWK, importX509 } from "jose";
@@ -17,6 +14,11 @@ export const DEVICE_JWK = {
     y: "oxS1OAORJ7XNUHNfVFGeM8E0RQVFxWA62fJj-sxW03c",
     crv: "P-256",
     d: "eRpAZr3eV5xMMnPG3kWjg90Y-bBff9LqmlQuk49HUtA",
+};
+
+const privateKeyOf = (key: CoseKey): Uint8Array => {
+    if (!key.d) throw new Error("COSE key has no private key (d)");
+    return key.d;
 };
 
 export const mdocContext: MdocContext = {
@@ -32,48 +34,13 @@ export const mdocContext: MdocContext = {
         random: (length: number) => {
             return crypto.getRandomValues(new Uint8Array(length));
         },
-        hdkf: async (input) => {
-            const {
-                digestAlgorithm: da,
-                salt,
-                info,
-                publicKey,
-                privateKey,
-            } = input;
-            const ikm = p256
-                .getSharedSecret(privateKey, publicKey, true)
-                .slice(1);
-            let digestAlgorithm: "sha256" | "sha384" | "sha512" = "sha256";
-            if (da === "SHA-384") {
-                digestAlgorithm = "sha384";
-            } else if (da === "SHA-512") {
-                digestAlgorithm = "sha512";
-            }
-            return hkdf(digestAlgorithm, ikm, salt, info, 32);
-        },
     },
 
     cose: {
-        mac0: {
-            authenticate: async (input) => {
-                const { key, toBeAuthenticated } = input;
-                const keyBytes = key instanceof CoseKey ? key.privateKey : key;
-                return hmac(sha256, keyBytes, toBeAuthenticated);
-            },
-            verify: async (input) => {
-                const { tag, toBeAuthenticated, key } = input;
-                const keyBytes = key instanceof CoseKey ? key.privateKey : key;
-                const expectedTag = hmac(sha256, keyBytes, toBeAuthenticated);
-                if (tag.length !== expectedTag.length) {
-                    return false;
-                }
-                return crypto.timingSafeEqual(tag, expectedTag);
-            },
-        },
         sign1: {
             sign: async (input) => {
                 const { key, toBeSigned } = input;
-                return p256.sign(toBeSigned, key.privateKey, {
+                return p256.sign(toBeSigned, privateKeyOf(key), {
                     format: "compact",
                 });
             },

@@ -301,6 +301,7 @@ describe("MdocverifierService status list fetch", () => {
                                     ...deviceJwk,
                                     alg: "ES256",
                                 }),
+                                algorithm: SignatureAlgorithm.ES256,
                             },
                         },
                     ],

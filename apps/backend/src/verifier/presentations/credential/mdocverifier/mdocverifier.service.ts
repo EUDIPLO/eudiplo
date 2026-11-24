@@ -328,7 +328,7 @@ export class MdocverifierService {
                         deviceResponse,
                         sessionTranscript,
                         trustedCertificates,
-                        disableStatusValidation: !includeStatusCheck,
+                        status: { disableValidation: !includeStatusCheck },
                     },
                     verificationContext,
                 );
@@ -371,7 +371,7 @@ export class MdocverifierService {
                         deviceResponse,
                         sessionTranscript,
                         trustedCertificates,
-                        disableStatusValidation: true,
+                        status: { disableValidation: true },
                     },
                     verificationContext,
                 );

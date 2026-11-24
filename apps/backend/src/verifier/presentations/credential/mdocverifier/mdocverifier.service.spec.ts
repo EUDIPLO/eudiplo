@@ -335,9 +335,9 @@ describe("MdocverifierService revocation mode", () => {
         const secondCallTrusted = verifyDeviceResponse.mock.calls[1][0]
             .trustedCertificates as Array<Record<string, unknown>>;
         const firstDisableStatusValidation =
-            verifyDeviceResponse.mock.calls[0][0].disableStatusValidation;
+            verifyDeviceResponse.mock.calls[0][0].status?.disableValidation;
         const secondDisableStatusValidation =
-            verifyDeviceResponse.mock.calls[1][0].disableStatusValidation;
+            verifyDeviceResponse.mock.calls[1][0].status?.disableValidation;
 
         expect(firstCallTrusted[0].status).toBeDefined();
         expect(secondCallTrusted[0].status).toBeUndefined();
@@ -415,7 +415,7 @@ describe("MdocverifierService revocation mode", () => {
         const trustedCertificates = verifyDeviceResponse.mock.calls[0][0]
             .trustedCertificates as Array<Record<string, Uint8Array[]>>;
         const disableStatusValidation =
-            verifyDeviceResponse.mock.calls[0][0].disableStatusValidation;
+            verifyDeviceResponse.mock.calls[0][0].status?.disableValidation;
 
         expect(trustedCertificates).toHaveLength(1);
         expect(trustedCertificates[0].issuance).toEqual([
@@ -453,7 +453,7 @@ describe("MdocverifierService revocation mode", () => {
         const trustedCertificates = verifyDeviceResponse.mock.calls[0][0]
             .trustedCertificates as Array<Record<string, Uint8Array[]>>;
         const disableStatusValidation =
-            verifyDeviceResponse.mock.calls[0][0].disableStatusValidation;
+            verifyDeviceResponse.mock.calls[0][0].status?.disableValidation;
 
         expect(trustedCertificates).toHaveLength(1);
         expect(trustedCertificates[0].issuance).toEqual([
