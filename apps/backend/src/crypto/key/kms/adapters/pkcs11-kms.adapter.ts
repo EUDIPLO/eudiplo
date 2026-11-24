@@ -141,6 +141,7 @@ export class Pkcs11KmsAdapter implements KmsAdapter {
     private constants?: Pkcs11Constants;
     private session?: Buffer;
     private initPromise?: Promise<void>;
+    private disposed = false;
 
     constructor(config: Pkcs11AdapterConfig) {
         this.providerId = config.providerId;
@@ -295,11 +296,33 @@ export class Pkcs11KmsAdapter implements KmsAdapter {
         }
     }
 
+    /**
+     * Close the session. Not C_Logout or C_Finalize: the login state and the
+     * library belong to every session of this process on the token, also
+     * those of other adapters.
+     */
+    async dispose(): Promise<void> {
+        this.disposed = true;
+        // A session that is being opened is closed once it is there.
+        await this.initPromise?.catch(() => undefined);
+        const { pkcs11, session } = this;
+        this.session = undefined;
+        this.jwkCache.clear();
+        if (pkcs11 && session) {
+            pkcs11.C_CloseSession(session);
+        }
+    }
+
     private async ensureSession(): Promise<{
         p11: Pkcs11Instance;
         c: Pkcs11Constants;
         session: Buffer;
     }> {
+        if (this.disposed) {
+            throw new Error(
+                `Pkcs11KmsAdapter[${this.providerId}]: this session was closed, retry the operation`,
+            );
+        }
         this.initPromise ??= this.initialise();
         await this.initPromise;
         if (!this.pkcs11 || !this.constants || !this.session) {
@@ -328,7 +351,13 @@ export class Pkcs11KmsAdapter implements KmsAdapter {
             c.CKF_SERIAL_SESSION |
             (this.config.readOnly ? 0 : c.CKF_RW_SESSION);
         const session = p11.C_OpenSession(slot, flags);
-        p11.C_Login(session, c.CKU_USER, this.config.pin);
+        try {
+            p11.C_Login(session, c.CKU_USER, this.config.pin);
+        } catch (err) {
+            // Nothing else knows this session, so nothing else would close it.
+            p11.C_CloseSession(session);
+            throw err;
+        }
 
         this.pkcs11 = p11;
         this.constants = c;

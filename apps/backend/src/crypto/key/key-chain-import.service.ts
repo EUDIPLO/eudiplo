@@ -34,7 +34,9 @@ import type {
     KmsKeyRef,
     KmsSigningAlg,
 } from "./kms/kms-adapter.js";
+import { KmsKeyOwnershipService } from "./kms/kms-key-ownership.service.js";
 import { KmsProviderRegistry } from "./kms/kms-provider.registry.js";
+import { tenantOwnsKmsProvider } from "./kms/kms-tenant-restrictions.js";
 
 // Avoids a backtracking-prone `=+$` regex by trimming padding with a bounded loop.
 function stripTrailingPadding(value: string): string {
@@ -64,6 +66,7 @@ export class KeyChainImportService {
         private readonly configImportService: ConfigImportService,
         private readonly kmsRegistry: KmsProviderRegistry,
         private readonly certBuilder: CertificateBuilderService,
+        private readonly kmsKeyOwnership: KmsKeyOwnershipService,
         configImportOrchestrator: ConfigImportOrchestratorService,
     ) {
         configImportOrchestrator.register(
@@ -93,15 +96,42 @@ export class KeyChainImportService {
                         .then((count) => count > 0);
                 },
                 processItem: async (tid, config) => {
-                    await this.importKeyChain(tid, config);
+                    await this.importKeyChain(tid, config, {
+                        fromRequest: false,
+                    });
                 },
             },
         );
     }
 
-    async importKeyChain(
+    /**
+     * Import a private key as a key chain. Runs alone among the tenant's
+     * imports, external key attachments and `kms.json` writes
+     * (KmsKeyOwnershipService.exclusive): the provider that receives the key
+     * must still be the one the key chain names when it is stored.
+     *
+     * @param options.fromRequest false for a file of the tenant's
+     * configuration folder, which the operator wrote: its key name is kept
+     * on every provider
+     */
+    importKeyChain(
         tenantId: string,
         dto: KeyChainImportDto,
+        options: { fromRequest?: boolean } = {},
+    ): Promise<string> {
+        return this.kmsKeyOwnership.exclusive(tenantId, () =>
+            this.importKeyChainExclusive(
+                tenantId,
+                dto,
+                options.fromRequest ?? true,
+            ),
+        );
+    }
+
+    private async importKeyChainExclusive(
+        tenantId: string,
+        dto: KeyChainImportDto,
+        fromRequest: boolean,
     ): Promise<string> {
         const id = dto.id || v4();
         const tenant = await this.tenantRepository.findOneByOrFail({
@@ -128,11 +158,20 @@ export class KeyChainImportService {
         const alg = this.signingAlgOf(privateKey);
         privateKey.alg = alg;
 
-        const adapter = this.kmsRegistry.resolve(dto.kmsProvider, tenantId);
+        const { adapter, tenantFile } = this.kmsRegistry.resolveWithTenantFile(
+            dto.kmsProvider,
+            tenantId,
+        );
         // Checked before either import path hands the key to the provider.
         this.assertProviderSupports(adapter, alg);
-        // External adapters must not overwrite the active key while a replacement is being validated.
-        if (replacing && adapter.type !== "db")
+        // External adapters must not overwrite the active key while a
+        // replacement is being validated. On a provider the tenant shares
+        // with others, a request never chooses the key name: it could be
+        // the name of another tenant's key.
+        const chosenForCaller =
+            fromRequest &&
+            !tenantOwnsKmsProvider(tenantFile, adapter.providerId);
+        if ((replacing || chosenForCaller) && adapter.type !== "db")
             privateKey.kid = `${id}-import-${v4()}`;
         const normalizedCertificates = this.resolveCertificateChain(dto);
         const rotationEnabled = dto.rotationPolicy?.enabled ?? false;
@@ -313,7 +352,7 @@ export class KeyChainImportService {
 
         // The signing key uses the curve of the CA key.
         const activeMat = await adapter.generateKey({
-            kid: `${id}-active-${Date.now()}`,
+            kid: `${id}-active-${v4()}`,
             alg: rootMat.ref.alg,
         });
         const { chain } = await this.certBuilder.createCaSignedCert({

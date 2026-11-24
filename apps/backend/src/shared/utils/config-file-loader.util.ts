@@ -1,42 +1,19 @@
 import { readFileSync } from "node:fs";
 
-function resolvePlaceholders<T>(value: T): T {
-    if (typeof value === "string") {
-        return value.replace(
-            /\$\{([A-Z0-9_]+)(?::([^}]*))?\}/g,
-            (_, name: string, defaultValue: string | undefined) => {
-                const envValue = process.env[name];
-                if (envValue !== undefined && envValue !== "") {
-                    return envValue;
-                }
-
-                return defaultValue ?? `\${${name}}`;
-            },
-        ) as unknown as T;
-    }
-
-    if (Array.isArray(value)) {
-        return value.map((item) => resolvePlaceholders(item)) as unknown as T;
-    }
-
-    if (value && typeof value === "object") {
-        const resolved: Record<string, unknown> = {};
-        for (const [key, item] of Object.entries(value)) {
-            resolved[key] = resolvePlaceholders(item);
-        }
-        return resolved as T;
-    }
-
-    return value;
-}
-
 export function loadJsonFile<T>(filePath: string): T {
     return JSON.parse(readFileSync(filePath, "utf8")) as T;
 }
 
+/**
+ * Load a configuration file and validate it.
+ *
+ * @param resolvePlaceholders replaces the `${VAR}` placeholders of the file
+ * before it is validated (ConfigImportService.replacePlaceholders).
+ */
 export function loadConfigDto<T extends object>(
     filePath: string,
     validationSchema: any,
+    resolvePlaceholders: <V>(value: V) => V,
 ): T {
     const payload = resolvePlaceholders(loadJsonFile<object>(filePath));
 

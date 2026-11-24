@@ -6,6 +6,12 @@ import { resolveConfigVariables } from "@eudiplo/config-format/config-values.js"
 import { Injectable, Logger, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { tenantConfigFolder } from "../../shared/utils/tenant-config-folder.util.js";
+import {
+    type ConfigFileScope,
+    KMS_TENANT_VARIABLES,
+    parseTenantKmsVariables,
+    refusedConfigVariable,
+} from "../config/config-variable-scope.js";
 import { ConfigMigrationService } from "../config-portability/config-migration.service.js";
 import { ConfigOwnershipService } from "../config-portability/config-ownership.service.js";
 import { ConfigResourceRegistry } from "../config-portability/config-resource.registry.js";
@@ -251,10 +257,17 @@ export class ConfigImportService {
 
     /**
      * Recursively replace placeholders of the form ${VAR} or ${VAR:default} in all string properties.
-     * ${VAR} -> replaced with process.env.VAR if defined; if undefined and no default given, logs a warning and leaves placeholder intact.
+     * ${VAR} -> replaced with process.env.VAR if defined; if undefined and no default given, it fails, or with CONFIG_VARIABLE_STRICT=ignore logs a warning and leaves the placeholder intact.
      * ${VAR:default} -> replaced with env value if defined, otherwise with "default".
+     *
+     * @param scope where the file lives. It decides which variables the file
+     * may name (see config-variable-scope.ts); a file that names another one
+     * is rejected, whatever CONFIG_VARIABLE_STRICT says.
      */
-    replacePlaceholders<T>(input: T): T {
+    replacePlaceholders<T>(
+        input: T,
+        scope: Exclude<ConfigFileScope, "global"> = "tenant",
+    ): T {
         const configured = this.configService.get<any>(
             "CONFIG_VARIABLE_STRICT",
         );
@@ -263,7 +276,38 @@ export class ConfigImportService {
             configured === "true" ||
             configured === "abort" ||
             configured === "skip";
-        const result = resolveConfigVariables(input, process.env);
+        const tenantKmsVariables =
+            scope === "tenant-kms"
+                ? parseTenantKmsVariables(
+                      this.configService.get<string>(KMS_TENANT_VARIABLES),
+                  )
+                : undefined;
+        // A kms.json has no ${VAR:default} form: KmsConfigService keeps it as
+        // text, so it must not resolve here either.
+        if (scope === "tenant-kms" && holdsDefaultPlaceholder(input)) {
+            throw new Error(
+                "a kms.json does not support ${VAR:default} placeholders",
+            );
+        }
+        // The resolver reads a variable only for a placeholder it found, so
+        // the policy sees exactly the names the file uses.
+        const refused = new Set<string>();
+        const env = new Proxy(process.env, {
+            get: (target, name) => {
+                if (typeof name !== "string") return undefined;
+                const reason = refusedConfigVariable(
+                    name,
+                    scope,
+                    tenantKmsVariables,
+                );
+                if (reason === undefined) return target[name];
+                refused.add(reason);
+                return undefined;
+            },
+        });
+        const result = resolveConfigVariables(input, env);
+        // In every mode: a refused variable is not a missing one.
+        if (refused.size > 0) throw new Error([...refused].join("; "));
         if (strict && result.issues.length)
             throw new Error(
                 result.issues
@@ -343,4 +387,13 @@ export class ConfigImportService {
     formatNestedValidationError(error: unknown): string {
         return this.extractErrorMessages(error).join(", ");
     }
+}
+
+/** Whether a string inside `value` holds a `${VAR:default}` placeholder. */
+function holdsDefaultPlaceholder(value: unknown): boolean {
+    if (typeof value === "string") return /\$\{[A-Z0-9_]+:/.test(value);
+    if (Array.isArray(value)) return value.some(holdsDefaultPlaceholder);
+    if (value && typeof value === "object")
+        return Object.values(value).some(holdsDefaultPlaceholder);
+    return false;
 }

@@ -115,6 +115,15 @@ export interface KmsAdapter {
      * `ListKeys` with limit 1) and return a non-throwing result.
      */
     health(): Promise<KmsHealthResult>;
+
+    /**
+     * Release what the adapter holds open in its backend (a session, pooled
+     * connections). The registry calls it for an adapter it no longer hands
+     * out, some time after it stopped doing so. An operation that still
+     * uses the adapter then may fail. Adapters that hold nothing open leave
+     * it out.
+     */
+    dispose?(): void | Promise<void>;
 }
 
 export interface KmsHealthResult {

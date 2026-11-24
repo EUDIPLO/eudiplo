@@ -1035,8 +1035,9 @@ export class KeyChainService {
     async importKeyChain(
         tenantId: string,
         dto: KeyChainImportDto,
+        options: { fromRequest?: boolean } = {},
     ): Promise<string> {
-        return this.importService.importKeyChain(tenantId, dto);
+        return this.importService.importKeyChain(tenantId, dto, options);
     }
 
     async rotate(tenantId: string, id: string): Promise<void> {

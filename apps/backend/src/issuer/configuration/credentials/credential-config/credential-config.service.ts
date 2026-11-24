@@ -112,7 +112,12 @@ export class CredentialConfigService {
                         .deleteForTenant(tid, data.id)
                         .then(() => undefined),
                 loadData: (filePath) =>
-                    loadConfigDto(filePath, CredentialConfigCreateSchema),
+                    loadConfigDto(
+                        filePath,
+                        CredentialConfigCreateSchema,
+                        (value) =>
+                            this.configImportService.replacePlaceholders(value),
+                    ),
                 processItem: async (tid, config) => {
                     await this.processCredentialConfig(tid, config);
                 },

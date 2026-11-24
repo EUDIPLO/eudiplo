@@ -11,15 +11,28 @@ import {
     type KmsConfig,
     parseRawKmsConfig,
 } from "../schemas/kms-config.schema.js";
-import { KmsConfigService } from "./kms-config.service.js";
-import { kmsConfigFilePath, kmsConfigFileSpec } from "./kms-config-file.js";
+import { KmsConfigService, mergeConfigs } from "./kms-config.service.js";
+import { kmsConfigFilePath, parseKmsConfigFile } from "./kms-config-file.js";
 import {
+    assertNoNewKmsInstanceCredentials,
+    assertNoNewKmsPlaceholders,
+    assertNoNewKmsServerFiles,
+    KmsInstanceCredentialsRefusedError,
+    KmsPlaceholderRefusedError,
     KmsSecretDestinationChangedError,
     KmsSecretNotStoredError,
+    KmsServerFileRefusedError,
     redactKmsConfig,
     restoreKmsSecrets,
 } from "./kms-config-secrets.js";
 import { KmsProviderRegistry } from "./kms-provider.registry.js";
+import { KMS_TENANT_RESTRICTION_CODES } from "./kms-tenant-restrictions.js";
+
+/** Why a tenant KMS configuration sent through the API is refused. */
+export interface RefusedKmsSetting {
+    code: "KMS_PLACEHOLDER_REFUSED" | "KMS_SETTING_REFUSED";
+    message: string;
+}
 
 @Injectable()
 export class KmsTenantConfigService {
@@ -42,9 +55,24 @@ export class KmsTenantConfigService {
         }
         const source = `tenant '${tenantId}' kms.json`;
         return parseRawKmsConfig(
-            kmsConfigFileSpec(JSON.parse(readFileSync(path, "utf8")), source),
+            parseKmsConfigFile(readFileSync(path, "utf8"), source),
             source,
         );
+    }
+
+    /**
+     * The stored file as what a write through the API may keep of it: its
+     * placeholders, host files and credentials. A file that is not JSON or
+     * no valid KMS configuration gives nothing to keep, so the tenant can
+     * replace it; only the operator can store such a file.
+     */
+    private keptTenantConfig(tenantId: string): KmsConfig | null {
+        try {
+            return this.getTenantConfig(tenantId);
+        } catch (error) {
+            if (error instanceof BadRequestException) return null;
+            throw error;
+        }
     }
 
     /**
@@ -78,28 +106,15 @@ export class KmsTenantConfigService {
      * the global configuration only with their non-secret settings.
      */
     getEffectiveConfigView(tenantId: string): KmsConfig {
-        const effective = this.getEffectiveConfig(tenantId);
-        const tenantProviders = new Map(
-            (this.getTenantConfig(tenantId)?.providers ?? []).map(
-                (provider) => [provider.id, provider],
-            ),
-        );
-        const view = redactKmsConfig(effective, {
+        // Throws the reason when the stored tenant file does not load.
+        this.getEffectiveConfig(tenantId);
+        // Built from the stored tenant file, never from its resolved form: a
+        // resolved value is an environment variable of the backend.
+        const globalView = redactKmsConfig(this.kmsConfigService.getConfig(), {
             keepEnvPlaceholders: false,
         });
-        const tenantView = redactKmsConfig(
-            { providers: [...tenantProviders.values()] },
-            { keepEnvPlaceholders: true },
-        );
-        return {
-            ...view,
-            providers: view.providers.map(
-                (provider) =>
-                    tenantView.providers.find(
-                        (entry) => entry.id === provider.id,
-                    ) ?? provider,
-            ),
-        };
+        const tenantView = this.getTenantConfigView(tenantId);
+        return tenantView ? mergeConfigs(globalView, tenantView) : globalView;
     }
 
     /**
@@ -112,7 +127,7 @@ export class KmsTenantConfigService {
         try {
             restored = restoreKmsSecrets(
                 config,
-                this.getTenantConfig(tenantId),
+                this.keptTenantConfig(tenantId),
             );
         } catch (error) {
             if (
@@ -126,6 +141,88 @@ export class KmsTenantConfigService {
         return this.saveTenantConfig(tenantId, restored);
     }
 
+    /**
+     * Why saveTenantConfig would refuse `config` for what only the operator
+     * may put into a tenant `kms.json`, or undefined: a new `${VAR}`
+     * placeholder, a kept one whose variable is unset or may not be used, a
+     * new file of the backend's host or one that is not listed, or an
+     * `aws-kms` provider without credentials. For plans; says nothing about
+     * a configuration that is invalid in another way.
+     */
+    refusedSetting(
+        tenantId: string,
+        config: unknown,
+    ): RefusedKmsSetting | undefined {
+        try {
+            const stored = this.getTenantConfig(tenantId);
+            assertNoNewKmsPlaceholders(config as KmsConfig, stored);
+            assertNoNewKmsServerFiles(config as KmsConfig, stored);
+            assertNoNewKmsInstanceCredentials(config as KmsConfig, stored);
+        } catch (error) {
+            if (error instanceof KmsPlaceholderRefusedError) {
+                return {
+                    code: "KMS_PLACEHOLDER_REFUSED",
+                    message: error.message,
+                };
+            }
+            if (
+                error instanceof KmsServerFileRefusedError ||
+                error instanceof KmsInstanceCredentialsRefusedError
+            ) {
+                return { code: "KMS_SETTING_REFUSED", message: error.message };
+            }
+            return undefined;
+        }
+        try {
+            this.kmsConfigService.resolveTenantConfig(
+                config,
+                "tenant KMS configuration",
+            );
+        } catch (error) {
+            const response = (
+                error as {
+                    getResponse?: () => {
+                        message?: string;
+                        errors?: { code?: string }[];
+                    };
+                }
+            ).getResponse?.();
+            if (!response?.message) return undefined;
+            const codes = (response.errors ?? []).map((issue) => issue.code);
+            // A kept placeholder whose variable is unset or not listed.
+            if (
+                codes.includes("refused_environment_variable") ||
+                codes.includes("missing_environment_variable")
+            ) {
+                return {
+                    code: "KMS_PLACEHOLDER_REFUSED",
+                    message: response.message,
+                };
+            }
+            if (
+                codes.some(
+                    (code) =>
+                        code !== undefined &&
+                        KMS_TENANT_RESTRICTION_CODES.includes(code),
+                )
+            ) {
+                return {
+                    code: "KMS_SETTING_REFUSED",
+                    message: response.message,
+                };
+            }
+        }
+        return undefined;
+    }
+
+    /**
+     * Write the tenant configuration sent through the API, by an update or a
+     * configuration bundle. It may keep the `${VAR}` placeholders and the
+     * files of the backend's host the stored file holds but not bring in new
+     * ones, nor an `aws-kms` provider without credentials (see
+     * assertNoNewKmsPlaceholders, assertNoNewKmsServerFiles,
+     * assertNoNewKmsInstanceCredentials).
+     */
     saveTenantConfig(tenantId: string, config: KmsConfig): KmsConfig {
         const path = this.getTenantConfigPath(tenantId);
         if (!path) {
@@ -133,6 +230,26 @@ export class KmsTenantConfigService {
         }
 
         const validatedConfig = this.validateConfig(config);
+        try {
+            const stored = this.keptTenantConfig(tenantId);
+            assertNoNewKmsPlaceholders(validatedConfig, stored);
+            assertNoNewKmsServerFiles(validatedConfig, stored);
+            assertNoNewKmsInstanceCredentials(validatedConfig, stored);
+        } catch (error) {
+            if (
+                error instanceof KmsPlaceholderRefusedError ||
+                error instanceof KmsServerFileRefusedError ||
+                error instanceof KmsInstanceCredentialsRefusedError
+            ) {
+                throw new BadRequestException(error.message);
+            }
+            throw error;
+        }
+        // Nothing is written that the tenant could not load afterwards.
+        this.kmsConfigService.resolveTenantConfig(
+            validatedConfig,
+            "tenant KMS configuration",
+        );
 
         mkdirSync(dirname(path), { recursive: true });
         atomicWriteFileSync(

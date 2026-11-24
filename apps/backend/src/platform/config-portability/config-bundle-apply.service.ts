@@ -25,7 +25,9 @@ import { TenantEntity } from "../../auth/tenant/entities/tenant.entity.js";
 import { KeyChainType } from "../../crypto/key/dto/key-chain-create.dto.js";
 import { KeyUsage } from "../../crypto/key/entities/key-chain.entity.js";
 import { KeyChainService } from "../../crypto/key/key-chain.service.js";
+import { KmsKeyOwnershipService } from "../../crypto/key/kms/kms-key-ownership.service.js";
 import { KmsTenantConfigService } from "../../crypto/key/kms/kms-tenant-config.service.js";
+import type { KmsConfig } from "../../crypto/key/schemas/kms-config.schema.js";
 import { AttributeProviderService } from "../../issuer/configuration/attribute-provider/attribute-provider.service.js";
 import { CredentialConfigService } from "../../issuer/configuration/credentials/credential-config/credential-config.service.js";
 import { IssuanceService } from "../../issuer/configuration/issuance/issuance.service.js";
@@ -40,7 +42,10 @@ import { ConfigBundleRepositories } from "./config-bundle-repositories.service.j
 import { ConfigImportJournalService } from "./config-import-journal.service.js";
 import { ConfigKmsReferenceService } from "./config-kms-reference.service.js";
 import { ConfigMigrationService } from "./config-migration.service.js";
-import { ConfigOwnershipService } from "./config-ownership.service.js";
+import {
+    ConfigOwnershipService,
+    isFolderSource,
+} from "./config-ownership.service.js";
 import { ConfigResourceRegistry } from "./config-resource.registry.js";
 import type {
     ConfigApplyOperation,
@@ -60,6 +65,7 @@ import { clientsManagedByIdentityProvider } from "./idp-managed-clients.js";
 import {
     appliedKeyChainType,
     appliedKmsProvider,
+    externalKeyIds,
     internalChainProblems,
     isInternalChainWithPrivateKeys,
     keyChainSettingsColumns,
@@ -93,6 +99,7 @@ export class ConfigBundleApplyService {
         private readonly filesService: FilesService,
         private readonly keyChainService: KeyChainService,
         private readonly kmsReferenceService: ConfigKmsReferenceService,
+        private readonly kmsKeyOwnershipService: KmsKeyOwnershipService,
         private readonly resourceRegistry: ConfigResourceRegistry,
         private readonly kmsTenantConfigService: KmsTenantConfigService,
         private readonly issuanceService: IssuanceService,
@@ -379,7 +386,7 @@ export class ConfigBundleApplyService {
                 write &&
                 !(
                     document.kind === "KmsConfig" &&
-                    ownershipSource.startsWith("folder:")
+                    isFolderSource(ownershipSource)
                 )
             ) {
                 add(
@@ -407,6 +414,7 @@ export class ConfigBundleApplyService {
                             tenantId,
                             document,
                             appliedAsIs,
+                            !isFolderSource(ownershipSource),
                         );
                         if (secret) generatedSecrets.push(secret);
                     },
@@ -434,7 +442,12 @@ export class ConfigBundleApplyService {
             );
         for (const item of deletions) {
             add({ stage: "delete", kind: item.kind, id: item.id }, () =>
-                this.deleteDocument(tenantId, item.kind, item.id),
+                this.deleteDocument(
+                    tenantId,
+                    item.kind,
+                    item.id,
+                    !isFolderSource(ownershipSource),
+                ),
             );
             add(
                 { stage: "delete-ownership", kind: item.kind, id: item.id },
@@ -488,6 +501,7 @@ export class ConfigBundleApplyService {
         tenantId: string,
         kind: ConfigResourceKind,
         id: string,
+        fromRequest: boolean,
     ): Promise<void> {
         switch (kind) {
             case "Tenant":
@@ -498,7 +512,9 @@ export class ConfigBundleApplyService {
                 await this.clientsProvider.removeClient(tenantId, id);
                 return;
             case "KmsConfig":
-                this.kmsTenantConfigService.deleteTenantConfig(tenantId);
+                await this.writeTenantKmsFile(tenantId, null, fromRequest, () =>
+                    this.kmsTenantConfigService.deleteTenantConfig(tenantId),
+                );
                 return;
             case "KeyChainDefaults":
                 await this.tenants.update(
@@ -570,6 +586,7 @@ export class ConfigBundleApplyService {
         tenantId: string,
         document: ConfigDocument,
         appliedAsIs: boolean,
+        fromRequest: boolean,
     ): Promise<
         | {
               kind: "Client";
@@ -654,13 +671,19 @@ export class ConfigBundleApplyService {
                     : undefined;
             }
             case "KmsConfig":
-                this.kmsTenantConfigService.saveTenantConfig(
+                await this.writeTenantKmsFile(
                     tenantId,
                     spec as any,
+                    fromRequest,
+                    () =>
+                        this.kmsTenantConfigService.saveTenantConfig(
+                            tenantId,
+                            spec as any,
+                        ),
                 );
                 return;
             case "KeyChain":
-                await this.applyKeyChain(tenantId, document);
+                await this.applyKeyChain(tenantId, document, fromRequest);
                 return;
             case "IssuanceConfig":
                 await this.issuanceService.storeIssuanceConfiguration(
@@ -781,9 +804,15 @@ export class ConfigBundleApplyService {
         }
     }
 
+    /**
+     * @param fromRequest false for a document of the tenant's configuration
+     * folder, which the operator wrote and which may name any key of a KMS
+     * provider
+     */
     private async applyKeyChain(
         tenantId: string,
         document: ConfigDocument,
+        fromRequest: boolean,
     ): Promise<void> {
         const spec = document.spec as any;
         if (spec.keySource?.type === "regenerate") {
@@ -829,10 +858,14 @@ export class ConfigBundleApplyService {
                 return;
             }
             // The importer sets rotation itself but keeps an omitted description.
-            await this.keyChainService.importKeyChain(tenantId, {
-                ...this.migrationService.unwrapForLegacyImporter(document),
-                description: spec.description ?? null,
-            } as any);
+            await this.keyChainService.importKeyChain(
+                tenantId,
+                {
+                    ...this.migrationService.unwrapForLegacyImporter(document),
+                    description: spec.description ?? null,
+                } as any,
+                { fromRequest },
+            );
             return;
         }
         if (spec.keySource?.type !== "external-reference") {
@@ -840,31 +873,66 @@ export class ConfigBundleApplyService {
                 `KeyChain '${resourceId(document)}' has no importable key source`,
             );
         }
-        await this.kmsReferenceService.verify(tenantId, spec.keySource);
-        await this.keyChains.save({
-            id: resourceId(document),
+        // The plan blocks on this too. Checked again before the key signs,
+        // and the key chain is stored before the tenant's kms.json can change.
+        const attach = async () => {
+            const refused = fromRequest
+                ? await this.kmsKeyOwnershipService.refusedExternalKeys(
+                      tenantId,
+                      spec.keySource.provider,
+                      externalKeyIds(spec.keySource),
+                  )
+                : undefined;
+            if (refused) throw new BadRequestException(refused);
+            await this.kmsReferenceService.verify(tenantId, spec.keySource);
+            await this.keyChains.save({
+                id: resourceId(document),
+                tenantId,
+                usageType: spec.usageType,
+                usage: KeyUsage.Sign,
+                kmsProvider: spec.keySource.provider,
+                rootJwk: spec.keySource.activeExternalKeyId
+                    ? spec.keySource.publicJwk
+                    : (null as any),
+                rootExternalKeyId: spec.keySource.activeExternalKeyId
+                    ? spec.keySource.externalKeyId
+                    : (null as any),
+                rootCertificate: spec.keySource.activeExternalKeyId
+                    ? spec.crt?.at(-1)
+                    : (null as any),
+                activeJwk:
+                    spec.keySource.activePublicJwk ?? spec.keySource.publicJwk,
+                externalKeyId:
+                    spec.keySource.activeExternalKeyId ??
+                    spec.keySource.externalKeyId,
+                activeCertificate:
+                    spec.activeCertificate ?? spec.crt?.join("\n") ?? "",
+                ...keyChainSettingsColumns(spec),
+            });
+        };
+        await this.kmsKeyOwnershipService.exclusive(tenantId, attach);
+    }
+
+    /**
+     * Write or delete the tenant's `kms.json`. For a request, not while key
+     * chains would lose a provider of their own: the plan blocks on that,
+     * but a key chain may have been stored since.
+     */
+    private async writeTenantKmsFile(
+        tenantId: string,
+        next: Pick<KmsConfig, "providers"> | null,
+        fromRequest: boolean,
+        write: () => unknown,
+    ): Promise<void> {
+        if (!fromRequest) {
+            write();
+            return;
+        }
+        await this.kmsKeyOwnershipService.replaceTenantFile(
             tenantId,
-            usageType: spec.usageType,
-            usage: KeyUsage.Sign,
-            kmsProvider: spec.keySource.provider,
-            rootJwk: spec.keySource.activeExternalKeyId
-                ? spec.keySource.publicJwk
-                : (null as any),
-            rootExternalKeyId: spec.keySource.activeExternalKeyId
-                ? spec.keySource.externalKeyId
-                : (null as any),
-            rootCertificate: spec.keySource.activeExternalKeyId
-                ? spec.crt?.at(-1)
-                : (null as any),
-            activeJwk:
-                spec.keySource.activePublicJwk ?? spec.keySource.publicJwk,
-            externalKeyId:
-                spec.keySource.activeExternalKeyId ??
-                spec.keySource.externalKeyId,
-            activeCertificate:
-                spec.activeCertificate ?? spec.crt?.join("\n") ?? "",
-            ...keyChainSettingsColumns(spec),
-        });
+            next,
+            write,
+        );
     }
 
     private order(kind: ConfigResourceKind): number {

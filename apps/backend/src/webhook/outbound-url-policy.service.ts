@@ -199,58 +199,15 @@ export class OutboundUrlPolicyService {
         url: string,
         overrides: { allowHttp?: boolean; resolveHost?: boolean } = {},
     ): Promise<void> {
-        let parsed: URL;
-        try {
-            parsed = new URL(url);
-        } catch {
-            throw new BadRequestException("Invalid outbound URL");
-        }
+        const refused = this.refusedUrl(url, overrides);
+        if (refused !== undefined) throw new BadRequestException(refused);
 
-        const protocol = parsed.protocol.toLowerCase();
-        if (
-            protocol !== "https:" &&
-            !(protocol === "http:" && (overrides.allowHttp || this.allowHttp()))
-        ) {
-            throw new BadRequestException(
-                "Outbound URL must use HTTPS in this environment",
-            );
-        }
-
-        const hostname = parsed.hostname.toLowerCase();
-        const allowlistedHosts = this.allowedHosts();
-        if (
-            allowlistedHosts.length > 0 &&
-            !allowlistedHosts.some(
-                (entry) => hostname === entry || hostname.endsWith(`.${entry}`),
-            )
-        ) {
-            throw new BadRequestException(
-                "Outbound URL host is not in the allowlist",
-            );
-        }
-
-        if (this.allowPrivateNetwork()) {
+        if (this.allowPrivateNetwork() || overrides.resolveHost === false) {
             return;
         }
-
-        if (this.isReservedHost(hostname)) {
-            throw new BadRequestException(
-                "Outbound URL host is not allowed in this environment",
-            );
-        }
-
-        // URL hostnames carry IPv6 literals in brackets.
-        const literal = hostname.replace(/^\[(.*)\]$/, "$1");
-        if (isIP(literal) > 0) {
-            if (isNonPublicIp(literal)) {
-                throw new BadRequestException(
-                    "Outbound URL target resolves to a private or loopback IP",
-                );
-            }
-            return;
-        }
-
-        if (overrides.resolveHost === false) {
+        const hostname = new URL(url).hostname.toLowerCase();
+        // An address literal was checked above and is not looked up.
+        if (isIP(hostname.replace(/^\[(.*)\]$/, "$1")) > 0) {
             return;
         }
 
@@ -274,6 +231,63 @@ export class OutboundUrlPolicyService {
                 "Outbound URL target resolves to a private or loopback IP",
             );
         }
+    }
+
+    /**
+     * Why the policy refuses `url` without looking up its host name, or
+     * undefined: the scheme, the allowlist, reserved names and address
+     * literals. For URLs that are stored now and requested later, where
+     * {@link safeLookup} checks the address of a host name on every
+     * connection. Node does not look up an address literal, so that check
+     * never sees one.
+     *
+     * @param overrides.allowHttp allow `http:` even when
+     * `OUTBOUND_URL_ALLOW_HTTP` is off
+     */
+    refusedUrl(
+        url: string,
+        overrides: { allowHttp?: boolean } = {},
+    ): string | undefined {
+        let parsed: URL;
+        try {
+            parsed = new URL(url);
+        } catch {
+            return "Invalid outbound URL";
+        }
+
+        const protocol = parsed.protocol.toLowerCase();
+        if (
+            protocol !== "https:" &&
+            !(protocol === "http:" && (overrides.allowHttp || this.allowHttp()))
+        ) {
+            return "Outbound URL must use HTTPS in this environment";
+        }
+
+        const hostname = parsed.hostname.toLowerCase();
+        const allowlistedHosts = this.allowedHosts();
+        if (
+            allowlistedHosts.length > 0 &&
+            !allowlistedHosts.some(
+                (entry) => hostname === entry || hostname.endsWith(`.${entry}`),
+            )
+        ) {
+            return "Outbound URL host is not in the allowlist";
+        }
+
+        if (this.allowPrivateNetwork()) {
+            return undefined;
+        }
+
+        if (this.isReservedHost(hostname)) {
+            return "Outbound URL host is not allowed in this environment";
+        }
+
+        // URL hostnames carry IPv6 literals in brackets.
+        const literal = hostname.replace(/^\[(.*)\]$/, "$1");
+        if (isIP(literal) > 0 && isNonPublicIp(literal)) {
+            return "Outbound URL target resolves to a private or loopback IP";
+        }
+        return undefined;
     }
 
     private isTrustedOrigin(url: string, trustedOrigins: string[] = []) {

@@ -132,7 +132,10 @@ Portability**.
 A folder of a tenant that does not exist yet is imported only if it contains
 `info.json`. String values can reference environment variables as `${VAR}` or
 `${VAR:default}`; with the default `CONFIG_VARIABLE_STRICT=skip`, an unresolved
-placeholder fails the import of that tenant while other tenants continue.
+placeholder fails the import of that tenant while other tenants continue. A
+placeholder cannot name a variable that configures EUDIPLO itself, such as
+`MASTER_SECRET`
+([variables a file can use](../reference/config-bundle-format.md#variables-a-file-can-use)).
 Restart the backend to apply changed files. The folder layout is listed in the
 [format reference](../reference/config-bundle-format.md#tenant-folder-layout).
 
@@ -179,7 +182,9 @@ such as the check of a presentation configuration's registration certificate,
 so an import can still fail on a folder that passed validation. Like the
 backend, the validator resolves `${VAR}` placeholders from its environment and
 fails on one without a value or default, so give the CI job a dummy value for
-each; the real secrets stay on the instance. A file the backend skips does not
+each; the real secrets stay on the instance. The validator does not check
+[which variables a file can use](../reference/config-bundle-format.md#variables-a-file-can-use);
+the backend refuses the others on import. A file the backend skips does not
 fail validation: a `registrar.json` left from the removed sandbox registrar
 integration prints `warning registrar.json: …` under its tenant, and the JSON
 report lists it in the tenant's `warnings[]` (`file`, `message`).
@@ -332,8 +337,11 @@ A startup import cannot return the secret; see
 ## Plans, locks and recovery
 
 One configuration writer per tenant runs at a time, across all replicas. Imports,
-config API edits and asset uploads take this lock; issuance, presentations and
-status updates continue.
+config API edits, key imports (`POST /api/key-chain/import`) and asset uploads
+take this lock; issuance, presentations and
+status updates continue. A request that finds the lock taken answers `409`
+with the code `CONFIG_WRITER_ACTIVE`: retry it, or recover an interrupted
+operation as described below.
 
 An import is not one transaction. If a step fails, the API returns
 `CONFIG_APPLY_FAILED` with an ordered report: completed steps stay applied, the

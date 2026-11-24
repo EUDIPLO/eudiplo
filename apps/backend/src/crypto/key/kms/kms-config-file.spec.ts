@@ -1,6 +1,10 @@
 import { BadRequestException } from "@nestjs/common";
 import { describe, expect, it } from "vitest";
-import { kmsConfigFilePath, kmsConfigFileSpec } from "./kms-config-file.js";
+import {
+    kmsConfigFilePath,
+    kmsConfigFileSpec,
+    parseKmsConfigFile,
+} from "./kms-config-file.js";
 
 const SOURCE = "global kms.json";
 
@@ -91,4 +95,38 @@ describe("kmsConfigFilePath", () => {
     ])("has no file for the tenant ID %j", (tenantId) => {
         expect(kmsConfigFilePath("/config", tenantId)).toBeNull();
     });
+});
+
+describe("parseKmsConfigFile", () => {
+    it("returns the content of a bare file and of a document", () => {
+        const spec = { providers: [{ id: "db", type: "db" }] };
+
+        expect(parseKmsConfigFile(JSON.stringify(spec), SOURCE)).toEqual(spec);
+        expect(
+            parseKmsConfigFile(JSON.stringify(kmsDocument(1, spec)), SOURCE),
+        ).toEqual(spec);
+    });
+
+    it("refuses a file that is not JSON and says where parsing stopped", () => {
+        const text = '{\n    "providers": [{ "id": "db", "type": "db" }],\n}';
+
+        expect(() => parseKmsConfigFile(text, SOURCE)).toThrow(
+            BadRequestException,
+        );
+        expect(() => parseKmsConfigFile(text, SOURCE)).toThrow(
+            "global kms.json: the file is not valid JSON (line 3 column 1)",
+        );
+    });
+
+    it.each([
+        ["text the parser quotes", "hvs.secret-token"],
+        ["an empty file", ""],
+    ])(
+        "gives the reason without position or text of the file for %s",
+        (_, text) => {
+            expect(() => parseKmsConfigFile(text, SOURCE)).toThrow(
+                /^global kms.json: the file is not valid JSON$/,
+            );
+        },
+    );
 });

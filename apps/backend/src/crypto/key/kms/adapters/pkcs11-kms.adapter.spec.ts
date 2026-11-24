@@ -17,6 +17,12 @@ const token = vi.hoisted(() => ({
     unwrappedPoint: false,
     /** Generate keys on this curve, whatever CKA_EC_PARAMS names. */
     curveOverride: undefined as string | undefined,
+    /** Calls that end something on the token, in order. */
+    ended: [] as string[],
+    /** Make C_OpenSession fail. */
+    failOpen: false,
+    /** Make C_Login fail. */
+    failLogin: false,
 }));
 
 // Constants as in the PKCS#11 specification; the adapter only passes them on.
@@ -80,7 +86,9 @@ vi.mock("pkcs11js", async () => {
 
         load() {}
         C_Initialize() {}
-        C_Finalize() {}
+        C_Finalize() {
+            token.ended.push("C_Finalize");
+        }
         C_GetSlotList() {
             return [Buffer.from("slot-0")];
         }
@@ -88,11 +96,18 @@ vi.mock("pkcs11js", async () => {
             return { label: "fake" };
         }
         C_OpenSession() {
+            if (token.failOpen) throw new Error("CKR_TOKEN_NOT_PRESENT");
             return Buffer.from("session");
         }
-        C_CloseSession() {}
-        C_Login() {}
-        C_Logout() {}
+        C_CloseSession(session: Buffer) {
+            token.ended.push(`C_CloseSession:${session.toString()}`);
+        }
+        C_Login() {
+            if (token.failLogin) throw new Error("CKR_PIN_INCORRECT");
+        }
+        C_Logout() {
+            token.ended.push("C_Logout");
+        }
 
         C_GenerateKeyPair(
             _session: Buffer,
@@ -215,6 +230,7 @@ describe("Pkcs11KmsAdapter curves", () => {
         token.signCalls.length = 0;
         token.unwrappedPoint = false;
         token.curveOverride = undefined;
+        token.ended.length = 0;
     });
 
     it("offers only ES256 for new keys unless kms.json allows more", () => {
@@ -285,5 +301,81 @@ describe("Pkcs11KmsAdapter curves", () => {
         await expect(
             createAdapter(["ES384"]).generateKey({ kid: "k", alg: "ES384" }),
         ).rejects.toThrow(/unexpected EC point encoding for P-384/);
+    });
+});
+
+describe("Pkcs11KmsAdapter dispose", () => {
+    beforeEach(() => {
+        token.ended.length = 0;
+    });
+
+    it("closes its session only: login and library belong to the process", async () => {
+        const adapter = createAdapter();
+        await adapter.generateKey({ kid: "k" });
+
+        await adapter.dispose();
+
+        expect(token.ended).toEqual(["C_CloseSession:session"]);
+    });
+
+    it("refuses further use instead of opening a new session", async () => {
+        const adapter = createAdapter();
+        const { ref } = await adapter.generateKey({ kid: "k" });
+        await adapter.dispose();
+
+        await expect(adapter.sign(ref, new Uint8Array(1))).rejects.toThrow(
+            /session was closed/,
+        );
+        await adapter.dispose();
+        expect(token.ended).toEqual(["C_CloseSession:session"]);
+    });
+
+    it("closes a session that was still being opened", async () => {
+        const adapter = createAdapter();
+        const pending = adapter.generateKey({ kid: "k" });
+
+        await adapter.dispose();
+
+        // The operation that was overtaken is refused, not left half done
+        // on a closed session.
+        await expect(pending).rejects.toThrow(/session was closed/);
+        expect(token.ended).toEqual(["C_CloseSession:session"]);
+    });
+
+    it("has nothing to close when the session could not be opened", async () => {
+        token.failOpen = true;
+        try {
+            const adapter = createAdapter();
+            await expect(adapter.generateKey({ kid: "k" })).rejects.toThrow(
+                "CKR_TOKEN_NOT_PRESENT",
+            );
+
+            await expect(adapter.dispose()).resolves.toBeUndefined();
+            expect(token.ended).toEqual([]);
+        } finally {
+            token.failOpen = false;
+        }
+    });
+
+    it("closes a session whose login fails, which nothing else would close", async () => {
+        token.failLogin = true;
+        try {
+            const adapter = createAdapter();
+            await expect(adapter.generateKey({ kid: "k" })).rejects.toThrow(
+                "CKR_PIN_INCORRECT",
+            );
+            expect(token.ended).toEqual(["C_CloseSession:session"]);
+
+            await adapter.dispose();
+            expect(token.ended).toEqual(["C_CloseSession:session"]);
+        } finally {
+            token.failLogin = false;
+        }
+    });
+
+    it("has nothing to close before the first use", async () => {
+        await createAdapter().dispose();
+
+        expect(token.ended).toEqual([]);
     });
 });

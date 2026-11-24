@@ -12,7 +12,7 @@ export class KmsTenantConfigResponseDto {
 
     @ApiProperty({
         description:
-            "Effective configuration used at runtime for the tenant (global + tenant merge). Credentials are `<redacted>`; providers from the global configuration are shown with their non-secret settings only.",
+            "Effective configuration of the tenant (global + tenant merge). Credentials are `<redacted>`; providers of the tenant are shown as stored, `${ENV_VAR}` placeholders included, and providers from the global configuration with their non-secret settings only.",
         type: KmsConfigDto,
     })
     effectiveConfig!: KmsConfig;

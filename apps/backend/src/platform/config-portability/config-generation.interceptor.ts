@@ -47,7 +47,13 @@ export class ConfigGenerationInterceptor implements NestInterceptor {
         const assetUpload =
             request.method === "POST" &&
             /^\/(?:api\/)?storage\/?$/.test(request.path);
-        if (!match && !assetUpload) return next.handle();
+        // An import without an ID names no resource yet, but binds a key of a
+        // KMS provider to a key chain: it must not run while another request,
+        // in any process, changes which provider that is.
+        const keyImport =
+            request.method === "POST" &&
+            /^\/(?:api\/)?key-chain\/import\/?$/.test(request.path);
+        if (!match && !assetUpload && !keyImport) return next.handle();
         // A tenant manager reaches a client of any tenant, so the client's own
         // tenant decides whether it is file-managed, not the caller's.
         if (

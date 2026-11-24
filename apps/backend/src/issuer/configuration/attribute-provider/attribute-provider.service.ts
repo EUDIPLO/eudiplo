@@ -65,7 +65,12 @@ export class AttributeProviderService {
                         .deleteForTenant(tid, data.id)
                         .then(() => undefined),
                 loadData: (filePath) =>
-                    loadConfigDto(filePath, CreateAttributeProviderDto),
+                    loadConfigDto(
+                        filePath,
+                        CreateAttributeProviderDto,
+                        (value) =>
+                            this.configImportService.replacePlaceholders(value),
+                    ),
                 processItem: async (tid, dto) => {
                     await this.create(tid, dto);
                 },

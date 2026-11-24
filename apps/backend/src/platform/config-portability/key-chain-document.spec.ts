@@ -2,6 +2,7 @@ import * as x509 from "@peculiar/x509";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
     appliedKeyChainType,
+    externalKeyIds,
     internalChainProblems,
     isInternalChainWithPrivateKeys,
 } from "./key-chain-document.js";
@@ -166,6 +167,18 @@ async function selfSignedCertificate(ca: boolean): Promise<string> {
     );
     return certificate.toString("base64");
 }
+
+describe("externalKeyIds", () => {
+    it("lists the root and the active key, without values that are no key ID", () => {
+        expect(
+            externalKeyIds({ externalKeyId: "root", activeExternalKeyId: "a" }),
+        ).toEqual(["root", "a"]);
+        expect(externalKeyIds({ externalKeyId: "only" })).toEqual(["only"]);
+        expect(
+            externalKeyIds({ externalKeyId: "", activeExternalKeyId: 1 }),
+        ).toEqual([]);
+    });
+});
 
 describe("appliedKeyChainType", () => {
     const jwk = { kty: "EC", crv: "P-256", x: "x", y: "y", d: "d" };

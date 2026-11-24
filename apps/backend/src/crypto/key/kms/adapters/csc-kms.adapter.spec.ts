@@ -160,3 +160,33 @@ describe("CscKmsAdapter ES384", () => {
         ]);
     });
 });
+
+describe("CscKmsAdapter request path", () => {
+    const create = (apiPath?: string) =>
+        new CscKmsAdapter(
+            {
+                providerId: "csc",
+                baseUrl: "https://csc.example.com",
+                tokenUrl: "https://csc.example.com/token",
+                clientId: "client",
+                clientSecret: "secret",
+                apiPath,
+            },
+            {} as any,
+        );
+
+    it("accepts the default and a path on the server of baseUrl", () => {
+        expect(() => create()).not.toThrow();
+        expect(() => create("/csc/v1")).not.toThrow();
+    });
+
+    // The credentials of the provider would be sent to another server.
+    it.each([".attacker.example/csc/v2", "@attacker.example/csc"])(
+        "refuses %j",
+        (apiPath) => {
+            expect(() => create(apiPath)).toThrow(
+                /apiPath must be a path on the server of baseUrl/,
+            );
+        },
+    );
+});

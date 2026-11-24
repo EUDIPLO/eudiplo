@@ -5,7 +5,8 @@
   ],
   "ignoreBinaries": [
     "openssl",
-    "openapi-ts"
+    "openapi-ts",
+    "mkfifo"
   ],
   "workspaces": {
     ".": {

@@ -20,7 +20,9 @@ an instance to real wallets and users, work through the
 All three run the same images, `ghcr.io/eudiplo/eudiplo` (backend)
 and `ghcr.io/eudiplo/eudiplo-client` (web client). The bundled
 manifests and Compose files run one backend replica. Several replicas can share
-one PostgreSQL database and one S3 bucket, but configuration changes of a tenant
+one PostgreSQL database and one S3 bucket, and need the same `CONFIG_FOLDER`
+volume when tenants have their own KMS configuration
+([per-tenant providers](kms.md#per-tenant-providers)), but configuration changes of a tenant
 are serialized by a database lock (see
 [configuration as code](configuration-as-code.md#plans-locks-and-recovery)), and
 the bundled PostgreSQL, RustFS and Vault services are single-instance

@@ -141,7 +141,7 @@ A pure source move of an entity needs no migration. Migrations run on startup, s
 
 ### An environment variable
 
-1. Add the key to the Joi schema of the owning capability (`<feature>-validation.schema.ts`) with a default, `.description(…)` and `.meta({ group, order })`. A new schema file is added to `platform/config/combined.schema.ts`.
+1. Add the key to the Joi schema of the owning capability (`<feature>-validation.schema.ts`) with a default, `.description(…)` and `.meta({ group, order })`. A new schema file is added to `platform/config/combined.schema.ts`. No configuration file can name the variable as a `${VAR}` placeholder unless the meta also sets `placeholder: "global"` (global `kms.json` only) or `placeholder: "any"` (`platform/config/config-variable-scope.ts`); then add it to the table in [variables a file can use](../reference/config-bundle-format.md#variables-a-file-can-use).
 2. Read the value once into typed settings in the module; do not inject `ConfigService` into core code.
 3. The [environment variable reference](../reference/environment-variables.md) is generated from this schema at docs build time (`<ConfigTable group="…" />`); a new group needs a section there.
 4. If the variable is required, add a placeholder to `.env.example`; CI runs `pnpm check:env-example`.

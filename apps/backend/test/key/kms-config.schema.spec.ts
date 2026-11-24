@@ -288,17 +288,21 @@ describe("KMS Zod schemas", () => {
         vi.stubEnv("VAULT_TOKEN", "token");
 
         expect(
-            parseResolvedKmsConfig({
-                defaultProvider: "vault",
-                providers: [
-                    {
-                        id: "vault",
-                        type: "vault",
-                        vaultUrl: "${VAULT_URL}",
-                        vaultToken: "${VAULT_TOKEN}",
-                    },
-                ],
-            }),
+            parseResolvedKmsConfig(
+                {
+                    defaultProvider: "vault",
+                    providers: [
+                        {
+                            id: "vault",
+                            type: "vault",
+                            vaultUrl: "${VAULT_URL}",
+                            vaultToken: "${VAULT_TOKEN}",
+                        },
+                    ],
+                },
+                "kms.json",
+                () => undefined,
+            ),
         ).toMatchObject({
             providers: [
                 {
@@ -311,17 +315,21 @@ describe("KMS Zod schemas", () => {
 
     it("rejects missing environment variables with a clear configuration error", () => {
         try {
-            parseResolvedKmsConfig({
-                defaultProvider: "vault",
-                providers: [
-                    {
-                        id: "vault",
-                        type: "vault",
-                        vaultUrl: "${VAULT_URL}",
-                        vaultToken: "${VAULT_TOKEN}",
-                    },
-                ],
-            });
+            parseResolvedKmsConfig(
+                {
+                    defaultProvider: "vault",
+                    providers: [
+                        {
+                            id: "vault",
+                            type: "vault",
+                            vaultUrl: "${VAULT_URL}",
+                            vaultToken: "${VAULT_TOKEN}",
+                        },
+                    ],
+                },
+                "kms.json",
+                () => undefined,
+            );
             expect.unreachable("expected missing env vars to fail");
         } catch (error) {
             expect(error).toHaveProperty("getResponse");
@@ -336,6 +344,47 @@ describe("KMS Zod schemas", () => {
                     }),
                 ]),
             );
+        }
+    });
+
+    it("never reads a refused environment variable, also inside a value", () => {
+        vi.stubEnv("REFUSED_SECRET", "do-not-leak");
+        vi.stubEnv("ALLOWED_URL", "https://vault.example.com");
+        const refuse = (name: string) =>
+            name === "REFUSED_SECRET" ? `\${${name}} is refused` : undefined;
+
+        for (const vaultToken of ["${REFUSED_SECRET}", "x${REFUSED_SECRET}y"]) {
+            try {
+                parseResolvedKmsConfig(
+                    {
+                        providers: [
+                            {
+                                id: "vault",
+                                type: "vault",
+                                vaultUrl: "${ALLOWED_URL}",
+                                vaultToken,
+                            },
+                        ],
+                    },
+                    "tenant 'a' kms.json",
+                    refuse,
+                );
+                expect.unreachable("expected the refused variable to fail");
+            } catch (error) {
+                const response = (
+                    error as { getResponse: () => any }
+                ).getResponse();
+                expect(response.message).toBe(
+                    "tenant 'a' kms.json: ${REFUSED_SECRET} is refused",
+                );
+                expect(response.errors).toEqual([
+                    expect.objectContaining({
+                        code: "refused_environment_variable",
+                        path: ["providers", 0, "vaultToken"],
+                    }),
+                ]);
+                expect(JSON.stringify(response)).not.toContain("do-not-leak");
+            }
         }
     });
 

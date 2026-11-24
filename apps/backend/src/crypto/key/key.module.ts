@@ -16,6 +16,7 @@ import { KeyChainImportService } from "./key-chain-import.service.js";
 import { KeyChainSigningService } from "./key-chain-signing.service.js";
 import { KeyRotationService } from "./key-rotation.service.js";
 import { KmsConfigService } from "./kms/kms-config.service.js";
+import { KmsKeyOwnershipService } from "./kms/kms-key-ownership.service.js";
 import { KmsProviderRegistry } from "./kms/kms-provider.registry.js";
 import { KmsTenantConfigService } from "./kms/kms-tenant-config.service.js";
 
@@ -36,6 +37,7 @@ export class KeyModule {
                 KmsConfigService,
                 KmsProviderRegistry,
                 KmsTenantConfigService,
+                KmsKeyOwnershipService,
                 CertificateBuilderService,
                 KeyChainSigningService,
                 KeyChainImportService,
@@ -48,6 +50,7 @@ export class KeyModule {
             exports: [
                 KeyChainService,
                 KmsTenantConfigService,
+                KmsKeyOwnershipService,
                 KmsProviderRegistry,
                 CertService,
                 CrlValidationService,

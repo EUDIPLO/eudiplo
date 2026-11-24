@@ -202,6 +202,14 @@ export class ConfigOwnershipService {
 }
 
 /**
+ * Whether an import reads the tenant's configuration folder, at startup or
+ * on reattach. Its files are the operator's; any other source is a request.
+ */
+export function isFolderSource(source: string): boolean {
+    return source.startsWith("folder:");
+}
+
+/**
  * Whether a stored ownership source belongs to an import source. A folder
  * source also covers sources recorded for files below that folder.
  */
@@ -211,7 +219,7 @@ export function sourceInScope(
 ): boolean {
     if (!entrySource) return false;
     if (entrySource === source) return true;
-    if (!source.startsWith("folder:")) return false;
+    if (!isFolderSource(source)) return false;
     let folder = source.slice("folder:".length);
     while (folder.endsWith("/") || folder.endsWith("\\")) {
         folder = folder.slice(0, -1);

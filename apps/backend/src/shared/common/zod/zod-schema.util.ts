@@ -277,6 +277,45 @@ export function findMissingEnvPlaceholderIssues(
     return [];
 }
 
+/**
+ * An issue for every `${VAR}` placeholder in `value` that `refuse` gives a
+ * reason against. The reason is the issue message.
+ */
+export function findRefusedEnvPlaceholderIssues(
+    value: unknown,
+    refuse: (variableName: string) => string | undefined,
+    path: Array<string | number> = [],
+): ValidationIssue[] {
+    if (typeof value === "string") {
+        const issues: ValidationIssue[] = [];
+        for (const match of value.matchAll(/\$\{([A-Z0-9_]+)\}/g)) {
+            const reason = refuse(match[1]);
+            if (reason !== undefined) {
+                issues.push({
+                    path,
+                    message: reason,
+                    code: "refused_environment_variable",
+                });
+            }
+        }
+        return issues;
+    }
+
+    if (Array.isArray(value)) {
+        return value.flatMap((item, index) =>
+            findRefusedEnvPlaceholderIssues(item, refuse, [...path, index]),
+        );
+    }
+
+    if (value && typeof value === "object") {
+        return Object.entries(value).flatMap(([key, item]) =>
+            findRefusedEnvPlaceholderIssues(item, refuse, [...path, key]),
+        );
+    }
+
+    return [];
+}
+
 export function resolveEnvPlaceholders<T>(value: T): T {
     if (typeof value === "string") {
         return value.replace(

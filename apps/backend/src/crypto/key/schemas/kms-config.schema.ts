@@ -3,6 +3,7 @@ import {
     booleanField,
     createValidationException,
     findMissingEnvPlaceholderIssues,
+    findRefusedEnvPlaceholderIssues,
     optionalTextField,
     resolveEnvPlaceholders,
     textField,
@@ -453,11 +454,26 @@ export function parseRawKmsConfig(
     return parsed.data;
 }
 
+/**
+ * Validate a KMS configuration and replace its `${VAR}` placeholders with
+ * the values of the environment.
+ *
+ * @param refuse the reason the configuration may not use a variable, or
+ * undefined when it may. A refused variable is never read.
+ */
 export function parseResolvedKmsConfig(
     input: unknown,
-    source = "KMS configuration",
+    source: string,
+    refuse: (variableName: string) => string | undefined,
 ): KmsConfig {
     const raw = parseRawKmsConfig(input, source);
+    const refusedIssues = findRefusedEnvPlaceholderIssues(raw, refuse);
+    if (refusedIssues.length > 0) {
+        throw createValidationException(
+            refusedIssues,
+            `${source}: ${[...new Set(refusedIssues.map((issue) => issue.message))].join("; ")}`,
+        );
+    }
     const missingEnvIssues = findMissingEnvPlaceholderIssues(raw);
     if (missingEnvIssues.length > 0) {
         const missingVariables = [

@@ -160,7 +160,9 @@ The variables are described in [Database](database.md),
 [Object storage](object-storage.md), [Encryption keys](encryption-keys.md) and
 [KMS](kms.md). The base deployment mounts `/app/config` as an `emptyDir`; mount
 a ConfigMap or volume there if you use a global `kms.json` or tenant config
-folders.
+folders. Tenant KMS configurations saved through the API are written there too,
+so several backend replicas need the same writable volume
+([Per-tenant providers](kms.md#per-tenant-providers)).
 
 ## Manage the deployment with the CLI
 

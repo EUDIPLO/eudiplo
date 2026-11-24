@@ -62,7 +62,9 @@ export class WebhookEndpointService {
                         .deleteForTenant(tid, data.id)
                         .then(() => undefined),
                 loadData: (filePath) =>
-                    loadConfigDto(filePath, CreateWebhookEndpointDto),
+                    loadConfigDto(filePath, CreateWebhookEndpointDto, (value) =>
+                        this.configImportService.replacePlaceholders(value),
+                    ),
                 processItem: async (tid, dto) => {
                     await this.create(tid, dto);
                 },

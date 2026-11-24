@@ -43,6 +43,29 @@ export function kmsConfigFileSpec(payload: unknown, source: string): unknown {
 }
 
 /**
+ * Content of a `kms.json` file read from disk, as the KMS configuration
+ * schema expects it (see kmsConfigFileSpec).
+ *
+ * A file that is not JSON is refused like one that is no valid KMS
+ * configuration. The reason names only where parsing stopped: the message
+ * of the parser quotes the file, which holds credentials.
+ */
+export function parseKmsConfigFile(text: string, source: string): unknown {
+    let payload: unknown;
+    try {
+        payload = JSON.parse(text);
+    } catch (error) {
+        const position = /\(line \d+ column \d+\)/.exec(
+            (error as SyntaxError).message,
+        )?.[0];
+        throw new BadRequestException(
+            `${source}: the file is not valid JSON${position ? ` ${position}` : ""}`,
+        );
+    }
+    return kmsConfigFileSpec(payload, source);
+}
+
+/**
  * Path of the global `kms.json` in `configFolder`, or of the tenant's
  * `<configFolder>/<tenantId>/kms.json`. Null for a tenant ID that is no
  * folder name (see tenantConfigFolder): such a tenant has no `kms.json`.

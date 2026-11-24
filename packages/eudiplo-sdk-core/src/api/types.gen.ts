@@ -987,7 +987,7 @@ export type KmsTenantConfigResponseDto = {
      */
     tenantConfig?: KmsConfigDto | null;
     /**
-     * Effective configuration used at runtime for the tenant (global + tenant merge). Credentials are `<redacted>`; providers from the global configuration are shown with their non-secret settings only.
+     * Effective configuration of the tenant (global + tenant merge). Credentials are `<redacted>`; providers of the tenant are shown as stored, `${ENV_VAR}` placeholders included, and providers from the global configuration with their non-secret settings only.
      */
     effectiveConfig: KmsConfigDto;
 };
@@ -7273,6 +7273,10 @@ export type KeyChainControllerDeleteTenantKmsConfigErrors = {
      * The caller lacks the `tenant:admin` or `tenants:manage` role or a tenant context.
      */
     403: unknown;
+    /**
+     * Key chains of the tenant use a provider of the stored configuration that holds its own credentials, and the request would remove it or make it one that other tenants use too.
+     */
+    409: unknown;
 };
 
 export type KeyChainControllerDeleteTenantKmsConfigResponses = {
@@ -7292,6 +7296,10 @@ export type KeyChainControllerGetTenantKmsConfigData = {
 };
 
 export type KeyChainControllerGetTenantKmsConfigErrors = {
+    /**
+     * The stored tenant kms.json is not JSON, is no valid KMS configuration or holds a setting it may not use.
+     */
+    400: unknown;
     /**
      * The caller lacks the `tenant:admin` or `tenants:manage` role or a tenant context.
      */
@@ -7316,9 +7324,17 @@ export type KeyChainControllerUpdateTenantKmsConfigData = {
 
 export type KeyChainControllerUpdateTenantKmsConfigErrors = {
     /**
+     * The configuration is invalid or holds a setting the API does not accept in a tenant KMS configuration.
+     */
+    400: unknown;
+    /**
      * The caller lacks the `tenant:admin` or `tenants:manage` role or a tenant context.
      */
     403: unknown;
+    /**
+     * Key chains of the tenant use a provider of the stored configuration that holds its own credentials, and the request would remove it or make it one that other tenants use too.
+     */
+    409: unknown;
 };
 
 export type KeyChainControllerUpdateTenantKmsConfigResponses = {
@@ -7528,7 +7544,7 @@ export type KeyChainControllerImportErrors = {
      */
     400: unknown;
     /**
-     * The id belongs to a key chain that EUDIPLO manages itself, such as the tenant's encryption key chain.
+     * The id belongs to a key chain that EUDIPLO manages itself, such as the tenant's encryption key chain. Or another configuration change of the tenant is running or needs recovery (`CONFIG_WRITER_ACTIVE`).
      */
     409: unknown;
 };

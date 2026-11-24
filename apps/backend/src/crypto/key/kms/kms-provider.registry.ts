@@ -3,13 +3,17 @@ import {
     BadRequestException,
     Injectable,
     Logger,
+    OnModuleDestroy,
     OnModuleInit,
 } from "@nestjs/common";
 import * as x509 from "@peculiar/x509";
+import axios from "axios";
+import { OutboundUrlPolicyService } from "../../../webhook/outbound-url-policy.service.js";
 import type { KmsAlgorithmPolicy } from "../domain/signing-algs.js";
 import type { KmsProviderInfoDto } from "../dto/kms-provider-capabilities.dto.js";
 import type { KmsProvidersResponseDto } from "../dto/kms-providers-response.dto.js";
 import type {
+    KmsConfig,
     KmsProviderConfig,
     KmsProviderType,
 } from "../schemas/kms-config.schema.js";
@@ -26,6 +30,20 @@ import { KmsCryptoProvider } from "./kms-crypto-provider.js";
 const DEFAULT_PROVIDER_ID = "db";
 
 /**
+ * How long adapters that are no longer handed out stay usable before they
+ * are disposed, so that operations that resolved them earlier, such as a
+ * signature waiting for its KMS, can finish. A bound, not a guarantee: an
+ * operation that takes longer may fail.
+ */
+export const RETIRED_ADAPTER_GRACE_MS = 60_000;
+
+/** Deadline of a request to a provider of a tenant `kms.json`. */
+const TENANT_KMS_TIMEOUT_MS = 30_000;
+
+/** Largest request or response body of a provider of a tenant `kms.json`. */
+const TENANT_KMS_MAX_BYTES = 1024 * 1024;
+
+/**
  * Registry that loads `kms.json`, instantiates one {@link KmsAdapter}
  * per configured provider, and resolves them by id.
  *
@@ -33,7 +51,7 @@ const DEFAULT_PROVIDER_ID = "db";
  * the id `"db"` so existing deployments keep working.
  */
 @Injectable()
-export class KmsProviderRegistry implements OnModuleInit {
+export class KmsProviderRegistry implements OnModuleInit, OnModuleDestroy {
     private readonly logger = new Logger(KmsProviderRegistry.name);
     private globalBundle: {
         adapters: Map<string, KmsAdapter>;
@@ -45,18 +63,62 @@ export class KmsProviderRegistry implements OnModuleInit {
     private readonly tenantBundles = new Map<
         string,
         {
+            /** The configuration the adapters were built from. */
+            config: KmsConfig;
             adapters: Map<string, KmsAdapter>;
             defaultProviderId: string;
         }
     >();
 
+    /** Adapters that are no longer handed out, by the timer that disposes them. */
+    private readonly retiring = new Map<
+        ReturnType<typeof setTimeout>,
+        KmsAdapter[]
+    >();
+
+    /**
+     * For the providers of a tenant `kms.json`, whose servers the tenant's
+     * administrators choose: every connection is checked against the outbound
+     * URL policy (no private or loopback address unless the operator allows
+     * it), no connection of another provider is reused, and no redirect is
+     * followed, which could lead to such an address or take a credential
+     * header along. Requests are bound in time and size, so such a server
+     * cannot hold or fill the process all tenants share.
+     */
+    private readonly tenantHttpService: HttpService;
+
     constructor(
         private readonly kmsConfig: KmsConfigService,
         private readonly httpService: HttpService,
-    ) {}
+        outboundUrlPolicy: OutboundUrlPolicyService,
+    ) {
+        const client = axios.create({
+            lookup: outboundUrlPolicy.safeLookup as never,
+            httpAgent: false,
+            httpsAgent: false,
+            maxRedirects: 0,
+            // Not through HTTPS_PROXY: the address check would then see
+            // the proxy, not the server.
+            proxy: false,
+            timeout: TENANT_KMS_TIMEOUT_MS,
+            maxContentLength: TENANT_KMS_MAX_BYTES,
+            maxBodyLength: TENANT_KMS_MAX_BYTES,
+        });
+        // `timeout` only bounds the connection and each pause of the answer;
+        // this ends a request whose answer trickles in.
+        client.interceptors.request.use((config) => {
+            const deadline = AbortSignal.timeout(TENANT_KMS_TIMEOUT_MS);
+            // HttpService sets a signal of its own on every request.
+            config.signal = config.signal
+                ? AbortSignal.any([config.signal as AbortSignal, deadline])
+                : deadline;
+            return config;
+        });
+        this.tenantHttpService = new HttpService(client);
+    }
 
     onModuleInit(): void {
-        this.globalBundle = this.buildBundle();
+        this.globalBundle = this.buildBundle(this.kmsConfig.getConfig());
 
         this.logger.log(
             `Registered global KMS providers: ${[...this.globalBundle.adapters.keys()].join(", ")} (default: ${this.globalBundle.defaultProviderId})`,
@@ -68,9 +130,37 @@ export class KmsProviderRegistry implements OnModuleInit {
         x509.cryptoProvider.set(new KmsCryptoProvider());
     }
 
+    /**
+     * Resolve an adapter of the tenant together with the tenant's stored
+     * `kms.json` the adapter was built from, so that whose the provider is
+     * (tenantOwnsKmsProvider) is judged for the provider that is used.
+     */
+    resolveWithTenantFile(
+        providerId: string | undefined,
+        tenantId: string,
+    ): { adapter: KmsAdapter; tenantFile: KmsConfig | null } {
+        const { config, file } = this.kmsConfig.getTenantSnapshot(tenantId);
+        return {
+            adapter: this.adapterOf(
+                this.getBundle(tenantId, config),
+                providerId,
+            ),
+            tenantFile: file,
+        };
+    }
+
     /** Resolve an adapter by provider id. Throws if not registered. */
     resolve(providerId?: string, tenantId?: string): KmsAdapter {
-        const bundle = this.getBundle(tenantId);
+        return this.adapterOf(this.getBundle(tenantId), providerId);
+    }
+
+    private adapterOf(
+        bundle: {
+            adapters: Map<string, KmsAdapter>;
+            defaultProviderId: string;
+        },
+        providerId?: string,
+    ): KmsAdapter {
         const id = providerId || bundle.defaultProviderId;
         const adapter = bundle.adapters.get(id);
         if (!adapter) {
@@ -124,7 +214,10 @@ export class KmsProviderRegistry implements OnModuleInit {
         );
     }
 
-    private getBundle(tenantId?: string): {
+    private getBundle(
+        tenantId?: string,
+        tenantConfig?: KmsConfig,
+    ): {
         adapters: Map<string, KmsAdapter>;
         defaultProviderId: string;
     } {
@@ -132,27 +225,40 @@ export class KmsProviderRegistry implements OnModuleInit {
             return this.globalBundle;
         }
 
+        // The configuration service hands out a new object when the tenant's
+        // kms.json changed, also when another process wrote it.
+        const config = tenantConfig ?? this.kmsConfig.getConfig(tenantId);
         const cached = this.tenantBundles.get(tenantId);
-        if (cached) {
+        if (cached?.config === config) {
             return cached;
         }
 
-        const bundle = this.buildBundle(tenantId);
+        const bundle = { config, ...this.buildBundle(config) };
         this.tenantBundles.set(tenantId, bundle);
+        if (cached) this.retire(cached.adapters.values());
         return bundle;
     }
 
-    private buildBundle(tenantId?: string): {
+    private buildBundle(config: KmsConfig): {
         adapters: Map<string, KmsAdapter>;
         defaultProviderId: string;
     } {
         const adapters = new Map<string, KmsAdapter>();
-        const defaultProviderId =
-            this.kmsConfig.getDefaultProviderId(tenantId) ||
-            DEFAULT_PROVIDER_ID;
+        const defaultProviderId = config.defaultProvider || DEFAULT_PROVIDER_ID;
 
-        for (const provider of this.kmsConfig.getProviders(tenantId)) {
-            adapters.set(provider.id, this.instantiate(provider));
+        // mergeConfigs hands on the providers of the global file as they
+        // are, so every other provider comes from the tenant's file.
+        const global = new Set(this.kmsConfig.getConfig().providers);
+        for (const provider of config.providers) {
+            adapters.set(
+                provider.id,
+                this.instantiate(
+                    provider,
+                    global.has(provider)
+                        ? this.httpService
+                        : this.tenantHttpService,
+                ),
+            );
         }
 
         // Always ensure a default db adapter exists.
@@ -170,10 +276,67 @@ export class KmsProviderRegistry implements OnModuleInit {
     }
 
     invalidateTenant(tenantId: string): void {
+        const cached = this.tenantBundles.get(tenantId);
         this.tenantBundles.delete(tenantId);
+        if (cached) this.retire(cached.adapters.values());
     }
 
-    private instantiate(provider: KmsProviderConfig): KmsAdapter {
+    /**
+     * Dispose adapters that are no longer handed out, after
+     * RETIRED_ADAPTER_GRACE_MS. Every tenant file that changes replaces the
+     * tenant's adapters; without this, each replaced adapter would keep its
+     * HSM session or connections for the life of the process.
+     */
+    private retire(adapters: Iterable<KmsAdapter>): void {
+        const disposable = [...adapters].filter((adapter) => adapter.dispose);
+        if (disposable.length === 0) return;
+        const timer = setTimeout(() => {
+            this.retiring.delete(timer);
+            void this.dispose(disposable);
+        }, RETIRED_ADAPTER_GRACE_MS);
+        // Does not keep the process alive, whose end closes them anyway.
+        timer.unref();
+        this.retiring.set(timer, disposable);
+    }
+
+    private async dispose(adapters: Iterable<KmsAdapter>): Promise<void> {
+        for (const adapter of adapters) {
+            try {
+                await adapter.dispose?.();
+            } catch (err) {
+                this.logger.warn(
+                    `Failed to dispose KMS provider '${adapter.providerId}': ${
+                        err instanceof Error ? err.message : String(err)
+                    }`,
+                );
+            }
+        }
+    }
+
+    /** Dispose every adapter: retired ones at once, then those in use. */
+    async onModuleDestroy(): Promise<void> {
+        const retired = [...this.retiring.entries()];
+        this.retiring.clear();
+        for (const [timer, adapters] of retired) {
+            clearTimeout(timer);
+            await this.dispose(adapters);
+        }
+        const tenants = [...this.tenantBundles.values()];
+        this.tenantBundles.clear();
+        for (const bundle of tenants) {
+            await this.dispose(bundle.adapters.values());
+        }
+        await this.dispose(this.globalBundle.adapters.values());
+    }
+
+    /**
+     * @param httpService what the adapter sends its requests with: the
+     * policy-bound one for a provider of a tenant file
+     */
+    private instantiate(
+        provider: KmsProviderConfig,
+        httpService: HttpService,
+    ): KmsAdapter {
         const type: KmsProviderType = provider.type;
         switch (type) {
             case "db":
@@ -190,7 +353,7 @@ export class KmsProviderRegistry implements OnModuleInit {
                         vaultToken: p.vaultToken,
                         algorithms: algorithmPolicy(provider),
                     },
-                    this.httpService,
+                    httpService,
                 );
             }
             case "aws-kms": {
@@ -239,7 +402,7 @@ export class KmsProviderRegistry implements OnModuleInit {
                         canImport: p.canImport,
                         algorithms: algorithmPolicy(provider),
                     },
-                    this.httpService,
+                    httpService,
                 );
             }
             case "csc": {
@@ -265,7 +428,7 @@ export class KmsProviderRegistry implements OnModuleInit {
                         authorizeAuthData: p.authorizeAuthData,
                         algorithms: algorithmPolicy(provider),
                     },
-                    this.httpService,
+                    httpService,
                 );
             }
             default: {

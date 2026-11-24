@@ -115,7 +115,9 @@ export class IssuanceService {
                     await this.issuanceConfigRepo.deleteForTenant(tid);
                 },
                 loadData: (filePath) =>
-                    loadConfigDto(filePath, IssuanceConfigSchema),
+                    loadConfigDto(filePath, IssuanceConfigSchema, (value) =>
+                        this.configImportService.replacePlaceholders(value),
+                    ),
                 processItem: async (tid, issuanceDto) => {
                     // Replace relative URIs with public URLs
                     issuanceDto.display = await this.replaceUrl(

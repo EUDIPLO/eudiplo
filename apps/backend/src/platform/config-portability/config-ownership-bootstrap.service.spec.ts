@@ -63,4 +63,104 @@ describe("ConfigOwnershipBootstrapService", () => {
             expect.objectContaining({ tenantId: "tenant-a" }),
         );
     });
+
+    it("skips a kms.json that is not JSON without quoting it and records the others", async () => {
+        vi.mocked(existsSync).mockReturnValue(true);
+        vi.mocked(readFileSync).mockImplementation((path) =>
+            Buffer.from(
+                String(path) === "/config/tenant-a/kms.json"
+                    ? "hvs.stored-secret"
+                    : JSON.stringify({ providers: [] }),
+            ),
+        );
+        const ownershipService = {
+            findStored: vi.fn().mockResolvedValue(null),
+            markApplied: vi.fn().mockResolvedValue(undefined),
+        };
+        const service = new ConfigOwnershipBootstrapService(
+            { get: vi.fn(() => "/config") } as any,
+            ownershipService as any,
+            {
+                isDocument: vi.fn(() => false),
+                wrapLegacy: vi.fn(() => ({ metadata: {} })),
+            } as any,
+            { resolve: vi.fn(() => "enabled") } as any,
+            {
+                find: vi
+                    .fn()
+                    .mockResolvedValue([
+                        { id: "tenant-a" },
+                        { id: "tenant-b" },
+                    ]),
+            } as any,
+        );
+        const warn = vi
+            .spyOn(Logger.prototype, "warn")
+            .mockImplementation(() => undefined);
+
+        await service.onApplicationBootstrap();
+
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(warn).toHaveBeenCalledWith(
+            expect.stringContaining(
+                "[tenant-a] /config/tenant-a/kms.json is not JSON or no configuration document",
+            ),
+        );
+        expect(JSON.stringify(warn.mock.calls)).not.toContain("stored-secret");
+        expect(ownershipService.markApplied).toHaveBeenCalledTimes(1);
+        expect(ownershipService.markApplied).toHaveBeenCalledWith(
+            expect.objectContaining({ tenantId: "tenant-b" }),
+        );
+    });
+
+    it("skips a kms.json that is a document the backend cannot read and records the others", async () => {
+        vi.mocked(existsSync).mockReturnValue(true);
+        vi.mocked(readFileSync).mockImplementation((path) =>
+            Buffer.from(
+                JSON.stringify(
+                    String(path) === "/config/tenant-a/kms.json"
+                        ? { $schema: "other", spec: {} }
+                        : { providers: [] },
+                ),
+            ),
+        );
+        const ownershipService = {
+            findStored: vi.fn().mockResolvedValue(null),
+            markApplied: vi.fn().mockResolvedValue(undefined),
+        };
+        const service = new ConfigOwnershipBootstrapService(
+            { get: vi.fn(() => "/config") } as any,
+            ownershipService as any,
+            {
+                isDocument: vi.fn((payload) => "$schema" in payload),
+                upgrade: vi.fn(() => {
+                    throw new Error("unsupported document");
+                }),
+                wrapLegacy: vi.fn(() => ({ metadata: {} })),
+            } as any,
+            { resolve: vi.fn(() => "enabled") } as any,
+            {
+                find: vi
+                    .fn()
+                    .mockResolvedValue([
+                        { id: "tenant-a" },
+                        { id: "tenant-b" },
+                    ]),
+            } as any,
+        );
+        const warn = vi
+            .spyOn(Logger.prototype, "warn")
+            .mockImplementation(() => undefined);
+
+        await service.onApplicationBootstrap();
+
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(warn).toHaveBeenCalledWith(
+            expect.stringContaining("[tenant-a] /config/tenant-a/kms.json"),
+        );
+        expect(ownershipService.markApplied).toHaveBeenCalledTimes(1);
+        expect(ownershipService.markApplied).toHaveBeenCalledWith(
+            expect.objectContaining({ tenantId: "tenant-b" }),
+        );
+    });
 });

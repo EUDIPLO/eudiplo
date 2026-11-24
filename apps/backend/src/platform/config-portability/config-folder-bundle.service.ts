@@ -26,6 +26,7 @@ import {
     NotFoundException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { findKmsIdentifierPlaceholderIssues } from "../../crypto/key/kms/kms-identifier-placeholders.js";
 import { tenantConfigFolder } from "../../shared/utils/tenant-config-folder.util.js";
 import { ConfigImportService } from "../config-import/config-import.service.js";
 import {
@@ -352,8 +353,29 @@ export class ConfigFolderBundleService {
         filePath: string,
     ): { document: ConfigDocument; issues: ConfigMigrationIssue[] } {
         const rawPayload = parseJsonFile(filePath);
+        const resolvedPayload = this.configImportService.replacePlaceholders(
+            rawPayload,
+            resource.kind === "KmsConfig" ? "tenant-kms" : "tenant",
+        );
+        // A tenant kms.json keeps its placeholders, as the API stores and
+        // shows it: KmsConfigService resolves them when the file is loaded.
+        // Resolved here, the plan would show the variables' values and the
+        // apply would write them to the file. Resolving above still refuses
+        // the variables the file may not use.
         const payload =
-            this.configImportService.replacePlaceholders(rawPayload);
+            resource.kind === "KmsConfig" ? rawPayload : resolvedPayload;
+        if (resource.kind === "KmsConfig") {
+            // Bare and as a document, so that neither form hides one.
+            const identifiers = [
+                rawPayload,
+                (rawPayload as { spec?: unknown } | null)?.spec,
+            ].flatMap((config) => findKmsIdentifierPlaceholderIssues(config));
+            if (identifiers.length > 0) {
+                throw new Error(
+                    identifiers.map((issue) => issue.message).join("; "),
+                );
+            }
+        }
         const fileId = filePath
             .split(/[\\/]/)
             .pop()!

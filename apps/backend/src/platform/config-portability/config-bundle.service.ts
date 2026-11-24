@@ -50,7 +50,9 @@ import {
     type KeyChainEntity,
     KeyUsage,
 } from "../../crypto/key/entities/key-chain.entity.js";
+import { KmsKeyOwnershipService } from "../../crypto/key/kms/kms-key-ownership.service.js";
 import { KmsTenantConfigService } from "../../crypto/key/kms/kms-tenant-config.service.js";
+import type { KmsConfig } from "../../crypto/key/schemas/kms-config.schema.js";
 import { withoutRemovedChainedVp } from "../../issuer/configuration/issuance/domain/removed-authorization-servers.js";
 import {
     type ConfigurationChange,
@@ -88,6 +90,7 @@ import { ConfigKmsReferenceService } from "./config-kms-reference.service.js";
 import { ConfigMigrationService } from "./config-migration.service.js";
 import {
     ConfigOwnershipService,
+    isFolderSource,
     sourceInScope,
 } from "./config-ownership.service.js";
 import { ConfigResourceRegistry } from "./config-resource.registry.js";
@@ -114,6 +117,7 @@ import {
     appliedKeyChainType,
     appliedKmsProvider,
     appliedRotationPolicy,
+    externalKeyIds,
     keyChainSettingsSpec,
 } from "./key-chain-document.js";
 import { UNRESOLVED_PLACEHOLDER } from "./unresolved-placeholder.js";
@@ -224,6 +228,7 @@ export class ConfigBundleService {
         private readonly filesService: FilesService,
         private readonly kmsTenantConfigService: KmsTenantConfigService,
         private readonly kmsReferenceService: ConfigKmsReferenceService,
+        private readonly kmsKeyOwnershipService: KmsKeyOwnershipService,
         private readonly registry: ConfigResourceRegistry,
         private readonly migrationService: ConfigMigrationService,
         private readonly documentValidationService: ConfigDocumentValidationService,
@@ -612,12 +617,20 @@ export class ConfigBundleService {
                         "This ID belongs to a key chain that EUDIPLO manages itself, such as the tenant's encryption key chain. It is skipped.",
                     resource: reference,
                 });
-            } else {
+            } else if (
+                // A folder's kms.json keeps its placeholders: the folder
+                // loader has checked the variables, and KmsConfigService
+                // resolves them when the tenant's file is loaded.
+                !(
+                    result.document.kind === "KmsConfig" &&
+                    ownershipSource.startsWith("folder:")
+                )
+            ) {
                 this.collectUnresolvedRequirements(result.document, itemIssues);
             }
             // A startup folder import must not fail the whole tenant because
             // one resource diverged; it skips that resource and says how to recover.
-            const startupFolder = ownershipSource.startsWith("folder:");
+            const startupFolder = isFolderSource(ownershipSource);
             let skipDiverged = false;
             if (
                 exists &&
@@ -716,6 +729,23 @@ export class ConfigBundleService {
                     path: "/spec",
                     message:
                         "The tenant ID is not a folder name, so the tenant has no configuration folder for a kms.json. Import this configuration into a tenant with a valid ID.",
+                    resource: { kind: "KmsConfig", id: reference.id },
+                });
+            }
+            // A folder's kms.json is the operator's file and is not written.
+            const refusedSetting =
+                result.document.kind === "KmsConfig" && !startupFolder
+                    ? this.kmsTenantConfigService.refusedSetting(
+                          tenantId,
+                          result.document.spec,
+                      )
+                    : undefined;
+            if (refusedSetting) {
+                itemIssues.push({
+                    severity: "error",
+                    code: refusedSetting.code,
+                    path: "/spec",
+                    message: refusedSetting.message,
                     resource: { kind: "KmsConfig", id: reference.id },
                 });
             }
@@ -887,6 +917,14 @@ export class ConfigBundleService {
                 )),
             );
         }
+        issues.push(
+            ...(await this.blockKmsProviderInUse(
+                tenantId,
+                upgradedDocuments,
+                items,
+                ownershipSource,
+            )),
+        );
         const trustAnchors = await this.trustAnchorEntityIdsAfter(
             tenantId,
             upgradedDocuments,
@@ -1691,6 +1729,62 @@ export class ConfigBundleService {
         )?.usageType;
     }
 
+    /**
+     * The tenant's own `kms.json` once the plan is applied: the `KmsConfig`
+     * document the plan writes, nothing when the plan deletes the file, else
+     * the stored file.
+     */
+    private tenantKmsFileAfter(
+        tenantId: string,
+        documents: ConfigDocument[],
+        items: ConfigImportPlanItem[],
+    ): Pick<KmsConfig, "providers"> | null {
+        const action = items.find((item) => item.kind === "KmsConfig")?.action;
+        if (action === "delete") return null;
+        const document = documents.find(
+            (candidate) => candidate.kind === "KmsConfig",
+        );
+        if (document && (action === "create" || action === "update")) {
+            return document.spec as unknown as Pick<KmsConfig, "providers">;
+        }
+        return this.kmsKeyOwnershipService.storedFile(tenantId) ?? null;
+    }
+
+    /**
+     * Blocks writing or deleting the tenant's `kms.json` for a request while
+     * key chains would lose a provider of their own
+     * (KmsKeyOwnershipService.keyChainsLosingOwnProvider). Runs once the
+     * deletions of `replace` are planned.
+     */
+    private async blockKmsProviderInUse(
+        tenantId: string,
+        documents: ConfigDocument[],
+        items: ConfigImportPlanItem[],
+        ownershipSource: string,
+    ): Promise<ConfigMigrationIssue[]> {
+        // A folder's kms.json is the operator's and is not written.
+        if (isFolderSource(ownershipSource)) return [];
+        const inUse =
+            await this.kmsKeyOwnershipService.keyChainsLosingOwnProvider(
+                tenantId,
+                this.tenantKmsFileAfter(tenantId, documents, items),
+            );
+        if (!inUse) return [];
+        const issue: ConfigMigrationIssue = {
+            severity: "error",
+            code: "KMS_PROVIDER_IN_USE",
+            path: "/spec/providers",
+            message: inUse,
+            resource: { kind: "KmsConfig", id: "kms" },
+        };
+        const item = items.find((candidate) => candidate.kind === "KmsConfig");
+        if (item) {
+            item.issues.push(issue);
+            item.action = "blocked";
+        }
+        return [issue];
+    }
+
     private async validateReferences(
         tenantId: string,
         documents: ConfigDocument[],
@@ -1890,11 +1984,69 @@ export class ConfigBundleService {
         const includesKmsConfig = documents.some(
             (document) => document.kind === "KmsConfig",
         );
+        // A folder is the operator's: it may name any key.
+        const fromRequest = !isFolderSource(ownershipSource);
+        const tenantKmsFile = fromRequest
+            ? this.tenantKmsFileAfter(tenantId, documents, items)
+            : null;
         for (const document of documents.filter(
             (candidate) => candidate.kind === "KeyChain",
         )) {
             const source = (document.spec as any).keySource;
             if (source?.type !== "external-reference") continue;
+            // A document the plan does not write attaches no key.
+            const action = items.find(
+                (item) =>
+                    item.kind === "KeyChain" &&
+                    item.id === resourceId(document),
+            )?.action;
+            if (action === "skip" || action === "unchanged") continue;
+            // Before the preflight, which signs with the key.
+            const refused = fromRequest
+                ? await this.kmsKeyOwnershipService.refusedExternalKeys(
+                      tenantId,
+                      source.provider,
+                      externalKeyIds(source),
+                      tenantKmsFile,
+                  )
+                : undefined;
+            if (refused) {
+                issues.push({
+                    severity: "error",
+                    code: "KMS_REFERENCE_REFUSED",
+                    path: "/spec/keySource",
+                    message: refused,
+                    resource: {
+                        kind: document.kind,
+                        id: resourceId(document),
+                    },
+                });
+                continue;
+            }
+            // The provider is the tenant's own only once the bundle's
+            // kms.json is written: until then the ID may name a shared
+            // provider, whose keys must not sign for this tenant.
+            const notYetOwn = fromRequest
+                ? await this.kmsKeyOwnershipService.refusedExternalKeys(
+                      tenantId,
+                      source.provider,
+                      externalKeyIds(source),
+                  )
+                : undefined;
+            if (notYetOwn) {
+                issues.push({
+                    severity: "warning",
+                    code: "KMS_PREFLIGHT_DEFERRED",
+                    path: "/spec/keySource",
+                    message:
+                        "The bundle changes KMS configuration, so this external key can only be verified after that configuration is applied.",
+                    resource: {
+                        kind: document.kind,
+                        id: resourceId(document),
+                    },
+                });
+                continue;
+            }
             try {
                 await this.kmsReferenceService.verify(tenantId, source);
             } catch (error) {
@@ -2265,7 +2417,11 @@ export class ConfigBundleService {
                     resource: { kind, id },
                     path: `/spec/${itemPath.replaceAll(".", "/")}`,
                     placeholder: env,
-                    message: `Supply ${env} in the target environment.`,
+                    // The API accepts no placeholders in a KMS configuration.
+                    message:
+                        kind === "KmsConfig"
+                            ? `Replace \${${env}} with the value before importing.`
+                            : `Supply ${env} in the target environment.`,
                 });
             } else {
                 output[key] = this.redact(

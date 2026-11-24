@@ -195,6 +195,12 @@ export class AwsKmsAdapter implements KmsAdapter {
         }
     }
 
+    /** Close the connections of the AWS client, if one was created. */
+    async dispose(): Promise<void> {
+        const client = await this.clientPromise?.catch(() => undefined);
+        client?.destroy();
+    }
+
     private async client(): Promise<KMSClient> {
         this.clientPromise ??= (async () => {
             const { KMSClient } = await import("@aws-sdk/client-kms");

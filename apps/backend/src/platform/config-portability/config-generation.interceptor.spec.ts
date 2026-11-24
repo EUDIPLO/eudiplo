@@ -49,6 +49,74 @@ describe("ConfigGenerationInterceptor", () => {
         expect(ownership.assertMutable).not.toHaveBeenCalled();
     });
 
+    it.each([
+        "/api/key-chain/import",
+        "/api/key-chain/import/",
+        "/key-chain/import",
+    ])(
+        "runs a key import without an ID under the tenant's configuration lock (%s)",
+        async (path) => {
+            const ownership = {
+                assertMutable: vi.fn(),
+                recordApiMutation: vi.fn(),
+                remove: vi.fn(),
+            };
+            const writes = journal();
+            const order: string[] = [];
+            writes.run.mockImplementation(
+                async (_tenant: string, _mode: string, execute: any) => {
+                    order.push("locked");
+                    const result = await execute({
+                        id: "run-1",
+                        operations: [],
+                    });
+                    order.push("released");
+                    return result;
+                },
+            );
+            const interceptor = new ConfigGenerationInterceptor(
+                ownership as any,
+                { match: vi.fn(() => undefined) } as any,
+                writes as any,
+                { getClientById: vi.fn() } as any,
+            );
+
+            await expect(
+                firstValueFrom(
+                    interceptor.intercept(
+                        context({
+                            method: "POST",
+                            path,
+                            body: { key: {} },
+                            user: { entity: { id: "tenant-a" } },
+                        }),
+                        {
+                            handle: () => {
+                                order.push("imported");
+                                return of({ id: "generated" });
+                            },
+                        },
+                    ),
+                ),
+            ).resolves.toEqual({ id: "generated" });
+
+            expect(writes.run).toHaveBeenCalledWith(
+                "tenant-a",
+                "api",
+                expect.any(Function),
+            );
+            expect(order).toEqual(["locked", "imported", "released"]);
+            expect(writes.checkpoint).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    operations: [{ stage: "resource", status: "completed" }],
+                }),
+            );
+            // No resource is named, so nothing is recorded as managed.
+            expect(ownership.assertMutable).not.toHaveBeenCalled();
+            expect(ownership.recordApiMutation).not.toHaveBeenCalled();
+        },
+    );
+
     it("blocks a file-managed mutation before invoking the handler", async () => {
         const ownership = {
             assertMutable: vi

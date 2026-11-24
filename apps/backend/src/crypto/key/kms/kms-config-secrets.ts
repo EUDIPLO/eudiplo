@@ -2,6 +2,13 @@ import {
     KMS_SECRET_PATHS,
     type KmsConfig,
 } from "../schemas/kms-config.schema.js";
+import {
+    HOLDS_ENV_PLACEHOLDER,
+    KMS_TENANT_AWS_DEFAULT_CREDENTIALS,
+    KMS_TENANT_FILES,
+    kmsServerFileFields,
+    usesAwsDefaultCredentials,
+} from "./kms-tenant-restrictions.js";
 
 /**
  * Value returned instead of a credential. Sent back in an update, it keeps
@@ -52,6 +59,30 @@ export class KmsSecretDestinationChangedError extends Error {
             `${path} is '${KMS_REDACTED_SECRET}' but ${destination} changes; send the credential again, a stored credential is not sent to a new address`,
         );
         this.name = "KmsSecretDestinationChangedError";
+    }
+}
+
+/** An update holds a `${VAR}` placeholder the API does not accept. */
+export class KmsPlaceholderRefusedError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = "KmsPlaceholderRefusedError";
+    }
+}
+
+/** An update names a file of the backend's host the API does not accept. */
+export class KmsServerFileRefusedError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = "KmsServerFileRefusedError";
+    }
+}
+
+/** An update holds an `aws-kms` provider that would use the instance's AWS identity. */
+export class KmsInstanceCredentialsRefusedError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = "KmsInstanceCredentialsRefusedError";
     }
 }
 
@@ -169,4 +200,159 @@ export function restoreKmsSecrets(
         }
         return storedSecret;
     }) as KmsConfig;
+}
+
+/**
+ * Refuse the `${VAR}` placeholders an update of the tenant configuration
+ * brings in, anywhere in a value. A placeholder makes the backend read a
+ * variable of its own environment, so only the operator, who writes the
+ * tenant's `kms.json` as a file, decides which ones a tenant uses.
+ *
+ * A value the stored configuration already holds at the same place of the
+ * provider with the same `id` and `type` is kept, as long as every setting
+ * that names where the provider's credentials are sent
+ * ({@link CREDENTIAL_DESTINATIONS}) stays the same.
+ *
+ * @throws KmsPlaceholderRefusedError
+ */
+export function assertNoNewKmsPlaceholders(
+    update: KmsConfig,
+    stored: KmsConfig | null,
+): void {
+    const storedProviders = new Map(
+        (stored?.providers ?? []).map((provider) => [provider.id, provider]),
+    );
+    const refuse = (label: string): never => {
+        throw new KmsPlaceholderRefusedError(
+            `${label} holds a \${VAR} placeholder. The API does not accept placeholders in a tenant KMS configuration; send the value, or have the operator write the placeholder to the tenant's kms.json`,
+        );
+    };
+    const visit = (value: unknown, path: (string | number)[]): void => {
+        if (Array.isArray(value)) {
+            value.forEach((item, index) => visit(item, [...path, index]));
+            return;
+        }
+        if (value && typeof value === "object") {
+            for (const [key, item] of Object.entries(value)) {
+                visit(item, [...path, key]);
+            }
+            return;
+        }
+        if (typeof value !== "string" || !HOLDS_ENV_PLACEHOLDER.test(value)) {
+            return;
+        }
+        if (path[0] !== "providers" || typeof path[1] !== "number") {
+            if (valueAt(stored, path) !== value) refuse(path.join("."));
+            return;
+        }
+        // path = ["providers", <index>, ...field path]
+        const provider = update.providers[path[1]];
+        const storedProvider = storedProviders.get(provider.id);
+        const fieldPath = path.slice(2);
+        const label = `providers[${path[1]}] ('${provider.id}').${fieldPath.join(".")}`;
+        if (
+            storedProvider?.type !== provider.type ||
+            valueAt(storedProvider, fieldPath) !== value
+        ) {
+            refuse(label);
+        }
+        const destinations = new Set(
+            Object.values(CREDENTIAL_DESTINATIONS[provider.type] ?? {}).flat(),
+        );
+        for (const destination of destinations) {
+            const destinationPath = destination.split(".");
+            if (
+                valueAt(provider, destinationPath) !==
+                valueAt(storedProvider, destinationPath)
+            ) {
+                throw new KmsPlaceholderRefusedError(
+                    `${label} keeps a stored \${VAR} placeholder but ${destination} changes; send the value, a stored placeholder is not sent to a new address`,
+                );
+            }
+        }
+    };
+    visit(update, []);
+}
+
+/**
+ * Refuse the files of the backend's host an update of the tenant
+ * configuration brings in: the `library` of a `pkcs11` provider, which the
+ * backend loads as native code, and the mTLS files of an `http` provider.
+ * Only the operator, who writes the tenant's `kms.json` as a file and lists
+ * its files in `KMS_TENANT_FILES`, decides which ones a tenant uses; every
+ * tenant could otherwise use every listed file.
+ *
+ * A path the stored configuration already holds in the same setting of the
+ * provider with the same `id` and `type` is kept. For an `http` provider the
+ * `baseUrl` must stay the same too, so a stored client certificate is not
+ * presented to another server.
+ *
+ * @throws KmsServerFileRefusedError
+ */
+export function assertNoNewKmsServerFiles(
+    update: KmsConfig,
+    stored: KmsConfig | null,
+): void {
+    const storedProviders = new Map(
+        (stored?.providers ?? []).map((provider) => [provider.id, provider]),
+    );
+    for (const [index, provider] of update.providers.entries()) {
+        const storedProvider = storedProviders.get(provider.id);
+        for (const field of kmsServerFileFields(provider)) {
+            const fieldPath = field.split(".");
+            const file = valueAt(provider, fieldPath);
+            if (file === undefined) continue;
+            const label = `providers[${index}] ('${provider.id}').${field}`;
+            if (
+                storedProvider?.type !== provider.type ||
+                valueAt(storedProvider, fieldPath) !== file
+            ) {
+                throw new KmsServerFileRefusedError(
+                    `${label} names a file of the backend's host. The API does not accept such a path in a tenant KMS configuration; have the operator write it to the tenant's kms.json and list it in ${KMS_TENANT_FILES}`,
+                );
+            }
+            if (
+                provider.type === "http" &&
+                valueAt(storedProvider, ["baseUrl"]) !== provider.baseUrl
+            ) {
+                throw new KmsServerFileRefusedError(
+                    `${label} keeps a stored file but baseUrl changes; a stored client certificate is not used for a new address`,
+                );
+            }
+        }
+    }
+}
+
+/**
+ * Refuse the `aws-kms` providers without credentials an update of the tenant
+ * configuration brings in. Such a provider calls AWS KMS with the identity of
+ * the instance, so only the operator, who writes the tenant's `kms.json` as a
+ * file and sets `KMS_TENANT_AWS_DEFAULT_CREDENTIALS`, decides which tenant
+ * gets one; every tenant could otherwise add it.
+ *
+ * A provider the stored configuration already holds without credentials,
+ * with the same `id` and `region`, is kept.
+ *
+ * @throws KmsInstanceCredentialsRefusedError
+ */
+export function assertNoNewKmsInstanceCredentials(
+    update: KmsConfig,
+    stored: KmsConfig | null,
+): void {
+    const storedProviders = new Map(
+        (stored?.providers ?? []).map((provider) => [provider.id, provider]),
+    );
+    for (const [index, provider] of update.providers.entries()) {
+        if (!usesAwsDefaultCredentials(provider)) continue;
+        const storedProvider = storedProviders.get(provider.id);
+        if (
+            !storedProvider ||
+            !usesAwsDefaultCredentials(storedProvider) ||
+            storedProvider.region !== provider.region
+        ) {
+            throw new KmsInstanceCredentialsRefusedError(
+                `providers[${index}] ('${provider.id}') needs accessKeyId and secretAccessKey. The API does not accept an aws-kms provider that uses the AWS credentials of the backend's environment; send credentials, or have the operator write the provider to the tenant's kms.json and set ${KMS_TENANT_AWS_DEFAULT_CREDENTIALS}`,
+            );
+        }
+    }
 }

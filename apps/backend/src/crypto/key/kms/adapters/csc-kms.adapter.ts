@@ -22,6 +22,7 @@ import type {
     KmsKeyRef,
     KmsSigningAlg,
 } from "../kms-adapter.js";
+import { kmsPathLeavesBaseUrl } from "../kms-request-path.js";
 import { PublicJwkCache } from "../public-jwk-cache.js";
 
 const DEFAULT_API_PATH = "/csc/v2";
@@ -122,6 +123,12 @@ export class CscKmsAdapter implements KmsAdapter {
         this.useAuthorizeEndpoint = Boolean(config.useAuthorizeEndpoint);
         this.authorizeAuthData = config.authorizeAuthData;
         this.apiPath = config.apiPath ?? DEFAULT_API_PATH;
+        // The credentials belong to baseUrl.
+        if (kmsPathLeavesBaseUrl(this.baseUrl, this.apiPath)) {
+            throw new Error(
+                `CscKmsAdapter[${this.providerId}]: apiPath must be a path on the server of baseUrl`,
+            );
+        }
     }
 
     async generateKey(opts: {

@@ -22,7 +22,11 @@ import type {
     KmsKeyRef,
     KmsSigningAlg,
 } from "../kms-adapter.js";
+import { kmsPathLeavesBaseUrl } from "../kms-request-path.js";
 import { PublicJwkCache } from "../public-jwk-cache.js";
+
+/** Largest certificate, key or CA bundle file read for mTLS. */
+const MAX_PEM_FILE_BYTES = 1024 * 1024;
 
 /**
  * Authentication configuration for the remote KMS microservice.
@@ -163,6 +167,17 @@ export class HttpKmsAdapter implements KmsAdapter {
         this.auth = config.auth ?? { type: "none" };
         this.keysPath = config.keysPath ?? "/keys";
         this.healthPath = config.healthPath ?? "/health";
+        // The credentials and the client certificate belong to baseUrl.
+        for (const [setting, path] of [
+            ["keysPath", this.keysPath],
+            ["healthPath", this.healthPath],
+        ]) {
+            if (kmsPathLeavesBaseUrl(this.baseUrl, path)) {
+                throw new Error(
+                    `HttpKmsAdapter[${this.providerId}]: ${setting} must be a path on the server of baseUrl`,
+                );
+            }
+        }
         this.capabilities = {
             canCreate: true,
             canImport: config.canImport ?? false,
@@ -175,13 +190,56 @@ export class HttpKmsAdapter implements KmsAdapter {
 
         if (this.auth.type === "mtls") {
             this.httpsAgent = new https.Agent({
-                cert: fs.readFileSync(this.auth.certFile),
-                key: fs.readFileSync(this.auth.keyFile),
+                cert: this.readPemFile(this.auth.certFile, "certFile"),
+                key: this.readPemFile(this.auth.keyFile, "keyFile"),
                 ca: this.auth.caFile
-                    ? fs.readFileSync(this.auth.caFile)
+                    ? this.readPemFile(this.auth.caFile, "caFile")
                     : undefined,
             });
         }
+    }
+
+    /**
+     * Read a PEM file of the mTLS configuration. Only a regular file of a
+     * plausible size is read: reading a device or a pipe would never return
+     * and block the process.
+     */
+    private readPemFile(path: string, setting: string): Buffer {
+        // Checked on the open file, so the path cannot be swapped in between.
+        const fd = fs.openSync(
+            path,
+            // Non-blocking, so a pipe nobody writes to does not block the open.
+            fs.constants.O_RDONLY | (fs.constants.O_NONBLOCK ?? 0),
+        );
+        try {
+            const stat = fs.fstatSync(fd);
+            if (!stat.isFile() || stat.size > MAX_PEM_FILE_BYTES) {
+                throw new Error(
+                    `HttpKmsAdapter[${this.providerId}]: auth.${setting} must be a regular file of at most ${MAX_PEM_FILE_BYTES} bytes`,
+                );
+            }
+            const content = Buffer.alloc(stat.size);
+            let read = 0;
+            while (read < content.length) {
+                const count = fs.readSync(
+                    fd,
+                    content,
+                    read,
+                    content.length - read,
+                    read,
+                );
+                if (count === 0) break;
+                read += count;
+            }
+            return content.subarray(0, read);
+        } finally {
+            fs.closeSync(fd);
+        }
+    }
+
+    /** Close the connections of the mTLS agent. */
+    dispose(): void {
+        this.httpsAgent?.destroy();
     }
 
     async generateKey(opts: {

@@ -912,16 +912,18 @@ describe("KeyChainController authorization", () => {
         );
     });
 
-    it("requires a tenant context", () => {
+    it("requires a tenant context", async () => {
         const service = { export: vi.fn() };
         const kms = {
             getTenantConfig: vi.fn(),
-            saveTenantConfig: vi.fn(),
+            updateTenantConfig: vi.fn(),
             deleteTenantConfig: vi.fn(),
         };
+        const ownership = { replaceTenantFile: vi.fn() };
         const controller = new KeyChainController(
             service as unknown as KeyChainService,
             kms as never,
+            ownership as never,
         );
         const token = { roles: [Role.Tenants] } as TokenPayload;
 
@@ -931,14 +933,15 @@ describe("KeyChainController authorization", () => {
         expect(() => controller.getTenantKmsConfig(token)).toThrow(
             ForbiddenException,
         );
-        expect(() =>
+        await expect(
             controller.updateTenantKmsConfig(token, { providers: [] } as never),
-        ).toThrow(ForbiddenException);
-        expect(() => controller.deleteTenantKmsConfig(token)).toThrow(
+        ).rejects.toThrow(ForbiddenException);
+        await expect(controller.deleteTenantKmsConfig(token)).rejects.toThrow(
             ForbiddenException,
         );
+        expect(ownership.replaceTenantFile).not.toHaveBeenCalled();
         expect(service.export).not.toHaveBeenCalled();
-        expect(kms.saveTenantConfig).not.toHaveBeenCalled();
+        expect(kms.updateTenantConfig).not.toHaveBeenCalled();
         expect(kms.deleteTenantConfig).not.toHaveBeenCalled();
     });
 });

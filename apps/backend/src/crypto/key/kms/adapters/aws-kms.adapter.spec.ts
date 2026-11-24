@@ -11,7 +11,7 @@ import {
     SignCommand,
 } from "@aws-sdk/client-kms";
 import { importJWK } from "jose";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
     type KmsSigningAlg,
     signingAlgSpec,
@@ -175,5 +175,42 @@ describe("AwsKmsAdapter curves", () => {
         const { ref } = await createAdapter(client).generateKey({ kid: "k" });
         expect(commands[0].input.KeySpec).toBe("ECC_NIST_P256");
         expect(ref.alg).toBe("ES256");
+    });
+});
+
+describe("AwsKmsAdapter dispose", () => {
+    it("closes the connections of a client it created", async () => {
+        const { client } = createFakeKms();
+        const destroy = vi.fn();
+        const adapter = createAdapter({ ...client, destroy } as KMSClient);
+
+        await adapter.dispose();
+
+        expect(destroy).toHaveBeenCalledTimes(1);
+    });
+
+    it("has nothing to close when the client could not be created", async () => {
+        const adapter = new AwsKmsAdapter({
+            providerId: "aws",
+            region: "eu-central-1",
+        });
+        (
+            adapter as unknown as { clientPromise: Promise<never> }
+        ).clientPromise = Promise.reject(new Error("no client"));
+
+        await expect(adapter.dispose()).resolves.toBeUndefined();
+    });
+
+    it("creates no client only to close it", async () => {
+        const adapter = new AwsKmsAdapter({
+            providerId: "aws",
+            region: "eu-central-1",
+        });
+
+        await adapter.dispose();
+
+        expect(
+            (adapter as unknown as { clientPromise?: unknown }).clientPromise,
+        ).toBeUndefined();
     });
 });

@@ -16,13 +16,45 @@ const newPrivateJwk = () =>
         format: "jwk",
     });
 
+/** The service without its dependencies; `owned` says whose the provider is. */
+function newService(): any {
+    const service = Object.create(KeyChainImportService.prototype);
+    service.kmsKeyOwnership = {
+        exclusive: vi.fn((_tenantId: string, task: () => Promise<unknown>) =>
+            task(),
+        ),
+    };
+    return service;
+}
+
+/**
+ * A registry with one adapter. `owned` says whether the tenant's own
+ * kms.json defines the adapter's provider with credentials of its own.
+ */
+function registryOf(adapter: { providerId?: string }, owned = true) {
+    const tenantFile = owned
+        ? {
+              providers: [
+                  {
+                      id: adapter.providerId,
+                      type: "vault",
+                      vaultUrl: "https://vault.example",
+                      vaultToken: "token",
+                  },
+              ],
+          }
+        : null;
+    return {
+        resolve: () => adapter,
+        resolveWithTenantFile: vi.fn(() => ({ adapter, tenantFile })),
+    };
+}
+
 describe("key replacement preparation", () => {
     it.each(["db", "vault"])(
         "keeps the live %s row when replacement certificate preparation fails",
         async (type) => {
-            const service = Object.create(
-                KeyChainImportService.prototype,
-            ) as any;
+            const service = newService();
             service.keyChainRepository = {
                 findOne: vi
                     .fn()
@@ -42,7 +74,7 @@ describe("key replacement preparation", () => {
                     .fn()
                     .mockResolvedValue({ ref: { publicJwk: {} } }),
             };
-            service.kmsRegistry = { resolve: () => adapter };
+            service.kmsRegistry = registryOf(adapter);
             service.certBuilder = {
                 createSelfSignedCert: vi
                     .fn()
@@ -70,7 +102,7 @@ describe("key replacement preparation", () => {
 
 describe("system-owned key chains", () => {
     it("refuses to replace the tenant's encryption key chain", async () => {
-        const service = Object.create(KeyChainImportService.prototype) as any;
+        const service = newService();
         service.keyChainRepository = {
             findOne: vi
                 .fn()
@@ -82,7 +114,7 @@ describe("system-owned key chains", () => {
         };
         service.getPublicUrl = () => "https://issuer.example";
         const adapter = { type: "db", importKey: vi.fn() };
-        service.kmsRegistry = { resolve: () => adapter };
+        service.kmsRegistry = registryOf(adapter);
 
         await expect(
             service.importKeyChain("tenant", {
@@ -109,9 +141,7 @@ describe("algorithms the provider does not offer", () => {
     ])(
         "refuses a P-384 key for a provider without ES384 (%s)",
         async (_type, ca) => {
-            const service = Object.create(
-                KeyChainImportService.prototype,
-            ) as any;
+            const service = newService();
             service.keyChainRepository = {
                 findOne: vi.fn().mockResolvedValue(null),
                 save: vi.fn(),
@@ -129,7 +159,7 @@ describe("algorithms the provider does not offer", () => {
                 },
                 importKey: vi.fn(),
             };
-            service.kmsRegistry = { resolve: () => adapter };
+            service.kmsRegistry = registryOf(adapter);
             const { privateKey } = await generateKeyPair("ES384", {
                 extractable: true,
             });
@@ -153,7 +183,7 @@ describe("algorithms the provider does not offer", () => {
 
 describe("algorithms the provider offers", () => {
     it("imports a P-384 key for a provider with ES384", async () => {
-        const service = Object.create(KeyChainImportService.prototype) as any;
+        const service = newService();
         service.keyChainRepository = {
             findOne: vi.fn().mockResolvedValue(null),
             save: vi.fn(),
@@ -175,7 +205,7 @@ describe("algorithms the provider offers", () => {
                 return { ref: { privateJwk, publicJwk } };
             }),
         };
-        service.kmsRegistry = { resolve: () => adapter };
+        service.kmsRegistry = registryOf(adapter);
         service.certBuilder = {
             createSelfSignedCert: vi.fn().mockResolvedValue("PEM"),
         };
@@ -198,10 +228,68 @@ describe("algorithms the provider offers", () => {
     });
 });
 
+describe("key names in an external provider", () => {
+    async function importWithKid(owned: boolean, fromRequest?: boolean) {
+        const service = newService();
+        service.keyChainRepository = {
+            findOne: vi.fn().mockResolvedValue(null),
+            save: vi.fn(),
+        };
+        service.tenantRepository = {
+            findOneByOrFail: async () => ({ name: "Tenant" }),
+        };
+        service.getPublicUrl = () => "https://issuer.example";
+        service.logger = { log: vi.fn() };
+        const adapter = {
+            type: "http",
+            providerId: "remote",
+            capabilities: { supportedAlgs: ["ES256"], defaultAlg: "ES256" },
+            importKey: vi.fn(async ({ privateJwk }) => {
+                const { d, ...publicJwk } = privateJwk;
+                return { ref: { privateJwk, publicJwk } };
+            }),
+        };
+        service.kmsRegistry = registryOf(adapter, owned);
+        service.certBuilder = {
+            createSelfSignedCert: vi.fn().mockResolvedValue("PEM"),
+        };
+
+        await service.importKeyChain(
+            "tenant",
+            {
+                id: "key",
+                key: { ...newPrivateJwk(), kid: "another-tenants-key" },
+                usageType: "access",
+            },
+            fromRequest === undefined ? undefined : { fromRequest },
+        );
+
+        expect(service.kmsKeyOwnership.exclusive).toHaveBeenCalledWith(
+            "tenant",
+            expect.any(Function),
+        );
+        return adapter.importKey.mock.calls[0][0].kid as string;
+    }
+
+    it("never takes the caller's key name on a provider tenants share", async () => {
+        await expect(importWithKid(false)).resolves.toMatch(
+            /^key-import-[0-9a-f-]{36}$/,
+        );
+    });
+
+    it("keeps the key name of a file of the tenant's configuration folder", async () => {
+        await expect(importWithKid(false, false)).resolves.toBe(
+            "another-tenants-key",
+        );
+    });
+
+    it("keeps the caller's key name on the tenant's own provider", async () => {
+        await expect(importWithKid(true)).resolves.toBe("another-tenants-key");
+    });
+});
+
 describe("JWK private key imports", () => {
-    const service = Object.create(
-        KeyChainImportService.prototype,
-    ) as KeyChainImportService;
+    const service = newService();
 
     it("accepts a private key whose d belongs to x and y", () => {
         const key = newPrivateJwk();
@@ -230,9 +318,7 @@ describe("JWK private key imports", () => {
 
 describe("PEM private key imports", () => {
     it("converts a PKCS#8 EC private key to JWK", async () => {
-        const service = Object.create(
-            KeyChainImportService.prototype,
-        ) as KeyChainImportService;
+        const service = newService();
         const { privateKey } = await generateKeyPair("ES256", {
             extractable: true,
         });
@@ -248,9 +334,7 @@ describe("PEM private key imports", () => {
     });
 
     it("rejects a PKCS#8 key that carries another key's public key", () => {
-        const service = Object.create(
-            KeyChainImportService.prototype,
-        ) as KeyChainImportService;
+        const service = newService();
         const sec1 = (privateKey: KeyObject) =>
             privateKey.export({ format: "der", type: "sec1" });
         const own = sec1(
@@ -321,7 +405,7 @@ describe("imports with rotation enabled", () => {
     }
 
     function serviceFor() {
-        const service = Object.create(KeyChainImportService.prototype) as any;
+        const service = newService();
         service.logger = { log: vi.fn() };
         service.keyChainRepository = {
             findOne: vi.fn().mockResolvedValue(null),
@@ -331,17 +415,15 @@ describe("imports with rotation enabled", () => {
             findOneByOrFail: async () => ({ name: "Tenant" }),
         };
         service.getPublicUrl = () => "https://issuer.example";
-        service.kmsRegistry = {
-            resolve: () => ({
-                type: "db",
-                providerId: "db",
-                capabilities: { supportedAlgs: ["ES256"], defaultAlg: "ES256" },
-                importKey: vi.fn(async ({ privateJwk }) => {
-                    const { d, ...publicJwk } = privateJwk;
-                    return { ref: { privateJwk, publicJwk } };
-                }),
+        service.kmsRegistry = registryOf({
+            type: "db",
+            providerId: "db",
+            capabilities: { supportedAlgs: ["ES256"], defaultAlg: "ES256" },
+            importKey: vi.fn(async ({ privateJwk }) => {
+                const { d, ...publicJwk } = privateJwk;
+                return { ref: { privateJwk, publicJwk } };
             }),
-        };
+        } as { providerId: string });
         service.importInternalChain = vi.fn().mockResolvedValue("key");
         return service;
     }
@@ -423,7 +505,7 @@ describe("imports with rotation enabled", () => {
             adapter.generateKey = vi.fn(async ({ kid }) => ({
                 ref: { privateJwk: { kid }, publicJwk: { kid } },
             }));
-            service.kmsRegistry = { resolve: () => adapter };
+            service.kmsRegistry = registryOf(adapter);
             service.certBuilder = {
                 createCaSignedCert: vi.fn(async ({ caCertPem }) => ({
                     chain: ["leaf", caCertPem],

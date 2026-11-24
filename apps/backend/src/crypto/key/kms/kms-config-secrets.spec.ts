@@ -4,9 +4,15 @@ import {
     type KmsConfig,
 } from "../schemas/kms-config.schema.js";
 import {
+    assertNoNewKmsInstanceCredentials,
+    assertNoNewKmsPlaceholders,
+    assertNoNewKmsServerFiles,
     KMS_REDACTED_SECRET,
+    KmsInstanceCredentialsRefusedError,
+    KmsPlaceholderRefusedError,
     KmsSecretDestinationChangedError,
     KmsSecretNotStoredError,
+    KmsServerFileRefusedError,
     redactKmsConfig,
     restoreKmsSecrets,
 } from "./kms-config-secrets.js";
@@ -276,6 +282,307 @@ describe("KMS configuration secrets", () => {
                     }),
                 ]),
             );
+        });
+    });
+    describe("placeholders in an update", () => {
+        const withProvider = (
+            id: string,
+            change: Record<string, unknown>,
+            base: KmsConfig = config,
+        ): KmsConfig => ({
+            ...base,
+            providers: base.providers.map((provider) =>
+                provider.id === id ? { ...provider, ...change } : provider,
+            ) as KmsConfig["providers"],
+        });
+        /** The stored file of an operator who wrote placeholders. */
+        const stored = withProvider(
+            "remote-bearer",
+            {
+                baseUrl: "${KMS_URL}",
+                keysPath: "/${KMS_PREFIX}/keys",
+                auth: { type: "bearer", token: "${KMS_TOKEN}" },
+            },
+            withProvider("vault", { vaultToken: "${VAULT_TOKEN}" }),
+        );
+
+        it("accepts an update without placeholders", () => {
+            expect(() =>
+                assertNoNewKmsPlaceholders(config, null),
+            ).not.toThrow();
+            expect(() =>
+                assertNoNewKmsPlaceholders(config, stored),
+            ).not.toThrow();
+        });
+
+        it.each([
+            ["a credential", "vault", { vaultToken: "${MASTER_SECRET}" }],
+            ["a part of a value", "vault", { vaultToken: "x${MASTER_SECRET}" }],
+            [
+                "a URL",
+                "vault",
+                { vaultUrl: "https://a.example/${DB_PASSWORD}" },
+            ],
+            ["a description", "vault", { description: "${MASTER_SECRET}" }],
+            [
+                "the default form",
+                "vault",
+                { description: "${MASTER_SECRET:fallback}" },
+            ],
+            [
+                "a nested credential",
+                "csc",
+                {
+                    authorizeAuthData: [
+                        { id: "PIN", value: "${MASTER_SECRET}" },
+                    ],
+                },
+            ],
+        ])("refuses a new placeholder in %s", (_, id, change) => {
+            for (const before of [null, config, stored]) {
+                expect(() =>
+                    assertNoNewKmsPlaceholders(
+                        withProvider(id, change),
+                        before,
+                    ),
+                ).toThrow(KmsPlaceholderRefusedError);
+            }
+        });
+
+        it("refuses a new placeholder outside the providers", () => {
+            expect(() =>
+                assertNoNewKmsPlaceholders(
+                    { ...config, defaultProvider: "${MASTER_SECRET}" },
+                    config,
+                ),
+            ).toThrow(/defaultProvider holds a \$\{VAR\} placeholder/);
+        });
+
+        it("keeps a stored placeholder outside the providers", () => {
+            const update = { ...config, defaultProvider: "${DEFAULT_KMS}" };
+            expect(() =>
+                assertNoNewKmsPlaceholders(update, update),
+            ).not.toThrow();
+        });
+
+        it("does not keep a placeholder for a provider of another type", () => {
+            const before: KmsConfig = {
+                providers: [
+                    {
+                        id: "kms",
+                        type: "vault",
+                        vaultUrl: "https://vault.example.com",
+                        vaultToken: "${KMS_TOKEN}",
+                        description: "${KMS_TOKEN}",
+                    },
+                ],
+            };
+            expect(() =>
+                assertNoNewKmsPlaceholders(
+                    {
+                        providers: [
+                            {
+                                id: "kms",
+                                type: "http",
+                                baseUrl: "https://attacker.example.com",
+                                description: "${KMS_TOKEN}",
+                            },
+                        ],
+                    },
+                    before,
+                ),
+            ).toThrow(KmsPlaceholderRefusedError);
+        });
+
+        it("keeps the placeholders the stored configuration holds", () => {
+            expect(() =>
+                assertNoNewKmsPlaceholders(stored, stored),
+            ).not.toThrow();
+            // Other settings of the provider may change.
+            expect(() =>
+                assertNoNewKmsPlaceholders(
+                    withProvider("vault", { description: "new" }, stored),
+                    stored,
+                ),
+            ).not.toThrow();
+        });
+
+        it("does not move a stored placeholder to another field, provider or type", () => {
+            expect(() =>
+                assertNoNewKmsPlaceholders(
+                    withProvider(
+                        "vault",
+                        { description: "${VAULT_TOKEN}" },
+                        stored,
+                    ),
+                    stored,
+                ),
+            ).toThrow(/providers\[1\] \('vault'\)\.description/);
+            expect(() =>
+                assertNoNewKmsPlaceholders(
+                    withProvider(
+                        "remote-oauth",
+                        { auth: { type: "bearer", token: "${KMS_TOKEN}" } },
+                        stored,
+                    ),
+                    stored,
+                ),
+            ).toThrow(KmsPlaceholderRefusedError);
+            expect(() =>
+                assertNoNewKmsPlaceholders(
+                    withProvider("vault", { id: "renamed" }, stored),
+                    stored,
+                ),
+            ).toThrow(KmsPlaceholderRefusedError);
+        });
+
+        it("does not send a stored placeholder to a new address", () => {
+            expect(() =>
+                assertNoNewKmsPlaceholders(
+                    withProvider(
+                        "vault",
+                        { vaultUrl: "https://attacker.example.com" },
+                        stored,
+                    ),
+                    stored,
+                ),
+            ).toThrow(/vaultToken keeps a stored .* but vaultUrl changes/);
+            // Also for a placeholder in a setting that is no credential.
+            expect(() =>
+                assertNoNewKmsPlaceholders(
+                    withProvider(
+                        "remote-bearer",
+                        {
+                            baseUrl: "https://attacker.example.com",
+                            keysPath: "/${KMS_PREFIX}/keys",
+                            auth: { type: "bearer", token: "new-token" },
+                        },
+                        stored,
+                    ),
+                    stored,
+                ),
+            ).toThrow(/keysPath keeps a stored .* but baseUrl changes/);
+        });
+    });
+
+    describe("files of the backend's host in an update", () => {
+        const mtls = (
+            id: string,
+            auth: Record<string, string>,
+            baseUrl = "https://signer.example.com",
+        ) =>
+            ({
+                id,
+                type: "http",
+                baseUrl,
+                auth: { type: "mtls", ...auth },
+            }) as KmsConfig["providers"][number];
+        const hsm = (id: string, library: string) =>
+            ({
+                id,
+                type: "pkcs11",
+                library,
+                slot: 0,
+                pin: "1234",
+            }) as KmsConfig["providers"][number];
+        const FILES = { certFile: "/certs/a.crt", keyFile: "/certs/a.key" };
+        const stored: KmsConfig = {
+            providers: [mtls("signer", FILES), hsm("hsm", "/lib/hsm.so")],
+        };
+        const update =
+            (...providers: KmsConfig["providers"]) =>
+            () =>
+                assertNoNewKmsServerFiles({ providers }, stored);
+
+        it("accepts an update without files, and the stored files unchanged", () => {
+            expect(
+                update({
+                    id: "db",
+                    type: "db",
+                } as KmsConfig["providers"][number]),
+            ).not.toThrow();
+            expect(update(...stored.providers)).not.toThrow();
+            expect(() => assertNoNewKmsServerFiles(stored, null)).toThrow(
+                KmsServerFileRefusedError,
+            );
+        });
+
+        it("does not move a stored file to another setting, provider or type", () => {
+            for (const refused of [
+                update(mtls("other", FILES)),
+                update(mtls("hsm", FILES)),
+                update(hsm("signer", "/lib/hsm.so")),
+                update(hsm("hsm", "/certs/a.key")),
+                update(
+                    mtls("signer", {
+                        certFile: "/certs/a.key",
+                        keyFile: "/certs/a.crt",
+                    }),
+                ),
+                // A CA file the stored provider does not have.
+                update(mtls("signer", { ...FILES, caFile: "/certs/a.crt" })),
+            ]) {
+                expect(refused).toThrow(KmsServerFileRefusedError);
+            }
+        });
+
+        it("does not present a stored client certificate to another server", () => {
+            expect(
+                update(mtls("signer", FILES, "https://attacker.example.com")),
+            ).toThrow(/baseUrl changes/);
+        });
+
+        it("lets an update drop a stored CA file", () => {
+            const withCa: KmsConfig = {
+                providers: [
+                    mtls("signer", { ...FILES, caFile: "/certs/ca.crt" }),
+                ],
+            };
+            expect(() =>
+                assertNoNewKmsServerFiles(
+                    { providers: [mtls("signer", FILES)] },
+                    withCa,
+                ),
+            ).not.toThrow();
+        });
+    });
+
+    describe("aws-kms providers without credentials in an update", () => {
+        const aws = (id: string, region: string, credentials = {}) =>
+            ({
+                id,
+                type: "aws-kms",
+                region,
+                ...credentials,
+            }) as KmsConfig["providers"][number];
+        const KEYS = { accessKeyId: "AKIA", secretAccessKey: "secret" };
+        const stored: KmsConfig = {
+            providers: [aws("role", "eu-1"), aws("keys", "eu-1", KEYS)],
+        };
+        const update =
+            (...providers: KmsConfig["providers"]) =>
+            () =>
+                assertNoNewKmsInstanceCredentials({ providers }, stored);
+
+        it("accepts providers with credentials and the stored one unchanged", () => {
+            expect(update(...stored.providers)).not.toThrow();
+            expect(update(aws("new", "us-1", KEYS))).not.toThrow();
+        });
+
+        it("refuses a new one, another region, and dropping stored credentials", () => {
+            for (const refused of [
+                update(aws("new", "eu-1")),
+                update(aws("role", "us-1")),
+                update(aws("keys", "eu-1")),
+                update(aws("keys", "eu-1", { accessKeyId: "AKIA" })),
+                () =>
+                    assertNoNewKmsInstanceCredentials(
+                        { providers: [aws("role", "eu-1")] },
+                        null,
+                    ),
+            ]) {
+                expect(refused).toThrow(KmsInstanceCredentialsRefusedError);
+            }
         });
     });
 });

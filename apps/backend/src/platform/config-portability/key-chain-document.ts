@@ -78,6 +78,16 @@ export function keyChainProviderKeys(spec: Spec): {
     return { provider: undefined, keys: [] };
 }
 
+/** The key IDs an `external-reference` key source names in its KMS provider. */
+export function externalKeyIds(source: {
+    externalKeyId?: unknown;
+    activeExternalKeyId?: unknown;
+}): string[] {
+    return [source.externalKeyId, source.activeExternalKeyId].filter(
+        (id): id is string => typeof id === "string" && id.length > 0,
+    );
+}
+
 /** What applying an internal chain with private keys would reject or drop. */
 export function internalChainProblems(spec: Spec): InternalChainProblem[] {
     const rootKey = privateKey(spec.keySource?.jwk);

@@ -70,7 +70,7 @@ vault kv put secret/eudiplo/encryption-key key="$(openssl rand -base64 32)"
 
 The backend reads `<VAULT_ADDR>/v1/<VAULT_ENCRYPTION_KEY_PATH>` and expects the
 key in the field `key`. `VAULT_ADDR` and `VAULT_TOKEN` can also be referenced as
-`${VAULT_ADDR}`/`${VAULT_TOKEN}` from `kms.json`, but Vault as a key provider for
+`${VAULT_ADDR}`/`${VAULT_TOKEN}` from the global `kms.json`, but Vault as a key provider for
 signing keys is configured separately in [KMS](kms.md).
 
 ### AWS Secrets Manager

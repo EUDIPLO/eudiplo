@@ -353,7 +353,9 @@ export class TrustListService {
                 validationSchema: TrustListCreateSchema,
                 resourceType: "trustlist",
                 loadData: (filePath) =>
-                    loadConfigDto(filePath, TrustListCreateSchema),
+                    loadConfigDto(filePath, TrustListCreateSchema, (value) =>
+                        this.configImportService.replacePlaceholders(value),
+                    ),
                 checkExists: (tenantId, data) => {
                     return this.findOne(tenantId, data.id!)
                         .then(() => true)

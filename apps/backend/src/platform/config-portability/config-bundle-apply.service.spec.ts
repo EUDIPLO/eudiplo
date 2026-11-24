@@ -3,7 +3,11 @@ import {
     normalizeDocument,
     schemaUrl,
 } from "@eudiplo/config-format/config-format.js";
-import { BadRequestException, ForbiddenException } from "@nestjs/common";
+import {
+    BadRequestException,
+    ConflictException,
+    ForbiddenException,
+} from "@nestjs/common";
 import * as x509 from "@peculiar/x509";
 import { describe, expect, it, vi } from "vitest";
 import type { ClientsProvider } from "../../auth/client/client.provider.js";
@@ -501,6 +505,12 @@ describe("key chain replacement", () => {
             certificate: certificate.toString("pem"),
         };
     }
+    const ownership = (refusal?: string) => ({
+        exclusive: vi.fn((_tenantId: string, task: () => Promise<unknown>) =>
+            task(),
+        ),
+        refusedExternalKeys: vi.fn(async () => refusal),
+    });
     function setup() {
         const service = Object.create(
             ConfigBundleApplyService.prototype,
@@ -511,6 +521,7 @@ describe("key chain replacement", () => {
             unsupportedAlgorithm: vi.fn(),
         };
         service.keyChainService = { importKeyChain: vi.fn() };
+        service.kmsKeyOwnershipService = ownership();
         service.migrationService = new ConfigMigrationService(
             new ConfigResourceRegistry(),
         );
@@ -673,6 +684,123 @@ describe("key chain replacement", () => {
             expect(service.repos.keyChains.save).not.toHaveBeenCalled();
         },
     );
+    describe("the tenant's kms.json", () => {
+        const kmsConfig = (): ConfigDocument => ({
+            $schema: schemaUrl("KmsConfig"),
+            kind: "KmsConfig",
+            metadata: { id: "kms" },
+            spec: { providers: [] },
+        });
+        function setupKms(refused: boolean) {
+            const service = setup();
+            service.kmsTenantConfigService = {
+                saveTenantConfig: vi.fn(),
+                deleteTenantConfig: vi.fn(),
+            };
+            service.kmsKeyOwnershipService.replaceTenantFile = vi.fn(
+                async (
+                    _tenantId: string,
+                    _next: unknown,
+                    write: () => void,
+                ) => {
+                    if (refused) throw new ConflictException("in use");
+                    write();
+                },
+            );
+            return service;
+        }
+
+        it("of a request is neither written nor deleted while key chains would lose their provider", async () => {
+            const service = setupKms(true);
+
+            await expect(
+                service.applyDocument("tenant", kmsConfig(), false, true),
+            ).rejects.toThrow(ConflictException);
+            await expect(
+                service.deleteDocument("tenant", "KmsConfig", "kms", true),
+            ).rejects.toThrow(ConflictException);
+
+            const { replaceTenantFile } = service.kmsKeyOwnershipService;
+            expect(replaceTenantFile.mock.calls[0].slice(0, 2)).toEqual([
+                "tenant",
+                { providers: [] },
+            ]);
+            expect(replaceTenantFile.mock.calls[1].slice(0, 2)).toEqual([
+                "tenant",
+                null,
+            ]);
+            const kms = service.kmsTenantConfigService;
+            expect(kms.saveTenantConfig).not.toHaveBeenCalled();
+            expect(kms.deleteTenantConfig).not.toHaveBeenCalled();
+        });
+
+        it("of a request is written and deleted otherwise", async () => {
+            const service = setupKms(false);
+
+            await service.applyDocument("tenant", kmsConfig(), false, true);
+            await service.deleteDocument("tenant", "KmsConfig", "kms", true);
+
+            const kms = service.kmsTenantConfigService;
+            expect(kms.saveTenantConfig).toHaveBeenCalledWith("tenant", {
+                providers: [],
+            });
+            expect(kms.deleteTenantConfig).toHaveBeenCalledWith("tenant");
+        });
+    });
+
+    describe("an external key reference", () => {
+        const reference = () =>
+            keyChain({
+                keySource: {
+                    type: "external-reference",
+                    provider: "shared",
+                    externalKeyId: "root-key",
+                    activeExternalKeyId: "active-key",
+                    publicJwk: { kty: "EC", crv: "P-256", x: "x", y: "y" },
+                    activePublicJwk: {
+                        kty: "EC",
+                        crv: "P-256",
+                        x: "x",
+                        y: "y",
+                    },
+                },
+                crt: ["cert"],
+            });
+
+        it("of a request is refused before the key signs when the tenant does not hold the key", async () => {
+            const service = setup();
+            service.kmsKeyOwnershipService = ownership("not a key of yours");
+
+            await expect(
+                service.applyKeyChain("tenant", reference(), true),
+            ).rejects.toThrow(new BadRequestException("not a key of yours"));
+
+            expect(
+                service.kmsKeyOwnershipService.refusedExternalKeys,
+            ).toHaveBeenCalledWith("tenant", "shared", [
+                "root-key",
+                "active-key",
+            ]);
+            expect(service.kmsReferenceService.verify).not.toHaveBeenCalled();
+            expect(service.repos.keyChains.save).not.toHaveBeenCalled();
+        });
+
+        it("of the tenant's configuration folder may name any key", async () => {
+            const service = setup();
+            service.kmsKeyOwnershipService = ownership("not a key of yours");
+
+            await service.applyKeyChain("tenant", reference(), false);
+
+            expect(
+                service.kmsKeyOwnershipService.refusedExternalKeys,
+            ).not.toHaveBeenCalled();
+            expect(service.kmsReferenceService.verify).toHaveBeenCalled();
+            expect(service.repos.keyChains.save).toHaveBeenCalled();
+            expect(
+                service.kmsKeyOwnershipService.exclusive,
+            ).toHaveBeenCalledWith("tenant", expect.any(Function));
+        });
+    });
     it("stores the rotation values of an internal chain with private keys as given", async () => {
         const service = setup();
         const root = await keyWithCertificate(true);
@@ -762,6 +890,8 @@ describe("key chain replacement", () => {
                 description: null,
                 rotationPolicy: { enabled: false },
             }),
+            // Called without a source: the document is taken as a request's.
+            { fromRequest: undefined },
         );
     });
 });

@@ -10,11 +10,24 @@ Fields of the global `<CONFIG_FOLDER>/kms.json`, of a tenant's
 schema. How to choose and set up a provider is described in
 [Key management (KMS)](../operate/kms.md).
 
-Every object is strict: unknown fields are rejected. String values accept
-`${VAR}` placeholders (upper-case letters, digits and `_`), resolved from the
-backend's environment; a file that references an unset or empty variable is
-rejected. Unlike configuration import files, `kms.json` has no
-`${VAR:default}` syntax. `defaultProvider` must match a provider `id`, and
+Every object is strict: unknown fields are rejected. In the two files, string
+values accept `${VAR}` placeholders (upper-case letters, digits and `_`),
+resolved from the backend's environment; a file that references an unset or
+empty variable is rejected. So is a file that references a variable it may not
+use: a tenant file resolves only the variables listed in
+`KMS_TENANT_VARIABLES` and never in `defaultProvider` or the `id` of a
+provider, and neither file resolves the variables of EUDIPLO
+itself, apart from a few
+([variables a file can use](config-bundle-format.md#variables-a-file-can-use)).
+The body of `PUT /api/key-chain/providers/config` accepts no new placeholders
+([placeholders in a tenant `kms.json`](../operate/kms.md#placeholders-in-a-tenant-kmsjson)).
+A tenant file can also name a PKCS#11 `library` or an mTLS file only if
+`KMS_TENANT_FILES` lists it, and its `aws-kms` providers need `accessKeyId` and
+`secretAccessKey` unless `KMS_TENANT_AWS_DEFAULT_CREDENTIALS` is set
+([files and AWS credentials in a tenant `kms.json`](../operate/kms.md#files-and-aws-credentials-in-a-tenant-kmsjson)).
+The servers of its providers must pass the outbound URL policy
+([servers in a tenant `kms.json`](../operate/kms.md#servers-in-a-tenant-kmsjson)).
+Unlike configuration import files, `kms.json` has no `${VAR:default}` syntax. `defaultProvider` must match a provider `id`, and
 provider IDs must be unique.
 
 Both files are either the bare content below or a `KmsConfig` document with
@@ -66,7 +79,9 @@ development only, is in [EUDIPLO/examples](https://github.com/EUDIPLO/examples/t
 | `GET {healthPath}`              | -                                            | `200` (for example `{ "ok": true }`)                        |
 | `POST {keysPath}/{kid}/import`  | `{ "privateJwk": { … }, "alg": "ES256" }`    | `200 { "publicJwk": { … } }`; only called with `canImport: true` |
 
-`keysPath` defaults to `/keys`, `healthPath` to `/health`.
+`keysPath` defaults to `/keys`, `healthPath` to `/health`. Both must be paths
+on the server of `baseUrl`, as must `apiPath` of a `csc` provider
+([Key management](../operate/kms.md#files-and-aws-credentials-in-a-tenant-kmsjson)).
 
 `alg` is `ES256`, `ES384` or `ES512`; the provider's `algorithms` decide which
 ones EUDIPLO sends for new and imported keys (only `defaultAlgorithm`, `ES256`

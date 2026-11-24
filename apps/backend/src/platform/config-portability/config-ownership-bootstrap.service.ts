@@ -53,10 +53,26 @@ export class ConfigOwnershipBootstrapService implements OnApplicationBootstrap {
                 continue;
             }
             const raw = readFileSync(file);
-            const payload = JSON.parse(raw.toString("utf8"));
-            const document = this.migrationService.isDocument(payload)
-                ? this.migrationService.upgrade(payload).document
-                : this.migrationService.wrapLegacy("KmsConfig", payload, "kms");
+            let document: ReturnType<ConfigMigrationService["wrapLegacy"]>;
+            try {
+                const payload = JSON.parse(raw.toString("utf8"));
+                document = this.migrationService.isDocument(payload)
+                    ? this.migrationService.upgrade(payload).document
+                    : this.migrationService.wrapLegacy(
+                          "KmsConfig",
+                          payload,
+                          "kms",
+                      );
+            } catch {
+                // One tenant's file must not stop the startup of the others.
+                // Without the reason: the message of the JSON parser quotes
+                // the file, which holds credentials. The tenant's key
+                // operations report the reason when they load the file.
+                this.logger.warn(
+                    `[${tenant.id}] ${file} is not JSON or no configuration document the backend can read, so it is not recorded as the tenant's file-managed KMS configuration. The tenant's key operations fail until the file is valid.`,
+                );
+                continue;
+            }
             await this.ownershipService.markApplied({
                 tenantId: tenant.id,
                 kind: "KmsConfig",

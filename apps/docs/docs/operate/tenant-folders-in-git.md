@@ -61,7 +61,14 @@ eudiplo config import ./config/acme --instance staging --mode upsert --plan plan
 2. It fills in `${VAR}` placeholders from the variables named in
    `--allow-env` (see below). A placeholder without a value is named in a
    warning and sent as it is; the plan blocks that resource with
-   `SECRET_REQUIRED` until the variable is set and named.
+   `SECRET_REQUIRED` until the variable is set and named. In the folder's
+   `kms.json`, fill in every placeholder: the API accepts none there
+   ([placeholders in a tenant `kms.json`](kms.md#placeholders-in-a-tenant-kmsjson)).
+   It also refuses a new `pkcs11` provider, new mTLS files and a new `aws-kms`
+   provider without credentials there
+   ([files and AWS credentials in a tenant `kms.json`](kms.md#files-and-aws-credentials-in-a-tenant-kmsjson)),
+   and a provider whose server the outbound URL policy refuses
+   ([servers in a tenant `kms.json`](kms.md#servers-in-a-tenant-kmsjson)).
 3. It sends the folder as a bundle archive, `info.json` and `images/` included.
    The bundle is the same for the same files and environment, so the import
    matches the reviewed plan.
@@ -94,7 +101,9 @@ for example a CI runner:
 
 `config import` still stores the filled-in values: review which variables a
 change adds to `--allow-env` before you import it. The startup import fills
-placeholders from the backend's whole environment.
+placeholders from the backend's environment, except for the variables that
+configure EUDIPLO itself
+([variables a file can use](../reference/config-bundle-format.md#variables-a-file-can-use)).
 
 ## Folder imports and the startup import
 
