@@ -299,6 +299,35 @@ export function buildDisclosureFrame(
 }
 
 /**
+ * The namespace an mdoc issuer puts claims in that name none of their own:
+ * `org.iso.18013.5.1` for the mDL, the docType itself for any other.
+ */
+export function mdocDefaultNamespace(docType: string): string {
+  return docType === "org.iso.18013.5.1.mDL" ? "org.iso.18013.5.1" : docType;
+}
+
+/**
+ * The fields with `defaultNamespace` given to each top-level field that names
+ * no namespace and whose path does not start with one (a one-segment path),
+ * so its claims path pointers, and those of its children, have the two
+ * components OID4VCI 1.0 Appendix C.2 requires. Metadata and default values
+ * resolve namespaces this way, as in the backend.
+ */
+function withDefaultNamespace(
+  fields: ClaimFieldDefinition[],
+  defaultNamespace: string | undefined,
+): ClaimFieldDefinition[] {
+  if (!defaultNamespace) {
+    return fields;
+  }
+  return fields.map((field) =>
+    getFieldNamespace(field) === undefined
+      ? { ...field, namespace: defaultNamespace }
+      : field,
+  );
+}
+
+/**
  * The path a field's claims metadata names, before the namespace is put in
  * front: a path that already starts with the field's namespace loses that
  * segment, so the namespace is not named twice. Empty when there is no
@@ -318,8 +347,17 @@ function isElementIndex(segment: Segment): segment is number {
   );
 }
 
-export function buildClaimsMetadata(fields: ClaimFieldDefinition[]): ClaimMetadata[] {
-  return flattenFields(fields)
+/**
+ * The `claims` entries of a credential configuration's metadata.
+ * @param defaultNamespace for `mso_mdoc`, the namespace of the docType
+ *   ({@link mdocDefaultNamespace}): put in front of fields that name no
+ *   namespace, where the issuer puts their values.
+ */
+export function buildClaimsMetadata(
+  fields: ClaimFieldDefinition[],
+  defaultNamespace?: string,
+): ClaimMetadata[] {
+  return flattenFields(withDefaultNamespace(fields, defaultNamespace))
     .map((field) => ({ field, path: claimMetadataPath(field) }))
     .filter(({ path }) => path.length > 0)
     .map(({ field, path }) => {
@@ -457,12 +495,18 @@ function namespaceRelativePath(
     : field.path;
 }
 
+/**
+ * The default values of the fields per mdoc namespace.
+ * @param defaultNamespace the namespace of fields that name none, as in
+ *   {@link buildClaimsMetadata}; without it their defaults are left out.
+ */
 export function buildClaimsByNamespace(
   fields: ClaimFieldDefinition[],
+  defaultNamespace?: string,
 ): Record<string, Record<string, unknown>> {
   const byNamespace: Record<string, Record<string, unknown>> = {};
 
-  for (const field of flattenFields(fields)) {
+  for (const field of flattenFields(withDefaultNamespace(fields, defaultNamespace))) {
     const namespace = getFieldNamespace(field);
     if (!namespace || !Object.prototype.hasOwnProperty.call(field, "defaultValue")) {
       continue;
@@ -485,7 +529,16 @@ export function buildClaimsByNamespace(
   return byNamespace;
 }
 
-export function deriveRuntimeArtifacts(fields: ClaimFieldDefinition[]): {
+/**
+ * Everything derived from the fields.
+ * @param defaultNamespace for `mso_mdoc`, the namespace of the docType
+ *   ({@link mdocDefaultNamespace}), so `claimsMetadata` and
+ *   `claimsByNamespace` match what the backend publishes and issues.
+ */
+export function deriveRuntimeArtifacts(
+  fields: ClaimFieldDefinition[],
+  defaultNamespace?: string,
+): {
   claims: Record<string, unknown>;
   disclosureFrame?: Record<string, unknown>;
   claimsMetadata: ClaimMetadata[];
@@ -495,8 +548,8 @@ export function deriveRuntimeArtifacts(fields: ClaimFieldDefinition[]): {
   return {
     claims: buildClaims(fields),
     disclosureFrame: buildDisclosureFrame(fields),
-    claimsMetadata: buildClaimsMetadata(fields),
+    claimsMetadata: buildClaimsMetadata(fields, defaultNamespace),
     schema: buildJsonSchema(fields),
-    claimsByNamespace: buildClaimsByNamespace(fields),
+    claimsByNamespace: buildClaimsByNamespace(fields, defaultNamespace),
   };
 }

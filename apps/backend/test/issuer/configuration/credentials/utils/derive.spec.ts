@@ -8,6 +8,7 @@ import {
     buildDisclosureFrame,
     buildJsonSchema,
     formattedClaimFields,
+    mdocDefaultNamespace,
 } from "../../../../../src/issuer/configuration/credentials/utils/derive.js";
 import type { ClaimFieldDefinition } from "../../../../../src/issuer/configuration/credentials/utils/types.js";
 import { builtInShape, changedBuiltIns } from "../../../../shared/built-ins.js";
@@ -443,6 +444,129 @@ describe("buildClaimsMetadata", () => {
             ["eu.europa.ec.eudi.pid.1", "nationality"],
             ["eu.europa.ec.eudi.pid.1", "nationality", null],
         ]);
+    });
+});
+
+describe("buildClaimsMetadata with a default namespace", () => {
+    const fields = [
+        { path: ["given_name"], type: "string" },
+        {
+            path: ["address"],
+            type: "object",
+            children: [{ path: ["street"], type: "string" }],
+        },
+        {
+            path: ["nationalities"],
+            type: "array",
+            children: [{ path: [null], type: "string" }],
+        },
+        // A namespace of its own or from the path wins over the default
+        { namespace: "org.example.1", path: ["level"], type: "string" },
+        { path: ["org.example.2", "rank"], type: "string" },
+    ] as any;
+
+    it("puts the default namespace in front of fields that name none", () => {
+        expect(
+            buildClaimsMetadata(fields, "org.iso.18013.5.1").map(
+                (claim) => claim.path,
+            ),
+        ).toEqual([
+            ["org.iso.18013.5.1", "given_name"],
+            ["org.iso.18013.5.1", "address"],
+            ["org.iso.18013.5.1", "address", "street"],
+            ["org.iso.18013.5.1", "nationalities"],
+            ["org.iso.18013.5.1", "nationalities", null],
+            ["org.example.1", "level"],
+            ["org.example.2", "rank"],
+        ]);
+    });
+
+    it("leaves paths as they are without a default namespace", () => {
+        expect(buildClaimsMetadata(fields).map((claim) => claim.path)).toEqual([
+            ["given_name"],
+            ["address"],
+            ["address", "street"],
+            ["nationalities"],
+            ["nationalities", null],
+            ["org.example.1", "level"],
+            ["org.example.2", "rank"],
+        ]);
+    });
+});
+
+describe("default namespace of mdoc fields that name none", () => {
+    const NS = "org.iso.18013.5.1";
+    const fields = [
+        { path: ["given_name"], type: "string", defaultValue: "Erika" },
+        {
+            path: ["address"],
+            type: "object",
+            children: [
+                { path: ["street"], type: "string", defaultValue: "Main" },
+                {
+                    path: ["since"],
+                    type: "string",
+                    format: "date",
+                    defaultValue: "2000-01-01",
+                },
+            ],
+        },
+    ] as any;
+
+    it("puts their default values in the default namespace", () => {
+        expect(buildClaimsByNamespace(fields, NS)).toEqual({
+            [NS]: {
+                given_name: "Erika",
+                address: { street: "Main", since: "2000-01-01" },
+            },
+        });
+    });
+
+    it("finds their date claims in the default namespace", () => {
+        expect(formattedClaimFields(fields, NS)).toEqual([
+            {
+                format: "date",
+                path: ["address", "since"],
+                namespace: NS,
+                namespacePath: ["address", "since"],
+            },
+        ]);
+    });
+
+    it("treats a one-segment parent as an element of the default namespace", () => {
+        const parent = (path: string) =>
+            [
+                {
+                    path: [path],
+                    type: "object",
+                    children: [{ path: ["given_name"], type: "string" }],
+                },
+            ] as any;
+
+        // Named like the default namespace: only the child is a claim
+        expect(
+            buildClaimsMetadata(parent(NS), NS).map((claim) => claim.path),
+        ).toEqual([[NS, "given_name"]]);
+        // Named like another namespace: an element of the default one
+        expect(
+            buildClaimsMetadata(parent("eu.europa.ec.eudi.pid.1"), NS).map(
+                (claim) => claim.path,
+            ),
+        ).toEqual([
+            [NS, "eu.europa.ec.eudi.pid.1"],
+            [NS, "eu.europa.ec.eudi.pid.1", "given_name"],
+        ]);
+    });
+});
+
+describe("mdocDefaultNamespace", () => {
+    it("is org.iso.18013.5.1 for the mDL and the docType otherwise", () => {
+        expect(mdocDefaultNamespace("org.iso.18013.5.1.mDL")).toBe(
+            "org.iso.18013.5.1",
+        );
+        expect(mdocDefaultNamespace("eu.europa.ec.eudi.pid.1")).toBe(
+            "eu.europa.ec.eudi.pid.1",
+        );
     });
 });
 

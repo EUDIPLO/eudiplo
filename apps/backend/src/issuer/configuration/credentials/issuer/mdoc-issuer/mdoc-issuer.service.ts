@@ -28,7 +28,10 @@ import {
     maintenancePeriodEnd,
 } from "../../domain/maintenance-period.js";
 import { formattedClaimFields } from "../../utils/derive.js";
-import { buildClaimsByNamespace } from "../../utils/index.js";
+import {
+    buildClaimsByNamespace,
+    mdocDefaultNamespace,
+} from "../../utils/index.js";
 import {
     clampCredentialValidityToCertificate,
     roundedCredentialValidity,
@@ -83,7 +86,7 @@ export class MdocIssuerService {
 
         const issuer = new Issuer(docType, mdocContext);
 
-        const defaultNamespace = this.getDefaultNamespace(docType);
+        const defaultNamespace = mdocDefaultNamespace(docType);
         this.addClaimsToIssuer(
             issuer,
             credentialConfiguration.fields as any,
@@ -277,18 +280,6 @@ export class MdocIssuerService {
     }
 
     /**
-     * Get the default namespace for a given docType.
-     */
-    private getDefaultNamespace(docType: string): string {
-        // For mDL, the namespace is typically "org.iso.18013.5.1"
-        if (docType === "org.iso.18013.5.1.mDL") {
-            return "org.iso.18013.5.1";
-        }
-        // For other docTypes, use the docType as namespace
-        return docType;
-    }
-
-    /**
      * Adds the claims per namespace. Claims of fields with a `format` are
      * encoded as `full-date` (tag 1004) or `tdate` (tag 0); fields without
      * one keep their JSON value, so a date stays a text string.
@@ -300,8 +291,11 @@ export class MdocIssuerService {
         defaultNamespace: string,
         inputClaims: Record<string, any>,
     ): void {
-        const claimsByNamespace = buildClaimsByNamespace(fields);
-        const dateFields = formattedClaimFields(fields ?? []);
+        const claimsByNamespace = buildClaimsByNamespace(
+            fields,
+            defaultNamespace,
+        );
+        const dateFields = formattedClaimFields(fields ?? [], defaultNamespace);
         let claims = inputClaims;
         if (dateFields.length > 0) {
             // The caller's claims stay JSON: other credentials of the same

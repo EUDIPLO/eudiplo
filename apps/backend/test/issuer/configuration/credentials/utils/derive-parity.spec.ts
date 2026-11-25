@@ -135,14 +135,55 @@ const CASES: Record<string, ClaimFieldDefinition[]> = {
         { path: ["neg", -1], type: "string" },
         { path: ["huge", Number.MAX_SAFE_INTEGER + 1], type: "string" },
     ],
+    "mdoc fields without a namespace": [
+        { path: ["given_name"], type: "string", defaultValue: "Erika" },
+        { path: ["org.example.1", "rank"], type: "string" },
+        {
+            path: ["address"],
+            type: "object",
+            children: [
+                { path: ["street"], type: "string", defaultValue: "Main" },
+            ],
+        },
+    ],
 };
 
 describe("derive parity with the backend", () => {
+    it("derives the same mdoc default namespace", () => {
+        for (const docType of ["org.iso.18013.5.1.mDL", NS]) {
+            expect(sdk.mdocDefaultNamespace(docType)).toBe(
+                backend.mdocDefaultNamespace(docType),
+            );
+        }
+    });
+
     for (const [name, fields] of Object.entries(CASES)) {
         describe(name, () => {
             it("builds the same claims metadata", () => {
                 expect(sdk.buildClaimsMetadata(fields)).toEqual(
                     backend.buildClaimsMetadata(fields as never),
+                );
+            });
+
+            it("builds the same claims metadata with a default namespace", () => {
+                expect(
+                    sdk.buildClaimsMetadata(fields, "org.iso.18013.5.1"),
+                ).toEqual(
+                    backend.buildClaimsMetadata(
+                        fields as never,
+                        "org.iso.18013.5.1",
+                    ),
+                );
+            });
+
+            it("builds the same claims by namespace with a default namespace", () => {
+                expect(
+                    sdk.buildClaimsByNamespace(fields, "org.iso.18013.5.1"),
+                ).toEqual(
+                    backend.buildClaimsByNamespace(
+                        fields as never,
+                        "org.iso.18013.5.1",
+                    ),
                 );
             });
 

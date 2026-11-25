@@ -304,6 +304,66 @@ describe("Issuance - Claims Metadata", () => {
         ]);
     });
 
+    test("mDOC fields without a namespace are published in the docType namespace", async () => {
+        // OID4VCI 1.0 Appendix C.2: an mdoc claims path pointer names the
+        // namespace first; the issuer puts these claims in the default one.
+        const credentialConfig: CredentialConfigUpdate = {
+            id: "test-mdoc-default-namespace",
+            description: "mDOC fields without a namespace",
+            config: {
+                format: CredentialFormat.MSO_MDOC,
+                docType: "org.iso.18013.5.1.mDL",
+                display: [{ name: "Test mDL", locale: "en-US" }],
+            },
+            fields: [
+                { path: ["given_name"], type: "string" },
+                {
+                    path: ["driving_privileges"],
+                    type: "array",
+                    children: [
+                        { path: ["vehicle_category_code"], type: "string" },
+                    ],
+                },
+                {
+                    path: ["age_over_18"],
+                    type: "boolean",
+                    namespace: "org.example.1",
+                },
+            ],
+        };
+
+        await request(app.getHttpServer())
+            .post("/issuer/credentials")
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .send(credentialConfig)
+            .expect(201);
+
+        const res = await request(app.getHttpServer())
+            .get("/.well-known/openid-credential-issuer/issuers/root")
+            .trustLocalhost()
+            .set("Accept", "application/json")
+            .expect(200);
+
+        const credConfig =
+            res.body.credential_configurations_supported[
+                "test-mdoc-default-namespace"
+            ];
+        expect(
+            credConfig.credential_metadata.claims.map((c: any) => c.path),
+        ).toEqual([
+            ["org.iso.18013.5.1", "given_name"],
+            ["org.iso.18013.5.1", "driving_privileges"],
+            [
+                "org.iso.18013.5.1",
+                "driving_privileges",
+                null,
+                "vehicle_category_code",
+            ],
+            ["org.example.1", "age_over_18"],
+        ]);
+    });
+
     test("update credential config claims metadata", async () => {
         // First update the credential config with new claims
         const updatePayload: CredentialConfigUpdate = {
