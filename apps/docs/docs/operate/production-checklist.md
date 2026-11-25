@@ -76,7 +76,8 @@ again after major upgrades. Each item links to the guide that explains it.
 
 - [ ] Each application has its own API client with only the roles it needs,
       usually `issuance:offer` and `presentation:request`, limited with
-      `allowedIssuanceConfigs` and `allowedPresentationConfigs`
+      `allowedIssuanceConfigs` and `allowedPresentationConfigs`, and without
+      `clients:manage`, which lifts these limits
       ([Tenants and access](tenants-and-access.md#api-clients-with-least-privilege)).
 - [ ] `tenants:manage` and `tenant:admin` are held only by operators and the
       configuration pipeline ([Roles](../reference/roles.md)).
