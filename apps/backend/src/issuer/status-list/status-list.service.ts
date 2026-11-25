@@ -59,6 +59,7 @@ import { ActiveCredentialSlot } from "./entities/active-credential-slot.entity.j
 import { CredentialWalletUnit } from "./entities/credential-wallet-unit.entity.js";
 import { StatusListEntity } from "./entities/status-list.entity.js";
 import { StatusMapping } from "./entities/status-mapping.entity.js";
+import { assertStatusListCapacity } from "./status-list-capacity.js";
 import { StatusListConfigService } from "./status-list-config.service.js";
 import {
     STATUS_LIST_SETTINGS,
@@ -107,9 +108,6 @@ export interface OutOfRangeStatusEntries {
 
 /** Indexes per query when resolving out-of-range entries to their sessions. */
 const MAPPING_LOOKUP_CHUNK_SIZE = 500;
-
-/** Upper bound for status list capacity; each list is held in memory while it is created. */
-export const MAX_STATUS_LIST_CAPACITY = 1_000_000;
 
 @Injectable()
 export class StatusListService implements OnApplicationBootstrap {
@@ -239,17 +237,7 @@ export class StatusListService implements OnApplicationBootstrap {
     ): Promise<StatusListEntity> {
         const size =
             options?.capacity ?? (await this.getEffectiveCapacity(tenantId));
-        // The capacity comes from API input or tenant configuration and sizes
-        // in-memory arrays, so it must be bounded.
-        if (
-            !Number.isSafeInteger(size) ||
-            size < 1 ||
-            size > MAX_STATUS_LIST_CAPACITY
-        ) {
-            throw new BadRequestException(
-                `Status list capacity must be an integer between 1 and ${MAX_STATUS_LIST_CAPACITY}`,
-            );
-        }
+        assertStatusListCapacity(size);
         // create an empty array with the size
         const elements = new Array(size).fill(0).map(() => 0);
         // create a list of indexes and shuffle them using crypto-secure randomness
@@ -2055,13 +2043,8 @@ export class StatusListService implements OnApplicationBootstrap {
         // Get effective size and bits (from config, tenant defaults, or global defaults)
         const size =
             config.capacity ?? (await this.getEffectiveCapacity(tenantId));
+        assertStatusListCapacity(size);
         const bits = config.bits ?? (await this.getEffectiveBits(tenantId));
-
-        // Create the shuffled stack
-        const elements = new Array(size).fill(0).map(() => 0);
-        const stack = this.shuffleArray(
-            new Array(size).fill(0).map((_, i) => i),
-        );
 
         // Validate keyChainId if provided
         if (config.keyChainId) {
@@ -2077,6 +2060,12 @@ export class StatusListService implements OnApplicationBootstrap {
                 );
             }
         }
+
+        // Create the shuffled stack only after the input has been checked
+        const elements = new Array(size).fill(0).map(() => 0);
+        const stack = this.shuffleArray(
+            new Array(size).fill(0).map((_, i) => i),
+        );
 
         // Save with the provided ID
         await this.statusListRepository.insert({

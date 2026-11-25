@@ -3,14 +3,12 @@ import { DataSource } from "typeorm";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { ClientEntity } from "../../auth/client/entities/client.entity.js";
 import { TenantEntity } from "../../auth/tenant/entities/tenant.entity.js";
+import { MAX_STATUS_LIST_CAPACITY } from "../../shared/domain/status-list-capacity.js";
 import { StatusListValuesOutOfRange } from "./domain/status-value.js";
 import { ActiveCredentialSlot } from "./entities/active-credential-slot.entity.js";
 import { StatusListEntity } from "./entities/status-list.entity.js";
 import { StatusMapping } from "./entities/status-mapping.entity.js";
-import {
-    MAX_STATUS_LIST_CAPACITY,
-    StatusListService,
-} from "./status-list.service.js";
+import { StatusListService } from "./status-list.service.js";
 
 describe("StatusListService SQLite concurrency", () => {
     let dataSource: DataSource;
@@ -113,6 +111,42 @@ describe("StatusListService SQLite concurrency", () => {
                     .findOneByOrFail({ tenantId: "tenant-1", id: "list-1" })
             ).elements,
         ).toEqual([0, 0]);
+    });
+
+    test.each([0, 1.5, MAX_STATUS_LIST_CAPACITY + 1, Number.MAX_SAFE_INTEGER])(
+        "refuses to import a new list with capacity %s before allocating it",
+        async (capacity) => {
+            await expect(
+                service.processStatusListConfig("tenant-1", {
+                    id: "list-2",
+                    capacity,
+                }),
+            ).rejects.toMatchObject({ status: 400 });
+            expect(
+                await dataSource
+                    .getRepository(StatusListEntity)
+                    .findOneBy({ tenantId: "tenant-1", id: "list-2" }),
+            ).toBeNull();
+        },
+    );
+
+    test("refuses to import a new list sized by an oversized tenant default", async () => {
+        await dataSource.getRepository(TenantEntity).update(
+            { id: "tenant-1" },
+            {
+                statusListConfig: {
+                    capacity: MAX_STATUS_LIST_CAPACITY + 1,
+                },
+            },
+        );
+        await expect(
+            service.processStatusListConfig("tenant-1", { id: "list-2" }),
+        ).rejects.toMatchObject({ status: 400 });
+        expect(
+            await dataSource
+                .getRepository(StatusListEntity)
+                .findOneBy({ tenantId: "tenant-1", id: "list-2" }),
+        ).toBeNull();
     });
 
     test("detects concurrent allocations while validating a binding update", async () => {

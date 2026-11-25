@@ -120,6 +120,7 @@ import {
     externalKeyIds,
     keyChainSettingsSpec,
 } from "./key-chain-document.js";
+import { newStatusListCapacityIssue } from "./status-list-capacity-issue.js";
 import { UNRESOLVED_PLACEHOLDER } from "./unresolved-placeholder.js";
 
 const OMITTED_FIELDS = new Set([
@@ -667,6 +668,11 @@ export class ConfigBundleService {
                     resource: reference,
                 });
             }
+            const capacityIssue = newStatusListCapacityIssue(
+                result.document,
+                exists,
+            );
+            if (capacityIssue) itemIssues.push(capacityIssue);
             if (
                 exists &&
                 mode !== "create" &&

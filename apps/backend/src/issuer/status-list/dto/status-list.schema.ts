@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+    isStatusListCapacity,
+    STATUS_LIST_CAPACITY_MESSAGE,
+} from "../../../shared/domain/status-list-capacity.js";
 
 export const StatusListImportSchema = z
     .object({
@@ -50,6 +54,7 @@ export const CreateStatusListSchema = z
             .number()
             .int()
             .min(1000)
+            .refine(isStatusListCapacity, STATUS_LIST_CAPACITY_MESSAGE)
             .optional()
             .describe("Optional status list capacity."),
     })
@@ -62,6 +67,7 @@ export const UpdateStatusListConfigSchema = z
             .number()
             .int()
             .min(100)
+            .refine(isStatusListCapacity, STATUS_LIST_CAPACITY_MESSAGE)
             .nullable()
             .optional()
             .describe(

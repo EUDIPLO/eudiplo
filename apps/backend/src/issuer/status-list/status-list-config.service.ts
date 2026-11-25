@@ -13,6 +13,7 @@ import { StatusListConfig } from "../../auth/tenant/entities/status-list-config.
 import { TenantEntity } from "../../auth/tenant/entities/tenant.entity.js";
 import { TokenPayload } from "../../auth/token.decorator.js";
 import { UpdateStatusListConfigDto } from "./dto/update-status-list-config.dto.js";
+import { assertStatusListCapacity } from "./status-list-capacity.js";
 
 /**
  * Service for managing status list configuration per tenant.
@@ -117,6 +118,9 @@ export class StatusListConfigService {
         actorToken?: TokenPayload,
         requestMeta?: AuditLogRequestMeta,
     ): Promise<StatusListConfig> {
+        if (config.capacity !== undefined && config.capacity !== null) {
+            assertStatusListCapacity(config.capacity);
+        }
         const tenant = await this.tenantRepository.findOneByOrFail({
             id: tenantId,
         });

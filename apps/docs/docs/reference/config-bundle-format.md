@@ -431,7 +431,14 @@ dependency order (for example key chains before issuance configs), record
 `file-managed` ownership. Applying needs the `planFingerprint` of the reviewed
 plan; a changed bundle, mode or target state fails with `CONFIG_PLAN_STALE`.
 Status lists keep their capacity and bit size: import a new list ID for a
-different layout.
+different layout. A new list holds at most 1,000,000 statuses: a
+`StatusList` document that would create one with a larger `capacity` is a plan
+error (`STATUS_LIST_CAPACITY_OUT_OF_RANGE`), and a `Tenant` document whose
+`statusListConfig.capacity` is larger fails validation
+(`CURRENT_SCHEMA_VALIDATION_FAILED`). A document for a list that already
+exists keeps its size, also above the limit. A new list without `capacity`
+takes the tenant default; if a stored default is above 1,000,000, applying the
+list fails with `CONFIG_APPLY_FAILED`.
 
 ### Clients with another identity provider
 

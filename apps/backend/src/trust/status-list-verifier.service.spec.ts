@@ -19,7 +19,7 @@ import {
     it,
     vi,
 } from "vitest";
-import { MAX_STATUS_LIST_CAPACITY } from "../issuer/status-list/status-list.service.js";
+import { MAX_STATUS_LIST_CAPACITY } from "../shared/domain/status-list-capacity.js";
 import { mdocContext } from "../verifier/presentations/mdoc-context.js";
 import { OutboundUrlPolicyService } from "../webhook/outbound-url-policy.service.js";
 import { MalformedStatusReferenceError } from "./domain/status-list-reference.js";
