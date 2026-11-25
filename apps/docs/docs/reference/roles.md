@@ -45,7 +45,10 @@ A caller can change or delete a client or person, or rotate a client's
 secret, only if it holds or can grant each of its roles; `tenants:manage` can
 rotate the secret of any client, except a `file-managed` one, which answers
 `409` until a token of the client's tenant
-[detaches](../operate/configuration-as-code.md#configuration-model) it. A change may keep roles the caller cannot
+[detaches](../operate/configuration-as-code.md#configuration-model) it. With
+Keycloak, only clients EUDIPLO manages for a tenant have their secret rotated:
+other clients of the realm, including EUDIPLO's own `OIDC_CLIENT_ID` and
+`AUTH_CLIENT_ID` clients, answer `404`. A change may keep roles the caller cannot
 grant, such as `tenant:admin` for a `tenant:admin` caller, but not add them.
 Only roles count: the caller's own `allowedIssuanceConfigs` and
 `allowedPresentationConfigs` do not limit the lists it sets on a client, so a

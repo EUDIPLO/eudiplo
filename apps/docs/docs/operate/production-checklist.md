@@ -19,9 +19,11 @@ again after major upgrades. Each item links to the guide that explains it.
       environment. The bundled Vault of the `full` preset runs in development
       mode and loses the key on every restart
       ([presets](index.md#presets-and-profiles)).
-- [ ] `AUTH_CLIENT_SECRET` is random. Changing it in the environment later has
-      no effect; rotate it with `POST /api/client/<id>/rotate-secret`
+- [ ] `AUTH_CLIENT_SECRET` is random. With the built-in server, changing it in
+      the environment later has no effect; rotate it with
+      `POST /api/client/<id>/rotate-secret`
       ([Tenants and access](tenants-and-access.md#built-in-oauth2-server)).
+      With Keycloak, change it in the environment and restart.
 - [ ] No default or example credentials remain: database password, RustFS/S3
       keys, Vault token `root`, Grafana `admin`/`admin`, the demo client
       `root`/`root`.
