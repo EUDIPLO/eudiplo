@@ -32,6 +32,23 @@ const VARIABLE_NAME = /^[A-Z0-9_]+$/;
 /** Name of the setting that lists the variables a tenant `kms.json` may use. */
 export const KMS_TENANT_VARIABLES = "KMS_TENANT_VARIABLES";
 
+/**
+ * Credentials the AWS SDK and the Azure identity library read from the
+ * environment for the identity of the instance, with the provider's name.
+ * EUDIPLO declares none of them, so the schema does not refuse them. A file
+ * of a tenant folder cannot name them; the global `kms.json` can, and a
+ * tenant `kms.json` only if the operator lists them.
+ */
+const CLOUD_CREDENTIAL_VARIABLES: ReadonlyMap<string, string> = new Map([
+    ["AWS_ACCESS_KEY_ID", "AWS"],
+    ["AWS_SECRET_ACCESS_KEY", "AWS"],
+    ["AWS_SESSION_TOKEN", "AWS"],
+    ["AWS_CONTAINER_AUTHORIZATION_TOKEN", "AWS"],
+    ["AZURE_CLIENT_SECRET", "Azure"],
+    ["AZURE_CLIENT_CERTIFICATE_PASSWORD", "Azure"],
+    ["AZURE_PASSWORD", "Azure"],
+]);
+
 /** The placeholder scope of every variable `schema` declares. */
 export function declaredPlaceholderScopes(
     schema: Joi.ObjectSchema,
@@ -67,7 +84,8 @@ function declaredScopes(): Map<string, PlaceholderScope> {
  *
  * Variables EUDIPLO declares follow their {@link PlaceholderScope}. Other
  * variables are the operator's own: every file may use them, except a tenant
- * `kms.json`, which needs them listed in `tenantKmsVariables`.
+ * `kms.json`, which needs them listed in `tenantKmsVariables`, and except
+ * {@link CLOUD_CREDENTIAL_VARIABLES} in the other files of a tenant folder.
  */
 export function refusedConfigVariable(
     name: string,
@@ -83,6 +101,10 @@ export function refusedConfigVariable(
         return scope === "global"
             ? undefined
             : `\${${name}} names a setting of EUDIPLO itself, which only the global kms.json can use`;
+    }
+    const provider = CLOUD_CREDENTIAL_VARIABLES.get(name);
+    if (scope === "tenant" && provider) {
+        return `\${${name}} holds the ${provider} credentials of the instance, which a file of a tenant folder cannot use`;
     }
     if (scope === "tenant-kms" && !tenantKmsVariables.has(name)) {
         return `\${${name}} is not listed in ${KMS_TENANT_VARIABLES}, so a tenant kms.json cannot use it`;

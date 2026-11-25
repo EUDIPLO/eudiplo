@@ -27,14 +27,13 @@ import type {
     ConfigMigrationIssue,
     ConfigResourceKind,
 } from "./config-resource.types.js";
+import { holdsUnresolvedPlaceholderAt } from "./document-file.js";
 import {
     importedKeyProblems,
     internalChainProblems,
     isInternalChainWithPrivateKeys,
     keySourceKeyChainType,
 } from "./key-chain-document.js";
-
-import { UNRESOLVED_PLACEHOLDER } from "./unresolved-placeholder.js";
 
 @Injectable()
 export class ConfigDocumentValidationService {
@@ -283,7 +282,7 @@ export class ConfigDocumentValidationService {
         if (
             typeof jwt !== "string" ||
             jwt.length === 0 ||
-            UNRESOLVED_PLACEHOLDER.test(jwt)
+            holdsUnresolvedPlaceholderAt(spec, "/registration_cert/jwt", jwt)
         ) {
             return [];
         }

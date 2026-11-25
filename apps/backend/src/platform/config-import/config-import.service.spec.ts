@@ -54,6 +54,84 @@ describe("ConfigImportService.replacePlaceholders", () => {
         }
     });
 
+    it.each([
+        "${AWS_SECRET_ACCESS_KEY}",
+        "https://attacker.example.com/${AWS_SECRET_ACCESS_KEY}",
+        "${AWS_SECRET_ACCESS_KEY:fallback}",
+        "${AWS_ACCESS_KEY_ID}",
+        "${AWS_SESSION_TOKEN}",
+    ])(
+        "refuses the instance's AWS credentials as %s in a tenant file in every strict mode",
+        (value) => {
+            vi.stubEnv("AWS_ACCESS_KEY_ID", "instance-aws-key-id");
+            vi.stubEnv("AWS_SECRET_ACCESS_KEY", "instance-aws-secret");
+            vi.stubEnv("AWS_SESSION_TOKEN", "instance-aws-session");
+            for (const mode of ["abort", "skip", "ignore"]) {
+                try {
+                    createService({
+                        CONFIG_VARIABLE_STRICT: mode,
+                    }).replacePlaceholders({ webhook: { url: value } });
+                    expect.unreachable("expected the variable to be refused");
+                } catch (error) {
+                    expect((error as Error).message).toMatch(
+                        /AWS credentials of the instance/,
+                    );
+                    expect((error as Error).message).not.toMatch(
+                        /instance-aws|fallback/,
+                    );
+                }
+            }
+        },
+    );
+
+    it("reads $${ in a tenant file as the text ${ and no variable", () => {
+        expect(
+            createService().replacePlaceholders({
+                name: "Hook $${MASTER_SECRET}",
+                url: "https://example.com/?k=$${WEBHOOK_KEY}",
+            }),
+        ).toEqual({
+            name: "Hook ${MASTER_SECRET}",
+            url: "https://example.com/?k=${WEBHOOK_KEY}",
+        });
+    });
+
+    it("hands the plan a file: escaped text stays escaped and a placeholder left unresolved stays one", () => {
+        vi.stubEnv("TEMPLATE_VALUE", "a${WEBHOOK_KEY}b");
+        expect(
+            createService({
+                CONFIG_VARIABLE_STRICT: "ignore",
+            }).replacePlaceholders(
+                {
+                    text: "Hook $${WEBHOOK_KEY}",
+                    filled: "${WEBHOOK_KEY}",
+                    filledWithText: "${TEMPLATE_VALUE}",
+                    open: "${UNSET_VARIABLE}",
+                },
+                "tenant",
+                true,
+            ),
+        ).toEqual({
+            text: "Hook $${WEBHOOK_KEY}",
+            filled: "webhook-key",
+            filledWithText: "a$${WEBHOOK_KEY}b",
+            open: "${UNSET_VARIABLE}",
+        });
+    });
+
+    it("refuses $${MASTER_SECRET} in a tenant kms.json, which has no escaped form", () => {
+        expect(() =>
+            createService().replacePlaceholders(
+                {
+                    providers: [
+                        { id: "vault", vaultToken: "$${MASTER_SECRET}" },
+                    ],
+                },
+                "tenant-kms",
+            ),
+        ).toThrow(/names a setting of EUDIPLO itself/);
+    });
+
     it("resolves only listed variables in a tenant kms.json", () => {
         const service = createService({ KMS_TENANT_VARIABLES: "WEBHOOK_KEY" });
 

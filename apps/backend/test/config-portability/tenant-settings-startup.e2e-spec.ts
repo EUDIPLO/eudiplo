@@ -26,7 +26,9 @@ import { ConfigResourceMetadataEntity } from "../../src/platform/config-portabil
 // turns the startup import off.
 
 const tenants = ["detach-unchanged", "detach-stale", "detach-reset"];
-const description = "Description from info.json";
+// The text `${` is written as `$${` in the file, as an export writes it.
+const description = "Description from info.json, with ${TEXT}";
+const descriptionInFile = "Description from info.json, with $${TEXT}";
 
 function restoreEnvironment(name: string, value: string | undefined): void {
     if (value === undefined) delete process.env[name];
@@ -67,7 +69,7 @@ describe("tenant settings detached from the startup folder", () => {
             mkdirSync(join(configRoot, id), { recursive: true });
             writeFileSync(
                 join(configRoot, id, "info.json"),
-                JSON.stringify({ name: id, description }),
+                JSON.stringify({ name: id, description: descriptionInFile }),
             );
         }
 

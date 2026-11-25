@@ -71,6 +71,8 @@ describe('ConfigDocumentService', () => {
             $schema: 'https://eudiplo.dev/schemas/v1/WebhookEndpointConfigFile.schema.json',
             spec: {
               id: 'hook',
+              // Stored text in its escaped form: no placeholder to set.
+              name: 'Hook $${STORED_TEXT}',
               auth: { config: { value: '${WEBHOOKENDPOINT_HOOK_AUTH_CONFIG_VALUE}' } },
             },
           }),
@@ -111,9 +113,10 @@ describe('ConfigDocumentService', () => {
       await service.downloadWithFeedback('WebhookEndpoint', 'hook');
 
       expect(snackBar.open).toHaveBeenCalledWith(
-        'Configuration downloaded. Its secrets are placeholders: set HOOK_SECRET, HOOK_TOKEN before importing it.',
+        "Configuration downloaded. Its secrets are placeholders (HOOK_SECRET, HOOK_TOKEN): set them in the backend's environment for a config folder, or replace them with the values before importing the file under Config Portability.",
         'Close',
-        { duration: 8000 }
+        // Too long to read in a fixed time: it stays until closed.
+        { duration: 0 }
       );
     });
 

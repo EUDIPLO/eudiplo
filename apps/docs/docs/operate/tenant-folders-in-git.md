@@ -61,7 +61,9 @@ eudiplo config import ./config/acme --instance staging --mode upsert --plan plan
 2. It fills in `${VAR}` placeholders from the variables named in
    `--allow-env` (see below). A placeholder without a value is named in a
    warning and sent as it is; the plan blocks that resource with
-   `SECRET_REQUIRED` until the variable is set and named. In the folder's
+   `SECRET_REQUIRED` until the variable is set and named. One inside a
+   longer value is stored as text, and the plan warns with
+   `PLACEHOLDER_STORED_AS_TEXT`. In the folder's
    `kms.json`, fill in every placeholder: the API accepts none there
    ([placeholders in a tenant `kms.json`](kms.md#placeholders-in-a-tenant-kmsjson)).
    It also refuses a new `pkcs11` provider, new mTLS files and a new `aws-kms`
@@ -89,8 +91,9 @@ for example a CI runner:
 
 - `${VAR}` placeholders resolve only from the variables named in
   `--allow-env` (comma-separated). The CLI reads no other variable, and the
-  option applies to a folder only; a bundle's placeholders are resolved by the
-  server.
+  option applies to a folder only. The server fills in no placeholder of a
+  bundle it receives: the plan blocks a value that is only a placeholder with `SECRET_REQUIRED`
+  ([placeholders and the API](../reference/config-bundle-format.md#placeholders-and-the-api)).
 - `EUDIPLO_TOKEN`, `EUDIPLO_CLIENT_ID` and `EUDIPLO_CLIENT_SECRET` hold the
   CLI's own credentials and are refused in `--allow-env`.
 - The plan or result that `config plan` and `config import` print or save,
@@ -101,8 +104,8 @@ for example a CI runner:
 
 `config import` still stores the filled-in values: review which variables a
 change adds to `--allow-env` before you import it. The startup import fills
-placeholders from the backend's environment, except for the variables that
-configure EUDIPLO itself
+placeholders from the backend's environment, except for the variables a file
+cannot use
 ([variables a file can use](../reference/config-bundle-format.md#variables-a-file-can-use)).
 
 ## Folder imports and the startup import

@@ -247,9 +247,11 @@ for the config folder. The API is
 `GET /api/config-bundles/resources/<kind>/<id>/document`
 ([single resources](../reference/config-bundle-format.md#single-resources)).
 Secrets are `${…}` placeholders, as in a bundle export; the Web Client names
-the environment variables to set before the import. **Choose bundle or
-document** under **Settings > Config Portability** also takes the file and
-plans it like a bundle with that one resource. A key chain document
+the environment variables to set when the file goes into the config folder.
+**Choose bundle or document** under **Settings > Config Portability** also
+takes the file and plans it like a bundle with that one resource; there,
+replace each placeholder with its value first
+([placeholders and the API](../reference/config-bundle-format.md#placeholders-and-the-api)). A key chain document
 contains the private keys of a `db` key chain and needs `tenant:admin` or
 `tenants:manage`.
 

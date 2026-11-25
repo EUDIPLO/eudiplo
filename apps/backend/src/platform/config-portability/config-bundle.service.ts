@@ -13,7 +13,9 @@ import {
 } from "@eudiplo/config-format/config-format.js";
 import {
     type ConfigChange,
+    type ConfigPlaceholder,
     configChanges,
+    escapeConfigPlaceholders,
     stableConfigJson,
 } from "@eudiplo/config-format/config-values.js";
 import { publishableDisplayEntries } from "@eudiplo/config-format/display-entries.js";
@@ -107,6 +109,7 @@ import type {
     ConfigResourceKind,
 } from "./config-resource.types.js";
 import { documentAppliedAsIs } from "./config-source-hash.js";
+import { readDocumentFile } from "./document-file.js";
 import {
     clientDocumentRefusal,
     clientKeptWarning,
@@ -205,6 +208,32 @@ function block(
         item.action = "blocked";
     }
     issues.push(issue);
+}
+
+/**
+ * The values of a resource as an exported document holds them. Stored text is
+ * data, and a file of a tenant folder resolves `${VAR}` from the backend's
+ * environment, so every `${` is written in its escaped form `$${`: placed in
+ * the folder, the export gives back the text and reads no variable. The
+ * placeholders the export itself writes for secrets are added afterwards
+ * (`redact`), except a client's, which its spec already holds. A KMS
+ * configuration has no escaped form and keeps the placeholders of its file.
+ */
+function exportedValues(
+    kind: ConfigResourceKind,
+    id: string,
+    spec: unknown,
+): unknown {
+    if (kind === "KmsConfig") return spec;
+    const escaped = escapeConfigPlaceholders(spec) as Record<string, unknown>;
+    const secret = (spec as Record<string, unknown> | null)?.secret;
+    if (
+        kind === "Client" &&
+        secret === `\${${placeholder("Client", id, "secret")}}`
+    ) {
+        escaped.secret = secret;
+    }
+    return escaped;
 }
 
 function placeholder(
@@ -582,6 +611,10 @@ export class ConfigBundleService {
             const input = this.migrationService.normalize(file);
             const sourceVersion = input.$schema!;
             const result = this.migrationService.upgrade(input);
+            // A document is a file: its values are read here, and no variable
+            // of the backend with them. In a folder bundle the loader has
+            // filled in the placeholders it could.
+            const placeholders = readDocumentFile(result.document);
             upgradedDocuments.push(result.document);
             const exists = await this.exists(
                 tenantId,
@@ -627,7 +660,12 @@ export class ConfigBundleService {
                     ownershipSource.startsWith("folder:")
                 )
             ) {
-                this.collectUnresolvedRequirements(result.document, itemIssues);
+                this.collectUnresolvedRequirements(
+                    result.document,
+                    itemIssues,
+                    placeholders,
+                    !isFolderSource(ownershipSource),
+                );
             }
             // A startup folder import must not fail the whole tenant because
             // one resource diverged; it skips that resource and says how to recover.
@@ -2367,13 +2405,15 @@ export class ConfigBundleService {
         redact = true,
     ): Promise<void> {
         const metadata = await this.ownershipService.get(tenantId, kind, id);
+        const values = exportedValues(kind, id, canonicalize(rawSpec));
         const spec = redact
-            ? this.redact(kind, id, canonicalize(rawSpec), requirements)
-            : canonicalize(rawSpec);
+            ? this.redact(kind, id, values, requirements)
+            : values;
         if (!CONFIG_SINGLETON_IDS[kind]) {
+            // Escaped like every other value: an ID is text a tenant chose.
             (spec as Record<string, unknown>)[
                 kind === "Client" ? "clientId" : "id"
-            ] = id;
+            ] = escapeConfigPlaceholders(id);
         }
         documents.push({
             $schema: schemaUrl(kind),
@@ -2478,15 +2518,22 @@ export class ConfigBundleService {
         tenantId: string,
         documents: ConfigDocument[],
     ): Promise<void> {
-        const rewrite = await this.assetReferenceRewriter(tenantId);
+        const rewrite = await this.assetReferenceRewriter(tenantId, true);
         for (const document of documents) {
             document.spec = rewrite(document.spec) as Record<string, unknown>;
         }
     }
 
-    /** Maps public storage URLs of tenant files back to their bundle filenames. */
+    /**
+     * Maps public storage URLs of tenant files back to their bundle filenames.
+     *
+     * @param forExport the result is an exported document: a filename is the
+     * name the uploader chose, so its `${` is written in the escaped form
+     * like every other stored text (exportedValues).
+     */
     private async assetReferenceRewriter(
         tenantId: string,
+        forExport = false,
     ): Promise<(value: unknown) => unknown> {
         const byId = new Map(
             (await this.files.find({ where: { tenantId } })).map((file) => [
@@ -2497,7 +2544,11 @@ export class ConfigBundleService {
         const rewrite = (value: unknown): unknown => {
             if (typeof value === "string") {
                 const match = /\/storage\/([^/?#]+)(?:[?#].*)?$/.exec(value);
-                return match && byId.has(match[1]) ? byId.get(match[1]) : value;
+                if (!match || !byId.has(match[1])) return value;
+                const filename = byId.get(match[1]);
+                return forExport
+                    ? escapeConfigPlaceholders(filename)
+                    : filename;
             }
             if (Array.isArray(value)) return value.map(rewrite);
             // Leave non-plain values (dates, buffers) of stored entities intact.
@@ -2523,7 +2574,35 @@ export class ConfigBundleService {
     private collectUnresolvedRequirements(
         document: ConfigDocument,
         issues: ConfigMigrationIssue[],
+        placeholders: ConfigPlaceholder[] | undefined,
+        fromRequest: boolean,
     ): void {
+        // Each value once, also when it holds several placeholders.
+        const reported = new Set<string>();
+        for (const { path, placeholder: text, whole } of placeholders ?? []) {
+            if (reported.has(path)) continue;
+            reported.add(path);
+            const resource = { kind: document.kind, id: resourceId(document) };
+            if (whole) {
+                issues.push({
+                    severity: "required-input",
+                    code: "SECRET_REQUIRED",
+                    path: `/spec${path}`,
+                    message: `Resolve ${text} before applying this resource.`,
+                    resource,
+                });
+            } else if (fromRequest) {
+                // Stored as text, as before. A folder file is not warned
+                // about: its loader has reported what it could not fill in.
+                issues.push({
+                    severity: "warning",
+                    code: "PLACEHOLDER_STORED_AS_TEXT",
+                    path: `/spec${path}`,
+                    message: `${text} is stored as text: an import through the API reads no environment variable. Replace it with the value, or write $\${ to say that the text \${ is meant.`,
+                    resource,
+                });
+            }
+        }
         const visit = (value: unknown, path: string): void => {
             if (
                 typeof value === "string" &&
@@ -2552,7 +2631,9 @@ export class ConfigBundleService {
                 );
             }
         };
-        visit(document.spec, "/spec");
+        // The placeholders of a document file are listed above; only a KMS
+        // configuration, which is no such file, is searched here.
+        if (!placeholders) visit(document.spec, "/spec");
         if (
             document.kind === "KeyChain" &&
             (document.spec as any).keySource?.type === "required"

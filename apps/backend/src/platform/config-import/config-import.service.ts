@@ -263,10 +263,15 @@ export class ConfigImportService {
      * @param scope where the file lives. It decides which variables the file
      * may name (see config-variable-scope.ts); a file that names another one
      * is rejected, whatever CONFIG_VARIABLE_STRICT says.
+     * @param asFile the result is planned as a configuration bundle, which
+     * reads a file: the escaped form `$${` stays, the values filled in are
+     * escaped, and a placeholder left unresolved stays one, so that the plan
+     * can tell it from text (readDocumentFile).
      */
     replacePlaceholders<T>(
         input: T,
         scope: Exclude<ConfigFileScope, "global"> = "tenant",
+        asFile = false,
     ): T {
         const configured = this.configService.get<any>(
             "CONFIG_VARIABLE_STRICT",
@@ -305,7 +310,13 @@ export class ConfigImportService {
                 return undefined;
             },
         });
-        const result = resolveConfigVariables(input, env);
+        // A kms.json has no escaped form: KmsConfigService reads `$${VAR}` as
+        // a `$` and a placeholder, so the policy must see that variable too.
+        const result = resolveConfigVariables(
+            input,
+            env,
+            scope === "tenant-kms" ? "none" : asFile ? "keep" : "resolve",
+        );
         // In every mode: a refused variable is not a missing one.
         if (refused.size > 0) throw new Error([...refused].join("; "));
         if (strict && result.issues.length)

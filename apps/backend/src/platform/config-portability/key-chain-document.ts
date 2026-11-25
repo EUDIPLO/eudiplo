@@ -6,7 +6,7 @@ import {
 import { privateJwkProblem } from "../../crypto/key/domain/private-jwk.js";
 import type { KeyChainEntity } from "../../crypto/key/entities/key-chain.entity.js";
 import { importedRotationIntervals } from "../../crypto/key/key-chain-import-rotation.js";
-import { holdsUnresolvedPlaceholder } from "./unresolved-placeholder.js";
+import { holdsUnresolvedPlaceholderAt } from "./document-file.js";
 
 type Spec = Record<string, any>;
 
@@ -192,7 +192,7 @@ export function importedKeyProblems(spec: Spec): InternalChainProblem[] {
     if (
         source?.type !== "private-jwk" ||
         isInternalChainWithPrivateKeys(spec) ||
-        holdsUnresolvedPlaceholder(source.jwk)
+        holdsUnresolvedPlaceholderAt(spec, "/keySource/jwk", source.jwk)
     ) {
         return [];
     }

@@ -314,6 +314,37 @@ describe("config plan / import with a tenant folder", () => {
         );
     });
 
+    it("sends the folder as a file: the escaped form stays and a filled-in value is escaped", async () => {
+        context.env.PORTAL_SECRET = "pa${NOT_A_PLACEHOLDER}ss";
+        await writeJson(join(tenant, "clients", "portal.json"), {
+            clientId: "portal",
+            secret: "${PORTAL_SECRET}",
+            // Text an export wrote in its escaped form.
+            description: "Portal $${PORTAL_SECRET}",
+            roles: ["issuance:manage"],
+        });
+
+        const code = await runPortabilityCommand(
+            "plan",
+            config,
+            {
+                positionals: ["acme"],
+                flags: { "allow-env": "PORTAL_SECRET" },
+            },
+            context,
+        );
+
+        expect(code).toBe(0);
+        const bundle = await sentBundle(
+            vi.mocked(context.fetch).mock.calls[0][1],
+        );
+        // The API reads `$${` as `${`, so neither value is a placeholder there.
+        expect(bundle.documents[1].spec).toMatchObject({
+            secret: "pa$${NOT_A_PLACEHOLDER}ss",
+            description: "Portal $${PORTAL_SECRET}",
+        });
+    });
+
     it("keeps a placeholder that --allow-env does not name for the server, without its value", async () => {
         // PORTAL_SECRET is set, but the folder may not read it.
         const code = await runPortabilityCommand(
