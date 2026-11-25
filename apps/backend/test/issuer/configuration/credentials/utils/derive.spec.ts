@@ -23,6 +23,28 @@ function compile(fields: ClaimFieldDefinition[]) {
 }
 
 describe("buildClaimsByNamespace", () => {
+    it("keeps the namespace a child names itself", () => {
+        expect(
+            buildClaimsByNamespace([
+                {
+                    namespace: "eu.europa.ec.eudi.pid.1",
+                    path: ["place_of_birth"],
+                    type: "object",
+                    children: [
+                        {
+                            path: ["country"],
+                            type: "string",
+                            namespace: "org.example.1",
+                            defaultValue: "DE",
+                        },
+                    ],
+                },
+            ] as any),
+        ).toEqual({
+            "org.example.1": { place_of_birth: { country: "DE" } },
+        });
+    });
+
     it("infers the namespace from the first path segment when namespace is omitted", () => {
         const claimsByNamespace = buildClaimsByNamespace([
             {
@@ -345,6 +367,27 @@ describe("buildJsonSchema", () => {
 });
 
 describe("buildClaimsMetadata", () => {
+    it("names the namespace once when the path already starts with it", () => {
+        const fields = [
+            {
+                namespace: "eu.europa.ec.eudi.pid.1",
+                path: ["eu.europa.ec.eudi.pid.1", "address"],
+                type: "object",
+                children: [{ path: ["street"], type: "string" }],
+            },
+            {
+                namespace: "eu.europa.ec.eudi.pid.1",
+                path: ["eu.europa.ec.eudi.pid.1"],
+                type: "string",
+            },
+        ] as any;
+
+        expect(buildClaimsMetadata(fields).map((claim) => claim.path)).toEqual([
+            ["eu.europa.ec.eudi.pid.1", "address"],
+            ["eu.europa.ec.eudi.pid.1", "address", "street"],
+        ]);
+    });
+
     it("publishes array element steps as claims path pointers", () => {
         expect(
             buildClaimsMetadata([
