@@ -44,6 +44,7 @@ function flattenFields(fields: ClaimFieldDefinition[]): ClaimFieldDefinition[] {
             const resolvedChildren: ClaimFieldDefinition[] = children.map(
                 (child) => ({
                     ...child,
+                    namespace: child.namespace ?? field.namespace,
                     path: resolveChildPath(field.path, field.type, child.path),
                 }),
             );

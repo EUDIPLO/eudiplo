@@ -61,6 +61,29 @@ describe("buildClaimsByNamespace", () => {
             },
         });
     });
+
+    it("puts defaults of child fields into the namespace of their parent", () => {
+        const claimsByNamespace = buildClaimsByNamespace([
+            {
+                path: ["place_of_birth"],
+                type: "object",
+                namespace: "eu.europa.ec.eudi.pid.1",
+                children: [
+                    {
+                        path: ["locality"],
+                        type: "string",
+                        defaultValue: "BERLIN",
+                    },
+                ],
+            },
+        ] as any);
+
+        expect(claimsByNamespace).toEqual({
+            "eu.europa.ec.eudi.pid.1": {
+                place_of_birth: { locality: "BERLIN" },
+            },
+        });
+    });
 });
 
 describe("buildJsonSchema", () => {
@@ -312,6 +335,34 @@ describe("buildClaimsMetadata", () => {
             ["places", 0, "city"],
             ["odd", "-1"],
             ["odd", "1.5"],
+        ]);
+    });
+
+    it("prefixes child paths with the namespace of their mdoc parent", () => {
+        expect(
+            buildClaimsMetadata([
+                {
+                    namespace: "eu.europa.ec.eudi.pid.1",
+                    path: ["place_of_birth"],
+                    type: "object",
+                    children: [
+                        { path: ["locality"], type: "string" },
+                        { path: ["country"], type: "string" },
+                    ],
+                },
+                {
+                    namespace: "eu.europa.ec.eudi.pid.1",
+                    path: ["nationality"],
+                    type: "array",
+                    children: [{ path: [null], type: "string" }],
+                },
+            ]).map((claim) => claim.path),
+        ).toEqual([
+            ["eu.europa.ec.eudi.pid.1", "place_of_birth"],
+            ["eu.europa.ec.eudi.pid.1", "place_of_birth", "locality"],
+            ["eu.europa.ec.eudi.pid.1", "place_of_birth", "country"],
+            ["eu.europa.ec.eudi.pid.1", "nationality"],
+            ["eu.europa.ec.eudi.pid.1", "nationality", null],
         ]);
     });
 });
