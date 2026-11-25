@@ -68,7 +68,8 @@ AUTH_CLIENT_SECRET=<secret>
 EUDIPLO validates access tokens against the issuer `OIDC_INTERNAL_ISSUER_URL`
 (default: `OIDC`) and loads the signing keys from
 `<issuer>/protocol/openid-connect/certs`. Leave it unset unless the `iss` of
-your tokens differs from `OIDC`.
+your tokens differs from `OIDC`. The keys are fetched and kept as for
+[other OIDC providers](oidc-provider.md).
 
 `OIDC_AUDIENCE` is off by default: Keycloak access tokens carry `aud: account`.
 To require your own audience, create a client scope with an **Audience** mapper

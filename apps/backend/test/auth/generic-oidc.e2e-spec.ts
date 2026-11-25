@@ -44,8 +44,11 @@ describe("Generic OIDC provider (e2e)", () => {
             issuer?: string;
             foreignKey?: boolean;
             typ?: string;
+            kid?: string | null;
         },
     ) => Promise<string>;
+    /** Requests the provider's key set has answered. */
+    let keySetFetches = 0;
 
     const as = (token: string) => ({
         get: (path: string) =>
@@ -83,6 +86,7 @@ describe("Generic OIDC provider (e2e)", () => {
                 },
                 "/application/o/eudiplo/jwks/": { keys: [jwk] },
             };
+            if (req.url === "/application/o/eudiplo/jwks/") keySetFetches++;
             const document = documents[req.url ?? ""];
             res.writeHead(document ? 200 : 404, {
                 "content-type": "application/json",
@@ -98,7 +102,9 @@ describe("Generic OIDC provider (e2e)", () => {
             new SignJWT(claims)
                 .setProtectedHeader({
                     alg: "RS256",
-                    kid: "key-1",
+                    ...(options.kid !== null && {
+                        kid: options.kid ?? "key-1",
+                    }),
                     ...(options.typ && { typ: options.typ }),
                 })
                 .setIssuer(options.issuer ?? issuer)
@@ -413,6 +419,44 @@ describe("Generic OIDC provider (e2e)", () => {
         const response = await as(token).get("/session/stats");
 
         expect(response.status).toBe(401);
+    });
+
+    test("does not fetch the key set for every unknown kid, and keeps accepting valid tokens", async () => {
+        const claims = {
+            sub: "person-1",
+            tenant_id: TENANT,
+            eudiplo: { roles: [Role.SessionsRead] },
+        };
+        // The key set is cached after the first valid token.
+        await as(await sign(claims))
+            .get("/auth/me")
+            .expect(200);
+        const before = keySetFetches;
+
+        for (let i = 0; i < 10; i++) {
+            const token = await sign(claims, { kid: `random-${i}` });
+            const response = await as(token).get("/auth/me");
+            expect(response.status).toBe(401);
+        }
+
+        // At most one fetch, whatever the number of unknown kids.
+        expect(keySetFetches - before).toBeLessThanOrEqual(1);
+        await as(await sign(claims))
+            .get("/auth/me")
+            .expect(200);
+    });
+
+    test("accepts a token without kid while the provider has one key", async () => {
+        const token = await sign(
+            {
+                sub: "person-1",
+                tenant_id: TENANT,
+                eudiplo: { roles: [Role.SessionsRead] },
+            },
+            { kid: null },
+        );
+
+        await as(token).get("/auth/me").expect(200);
     });
 
     test("names a bearer token that is no JWT", async () => {

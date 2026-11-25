@@ -1,11 +1,16 @@
-import { Inject, Injectable, UnauthorizedException } from "@nestjs/common";
+import {
+    Inject,
+    Injectable,
+    Logger,
+    UnauthorizedException,
+} from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { PassportStrategy } from "@nestjs/passport";
 import { decodeProtectedHeader } from "jose";
-import { passportJwtSecret } from "jwks-rsa";
-import { ExtractJwt, Strategy } from "passport-jwt";
+import { ExtractJwt, type SecretOrKeyProvider, Strategy } from "passport-jwt";
 import { OutboundUrlPolicyService } from "../webhook/outbound-url-policy.service.js";
 import { jwksFetcher } from "./adapters/jwks-fetcher.js";
+import { JwksKeySet } from "./adapters/jwks-key-set.js";
 import {
     AUTH_SETTINGS,
     type AuthSettings,
@@ -82,6 +87,8 @@ export function externalTokenChecks(
     };
 }
 
+const jwksLogger = new Logger("JwksKeySet");
+
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
     /** The external provider, or undefined for the built-in server. */
@@ -122,24 +129,39 @@ export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
         checks: ExternalTokenChecks,
         outboundUrlPolicy: OutboundUrlPolicyService,
     ) {
-        const keyProvider = passportJwtSecret({
-            cache: true,
-            rateLimit: true,
-            jwksRequestsPerMinute: 5,
+        const keySet = new JwksKeySet({
             jwksUri: checks.jwksUri,
             fetcher: jwksFetcher(outboundUrlPolicy, checks.trustedOrigins),
-            handleSigningKeyError: (err, cb) => {
-                console.error("❌ JWKS error of the identity provider:", err);
-                if (err instanceof Error) {
-                    return cb(err);
-                }
-                return cb(
-                    new Error(
-                        "Could not get the signing key from the identity provider",
-                    ),
-                );
-            },
+            onFetchError: (error) =>
+                jwksLogger.warn(
+                    `Could not fetch the key set of the identity provider: ${error instanceof Error ? error.message : String(error)}`,
+                ),
         });
+        const keyProvider: SecretOrKeyProvider = (
+            _request,
+            rawJwtToken,
+            done,
+        ) => {
+            let kid: string | undefined;
+            try {
+                const header = decodeProtectedHeader(rawJwtToken as string);
+                kid = typeof header.kid === "string" ? header.kid : undefined;
+            } catch {
+                // A token whose header cannot be read names no key; it fails
+                // in the signature check with the generic reason.
+            }
+            keySet.getKey(kid).then(
+                (key) => done(null, key),
+                (error: unknown) =>
+                    done(
+                        error instanceof Error
+                            ? error
+                            : new Error(
+                                  "Could not get the signing key from the identity provider",
+                              ),
+                    ),
+            );
+        };
         return {
             secretOrKeyProvider:
                 JwtStrategy.refusingOtherTokenTypes(keyProvider),
@@ -157,8 +179,8 @@ export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
      * answers with the reason.
      */
     private static refusingOtherTokenTypes(
-        keyProvider: ReturnType<typeof passportJwtSecret>,
-    ): ReturnType<typeof passportJwtSecret> {
+        keyProvider: SecretOrKeyProvider,
+    ): SecretOrKeyProvider {
         return (request, rawJwtToken, done) => {
             let header: { typ?: unknown } | undefined;
             try {
