@@ -57,6 +57,8 @@ export function flattenFields(fields: ClaimFieldDefinition[]): ClaimFieldDefinit
     if (children && children.length > 0) {
       const resolvedChildren: ClaimFieldDefinition[] = children.map((child) => ({
         ...child,
+        // An mdoc child lives in the namespace of its parent unless it names its own.
+        namespace: child.namespace ?? field.namespace,
         path: resolveChildPath(field.path, field.type, child.path),
       }));
       result.push(...flattenFields(resolvedChildren));
@@ -303,6 +305,10 @@ export function buildClaimsMetadata(fields: ClaimFieldDefinition[]): ClaimMetada
       const metadata: ClaimMetadata = {
         path: field.path,
       };
+      // mdoc claims path pointers start with the namespace (OID4VCI 1.0 Appendix C.2).
+      if (field.namespace) {
+        metadata.path = [field.namespace, ...metadata.path];
+      }
 
       if (typeof field.mandatory === "boolean") {
         metadata.mandatory = field.mandatory;
