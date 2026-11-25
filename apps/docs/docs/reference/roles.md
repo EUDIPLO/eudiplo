@@ -47,6 +47,10 @@ rotate the secret of any client, except a `file-managed` one, which answers
 `409` until a token of the client's tenant
 [detaches](../operate/configuration-as-code.md#configuration-model) it. A change may keep roles the caller cannot
 grant, such as `tenant:admin` for a `tenant:admin` caller, but not add them.
+Only roles count: the caller's own `allowedIssuanceConfigs` and
+`allowedPresentationConfigs` do not limit the lists it sets on a client, so a
+caller with `clients:manage` is not bound by its own lists
+([API clients with least privilege](../operate/tenants-and-access.md#api-clients-with-least-privilege)).
 With Keycloak, creating a client that takes over an existing Keycloak client of
 the tenant needs both: the caller must be able to manage that client, and grant
 each requested role, since none counts as one the client already has

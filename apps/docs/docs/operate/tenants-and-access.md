@@ -136,6 +136,15 @@ and changes nothing. Updating a credential configuration outside
 ([details](../issuance/credential-configuration.md#revoke-credentials-when-the-policy-changes)).
 The lists do not limit reading the configurations themselves.
 
+The lists limit what the client does with its own token, not what it can hand
+out. A client that also holds `clients:manage` manages the clients of its
+tenant, itself included, by their roles alone
+([granting roles](../reference/roles.md#granting-roles)): it can create a
+client without lists or remove its own, and rotate the secret of a client with
+the same roles but wider lists. Give `clients:manage` only to an application
+you trust with every configuration of the tenant, and keep it off clients you
+limit with these lists.
+
 The web client's client form changes a list only when it can load the
 configurations to choose from: listing credential configurations needs
 `issuance:manage`, listing presentation configurations `presentation:manage` or
