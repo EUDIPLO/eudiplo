@@ -474,6 +474,50 @@ describe("MdocIssuerService namespace merge behavior", () => {
         );
     });
 
+    test("issues child defaults inside the namespace of their parent", () => {
+        const addNamespaceSpy = vi.spyOn(
+            Issuer.prototype as any,
+            "addIssuerNamespace",
+        );
+        const service = createMdocIssuerService() as any;
+        const issuer = new Issuer(defaultNamespace, mdocContext);
+        const parentNamespace = "org.example.place";
+
+        service.addClaimsToIssuer(
+            issuer,
+            [
+                {
+                    namespace: parentNamespace,
+                    path: ["place_of_birth"],
+                    type: "object",
+                    children: [
+                        {
+                            path: ["locality"],
+                            type: "string",
+                            defaultValue: "BERLIN",
+                        },
+                        {
+                            path: ["date"],
+                            type: "string",
+                            format: "date",
+                            defaultValue: "1964-08-12",
+                        },
+                    ],
+                },
+            ],
+            defaultNamespace,
+            {},
+        );
+
+        expect(addNamespaceSpy).toHaveBeenCalledTimes(1);
+        expect(addNamespaceSpy).toHaveBeenCalledWith(parentNamespace, {
+            place_of_birth: {
+                locality: "BERLIN",
+                date: new DateOnly("1964-08-12"),
+            },
+        });
+    });
+
     test("keeps non-default namespaces and enriches only default namespace from fallback claims", () => {
         const addNamespaceSpy = vi.spyOn(
             Issuer.prototype as any,

@@ -241,6 +241,69 @@ describe("Issuance - Claims Metadata", () => {
         expect(givenNameClaim).toBeDefined();
     });
 
+    test("publish mDOC child claims under the namespace of their parent", async () => {
+        const credentialConfig: CredentialConfigUpdate = {
+            id: "test-mdoc-nested-claims",
+            description: "Test mDOC credential with nested claims",
+            config: {
+                format: CredentialFormat.MSO_MDOC,
+                docType: "org.test.claims.1",
+                display: [{ name: "Nested mDOC Credential", locale: "en-US" }],
+            },
+            fields: [
+                {
+                    path: ["place_of_birth"],
+                    type: "object",
+                    namespace: "org.test.claims",
+                    children: [
+                        {
+                            path: ["locality"],
+                            type: "string",
+                            defaultValue: "BERLIN",
+                        },
+                    ],
+                },
+                {
+                    path: ["nationality"],
+                    type: "array",
+                    namespace: "org.test.claims",
+                    defaultValue: ["DE"],
+                    children: [{ path: [null], type: "string" }],
+                },
+            ],
+        };
+
+        await request(app.getHttpServer())
+            .post("/issuer/credentials")
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .send(credentialConfig)
+            .expect(201);
+
+        const res = await request(app.getHttpServer())
+            .get("/.well-known/openid-credential-issuer/issuers/root")
+            .trustLocalhost()
+            .set("Accept", "application/json")
+            .expect(200);
+
+        // A claim path into an mdoc must start with the namespace
+        // (OID4VCI 1.0 Appendix C.2); otherwise the configuration is not
+        // published and credential requests for it fail.
+        const credConfig =
+            res.body.credential_configurations_supported[
+                "test-mdoc-nested-claims"
+            ];
+        expect(credConfig).toBeDefined();
+        expect(
+            credConfig.credential_metadata.claims.map((c: any) => c.path),
+        ).toEqual([
+            ["org.test.claims", "place_of_birth"],
+            ["org.test.claims", "place_of_birth", "locality"],
+            ["org.test.claims", "nationality"],
+            ["org.test.claims", "nationality", null],
+        ]);
+    });
+
     test("update credential config claims metadata", async () => {
         // First update the credential config with new claims
         const updatePayload: CredentialConfigUpdate = {

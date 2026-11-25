@@ -76,13 +76,49 @@ describe("buildClaimsByNamespace", () => {
                     },
                 ],
             },
-        ] as any);
+        ]);
 
         expect(claimsByNamespace).toEqual({
             "eu.europa.ec.eudi.pid.1": {
                 place_of_birth: { locality: "BERLIN" },
             },
         });
+    });
+});
+
+describe("child namespace inheritance", () => {
+    const fields: ClaimFieldDefinition[] = [
+        {
+            namespace: "eu.europa.ec.eudi.pid.1",
+            path: ["residence"],
+            type: "object",
+            children: [
+                {
+                    path: ["address"],
+                    type: "object",
+                    children: [
+                        {
+                            path: ["street"],
+                            type: "string",
+                            defaultValue: "MAIN ST",
+                        },
+                    ],
+                },
+            ],
+        },
+    ];
+
+    it("passes the namespace on to grandchildren", () => {
+        expect(buildClaimsByNamespace(fields)).toEqual({
+            "eu.europa.ec.eudi.pid.1": {
+                residence: { address: { street: "MAIN ST" } },
+            },
+        });
+        expect(buildClaimsMetadata(fields).map((claim) => claim.path)).toEqual([
+            ["eu.europa.ec.eudi.pid.1", "residence"],
+            ["eu.europa.ec.eudi.pid.1", "residence", "address"],
+            ["eu.europa.ec.eudi.pid.1", "residence", "address", "street"],
+        ]);
     });
 });
 
@@ -806,6 +842,28 @@ describe("claim field format", () => {
                 path: ["history", null, "at"],
                 namespace: "history",
                 namespacePath: [null, "at"],
+            },
+        ]);
+    });
+
+    it("gives a formatted child the namespace of its mdoc parent", () => {
+        expect(
+            formattedClaimFields([
+                {
+                    namespace: "eu.europa.ec.eudi.pid.1",
+                    path: ["place_of_birth"],
+                    type: "object",
+                    children: [
+                        { path: ["date"], type: "string", format: "date" },
+                    ],
+                },
+            ]),
+        ).toEqual([
+            {
+                format: "date",
+                path: ["place_of_birth", "date"],
+                namespace: "eu.europa.ec.eudi.pid.1",
+                namespacePath: ["place_of_birth", "date"],
             },
         ]);
     });

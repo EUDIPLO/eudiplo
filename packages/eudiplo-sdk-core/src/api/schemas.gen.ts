@@ -4991,7 +4991,7 @@ export const ClaimFieldDefinitionDtoSchema = {
         },
         namespace: {
             type: 'string',
-            description: 'Namespace for mDOC field. Optional when the namespace is already present as the first path segment.',
+            description: 'Namespace for mDOC field. When omitted, a child field takes the namespace set on its parent; otherwise the first segment of a nested path is used (for a child, its full path including the parent). Set it on every top-level field: a default value without a namespace is not issued.',
             example: 'eu.europa.ec.eudi.pid.1'
         },
         display: {
