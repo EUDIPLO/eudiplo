@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { schemaUrl } from "@eudiplo/config-format/config-format.js";
 import { describe, expect, it } from "vitest";
 import { CLOUD_CREDENTIAL_VARIABLES } from "../src/commands/config/validate/validator.js";
 import { runCli } from "../src/runtime.js";
@@ -367,6 +368,82 @@ describe("eudiplo config validate tenant(s)", () => {
         expect(code).toBe(0);
         expect(output.stdout).not.toContain("Unresolved placeholder");
         expect(output.stdout).not.toContain("UNSET");
+    });
+
+    it("checks a value at its maximum length that contains $${ as the value", async () => {
+        const { context, output, cwd } = await createContext();
+        const tenantDir = join(cwd, "root");
+        await writeTenantInfo(tenantDir, { name: "Root Tenant" });
+        // 1000 characters as a value, the maximum; 1001 as the file writes it.
+        const description = `${"x".repeat(989)}$\${VARIABLE}`;
+        const anchor = (text: string) => ({
+            id: "anchor",
+            entityId: "https://anchor.example",
+            description: text,
+            jwks: { keys: [{ kty: "EC", kid: "anchor-key" }] },
+        });
+        await writeResource(
+            tenantDir,
+            "federation-trust-anchors",
+            "anchor.json",
+            anchor(description),
+        );
+
+        expect(
+            await runCli(["config", "validate", "tenant", tenantDir], context),
+        ).toBe(0);
+        expect(output.stdout).not.toContain("Unresolved placeholder");
+
+        output.stdout = "";
+        await writeResource(
+            tenantDir,
+            "federation-trust-anchors",
+            "anchor.json",
+            anchor(`x${description}`),
+        );
+        expect(
+            await runCli(["config", "validate", "tenant", tenantDir], context),
+        ).toBe(1);
+        expect(output.stdout).toContain("description");
+    });
+
+    it("checks a value at its maximum length that contains $${ as the value, also in a file with $schema", async () => {
+        const { context, output, cwd } = await createContext();
+        const tenantDir = join(cwd, "root");
+        await writeTenantInfo(tenantDir, { name: "Root Tenant" });
+        const description = `${"x".repeat(989)}$\${VARIABLE}`;
+        const anchor = (text: string) => ({
+            $schema: schemaUrl("FederationTrustAnchor"),
+            metadata: { generation: 1 },
+            spec: {
+                id: "anchor",
+                entityId: "https://anchor.example",
+                description: text,
+                jwks: { keys: [{ kty: "EC", kid: "anchor-key" }] },
+            },
+        });
+        await writeResource(
+            tenantDir,
+            "federation-trust-anchors",
+            "anchor.json",
+            anchor(description),
+        );
+
+        expect(
+            await runCli(["config", "validate", "tenant", tenantDir], context),
+        ).toBe(0);
+
+        output.stdout = "";
+        await writeResource(
+            tenantDir,
+            "federation-trust-anchors",
+            "anchor.json",
+            anchor(`x${description}`),
+        );
+        expect(
+            await runCli(["config", "validate", "tenant", tenantDir], context),
+        ).toBe(1);
+        expect(output.stdout).toContain("description");
     });
 
     it("reads $${ in a kms.json as a $ and a placeholder, which has no escaped form", async () => {
