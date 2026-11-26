@@ -101,6 +101,19 @@ describe("readSecretPolicyFile", () => {
         expect(found[0]).not.toContain("root");
     });
 
+    it("reads the allow-list for placeholders of tenant folders", () => {
+        expect(read({}).templates).toEqual({});
+        expect(
+            read({ templates: { tenant: ["PUBLIC_URL", "SHOP_*"] } }).templates,
+        ).toEqual({ tenant: ["PUBLIC_URL", "SHOP_*"] });
+        expect(
+            issues(() => read({ templates: { tenant: ["shop_url"] } })).join(),
+        ).toMatch(/^templates\.tenant\.0: a template grant/);
+        expect(
+            issues(() => read({ templates: { global: [] } })).join(),
+        ).toMatch(/^templates/);
+    });
+
     it("names invalid JSON and unknown fields", () => {
         expect(issues(() => read("{ not json"))).toEqual([
             "the file is no valid JSON",

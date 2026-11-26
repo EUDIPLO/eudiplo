@@ -2,10 +2,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ConfigImportService } from "./config-import.service.js";
 
 describe("ConfigImportService.replacePlaceholders", () => {
-    function createService(settings: Record<string, string> = {}) {
+    function createService(
+        settings: Record<string, string> = {},
+        templates?: { tenant?: string[] },
+    ) {
         return new ConfigImportService(
             { get: vi.fn((key: string) => settings[key]) } as any,
             {} as any,
+            undefined,
+            undefined,
+            undefined,
+            templates,
         );
     }
 
@@ -83,6 +90,25 @@ describe("ConfigImportService.replacePlaceholders", () => {
             }
         },
     );
+
+    it("resolves only the variables the secret policy lists in a tenant file", () => {
+        const service = createService({}, { tenant: ["PUBLIC_URL"] });
+
+        expect(
+            service.replacePlaceholders({ url: "${PUBLIC_URL}/hook" }),
+        ).toEqual({
+            url: "https://issuer.example.com/hook",
+        });
+        expect(() =>
+            service.replacePlaceholders({ auth: { value: "${WEBHOOK_KEY}" } }),
+        ).toThrow("${WEBHOOK_KEY} is not listed in templates.tenant");
+        // Without templates in the policy, the deny-list decides as before.
+        expect(
+            createService({}, {}).replacePlaceholders({
+                auth: { value: "${WEBHOOK_KEY}" },
+            }),
+        ).toEqual({ auth: { value: "webhook-key" } });
+    });
 
     it("reads $${ in a tenant file as the text ${ and no variable", () => {
         expect(

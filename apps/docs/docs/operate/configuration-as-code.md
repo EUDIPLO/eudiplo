@@ -136,6 +136,8 @@ placeholder fails the import of that tenant while other tenants continue. A
 placeholder cannot name a variable that configures EUDIPLO itself, such as
 `MASTER_SECRET`
 ([variables a file can use](../reference/config-bundle-format.md#variables-a-file-can-use)).
+To allow only the variables you list instead, set `templates.tenant` in the
+[secret policy](secret-references.md#placeholders-in-tenant-folders).
 Restart the backend to apply changed files. The folder layout is listed in the
 [format reference](../reference/config-bundle-format.md#tenant-folder-layout).
 

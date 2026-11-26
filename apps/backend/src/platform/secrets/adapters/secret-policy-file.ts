@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+    type ConfigTemplatePolicy,
+    TEMPLATE_PATTERN,
+} from "../../config/config-template-policy.js";
 import { SecretPolicy } from "../application/secret-policy.js";
 import { SecretPolicyError } from "../domain/secret-errors.js";
 import type { SecretSource } from "../ports/secret-source.js";
@@ -42,6 +46,19 @@ const policyFileSchema = z
             .object({ vault: vaultSourceSchema.optional() })
             .strict()
             .optional(),
+        templates: z
+            .object({
+                tenant: z.array(
+                    z
+                        .string()
+                        .regex(
+                            TEMPLATE_PATTERN,
+                            "a template grant is a variable name of A-Z, 0-9 and _, or a prefix of one ending in *",
+                        ),
+                ),
+            })
+            .strict()
+            .optional(),
     })
     .passthrough();
 
@@ -82,8 +99,9 @@ function vaultAuth(
 
 /**
  * The operator's secret policy file: the sources (`env` always, `vault`
- * when `sources.vault` is set) and the grants of the instance and the
- * tenants.
+ * when `sources.vault` is set), the grants of the instance and the
+ * tenants, and the variables `${VAR}` placeholders of tenant folders may
+ * name (`templates`).
  *
  * @throws SecretPolicyError naming every problem. Messages never quote the
  * file's text.
@@ -91,6 +109,7 @@ function vaultAuth(
 export function readSecretPolicyFile(input: SecretPolicyFileInput): {
     policy: SecretPolicy;
     sources: SecretSource[];
+    templates: ConfigTemplatePolicy;
 } {
     let json: unknown;
     try {
@@ -107,7 +126,7 @@ export function readSecretPolicyFile(input: SecretPolicyFileInput): {
             ),
         );
     }
-    const { sources: sourceSettings, ...grants } = parsed.data;
+    const { sources: sourceSettings, templates, ...grants } = parsed.data;
     const sources: SecretSource[] = [input.envSource(input.env)];
     const vault = sourceSettings?.vault;
     if (vault) {
@@ -128,5 +147,9 @@ export function readSecretPolicyFile(input: SecretPolicyFileInput): {
             ]);
         }
     }
-    return { policy: SecretPolicy.create(grants, sources), sources };
+    return {
+        policy: SecretPolicy.create(grants, sources),
+        sources,
+        templates: templates ? { tenant: templates.tenant } : {},
+    };
 }

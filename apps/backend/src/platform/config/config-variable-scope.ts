@@ -1,5 +1,6 @@
 import type Joi from "joi";
 import { VALIDATION_SCHEMA } from "./combined.schema.js";
+import { templateAllowed } from "./config-template-policy.js";
 
 /**
  * Where a configuration file with `${VAR}` placeholders lives:
@@ -103,11 +104,14 @@ export function settingRefusal(
  * variables are the operator's own: every file may use them, except a tenant
  * `kms.json`, which needs them listed in `tenantKmsVariables`, and except
  * {@link CLOUD_CREDENTIAL_VARIABLES} in the other files of a tenant folder.
+ * When the operator's secret policy lists `tenantTemplates`, the other
+ * files of a tenant folder may use only the variables it lists instead.
  */
 export function refusedConfigVariable(
     name: string,
     scope: ConfigFileScope,
     tenantKmsVariables: ReadonlySet<string> = new Set(),
+    tenantTemplates?: readonly string[],
 ): string | undefined {
     const declaredScope = declaredScopes().get(name);
     if (declaredScope === "any") return undefined;
@@ -119,6 +123,15 @@ export function refusedConfigVariable(
         return `\${${name}} names a setting of EUDIPLO itself, which only the global kms.json can use`;
     }
     if (declaredScope !== undefined) return undefined;
+    if (scope === "tenant" && tenantTemplates) {
+        return templateAllowed(
+            name,
+            tenantTemplates,
+            CLOUD_CREDENTIAL_VARIABLES,
+        )
+            ? undefined
+            : `\${${name}} is not listed in templates.tenant of the secret policy, so a file of a tenant folder cannot use it`;
+    }
     const provider = CLOUD_CREDENTIAL_VARIABLES.get(name);
     if (scope === "tenant" && provider) {
         return `\${${name}} holds the ${provider} credentials of the instance, which a file of a tenant folder cannot use`;

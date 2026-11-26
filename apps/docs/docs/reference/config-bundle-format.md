@@ -382,7 +382,7 @@ identity library read from the environment for the instance:
 | `VAULT_ADDR`, `VAULT_TOKEN`, `AWS_REGION`  | refused             | refused                                         | resolved          |
 | Every other variable of EUDIPLO            | refused             | refused                                         | refused           |
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_CONTAINER_AUTHORIZATION_TOKEN`, `AZURE_CLIENT_SECRET`, `AZURE_CLIENT_CERTIFICATE_PASSWORD`, `AZURE_PASSWORD` | refused | resolved only if listed in `KMS_TENANT_VARIABLES` | resolved |
-| Your own variables                         | resolved            | resolved only if listed in `KMS_TENANT_VARIABLES` | resolved        |
+| Your own variables                         | resolved, or only if listed in `templates.tenant` of the [secret policy](../operate/secret-references.md#placeholders-in-tenant-folders) | resolved only if listed in `KMS_TENANT_VARIABLES` | resolved        |
 
 A file that names a refused variable is rejected, with every value of
 `CONFIG_VARIABLE_STRICT` and also for `${VAR:default}`: in a tenant folder the
