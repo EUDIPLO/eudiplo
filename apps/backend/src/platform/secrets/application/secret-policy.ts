@@ -211,51 +211,16 @@ export class SecretPolicy {
         const refused = source.refusal(reference, scope.type);
         if (refused) return refused;
         const candidates = this.grantsOf(scope);
-        for (const { grants, tenant } of candidates) {
-            for (const pattern of grants.own.get(source.type) ?? []) {
-                const expanded =
-                    tenant === undefined
-                        ? pattern
-                        : pattern.replaceAll(TENANT_TEMPLATE, tenant);
-                if (source.within(reference, expanded, scope.type))
-                    return undefined;
-            }
-        }
-        const bound = candidates.flatMap(({ grants }) =>
-            grants.bound.filter(
-                (grant) => grant.reference.reference === reference.reference,
-            ),
-        );
-        if (bound.length === 0)
-            return `no grant of ${describeScope(scope)} covers it`;
-        const inField = bound.filter((grant) =>
-            grant.fields.some((field) => fieldMatches(field.parts, use.field)),
-        );
-        if (inField.length === 0)
-            return `${describeScope(scope)} may use it only in ${bound
-                .flatMap((grant) => grant.fields.map((field) => field.text))
-                .join(", ")}, not in ${use.field}`;
-        const target = use.destination ? origin(use.destination) : undefined;
-        if (
-            target !== undefined &&
-            inField.some((grant) => grant.destinations.has(target))
-        )
+        if (inOwnNamespace(reference, source, candidates, scope.type))
             return undefined;
-        const allowed = [
-            ...new Set(inField.flatMap((grant) => [...grant.destinations])),
-        ].join(", ");
-        return `${describeScope(scope)} may send it only to ${allowed}${
-            use.destination ? `, not to ${target ?? "this address"}` : ""
-        }`;
+        return boundRefusal(reference, use, candidates);
     }
 
     /**
      * The grants that apply to `scope`, with the tenant ID `{tenant}`
      * stands for.
      */
-    private grantsOf(
-        scope: SecretScope,
-    ): { grants: Grants; tenant?: string }[] {
+    private grantsOf(scope: SecretScope): Candidates {
         if (scope.type === "instance") return [{ grants: this.instance }];
         if (scope.tenantId === EVERY_TENANT) return [];
         const own = {
@@ -273,6 +238,65 @@ export class SecretPolicy {
             },
         ];
     }
+}
+
+type Candidates = { grants: Grants; tenant?: string }[];
+
+/** Whether `reference` lies inside an own namespace of the candidates. */
+function inOwnNamespace(
+    reference: SecretReference,
+    source: SecretSource,
+    candidates: Candidates,
+    scopeType: SecretScope["type"],
+): boolean {
+    return candidates.some(({ grants, tenant }) =>
+        (grants.own.get(source.type) ?? []).some((pattern) =>
+            source.within(
+                reference,
+                tenant === undefined
+                    ? pattern
+                    : pattern.replaceAll(TENANT_TEMPLATE, tenant),
+                scopeType,
+            ),
+        ),
+    );
+}
+
+/** Why no bound grant of the candidates allows `use`, or undefined. */
+function boundRefusal(
+    reference: SecretReference,
+    use: SecretUse,
+    candidates: Candidates,
+): string | undefined {
+    const scope = describeScope(use.scope);
+    const bound = candidates.flatMap(({ grants }) =>
+        grants.bound.filter(
+            (grant) => grant.reference.reference === reference.reference,
+        ),
+    );
+    if (bound.length === 0) return `no grant of ${scope} covers it`;
+    const inField = bound.filter((grant) =>
+        grant.fields.some((field) => fieldMatches(field.parts, use.field)),
+    );
+    if (inField.length === 0) {
+        const fields = bound
+            .flatMap((grant) => grant.fields.map((field) => field.text))
+            .join(", ");
+        return `${scope} may use it only in ${fields}, not in ${use.field}`;
+    }
+    const target = use.destination ? origin(use.destination) : undefined;
+    if (
+        target !== undefined &&
+        inField.some((grant) => grant.destinations.has(target))
+    )
+        return undefined;
+    const allowed = [
+        ...new Set(inField.flatMap((grant) => [...grant.destinations])),
+    ].join(", ");
+    const actual = use.destination
+        ? `, not to ${target ?? "this address"}`
+        : "";
+    return `${scope} may send it only to ${allowed}${actual}`;
 }
 
 /** Reads and checks the grants of one scope. */
@@ -327,8 +351,12 @@ function ownPatternProblem(
     everyTenant: boolean,
 ): string | undefined {
     const templated = pattern.includes(TENANT_TEMPLATE);
-    if (templated && !(source.tenantTemplates && everyTenant))
-        return `names ${TENANT_TEMPLATE}, which only grants in tenants["${EVERY_TENANT}"]${source.tenantTemplates ? "" : ` of a source other than ${source.type}`} can`;
+    if (templated && !(source.tenantTemplates && everyTenant)) {
+        const which = source.tenantTemplates
+            ? ""
+            : ` of a source other than ${source.type}`;
+        return `names ${TENANT_TEMPLATE}, which only grants in tenants["${EVERY_TENANT}"]${which} can`;
+    }
     // Without a separator after it, the namespace of tenant `a` would hold
     // that of tenant `ab`.
     if (
@@ -419,48 +447,36 @@ function separationIssues(
     scopes: GrantScope[],
     sources: ReadonlyMap<SecretSourceType, SecretSource>,
 ): string[] {
-    const issues: string[] = [];
     const named = scopes.filter((scope) => scope.tenantId !== undefined);
     const everyTenant = scopes.find(
         (scope) => scope.path === `tenants.${EVERY_TENANT}`,
     );
     const instance = scopes.find((scope) => scope.scopeType === "instance");
-    for (const [type, source] of sources) {
+    return [...sources].flatMap(([type, source]) => {
         const own = (scope: GrantScope | undefined) =>
             scope?.grants.own.get(type) ?? [];
         const templates = own(everyTenant);
-        named.forEach((scope, index) => {
-            for (const pattern of own(scope)) {
-                for (const other of named.slice(index + 1))
-                    for (const otherPattern of own(other))
-                        if (source.overlaps(pattern, otherPattern))
-                            issues.push(
-                                `${scope.path}.${type} '${pattern}' and ${other.path}.${type} '${otherPattern}' overlap, so each tenant could name the other's secrets`,
-                            );
-                for (const template of templates) {
-                    const mine = template.replaceAll(
-                        TENANT_TEMPLATE,
-                        scope.tenantId ?? "",
-                    );
-                    if (
-                        source.overlaps(pattern, templateRegion(template)) &&
-                        !(
-                            TENANT_ID_PATTERN.test(scope.tenantId ?? "") &&
-                            source.contains(mine, pattern)
-                        )
-                    )
-                        issues.push(
-                            `${scope.path}.${type} '${pattern}' reaches into the namespaces of other tenants of tenants.${EVERY_TENANT}.${type} '${template}'`,
-                        );
-                }
-            }
-        });
+        const between = named.flatMap((scope, index) =>
+            own(scope).flatMap((pattern) => [
+                ...named
+                    .slice(index + 1)
+                    .flatMap((other) =>
+                        tenantOverlaps(
+                            source,
+                            scope,
+                            pattern,
+                            other,
+                            own(other),
+                        ),
+                    ),
+                ...templates.flatMap((template) =>
+                    templateReach(source, scope, pattern, template),
+                ),
+            ]),
+        );
         // Every tenant namespace: as written, and for a template the set
         // that holds the namespaces of all tenants.
-        const tenantNamespaces: {
-            label: string;
-            pattern: string;
-        }[] = [
+        const namespaces = [
             ...named.flatMap((scope) =>
                 own(scope).map((pattern) => ({
                     label: `${scope.path}.${type} '${pattern}'`,
@@ -472,25 +488,73 @@ function separationIssues(
                 pattern: templateRegion(template),
             })),
         ];
-        for (const { label, pattern } of tenantNamespaces) {
-            for (const instancePattern of own(instance))
-                if (
-                    source.overlaps(pattern, instancePattern) &&
-                    !source.contains(instancePattern, pattern)
+        const outward = namespaces.flatMap(({ label, pattern }) => [
+            ...own(instance)
+                .filter(
+                    (instancePattern) =>
+                        source.overlaps(pattern, instancePattern) &&
+                        !source.contains(instancePattern, pattern),
                 )
-                    issues.push(
+                .map(
+                    (instancePattern) =>
                         `${label} reaches into instance.${type} '${instancePattern}', so a tenant could name secrets of the instance`,
-                    );
-            for (const holder of scopes)
-                for (const grant of holder.grants.bound)
-                    if (
-                        grant.reference.source === type &&
-                        source.within(grant.reference, pattern, "tenant")
-                    )
-                        issues.push(
-                            `${holder.path}.bound: ${grant.reference.reference} lies inside ${label}, where it could be sent anywhere; keep bound secrets out of tenant namespaces`,
-                        );
-        }
-    }
-    return issues;
+                ),
+            ...boundInside(source, scopes, label, pattern),
+        ]);
+        return [...between, ...outward];
+    });
+}
+
+function tenantOverlaps(
+    source: SecretSource,
+    scope: GrantScope,
+    pattern: string,
+    other: GrantScope,
+    otherPatterns: string[],
+): string[] {
+    return otherPatterns
+        .filter((otherPattern) => source.overlaps(pattern, otherPattern))
+        .map(
+            (otherPattern) =>
+                `${scope.path}.${source.type} '${pattern}' and ${other.path}.${source.type} '${otherPattern}' overlap, so each tenant could name the other's secrets`,
+        );
+}
+
+/** A named tenant's pattern reaching beyond its own `{tenant}` namespace. */
+function templateReach(
+    source: SecretSource,
+    scope: GrantScope,
+    pattern: string,
+    template: string,
+): string[] {
+    const tenantId = scope.tenantId ?? "";
+    const mine = template.replaceAll(TENANT_TEMPLATE, tenantId);
+    const insideOwn =
+        TENANT_ID_PATTERN.test(tenantId) && source.contains(mine, pattern);
+    if (!source.overlaps(pattern, templateRegion(template)) || insideOwn)
+        return [];
+    return [
+        `${scope.path}.${source.type} '${pattern}' reaches into the namespaces of other tenants of tenants.${EVERY_TENANT}.${source.type} '${template}'`,
+    ];
+}
+
+/** Bound secrets of any scope that lie inside a tenant namespace. */
+function boundInside(
+    source: SecretSource,
+    scopes: GrantScope[],
+    label: string,
+    pattern: string,
+): string[] {
+    return scopes.flatMap((holder) =>
+        holder.grants.bound
+            .filter(
+                (grant) =>
+                    grant.reference.source === source.type &&
+                    source.within(grant.reference, pattern, "tenant"),
+            )
+            .map(
+                (grant) =>
+                    `${holder.path}.bound: ${grant.reference.reference} lies inside ${label}, where it could be sent anywhere; keep bound secrets out of tenant namespaces`,
+            ),
+    );
 }

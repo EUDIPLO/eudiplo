@@ -152,9 +152,9 @@ describe("SecretPolicy", () => {
         expect(refusal("${env:VAULT_TOKEN}")).toBeUndefined();
         expect(refusal("${env:PUBLIC_URL}")).toMatch(/no grant/);
         expect(refusal("${env:MASTER_SECRET}")).toMatch(/setting of EUDIPLO/);
-        expect(refusal("${vault:kv/eudiplo/instance/kms#token}")).toBe(
-            undefined,
-        );
+        expect(
+            refusal("${vault:kv/eudiplo/instance/kms#token}"),
+        ).toBeUndefined();
         expect(refusal("${vault:kv/eudiplo/tenants/acme/x#t}")).toMatch(
             /no grant of the instance/,
         );
