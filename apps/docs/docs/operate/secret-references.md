@@ -4,8 +4,9 @@ title: Secret References
 
 # Secret References
 
-Keep the API keys of webhook endpoints and attribute providers, and the
-upstream client secrets of chained authorization servers, in a secret store
+Keep the API keys of webhook endpoints and attribute providers, the
+upstream client secrets of chained authorization servers and the credentials
+of KMS providers in a secret store
 instead of in EUDIPLO's database. The value is then a reference such as
 `${vault:kv/eudiplo/acme/shop#token}`, which EUDIPLO reads when it sends a
 request and keeps only in memory.
@@ -22,6 +23,7 @@ written, as in earlier versions.
 | Webhook endpoint   | `auth.config.value` | Each time a webhook is sent            |
 | Attribute provider | `auth.config.value` | Each time claims are fetched           |
 | Issuance configuration | `authorizationServers[].upstream.clientSecret` of a `chained` server | Each time an upstream code is exchanged at the token endpoint |
+| Tenant and global `kms.json` | The credentials of a provider ([KMS](kms.md#secret-references-in-a-tenant-kmsjson)) | When the provider is used; a changed value rebuilds the provider |
 
 The reference must be the whole value. A webhook defined in a session request
 (an offer's `credentialClaims.<id>.webhook`, a presentation request's `webhook`)
@@ -97,7 +99,8 @@ only the tenant's own secrets there.
   of the listed origins. Fields are written `<Kind>:<path>`, with `*` for any
   key or array index: `WebhookEndpoint:auth.config.value`,
   `AttributeProvider:auth.config.value`,
-  `IssuanceConfig:authorizationServers.*.upstream.clientSecret`. The URL of an
+  `IssuanceConfig:authorizationServers.*.upstream.clientSecret`,
+  `KmsConfig:providers.*.vaultToken`. The URL of an
   API key is the endpoint's or provider's `url`. An upstream client secret is
   checked for `upstream.issuer` when it is stored and, when it is sent, also
   for the token endpoint that the issuer's discovery document names: list the

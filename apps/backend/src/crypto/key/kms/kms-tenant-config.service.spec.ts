@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { stubSecretReferences } from "../../../../test/secrets/secret-test-sources.js";
+import type { SecretReferences } from "../../../platform/secrets/application/secret-references.js";
 
 vi.mock("node:fs", () => ({
     existsSync: vi.fn(() => true),
@@ -23,7 +25,7 @@ describe("KmsTenantConfigService", () => {
 
     const resolveTenantConfig = vi.fn();
 
-    function createService() {
+    function createService(secrets?: SecretReferences) {
         const configService = {
             get: vi.fn((key: string) =>
                 key === "CONFIG_FOLDER" ? "/config" : undefined,
@@ -37,6 +39,7 @@ describe("KmsTenantConfigService", () => {
                 resolveTenantConfig,
             } as any,
             { invalidateTenant: vi.fn() } as any,
+            secrets,
         );
     }
 
@@ -305,6 +308,54 @@ describe("KmsTenantConfigService", () => {
                 service.updateTenantConfig("tenant-a", vault("token")),
             ).toThrow("EACCES");
             expect(atomicWriteFileSync).not.toHaveBeenCalled();
+        });
+    });
+
+    describe("secret references", () => {
+        const vault = (vaultToken: string) => ({
+            providers: [
+                {
+                    id: "vault",
+                    type: "vault" as const,
+                    vaultUrl: "https://vault.example.com",
+                    vaultToken,
+                },
+            ],
+        });
+
+        it("does not store a reference outside the tenant's namespace, and reports it to plans", () => {
+            const service = createService(stubSecretReferences().secrets);
+            const update = vault("${vault:kv/eudiplo/other/kms#token}");
+
+            expect(() => service.saveTenantConfig("tenant-a", update)).toThrow(
+                /providers\[0\] \('vault'\)\.vaultToken: .*no grant of tenant 'tenant-a'/,
+            );
+            expect(service.refusedSetting("tenant-a", update)).toEqual({
+                code: "KMS_SETTING_REFUSED",
+                message: expect.stringContaining(
+                    "no grant of tenant 'tenant-a'",
+                ),
+            });
+            expect(atomicWriteFileSync).not.toHaveBeenCalled();
+        });
+
+        it("stores a reference of its own namespace and shows it as written", () => {
+            const reference = "${vault:kv/eudiplo/tenant-a/kms#token}";
+            const service = createService(stubSecretReferences().secrets);
+
+            service.saveTenantConfig("tenant-a", vault(reference));
+
+            expect(atomicWriteFileSync).toHaveBeenCalledWith(
+                expect.any(String),
+                expect.stringContaining(reference),
+            );
+            vi.mocked(existsSync).mockReturnValue(true);
+            vi.mocked(readFileSync).mockReturnValue(
+                JSON.stringify(vault(reference)),
+            );
+            expect(
+                service.getTenantConfigView("tenant-a")?.providers[0],
+            ).toMatchObject({ vaultToken: reference });
         });
     });
 

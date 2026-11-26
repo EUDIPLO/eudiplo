@@ -32,6 +32,8 @@ export const mockKms: {
     curveOverride?: string;
     signCount: number;
     importCount: number;
+    /** `Authorization` header of the last request, when it had one. */
+    lastAuthorization?: string;
 } = {
     signCount: 0,
     importCount: 0,
@@ -63,6 +65,8 @@ async function kmsHandler(
     keyStore: Map<string, StoredKey>,
 ): Promise<void> {
     const parts = (req.url ?? "/").split("/").filter(Boolean);
+    if (req.headers.authorization)
+        mockKms.lastAuthorization = req.headers.authorization;
 
     try {
         // GET /health

@@ -302,6 +302,39 @@ The list is not per tenant: whoever can write a tenant's `kms.json` on disk,
 for example through a Git repository of tenant folders, can use every listed
 variable.
 
+### Secret references in a tenant `kms.json`
+
+With a [secret policy](secret-references.md), a credential of a provider
+(`vaultToken`; `auth.token` and `auth.clientSecret` of `http`; `clientSecret`,
+`sad` and `authorizeAuthData[].value` of `csc`; `secretAccessKey` of
+`aws-kms`; `pin` of `pkcs11`) can be a secret reference such
+as `${vault:kv/eudiplo/acme/kms#token}`. Unlike a `${VAR}` placeholder, the
+tenant may write one through the API, because the policy, not the tenant,
+decides what it may name:
+
+- The tenant chooses both the reference and the server the credential goes to,
+  so only references in its own namespace are accepted. Its own secrets may go
+  to any server the outbound URL policy allows. A secret of the instance or of
+  another tenant is outside its namespace and is refused with `400` (plan issue
+  `KMS_SETTING_REFUSED`). An operator secret it may use only for one server is
+  a `bound` grant, checked against the server the credential is sent to
+  (`vaultUrl`, `baseUrl`, `auth.tokenUrl`, `tokenUrl`; the region's endpoint
+  for `aws-kms`).
+- The reference is checked again each time the credential is used, so one in a
+  file you wrote, or one the policy no longer grants, fails the key operation
+  and nothing is sent.
+- The value is read when the provider is used and cached for 5 minutes. When it
+  changes, EUDIPLO builds the provider anew with the new value; the old one is
+  closed after the grace period running operations get.
+- `GET /api/key-chain/providers/config` shows a reference as written; a literal
+  credential stays `<redacted>`.
+- `KMS_TENANT_VARIABLES`, `KMS_TENANT_FILES`, the AWS default credentials and
+  the outbound URL policy keep their rules: a reference is no `${VAR}`
+  placeholder, no file of the host and no server address.
+
+The global `kms.json` can use references too, under the policy's `instance`
+grants.
+
 ### Files and AWS credentials in a tenant `kms.json`
 
 Two kinds of settings make the backend use something of its own host or cloud

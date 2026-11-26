@@ -3,10 +3,17 @@ import { dirname } from "node:path";
 import { atomicWriteFileSync } from "@eudiplo/config-format/config-io.js";
 import {
     BadRequestException,
+    Inject,
     Injectable,
     NotFoundException,
+    Optional,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import {
+    SECRET_REFERENCES,
+    SecretReferences,
+} from "../../../platform/secrets/application/secret-references.js";
+import { assertSecretFieldAllowed } from "../../../platform/secrets/secret-reference-request.js";
 import {
     type KmsConfig,
     parseRawKmsConfig,
@@ -25,6 +32,10 @@ import {
     redactKmsConfig,
     restoreKmsSecrets,
 } from "./kms-config-secrets.js";
+import {
+    kmsCredentials,
+    kmsCredentialUse,
+} from "./kms-credential-references.js";
 import { KmsProviderRegistry } from "./kms-provider.registry.js";
 import { KMS_TENANT_RESTRICTION_CODES } from "./kms-tenant-restrictions.js";
 
@@ -40,7 +51,41 @@ export class KmsTenantConfigService {
         private readonly configService: ConfigService,
         private readonly kmsConfigService: KmsConfigService,
         private readonly kmsProviderRegistry: KmsProviderRegistry,
+        @Optional()
+        @Inject(SECRET_REFERENCES)
+        private readonly secrets: SecretReferences = new SecretReferences(),
     ) {}
+
+    /** Whether a credential value is shown: a secret reference, no secret. */
+    private readonly shown = (value: string) => this.secrets.isShown(value);
+
+    /**
+     * Refuses a credential that is a secret reference this tenant's policy
+     * does not let it name, for the address the provider sends it to. The
+     * tenant writes both the reference and that address, so a reference
+     * outside its own namespace, or bound to another address, is refused.
+     *
+     * @throws BadRequestException naming the credential
+     */
+    private assertCredentialReferences(
+        tenantId: string,
+        config: KmsConfig,
+    ): void {
+        config.providers.forEach((provider, index) => {
+            for (const credential of kmsCredentials(provider))
+                assertSecretFieldAllowed(
+                    this.secrets,
+                    credential.value,
+                    kmsCredentialUse(
+                        { type: "tenant", tenantId },
+                        index,
+                        provider,
+                        credential.path,
+                    ),
+                    `providers[${index}] ('${provider.id}').${credential.path.join(".")}`,
+                );
+        });
+    }
 
     /**
      * The tenant's own `kms.json`, or null when it has none. A tenant whose ID
@@ -97,7 +142,13 @@ export class KmsTenantConfigService {
      */
     getTenantConfigView(tenantId: string): KmsConfig | null {
         const config = this.getTenantConfig(tenantId);
-        return config && redactKmsConfig(config, { keepEnvPlaceholders: true });
+        return (
+            config &&
+            redactKmsConfig(config, {
+                keepEnvPlaceholders: true,
+                shown: this.shown,
+            })
+        );
     }
 
     /**
@@ -146,7 +197,8 @@ export class KmsTenantConfigService {
      * may put into a tenant `kms.json`, or undefined: a new `${VAR}`
      * placeholder, a kept one whose variable is unset or may not be used, a
      * new file of the backend's host or one that is not listed, or an
-     * `aws-kms` provider without credentials. For plans; says nothing about
+     * `aws-kms` provider without credentials, or a credential that is a
+     * secret reference the tenant's policy refuses. For plans; says nothing about
      * a configuration that is invalid in another way.
      */
     refusedSetting(
@@ -172,6 +224,13 @@ export class KmsTenantConfigService {
                 return { code: "KMS_SETTING_REFUSED", message: error.message };
             }
             return undefined;
+        }
+        try {
+            this.assertCredentialReferences(tenantId, config as KmsConfig);
+        } catch (error) {
+            if (error instanceof BadRequestException)
+                return { code: "KMS_SETTING_REFUSED", message: error.message };
+            throw error;
         }
         try {
             this.kmsConfigService.resolveTenantConfig(
@@ -245,6 +304,9 @@ export class KmsTenantConfigService {
             }
             throw error;
         }
+        // Every reference, also one the stored file holds: its address may
+        // have changed, or the policy since it was stored.
+        this.assertCredentialReferences(tenantId, validatedConfig);
         // Nothing is written that the tenant could not load afterwards.
         this.kmsConfigService.resolveTenantConfig(
             validatedConfig,

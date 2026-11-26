@@ -2,6 +2,7 @@ import {
     KMS_SECRET_PATHS,
     type KmsConfig,
 } from "../schemas/kms-config.schema.js";
+import { KMS_CREDENTIAL_DESTINATIONS } from "./kms-credential-references.js";
 import {
     HOLDS_ENV_PLACEHOLDER,
     KMS_TENANT_AWS_DEFAULT_CREDENTIALS,
@@ -19,28 +20,12 @@ export const KMS_REDACTED_SECRET = "<redacted>";
 const ENV_PLACEHOLDER = /^\$\{[A-Z0-9_]+\}$/;
 
 /**
- * Settings that name where a credential is sent, by provider type and
- * credential path (relative to the provider, `*` for any array index). A
- * credential sent as {@link KMS_REDACTED_SECRET} is kept only while these stay
- * the same; otherwise whoever may edit the KMS configuration could send the
- * stored credential to a server of their choice without knowing it.
- *
- * `aws-kms` is not listed: the secret access key only signs requests to AWS
- * and is never sent.
+ * A credential sent as {@link KMS_REDACTED_SECRET} is kept only while the
+ * settings that name where it is sent stay the same; otherwise whoever may
+ * edit the KMS configuration could send the stored credential to a server
+ * of their choice without knowing it.
  */
-const CREDENTIAL_DESTINATIONS: Record<string, Record<string, string[]>> = {
-    vault: { vaultToken: ["vaultUrl"] },
-    pkcs11: { pin: ["library"] },
-    http: {
-        "auth.token": ["baseUrl"],
-        "auth.clientSecret": ["auth.tokenUrl"],
-    },
-    csc: {
-        clientSecret: ["tokenUrl"],
-        sad: ["baseUrl"],
-        "authorizeAuthData.*.value": ["baseUrl"],
-    },
-};
+const CREDENTIAL_DESTINATIONS = KMS_CREDENTIAL_DESTINATIONS;
 
 /** A redacted credential was sent for a provider that has no stored value. */
 export class KmsSecretNotStoredError extends Error {
@@ -142,12 +127,18 @@ function mapSecrets(
  */
 export function redactKmsConfig(
     config: KmsConfig,
-    { keepEnvPlaceholders }: { keepEnvPlaceholders: boolean },
+    {
+        keepEnvPlaceholders,
+        shown = () => false,
+    }: {
+        keepEnvPlaceholders: boolean;
+        /** True for a secret reference, which is no secret and kept. */
+        shown?: (value: string) => boolean;
+    },
 ): KmsConfig {
     return mapSecrets(config, (secret) =>
-        keepEnvPlaceholders &&
         typeof secret === "string" &&
-        ENV_PLACEHOLDER.test(secret)
+        ((keepEnvPlaceholders && ENV_PLACEHOLDER.test(secret)) || shown(secret))
             ? secret
             : KMS_REDACTED_SECRET,
     ) as KmsConfig;
