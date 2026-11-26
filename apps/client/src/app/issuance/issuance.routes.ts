@@ -63,6 +63,15 @@ export const credentialConfigRoutes: Routes = [
       ),
     canDeactivate: [unsavedChangesGuard],
   },
+  {
+    path: ':id/copy',
+    loadComponent: () =>
+      import('./credential-config/credential-config-create/credential-config-create.component').then(
+        (m) => m.CredentialConfigCreateComponent
+      ),
+    data: { copy: true },
+    canDeactivate: [unsavedChangesGuard],
+  },
 ];
 
 export const attributeProviderRoutes: Routes = [

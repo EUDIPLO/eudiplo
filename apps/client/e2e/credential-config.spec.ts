@@ -230,6 +230,80 @@ test('keeps optional display fields as loaded and refuses colors and locales wal
   }
 });
 
+test('copies a configuration from its page into a new one', async ({ page, request }) => {
+  test.skip(
+    !hasAuthCredentials,
+    'Set E2E_TENANT_CLIENT_ID and E2E_TENANT_CLIENT_SECRET for tenant flow tests.'
+  );
+  const id = `e2e-copy-source-${Date.now()}`;
+  const copyId = `${id}-copy`;
+  const url = `${resolvedE2EConfig.apiBaseUrl}/api/issuer/credentials`;
+  const headers = { Authorization: `Bearer ${await tenantToken(request)}` };
+  const display = [{ name: 'Membership', description: 'Member card', locale: 'en-US' }];
+  await writeConfig(
+    () =>
+      request.post(url, {
+        headers,
+        data: {
+          id,
+          description: 'Copy source',
+          vct: `urn:${id}`,
+          config: { format: 'dc+sd-jwt', display },
+          fields: [],
+        },
+      }),
+    `create ${id}`
+  );
+
+  try {
+    await page.goto(`/credential-config/${id}`);
+    await page.getByRole('button', { name: 'Copy credential config' }).click();
+    await expect(page).toHaveURL(new RegExp(`/credential-config/${id}/copy$`));
+    await expect(
+      page.getByRole('heading', { name: 'Copy Credential Config', level: 1 })
+    ).toBeVisible();
+    const idField = page.getByRole('textbox', { name: 'Configuration ID' });
+    await expect(idField).toHaveValue(copyId);
+    await expect(idField).toBeEditable();
+
+    await page.getByRole('button', { name: 'Create Configuration' }).click();
+    await expect(page).toHaveURL(new RegExp(`/credential-config/${copyId}$`));
+
+    const copy = await request.get(`${url}/${copyId}`, { headers });
+    expect(copy.ok(), `GET ${copyId}`).toBe(true);
+    const saved = (await copy.json()) as {
+      description?: string | null;
+      vct?: string;
+      config: { display: unknown[] };
+    };
+    expect(saved.description).toBe('Copy source');
+    expect(saved.vct).toBe(`urn:${id}`);
+    expect(saved.config.display).toEqual(display);
+    // The source stays as it was.
+    const source = await request.get(`${url}/${id}`, { headers });
+    expect(source.ok(), `GET ${id}`).toBe(true);
+    expect(await source.json()).toMatchObject({
+      id,
+      description: 'Copy source',
+      vct: `urn:${id}`,
+      config: { display },
+    });
+
+    // A second copy does not take the first copy's ID, and refuses it when typed.
+    await page.goto(`/credential-config/${id}/copy`);
+    await expect(idField).toHaveValue(`${id}-copy-2`);
+    await idField.fill(copyId);
+    await idField.blur();
+    await expect(
+      page.getByText('A credential config with this ID already exists; creating would replace it.')
+    ).toBeVisible();
+  } finally {
+    await writeConfig(() => request.delete(`${url}/${id}`, { headers }), `delete ${id}`);
+    // Missing when the test failed before the copy was saved.
+    await request.delete(`${url}/${copyId}`, { headers });
+  }
+});
+
 test('creates a configuration whose display has only a name', async ({ page, request }) => {
   test.skip(
     !hasAuthCredentials,
