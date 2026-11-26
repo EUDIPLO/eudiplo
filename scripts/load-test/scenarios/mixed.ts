@@ -57,7 +57,10 @@ export const options = multiScenarioOptions([
         baseRate: envNumber('MIXED_PRESENTATION_RATE', 10),
         pauses: 2,
         thresholds: {
-            'http_req_duration{stage:vp_offer}': ['p(95)<100'],
+            // Twice the single-flow limit, as for the token exchange: the
+            // offer writes the session and its signed request object while
+            // issuance, revocation and status-list writes share the database.
+            'http_req_duration{stage:vp_offer}': ['p(95)<200'],
             'http_req_duration{stage:vp_request_object}': ['p(95)<50'],
             'http_req_duration{stage:vp_response}': ['p(95)<500', 'p(99)<1000'],
             presentation_success: ['count>0'],
