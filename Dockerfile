@@ -72,11 +72,27 @@ RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
          echo "unexpected global packages in the runtime image:" >&2; ls -A /usr/local/lib/node_modules >&2; exit 1; \
        fi
 
+# --- Non-root user ---
+# The backend runs as the node user of the base image (1000:1000), or as the
+# owner of FOLDER when that is not root. The image itself starts as root so the
+# entrypoint can hand data folders that earlier images created as root to that
+# user; it then drops root before node starts. Started with --user or a
+# Kubernetes runAsUser, the entrypoint runs the command as that user unchanged.
+# The folders below are owned by node, so a new named volume mounted on one
+# starts out owned by node too. Group root may write them as well, so a
+# container that runs as root without capabilities (cap_drop: ALL), which the
+# entrypoint leaves as root, can still write them.
+RUN mkdir -p /app/config /app/uploads /app/logs \
+    && chown node:0 /app/config /app/uploads /app/logs \
+    && chmod 0775 /app/config /app/uploads /app/logs
+COPY --chmod=0755 apps/backend/docker-entrypoint.sh /usr/local/bin/eudiplo-entrypoint.sh
+
 # --- HEALTHCHECK ---
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD curl -f http://localhost:3000/health || exit 1
 
 # Run compiled NestJS app
+ENTRYPOINT [ "/usr/local/bin/eudiplo-entrypoint.sh" ]
 CMD [ "node", "dist/main.js" ]
 
 FROM nginx:alpine@sha256:0563c36f94a6d3ec3584161b77859f740f7e20b4853f52c796a864ce6908e8ea AS client

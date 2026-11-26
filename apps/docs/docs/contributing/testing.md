@@ -69,6 +69,18 @@ pnpm --filter @eudiplo/backend test:e2e         # with coverage, as in CI
 
 CI splits the suites across four runners (**E2E Tests (non-OIDF, shard n/4)**), because they share port 3000 and cannot run in parallel on one machine. The **E2E Tests (non-OIDF)** job passes only when every shard passed. Each shard also writes a Vitest blob report, which the **Backend E2E Coverage** job merges with its coverage. The shard jobs also add the `host.testcontainers.internal` hosts entry; locally it is not required.
 
+## Container image
+
+`apps/backend/test/docker/image-user.sh <image>` checks which user the backend
+image runs as and how its entrypoint (`apps/backend/docker-entrypoint.sh`)
+hands data folders to that user. It needs Docker and runs in CI after the image
+build. Run it locally after a change to the entrypoint or the `eudiplo` stage of
+the `Dockerfile`:
+
+```bash
+docker build --target eudiplo -t eudiplo:local . && apps/backend/test/docker/image-user.sh eudiplo:local
+```
+
 ## OIDF conformance testing
 
 The conformance tests run the [OpenID Foundation conformance suite](https://openid.net/certification/about-conformance-suite/) locally and execute its OID4VCI issuer and OID4VP verifier test plans against EUDIPLO. Testcontainers starts the suite (MongoDB, the suite server and its nginx front end on port 8443); the tests start the backend at `https://host.testcontainers.internal:3000`. No public deployment and no hosted suite are needed.
