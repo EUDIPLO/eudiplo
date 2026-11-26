@@ -11,6 +11,7 @@ import {
     ConfigImportOrchestratorService,
     ImportPhase,
 } from "../../../platform/config-import/config-import-orchestrator.service.js";
+import { ResourceIdTaken } from "../../../shared/domain/conflict-error.js";
 import { loadConfigDto } from "../../../shared/utils/config-file-loader.util.js";
 import {
     changedEndpointFields,
@@ -96,6 +97,9 @@ export class AttributeProviderService {
         actorToken?: TokenPayload,
         requestMeta?: AuditLogRequestMeta,
     ) {
+        if (await this.repo.findForTenant(tenantId, dto.id)) {
+            throw new ResourceIdTaken("Attribute provider", dto.id);
+        }
         await this.outboundUrlPolicyService.assertSafeUrl(dto.url);
 
         const saved = await this.repo.save({

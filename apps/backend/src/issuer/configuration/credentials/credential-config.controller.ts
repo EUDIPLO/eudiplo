@@ -65,16 +65,20 @@ export class CredentialConfigController {
     @ApiOperation({ summary: "Create a credential configuration" })
     @ApiBody({ type: CredentialConfigCreate })
     @ApiResponse({ status: 201, type: CredentialConfig })
+    @ApiResponse({
+        status: 409,
+        description:
+            "The tenant already has a credential configuration with this ID. Change it with PATCH.",
+    })
     storeCredentialConfiguration(
         @Body(createConfigBodyPipe(CredentialConfigCreateSchema, { readOnly }))
         config: CredentialConfigCreate,
         @Token() user: TokenPayload,
         @AuditMeta() requestMeta: AuditLogRequestMeta,
     ) {
-        return this.credentialsService.store(
+        return this.credentialsService.create(
             user.entity!.id,
             config,
-            false,
             user,
             requestMeta,
         );

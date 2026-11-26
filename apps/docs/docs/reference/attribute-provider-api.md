@@ -16,7 +16,7 @@ Attribute providers are tenant resources managed with the `issuance:manage` role
 | --- | --- | --- |
 | `GET` | `/api/issuer/attribute-providers` | List providers |
 | `GET` | `/api/issuer/attribute-providers/{id}` | Get one provider |
-| `POST` | `/api/issuer/attribute-providers` | Create a provider |
+| `POST` | `/api/issuer/attribute-providers` | Create a provider; `409` when the tenant already has a provider with this `id` |
 | `PATCH` | `/api/issuer/attribute-providers/{id}` | Update fields of a provider |
 | `DELETE` | `/api/issuer/attribute-providers/{id}` | Delete a provider no credential config uses ([Delete an attribute provider](../issuance/attribute-provider.md#delete-an-attribute-provider)) |
 

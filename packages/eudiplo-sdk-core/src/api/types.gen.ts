@@ -7606,6 +7606,13 @@ export type AttributeProviderControllerCreateData = {
     url: '/api/issuer/attribute-providers';
 };
 
+export type AttributeProviderControllerCreateErrors = {
+    /**
+     * The tenant already has an attribute provider with this ID. Change it with PATCH.
+     */
+    409: unknown;
+};
+
 export type AttributeProviderControllerCreateResponses = {
     /**
      * Attribute provider created
@@ -7716,6 +7723,13 @@ export type CredentialConfigControllerStoreCredentialConfigurationData = {
     url: '/api/issuer/credentials';
 };
 
+export type CredentialConfigControllerStoreCredentialConfigurationErrors = {
+    /**
+     * The tenant already has a credential configuration with this ID. Change it with PATCH.
+     */
+    409: unknown;
+};
+
 export type CredentialConfigControllerStoreCredentialConfigurationResponses = {
     201: CredentialConfig;
 };
@@ -7811,6 +7825,10 @@ export type PresentationManagementControllerStorePresentationConfigErrors = {
      * The configuration is invalid: a field fails validation, a DCQL credential query has no trusted_authorities (unless SKIP_TRUST_AUTHORITY is set), or the imported registration certificate (registration_cert.jwt) is refused because it is not a JWT, is expired or not yet valid, or does not authorize the requested DCQL credentials.
      */
     400: unknown;
+    /**
+     * The tenant already has a presentation configuration with this ID. Change it with PATCH.
+     */
+    409: unknown;
 };
 
 export type PresentationManagementControllerStorePresentationConfigResponses = {
@@ -7987,7 +8005,7 @@ export type TrustListControllerCreateTrustListErrors = {
      */
     400: unknown;
     /**
-     * The body sets no keyChainId, and the tenant has no trustList key chain or the one EUDIPLO picks has no valid certificate
+     * The tenant already has a trust list with the ID in the body (change it with PUT), or the body sets no keyChainId, and the tenant has no trustList key chain or the one EUDIPLO picks has no valid certificate
      */
     409: unknown;
 };
@@ -8851,6 +8869,13 @@ export type WebhookEndpointControllerCreateData = {
     path?: never;
     query?: never;
     url: '/api/issuer/webhook-endpoints';
+};
+
+export type WebhookEndpointControllerCreateErrors = {
+    /**
+     * The tenant already has a webhook endpoint with this ID. Change it with PATCH.
+     */
+    409: unknown;
 };
 
 export type WebhookEndpointControllerCreateResponses = {

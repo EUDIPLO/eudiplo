@@ -62,6 +62,11 @@ export class AttributeProviderController {
         description: "Attribute provider created",
         type: AttributeProviderEntity,
     })
+    @ApiResponse({
+        status: 409,
+        description:
+            "The tenant already has an attribute provider with this ID. Change it with PATCH.",
+    })
     @ApiBody({ type: CreateAttributeProviderDto })
     async create(
         @Body() dto: CreateAttributeProviderDto,

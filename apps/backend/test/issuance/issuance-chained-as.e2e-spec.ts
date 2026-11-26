@@ -1087,7 +1087,13 @@ describe("Issuance - Chained AS Flow", () => {
         "$type authorization server answers a rejected wallet attestation with invalid_client",
         async ({ type, path }) => {
             setupUpstreamOidcMocks();
-            if (type === "oid4vp") {
+            // An earlier test may have created it; a create refuses a taken ID.
+            const stored = await request(app.getHttpServer())
+                .get("/verifier/config/pid-no-hook")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`);
+            expect([200, 404]).toContain(stored.status);
+            if (type === "oid4vp" && stored.status === 404) {
                 await request(app.getHttpServer())
                     .post("/verifier/config")
                     .trustLocalhost()

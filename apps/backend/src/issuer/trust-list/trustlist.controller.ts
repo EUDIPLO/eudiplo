@@ -85,7 +85,7 @@ export class TrustListController {
     @ApiResponse({
         status: 409,
         description:
-            "The body sets no keyChainId, and the tenant has no trustList key chain or the one EUDIPLO picks has no valid certificate",
+            "The tenant already has a trust list with the ID in the body (change it with PUT), or the body sets no keyChainId, and the tenant has no trustList key chain or the one EUDIPLO picks has no valid certificate",
     })
     createTrustList(
         @Body(createConfigBodyPipe(TrustListCreateSchema, { readOnly }))

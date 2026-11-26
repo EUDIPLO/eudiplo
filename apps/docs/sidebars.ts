@@ -166,7 +166,7 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: '🔄 Upgrade',
       link: {type: 'doc', id: 'upgrade/index'},
-      items: ['upgrade/10.x-fixes', 'upgrade/9.x-to-10.0', 'upgrade/8.x-to-9.0', 'upgrade/7.x-to-8.0', 'upgrade/6.x-to-7.0'],
+      items: ['upgrade/10.x-fixes', 'upgrade/10.x-to-11.0', 'upgrade/9.x-to-10.0', 'upgrade/8.x-to-9.0', 'upgrade/7.x-to-8.0', 'upgrade/6.x-to-7.0'],
     },
     'showcase',
     'brand',
