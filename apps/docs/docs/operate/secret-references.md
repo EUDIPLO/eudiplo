@@ -46,7 +46,7 @@ policy was set is read as a reference from then on.
 
 ## The policy file
 
-The policy file says which sources exist and what each tenant may name. An
+The policy file says which sources exist, what each tenant may name and, optionally, which variables the [placeholders of tenant folders](#placeholders-in-tenant-folders) may use. An
 `instance` key next to `tenants` holds the grants of instance-wide files; no
 such file uses references yet. EUDIPLO reads it once at startup and does not start when it is
 invalid. It is not part of any tenant configuration and cannot be changed
@@ -145,7 +145,10 @@ files of every tenant folder may name only the variables you list:
   of a tenant keeps `KMS_TENANT_VARIABLES`, the global `kms.json` its own
   rules, and the CLI resolves placeholders of a folder it sends from its own
   environment (`--allow-env`).
+- `templates` needs `tenant`; `["*"]` writes out the default rule.
 - Without `templates`, the default above applies, as in earlier versions.
+- A policy file set only for `templates` also turns secret references on:
+  with no grants, every [reference](#reference-syntax) is then refused.
 
 ## When a value is read
 

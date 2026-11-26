@@ -453,7 +453,10 @@ export const CLOUD_CREDENTIAL_VARIABLES: ReadonlyMap<string, string> = new Map([
  *
  * The backend also refuses the variables that configure EUDIPLO itself
  * (its environment schema); the CLI does not have that list and does not
- * report them.
+ * report them. Nor can it read the instance's secret policy: when that sets
+ * `templates.tenant`, the backend refuses every variable it does not list,
+ * also one the CLI reports nothing for, and resolves a cloud credential it
+ * lists by name.
  */
 function checkFolderVariable(
     variable: string,

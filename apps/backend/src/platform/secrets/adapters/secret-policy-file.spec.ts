@@ -112,6 +112,13 @@ describe("readSecretPolicyFile", () => {
         expect(
             issues(() => read({ templates: { global: [] } })).join(),
         ).toMatch(/^templates/);
+        expect(read({ templates: { tenant: ["*"] } }).templates).toEqual({
+            tenant: ["*"],
+        });
+        // `templates` without `tenant` is a mistake, not "no list".
+        expect(issues(() => read({ templates: {} })).join()).toMatch(
+            /^templates\.tenant/,
+        );
     });
 
     it("names invalid JSON and unknown fields", () => {

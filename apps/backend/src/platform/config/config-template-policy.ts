@@ -18,20 +18,3 @@ export interface ConfigTemplatePolicy {
 
 /** A variable name, or a prefix of names ending in `*`. */
 export const TEMPLATE_PATTERN = /^[A-Z0-9_]+\*?$|^\*$/;
-
-/**
- * Whether `patterns` let a file of a tenant folder use `name`. A prefix
- * never covers `excluded` names (the cloud credentials of the instance),
- * which only an exact name grants.
- */
-export function templateAllowed(
-    name: string,
-    patterns: readonly string[],
-    excluded: ReadonlyMap<string, string>,
-): boolean {
-    return patterns.some((pattern) =>
-        pattern.endsWith("*")
-            ? name.startsWith(pattern.slice(0, -1)) && !excluded.has(name)
-            : name === pattern,
-    );
-}

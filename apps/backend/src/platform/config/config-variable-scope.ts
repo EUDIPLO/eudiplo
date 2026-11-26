@@ -1,6 +1,5 @@
 import type Joi from "joi";
 import { VALIDATION_SCHEMA } from "./combined.schema.js";
-import { templateAllowed } from "./config-template-policy.js";
 
 /**
  * Where a configuration file with `${VAR}` placeholders lives:
@@ -37,7 +36,8 @@ export const KMS_TENANT_VARIABLES = "KMS_TENANT_VARIABLES";
  * Credentials the AWS SDK and the Azure identity library read from the
  * environment for the identity of the instance, with the provider's name.
  * EUDIPLO declares none of them, so the schema does not refuse them. A file
- * of a tenant folder cannot name them; the global `kms.json` can, and a
+ * of a tenant folder cannot name them, unless the secret policy's
+ * `templates.tenant` lists one by name; the global `kms.json` can, and a
  * tenant `kms.json` only if the operator lists them.
  */
 export const CLOUD_CREDENTIAL_VARIABLES: ReadonlyMap<string, string> = new Map([
@@ -49,6 +49,20 @@ export const CLOUD_CREDENTIAL_VARIABLES: ReadonlyMap<string, string> = new Map([
     ["AZURE_CLIENT_CERTIFICATE_PASSWORD", "Azure"],
     ["AZURE_PASSWORD", "Azure"],
 ]);
+
+/**
+ * Whether the secret policy's `templates.tenant` lets a file of a tenant
+ * folder use `name`. A prefix never covers a cloud credential of the
+ * instance, which only its exact name grants.
+ */
+function templateAllowed(name: string, patterns: readonly string[]): boolean {
+    return patterns.some((pattern) =>
+        pattern.endsWith("*")
+            ? name.startsWith(pattern.slice(0, -1)) &&
+              !CLOUD_CREDENTIAL_VARIABLES.has(name)
+            : name === pattern,
+    );
+}
 
 /** The placeholder scope of every variable `schema` declares. */
 export function declaredPlaceholderScopes(
@@ -124,11 +138,7 @@ export function refusedConfigVariable(
     }
     if (declaredScope !== undefined) return undefined;
     if (scope === "tenant" && tenantTemplates) {
-        return templateAllowed(
-            name,
-            tenantTemplates,
-            CLOUD_CREDENTIAL_VARIABLES,
-        )
+        return templateAllowed(name, tenantTemplates)
             ? undefined
             : `\${${name}} is not listed in templates.tenant of the secret policy, so a file of a tenant folder cannot use it`;
     }

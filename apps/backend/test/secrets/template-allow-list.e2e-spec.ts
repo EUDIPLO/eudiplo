@@ -6,6 +6,7 @@ import type { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { ConfigFolderBundleService } from "../../src/platform/config-portability/config-folder-bundle.service.js";
 
 /**
  * With `templates.tenant` in the operator's secret policy, the `${VAR}`
@@ -20,7 +21,7 @@ describe("Secret policy: allow-list for placeholders of tenant folders", () => {
     const refusedTenant = "templates-refused";
     const variables = {
         E2E_TMPL_HOOK_URL: "https://hooks.example.com/listed",
-        E2E_UNLISTED_KEY: "unlisted-key-do-not-store",
+        E2E_UNLISTED_URL: "https://hooks.example.com/unlisted",
     };
     const keys = [
         "CONFIG_FOLDER",
@@ -67,16 +68,8 @@ describe("Secret policy: allow-list for placeholders of tenant folders", () => {
             );
         };
         tenantFolder(listedTenant, { url: "${E2E_TMPL_HOOK_URL}" });
-        tenantFolder(refusedTenant, {
-            url: "https://hooks.example.com/unlisted",
-            auth: {
-                type: "apiKey",
-                config: {
-                    headerName: "x-api-key",
-                    value: "${E2E_UNLISTED_KEY}",
-                },
-            },
-        });
+        // The same files, except for the variable named.
+        tenantFolder(refusedTenant, { url: "${E2E_UNLISTED_URL}" });
         const policyFile = join(runtimeFolder, "secret-policy.json");
         write(policyFile, { templates: { tenant: ["E2E_TMPL_*"] } });
 
@@ -124,7 +117,16 @@ describe("Secret policy: allow-list for placeholders of tenant folders", () => {
 
     it("does not import a tenant folder whose file names a variable the policy does not list", async () => {
         // As for any refused placeholder, the tenant's import fails, so
-        // neither its client nor the value exists.
+        // its client does not exist.
         await token(refusedTenant).expect(401);
+        await expect(
+            app
+                .get(ConfigFolderBundleService)
+                .applyTenantFolder(refusedTenant, "upsert"),
+        ).rejects.toMatchObject({
+            message: expect.stringContaining(
+                "${E2E_UNLISTED_URL} is not listed in templates.tenant",
+            ),
+        });
     });
 });

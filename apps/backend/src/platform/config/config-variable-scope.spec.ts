@@ -142,6 +142,18 @@ describe("configuration variable scope", () => {
                 "AWS_*",
             ]),
         ).toBeDefined();
+        // `*` alone is the default rule, written out.
+        expect(
+            refusedConfigVariable("ANY_VAR", "tenant", undefined, ["*"]),
+        ).toBeUndefined();
+        expect(
+            refusedConfigVariable(
+                "AWS_SECRET_ACCESS_KEY",
+                "tenant",
+                undefined,
+                ["*"],
+            ),
+        ).toBeDefined();
         // EUDIPLO's settings keep their own scope, listed or not.
         expect(
             refusedConfigVariable("MASTER_SECRET", "tenant", undefined, [
