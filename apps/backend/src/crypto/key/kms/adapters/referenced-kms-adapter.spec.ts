@@ -19,7 +19,7 @@ const provider = {
     vaultToken: reference,
 } as unknown as KmsProviderConfig;
 
-function setup(grants: string[] = ["ACME_*"]) {
+function setup(grants: string[] = ["ACME_*"], hideReasons = false) {
     const environment: Record<string, string> = { ACME_VAULT_TOKEN: "first" };
     let now = 0;
     const secrets = new SecretReferences(
@@ -71,6 +71,7 @@ function setup(grants: string[] = ["ACME_*"]) {
         secrets,
         build,
         (old) => retired.push(old),
+        hideReasons,
     );
     const sign = async () =>
         new TextDecoder().decode(
@@ -142,6 +143,15 @@ describe("ReferencedKmsAdapter", () => {
             error: expect.stringMatching(/refused/),
         });
         expect(built).toHaveLength(1);
+    });
+
+    it("tells only that the credentials cannot be read for a global provider", async () => {
+        const { adapter } = setup(["OTHER_*"], true);
+        const health = await adapter.health();
+        expect(health).toEqual({
+            ok: false,
+            error: "the credentials of this provider cannot be read",
+        });
     });
 
     it("disposes the current adapter", async () => {

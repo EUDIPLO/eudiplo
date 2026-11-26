@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { Logger } from "@nestjs/common";
 import type { JWK } from "jose";
 import type { SecretReferences } from "../../../../platform/secrets/application/secret-references.js";
 import type { SecretUse } from "../../../../platform/secrets/domain/secret-use.js";
@@ -30,6 +31,7 @@ export class ReferencedKmsAdapter implements KmsAdapter {
     readonly type: KmsAdapter["type"];
     readonly capabilities: KmsAdapterCapabilities;
     private current?: { fingerprint: string; adapter: KmsAdapter };
+    private readonly logger = new Logger(ReferencedKmsAdapter.name);
 
     /**
      * @param references the credentials of `provider` that are references
@@ -37,6 +39,9 @@ export class ReferencedKmsAdapter implements KmsAdapter {
      * @param build builds an adapter; it must do no I/O, as the adapters'
      * constructors do not
      * @param retire disposes an adapter that is no longer handed out
+     * @param hideReasons for a provider of the global file: its health
+     * tells tenants only that the credentials cannot be read, and the log
+     * names the reference and why
      */
     constructor(
         private readonly provider: KmsProviderConfig,
@@ -45,6 +50,7 @@ export class ReferencedKmsAdapter implements KmsAdapter {
         private readonly secrets: SecretReferences,
         private readonly build: (provider: KmsProviderConfig) => KmsAdapter,
         private readonly retire: (adapter: KmsAdapter) => void,
+        private readonly hideReasons = false,
     ) {
         // Only for what is known without the credentials; never used.
         const probe = build(provider);
@@ -114,9 +120,13 @@ export class ReferencedKmsAdapter implements KmsAdapter {
         try {
             adapter = await this.adapter();
         } catch (error) {
+            const reason =
+                error instanceof Error ? error.message : String(error);
+            if (!this.hideReasons) return { ok: false, error: reason };
+            this.logger.warn(`${this.providerId}: ${reason}`);
             return {
                 ok: false,
-                error: error instanceof Error ? error.message : String(error),
+                error: "the credentials of this provider cannot be read",
             };
         }
         return adapter.health();

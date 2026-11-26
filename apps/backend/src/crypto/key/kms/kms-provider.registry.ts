@@ -411,6 +411,8 @@ export class KmsProviderRegistry implements OnModuleInit, OnModuleDestroy {
             this.secrets,
             (resolved) => this.instantiate(resolved, httpService),
             (adapter) => this.retire([adapter]),
+            // The operator's references are not shown to tenants.
+            owner.scope.type === "instance",
         );
     }
 
