@@ -16,6 +16,7 @@ import { type FindOptionsSelect, In, Repository } from "typeorm";
 import { v4 } from "uuid";
 import type { DefaultKeyChains } from "../../auth/tenant/domain/tenant-data.js";
 import { TenantEntity } from "../../auth/tenant/entities/tenant.entity.js";
+import { parseX509Certificate } from "../../shared/utils/x509-certificate-cache.js";
 import { KeyChainReferences } from "./application/key-chain-references.js";
 import {
     CertificateBuilderService,
@@ -1408,7 +1409,7 @@ export class KeyChainService {
             "-----END CERTIFICATE-----";
 
         try {
-            const cert = new x509.X509Certificate(firstCertPem);
+            const cert = parseX509Certificate(firstCertPem);
             return {
                 pem,
                 subject: cert.subject,

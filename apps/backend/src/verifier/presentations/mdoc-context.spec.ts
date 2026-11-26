@@ -10,6 +10,7 @@ import {
 } from "../../../test/trust/certificate-chain.fixture.js";
 import { CertificatePathBuilder } from "../../shared/utils/certificate-path.util.js";
 import { coseReadyJwk } from "../../shared/utils/cose-key-jwk.util.js";
+import { parseX509CertificateDer } from "../../shared/utils/x509-certificate-cache.js";
 import {
     CERTIFICATE_PATH_CONSTRAINT_FAILURE,
     mdocContext,
@@ -459,6 +460,23 @@ describe("mdocContext.x509.verifyCertificateChain", () => {
         });
         return issued(cert, keys);
     }
+
+    it("returns copies of the trusted certificates, not the cached ones", async () => {
+        // Trust anchors come from the process-wide parse cache; a caller
+        // that writes into the returned chain must not corrupt it.
+        const iaca = await ca("IACA");
+        const documentSigner = await issuedBy(iaca, "Document Signer");
+        const original = Uint8Array.from(iaca.der);
+
+        const { chain } = await verifyChain(documentSigner, iaca);
+        chain[chain.length - 1].fill(0);
+
+        expect(
+            new Uint8Array(parseX509CertificateDer(iaca.der).rawData),
+        ).toEqual(original);
+        const again = await verifyChain(documentSigner, iaca);
+        expect(again.chain).toContainEqual(original);
+    });
 
     it("rejects a document signer issued by a certificate without cA, as in RP_WS_SM_IssuerIntegrity_034b_UF", async () => {
         const iaca = await ca("IACA");

@@ -7,7 +7,6 @@ import {
     SignatureAlgorithm,
     StatusOptions,
 } from "@owf/mdoc";
-import { X509Certificate } from "@peculiar/x509";
 import { exportJWK, importX509 } from "jose";
 import { CertService } from "../../../../../crypto/key/cert/cert.service.js";
 import {
@@ -19,6 +18,7 @@ import type { KmsSigningAlg } from "../../../../../crypto/key/kms/kms-adapter.js
 import { KeyUsageType } from "../../../../../crypto/key/types/key-usage-type.js";
 import type { SessionData as Session } from "../../../../../session/domain/session-data.js";
 import { coseReadyJwk } from "../../../../../shared/utils/cose-key-jwk.util.js";
+import { parseX509Certificate } from "../../../../../shared/utils/x509-certificate-cache.js";
 import { mdocContext } from "../../../../../verifier/presentations/mdoc-context.js";
 import type { WalletUnitReference } from "../../../../status-list/domain/wallet-unit-reference.js";
 import { StatusListService } from "../../../../status-list/status-list.service.js";
@@ -120,13 +120,13 @@ export class MdocIssuerService {
         // Convert all certificates in the chain to Uint8Array
         // certificate.crt is an array: [leaf, intermediate..., root]
         const certificateChain = certificate.crt.map((certPem) => {
-            const x509Cert = new X509Certificate(certPem);
-            return new Uint8Array(x509Cert.rawData);
+            const x509Cert = parseX509Certificate(certPem);
+            return new Uint8Array(x509Cert.rawData.slice(0));
         });
 
         // Diagnostic: log the leaf cert that will be embedded in the mDOC.
         try {
-            const leaf = new X509Certificate(certificate.crt[0]);
+            const leaf = parseX509Certificate(certificate.crt[0]);
             const thumb = Buffer.from(
                 await crypto.subtle.digest("SHA-256", leaf.rawData),
             )
@@ -151,7 +151,7 @@ export class MdocIssuerService {
         // Set validity dates
         // Use lifeTime from config or default to 1 year, kept within the leaf
         // certificate's validity (ISO 18013-5 checks the signed date against it)
-        const leafCertificate = new X509Certificate(certificate.crt[0]);
+        const leafCertificate = parseX509Certificate(certificate.crt[0]);
         let issuedAt: number;
         let expiresAt: number;
         try {

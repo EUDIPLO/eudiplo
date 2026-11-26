@@ -2,7 +2,10 @@ import "reflect-metadata";
 import { webcrypto } from "node:crypto";
 import * as x509 from "@peculiar/x509";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { parseX509Certificate } from "./x509-certificate-cache.js";
+import {
+    parseX509Certificate,
+    parseX509CertificateDer,
+} from "./x509-certificate-cache.js";
 
 describe("parseX509Certificate", () => {
     let pem: string;
@@ -52,6 +55,17 @@ describe("parseX509Certificate", () => {
 
         expect(parseX509Certificate(wrapped)).toBe(
             parseX509Certificate(base64Der),
+        );
+    });
+
+    it("shares the entry between DER bytes and their base64 encoding", () => {
+        const der = Buffer.from(base64Der, "base64");
+
+        expect(parseX509CertificateDer(new Uint8Array(der))).toBe(
+            parseX509Certificate(base64Der),
+        );
+        expect(parseX509CertificateDer(Uint8Array.from(der))).toBe(
+            parseX509CertificateDer(new Uint8Array(der)),
         );
     });
 
