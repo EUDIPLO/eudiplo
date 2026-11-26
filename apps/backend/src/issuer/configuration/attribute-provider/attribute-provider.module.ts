@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { getRepositoryToken, TypeOrmModule } from "@nestjs/typeorm";
 import type { Repository } from "typeorm";
 import { AuditLogModule } from "../../../audit-log/audit-log.module.js";
+import { SecretsModule } from "../../../platform/secrets/secrets.module.js";
 import { OutboundUrlPolicyModule } from "../../../webhook/outbound-url-policy.module.js";
 import { TypeOrmAttributeProviderRepository } from "./adapters/typeorm-attribute-provider.repository.js";
 import { AttributeProviderReferences } from "./application/attribute-provider-references.js";
@@ -15,6 +16,7 @@ import { ATTRIBUTE_PROVIDER_REPOSITORY } from "./ports/attribute-provider.reposi
         TypeOrmModule.forFeature([AttributeProviderEntity]),
         AuditLogModule,
         OutboundUrlPolicyModule,
+        SecretsModule,
     ],
     controllers: [AttributeProviderController],
     providers: [

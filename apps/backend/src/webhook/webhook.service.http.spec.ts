@@ -16,6 +16,11 @@ import {
     it,
     vi,
 } from "vitest";
+import {
+    type StubVaultSource,
+    stubSecretReferences,
+} from "../../test/secrets/secret-test-sources.js";
+import type { SecretReferences } from "../platform/secrets/application/secret-references.js";
 import type { SessionData } from "../session/domain/session-data.js";
 import { OutboundUrlPolicyService } from "./outbound-url-policy.service.js";
 import { WebhookService } from "./webhook.service.js";
@@ -37,6 +42,8 @@ describe("WebhookService deliveries", () => {
     let received: ReceivedRequest[];
     let logger: { setContext: any; debug: any; error: any };
     let service: WebhookService;
+    let secrets: SecretReferences;
+    let vault: StubVaultSource;
 
     const session = {
         id: "session-1",
@@ -136,6 +143,7 @@ describe("WebhookService deliveries", () => {
     });
 
     beforeEach(() => {
+        ({ secrets, vault } = stubSecretReferences());
         received = [];
         logger = { setContext: vi.fn(), debug: vi.fn(), error: vi.fn() };
         const config: Record<string, unknown> = {
@@ -149,6 +157,7 @@ describe("WebhookService deliveries", () => {
                 get: (key: string) => config[key],
             } as never),
             logger as never,
+            secrets,
         );
     });
 
@@ -178,6 +187,77 @@ describe("WebhookService deliveries", () => {
             (err: Error) => err,
         );
     }
+
+    describe("API key as a secret reference", () => {
+        const reference = "${vault:kv/eudiplo/tenant-1/shop#token}";
+        const stored = (path: string) => ({
+            ...webhook(path),
+            auth: {
+                type: "apiKey" as const,
+                config: { headerName: "x-api-key", value: reference },
+            },
+            storedAs: {
+                kind: "WebhookEndpoint" as const,
+                tenantId: "tenant-1",
+            },
+        });
+        const send = (target: ReturnType<typeof stored>) =>
+            service.sendClaimsWebhook({
+                webhook: target,
+                session: "session-1",
+                credentialConfigurationId: "pid",
+            });
+
+        it("sends the value of a stored endpoint's reference, only to its origin", async () => {
+            vault.values.set("kv/eudiplo/tenant-1/shop#token", "from-vault");
+
+            await send(stored("/redirect-other-origin"));
+
+            expect(received[0]).toMatchObject({
+                server: "main",
+                apiKey: "from-vault",
+            });
+            expect(received[1]).toMatchObject({ server: "other" });
+            expect(received[1].apiKey).toBeUndefined();
+        });
+
+        it("sends the reference of a webhook from a request as written", async () => {
+            vault.values.set("kv/eudiplo/tenant-1/shop#token", "from-vault");
+            const { storedAs: _, ...inline } = stored("/claims");
+
+            await send(inline as never);
+
+            expect(received[0].apiKey).toBe(reference);
+            expect(vault.reads).toBe(0);
+        });
+
+        it("fails without naming the reference when the value cannot be read", async () => {
+            const err = await failure(send(stored("/claims")));
+
+            expect(err.message).toBe(
+                "Error sending claims webhook: the API key of the webhook could not be read",
+            );
+            expect(received).toEqual([]);
+            expect(logger.error).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    secretError: expect.stringContaining(reference),
+                }),
+                expect.any(String),
+            );
+        });
+
+        it("refuses a reference of another tenant", async () => {
+            vault.values.set("kv/eudiplo/tenant-2/shop#token", "other");
+            const target = stored("/claims");
+            target.auth.config.value =
+                "${vault:kv/eudiplo/tenant-2/shop#token}";
+
+            await failure(send(target));
+
+            expect(received).toEqual([]);
+            expect(vault.reads).toBe(0);
+        });
+    });
 
     it("returns the claims of a receiver that answers directly", async () => {
         await expect(claims("/claims")).resolves.toEqual({

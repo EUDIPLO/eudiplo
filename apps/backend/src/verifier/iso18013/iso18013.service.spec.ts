@@ -18,7 +18,6 @@ import {
 import { hpkeOpen } from "./hpke.js";
 import { Iso18013Service } from "./iso18013.service.js";
 
-const CONFIG_WEBHOOK = { url: "https://config.example/hook" } as any;
 const OVERRIDE_WEBHOOK = {
     url: "https://override.example/hook",
     auth: {
@@ -188,12 +187,12 @@ describe("Iso18013Service.createOffer per-request webhook override", () => {
         );
     });
 
-    it("falls back to the configured webhook when no override is given", async () => {
+    it("keeps only the endpoint ID of a configured webhook with the session", async () => {
         await service.createOffer("req", "tenant", "https://origin.example");
 
-        expect(sessionCreate).toHaveBeenCalledWith(
-            expect.objectContaining({ parsedWebhook: CONFIG_WEBHOOK }),
-        );
+        const [values] = sessionCreate.mock.calls[0];
+        expect(values.parsedWebhook).toBeUndefined();
+        expect(values.webhookEndpointId).toBe("endpoint-1");
     });
 
     it("binds the session transcript to the allowed origin", async () => {
@@ -337,6 +336,39 @@ describe("Iso18013Service.processResponse presentation webhook", () => {
             } as any,
             { announce } as any,
         );
+    });
+
+    it("reads the configured endpoint of a session without a request webhook as a stored webhook", async () => {
+        const repo = (
+            service as unknown as {
+                webhookEndpointRepo: { findOneBy: ReturnType<typeof vi.fn> };
+            }
+        ).webhookEndpointRepo;
+        repo.findOneBy.mockResolvedValue({
+            tenantId: "tenant",
+            url: "https://endpoint.example/result",
+            auth: { type: "none" },
+        });
+
+        const resolved = await (
+            service as unknown as {
+                resolveSessionWebhook(session: unknown): Promise<unknown>;
+            }
+        ).resolveSessionWebhook({
+            ...session,
+            parsedWebhook: undefined,
+            webhookEndpointId: "endpoint-1",
+        });
+
+        expect(repo.findOneBy).toHaveBeenCalledWith({
+            id: "endpoint-1",
+            tenantId: "tenant",
+        });
+        expect(resolved).toEqual({
+            url: "https://endpoint.example/result",
+            auth: { type: "none" },
+            storedAs: { kind: "WebhookEndpoint", tenantId: "tenant" },
+        });
     });
 
     it("verifies against the trust lists of the session's tenant", async () => {

@@ -26,7 +26,7 @@ An offer `webhook` source has the shape `{ "url", "auth", "includeRawTokensFor"?
 
 ## Request
 
-EUDIPLO sends `POST <url>` with `Content-Type: application/json` and, for `apiKey` authentication, the configured header. It calls the provider when the wallet requests the credential, once per credential request.
+EUDIPLO sends `POST <url>` with `Content-Type: application/json` and, for `apiKey` authentication, the configured header. For a configured attribute provider, its value can be a secret reference, read when the provider is called ([Secret references](../operate/secret-references.md)); an offer `webhook` source cannot use one. It calls the provider when the wallet requests the credential, once per credential request.
 
 ```json
 {

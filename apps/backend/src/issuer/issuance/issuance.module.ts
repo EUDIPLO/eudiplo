@@ -7,6 +7,7 @@ import { v4 } from "uuid";
 import { CryptoModule } from "../../crypto/crypto.module.js";
 import { EncryptionService } from "../../crypto/encryption/encryption.service.js";
 import { KeyChainService } from "../../crypto/key/key-chain.service.js";
+import { SecretsModule } from "../../platform/secrets/secrets.module.js";
 import { ChangeSessionState } from "../../session/application/change-session-state.js";
 import { CreateSession } from "../../session/application/create-session.js";
 import { ResolveExternalAuthorizationSession } from "../../session/application/resolve-external-authorization-session.js";
@@ -140,6 +141,7 @@ import { WellKnownService } from "./oid4vci/well-known/well-known.service.js";
  */
 @Module({
     imports: [
+        SecretsModule,
         CryptoModule,
         ConfigurationModule,
         Oid4vpModule,

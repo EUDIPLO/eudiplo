@@ -11,12 +11,17 @@ import {
     ConfigImportOrchestratorService,
     ImportPhase,
 } from "../../../platform/config-import/config-import-orchestrator.service.js";
+import {
+    SECRET_REFERENCES,
+    type SecretReferences,
+} from "../../../platform/secrets/application/secret-references.js";
 import { loadConfigDto } from "../../../shared/utils/config-file-loader.util.js";
 import {
     changedEndpointFields,
     redactWebhookAuth,
 } from "../../../webhook/domain/webhook-configuration.js";
 import { OutboundUrlPolicyService } from "../../../webhook/outbound-url-policy.service.js";
+import { assertStoredWebhookSecret } from "../../../webhook/stored-webhook-secret.js";
 import type { WebhookEndpointData } from "./domain/webhook-endpoint-data.js";
 import { CreateWebhookEndpointDto } from "./dto/create-webhook-endpoint.dto.js";
 import {
@@ -37,6 +42,8 @@ export class WebhookEndpointService {
         private readonly configImportOrchestrator: ConfigImportOrchestratorService,
         private readonly tenantActionLogService: AuditLogService,
         private readonly outboundUrlPolicyService: OutboundUrlPolicyService,
+        @Inject(SECRET_REFERENCES)
+        private readonly secrets: SecretReferences,
     ) {
         this.configImportOrchestrator.register(
             "webhook-endpoints",
@@ -91,6 +98,12 @@ export class WebhookEndpointService {
         requestMeta?: AuditLogRequestMeta,
     ) {
         await this.outboundUrlPolicyService.assertSafeUrl(dto.url);
+        assertStoredWebhookSecret(
+            this.secrets,
+            "WebhookEndpoint",
+            tenantId,
+            dto,
+        );
 
         const saved = await this.repo.save({
             ...dto,
@@ -127,12 +140,16 @@ export class WebhookEndpointService {
             await this.outboundUrlPolicyService.assertSafeUrl(dto.url);
         }
 
-        const saved = await this.repo.save({
-            ...existing,
-            ...dto,
-            id,
+        const next = { ...existing, ...dto, id, tenantId };
+        // Also when only the URL changes: a reference may be bound to it.
+        assertStoredWebhookSecret(
+            this.secrets,
+            "WebhookEndpoint",
             tenantId,
-        });
+            next,
+        );
+
+        const saved = await this.repo.save(next);
 
         if (actorToken) {
             await this.tenantActionLogService.record({
@@ -179,7 +196,9 @@ export class WebhookEndpointService {
             name: endpoint.name,
             url: endpoint.url,
             description: endpoint.description,
-            auth: redactWebhookAuth(endpoint.auth),
+            auth: redactWebhookAuth(endpoint.auth, (value) =>
+                this.secrets.isShown(value),
+            ),
         };
     }
 }

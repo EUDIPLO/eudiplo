@@ -33,7 +33,10 @@ import {
 import { AuditLogContext } from "../../session/logging/session-audit.service.js";
 import { SessionLoggerService } from "../../session/logging/session-logger.service.js";
 import { DEFAULT_VERIFIER_SKEW_SECONDS } from "../../trust/types.js";
-import type { WebhookConfiguration } from "../../webhook/domain/webhook-configuration.js";
+import {
+    storedWebhook,
+    type WebhookConfiguration,
+} from "../../webhook/domain/webhook-configuration.js";
 import {
     CredentialVerificationFailedError,
     IncompletePresentationError,
@@ -136,7 +139,7 @@ export class Oid4vpService {
             return undefined;
         }
 
-        return { url: endpoint.url, auth: endpoint.auth };
+        return storedWebhook("WebhookEndpoint", endpoint);
     }
 
     /**
@@ -593,17 +596,15 @@ export class Oid4vpService {
             // Use transaction_data from options if provided, otherwise fall back to config
             const transaction_data =
                 values.transaction_data ?? presentationConfig.transaction_data;
-            const endpointWebhook = await this.resolveWebhookFromEndpoint(
-                presentationConfig.webhookEndpointId,
-                tenantId,
-            );
-
             const session = await this.createSession.execute({
                 id: values.session,
                 walletNonce,
                 webhookEndpointId:
                     presentationConfig.webhookEndpointId ?? undefined,
-                parsedWebhook: values.webhook ?? endpointWebhook,
+                // Only a webhook of the request is kept with the session; a
+                // configured endpoint is read when the result is sent, so its
+                // API key (or secret reference) is not copied to the session.
+                parsedWebhook: values.webhook,
                 redirectUri:
                     values.redirectUri ??
                     presentationConfig.redirectUri ??

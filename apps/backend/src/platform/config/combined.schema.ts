@@ -12,6 +12,7 @@ import { VERIFIER_VALIDATION_SCHEMA } from "../../verifier/verifier-validation.s
 import { WEBHOOK_VALIDATION_SCHEMA } from "../../webhook/webhook-validation.schema.js";
 import { ENCRYPTION_VALIDATION_SCHEMA } from "../data-encryption/encryption-validation.schema.js";
 import { LOG_VALIDATION_SCHEMA } from "../observability/log-validation.schema.js";
+import { SECRETS_VALIDATION_SCHEMA } from "../secrets/secrets-validation.schema.js";
 import { CONFIG_VALIDATION_SCHEMA } from "./config-validation.schema.js";
 import { CORS_VALIDATION_SCHEMA } from "./cors-validation.schema.js";
 import { SKIP_VALIDATION_SCHEMA } from "./skip-validation.schema.js";
@@ -38,6 +39,7 @@ export const VALIDATION_SCHEMA = BASE_VALIDATION_SCHEMA.concat(
     .concat(VERIFIER_VALIDATION_SCHEMA)
     .concat(FEDERATION_VALIDATION_SCHEMA)
     .concat(WEBHOOK_VALIDATION_SCHEMA)
+    .concat(SECRETS_VALIDATION_SCHEMA)
     .concat(EUDI_HUB_VALIDATION_SCHEMA)
     .concat(TLS_VALIDATION_SCHEMA)
     .concat(SKIP_VALIDATION_SCHEMA);
