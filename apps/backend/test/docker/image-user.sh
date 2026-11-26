@@ -126,9 +126,16 @@ echo "$out" | grep 'TLS_CERT_PATH (/certs/cert.pem) cannot be read: EACCES' >/de
 echo "$out" | grep 'EUDIPLO_RUN_AS_ROOT=true' >/dev/null || { echo "$out" >&2; echo "FAIL root-only TLS file: no hint" >&2; exit 1; }
 echo "ok   root-only TLS file: error names the file and EUDIPLO_RUN_AS_ROOT"
 
-# --- User namespace (rootless Podman): a root-owned FOLDER keeps root
-check "user namespace with root-owned FOLDER keeps root" "0" "$(docker run --rm --user 1000:1000 \
-    --security-opt seccomp=unconfined --security-opt apparmor=unconfined --entrypoint sh "$img" -c \
-    'mkdir -p /tmp/f && unshare --user --map-root-user sh -c "FOLDER=/tmp/f /usr/local/bin/eudiplo-entrypoint.sh id -u"' 2>/dev/null)"
+# --- User namespace (rootless Podman): a root-owned FOLDER keeps root.
+# Simulated with unshare, which hosts that restrict unprivileged user
+# namespaces (Ubuntu 24.04, the GitHub runners) refuse: skipped there.
+userns=(docker run --rm --user 1000:1000 --security-opt seccomp=unconfined
+    --security-opt apparmor=unconfined --entrypoint sh "$img" -c)
+if "${userns[@]}" 'unshare --user --map-root-user true' >/dev/null 2>&1; then
+    check "user namespace with root-owned FOLDER keeps root" "0" "$("${userns[@]}" \
+        'mkdir -p /tmp/f && unshare --user --map-root-user sh -c "FOLDER=/tmp/f /usr/local/bin/eudiplo-entrypoint.sh id -u"' 2>/dev/null)"
+else
+    echo "skip user namespace: this host does not allow unprivileged user namespaces"
+fi
 
 echo "all image user checks passed"
