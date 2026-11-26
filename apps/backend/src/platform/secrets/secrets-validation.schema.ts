@@ -2,7 +2,8 @@ import Joi from "joi";
 
 /**
  * Settings of secret references (`${env:…}`, `${vault:…}`) in the secret
- * fields of webhook endpoints and attribute providers.
+ * fields: webhook endpoints, attribute providers, upstream client secrets
+ * and KMS provider credentials.
  */
 export const SECRETS_VALIDATION_SCHEMA = Joi.object({
     SECRET_POLICY_FILE: Joi.string()

@@ -331,7 +331,7 @@ export const keyChainControllerDeleteTenantKmsConfig = <ThrowOnError extends boo
 /**
  * Get tenant KMS provider configuration
  *
- * Returns tenant-specific KMS config (if present) and the effective merged config. Credentials are returned as `<redacted>`, a secret reference (`${vault:…}`, `${env:…}`) as written; `${ENV_VAR}` placeholders of the tenant file are returned as stored. Answers 400 with the reason when the stored tenant `kms.json` is not JSON or no valid KMS configuration, or names a variable, a file or a server it may not use. Requires the `tenant:admin` or `tenants:manage` role.
+ * Returns tenant-specific KMS config (if present) and the effective merged config. Credentials are returned as `<redacted>`, a secret reference (`${vault:…}`, `${env:…}`) of the tenant file as written; `${ENV_VAR}` placeholders of the tenant file are returned as stored. Answers 400 with the reason when the stored tenant `kms.json` is not JSON or no valid KMS configuration, or names a variable, a file or a server it may not use. Requires the `tenant:admin` or `tenants:manage` role.
  */
 export const keyChainControllerGetTenantKmsConfig = <ThrowOnError extends boolean = true>(options?: Options<KeyChainControllerGetTenantKmsConfigData, ThrowOnError>): RequestResult<KeyChainControllerGetTenantKmsConfigResponses, KeyChainControllerGetTenantKmsConfigErrors, ThrowOnError> => (options?.client ?? client).get<KeyChainControllerGetTenantKmsConfigResponses, KeyChainControllerGetTenantKmsConfigErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],

@@ -49,8 +49,8 @@ policy was set is read as a reference from then on.
 ## The policy file
 
 The policy file says which sources exist and what each tenant may name. An
-`instance` key next to `tenants` holds the grants of instance-wide files; no
-such file uses references yet. EUDIPLO reads it once at startup and does not start when it is
+`instance` key next to `tenants` holds the grants of the global `kms.json`
+([KMS](kms.md#secret-references-in-a-tenant-kmsjson)). EUDIPLO reads it once at startup and does not start when it is
 invalid. It is not part of any tenant configuration and cannot be changed
 through the API.
 
@@ -125,10 +125,11 @@ EUDIPLO's Vault token or AppRole read access to the granted paths only.
 
 ## When a value is read
 
-- **Writing.** Creating or updating a webhook endpoint, an attribute provider
-  or the authorization servers of the issuance configuration, through the API,
-  a bundle or a configuration folder, checks the reference against the policy
-  without reading it. Through the API, a refused or
+- **Writing.** Creating or updating a webhook endpoint, an attribute provider,
+  the authorization servers of the issuance configuration or a tenant
+  `kms.json`, through the API, a bundle or a configuration folder, checks the
+  reference against the policy without reading it. A bundle plan already
+  reports a refused reference of a `kms.json` (`KMS_SETTING_REFUSED`). Through the API, a refused or
   malformed reference is answered with `400`; a bundle with one is refused when
   it is imported, not yet when it is planned; a configuration folder file with
   one is skipped and logged at startup, like any file that does not import,
@@ -142,14 +143,15 @@ EUDIPLO's Vault token or AppRole read access to the granted paths only.
   fails.
 - **Failing.** When a value cannot be read, the webhook delivery fails with
   "the API key of the webhook could not be read", and the upstream login of a
-  chained authorization server ends with `server_error` for the wallet. The log
+  chained authorization server ends with `server_error` for the wallet, and a
+  key operation of a KMS provider fails (its health check names the reason). The log
   names the reference and the reason, never the value.
 
 ## What EUDIPLO shows
 
 A reference is no secret. Responses of the webhook endpoint, attribute
-provider and issuance configuration API and audit log entries show it as
-written; a literal API key stays
+provider, issuance configuration and tenant KMS configuration API and audit
+log entries show it as written; a literal API key stays
 `<redacted>` in responses and `[REDACTED]` in the audit log, as does a
 literal upstream client secret. A
 [configuration export](configuration-as-code.md#export-a-tenant) still replaces

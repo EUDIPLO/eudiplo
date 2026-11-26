@@ -1,14 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
-import { envSource } from "../../../../test/secrets/secret-test-sources.js";
-import { SecretPolicy } from "../../../platform/secrets/application/secret-policy.js";
-import { SecretReferences } from "../../../platform/secrets/application/secret-references.js";
+import { envSource } from "../../../../../test/secrets/secret-test-sources.js";
+import { SecretPolicy } from "../../../../platform/secrets/application/secret-policy.js";
+import { SecretReferences } from "../../../../platform/secrets/application/secret-references.js";
 import {
     DEFAULT_SECRET_RESOLVER_OPTIONS,
     SecretResolver,
-} from "../../../platform/secrets/application/secret-resolver.js";
-import type { KmsProviderConfig } from "../schemas/kms-config.schema.js";
-import type { KmsAdapter } from "./kms-adapter.js";
-import { kmsCredentialUse } from "./kms-credential-references.js";
+} from "../../../../platform/secrets/application/secret-resolver.js";
+import type { KmsProviderConfig } from "../../schemas/kms-config.schema.js";
+import type { KmsAdapter } from "../kms-adapter.js";
+import { kmsCredentialUse } from "../kms-credential-references.js";
 import { ReferencedKmsAdapter } from "./referenced-kms-adapter.js";
 
 const reference = "${env:ACME_VAULT_TOKEN}";
@@ -105,6 +105,17 @@ describe("ReferencedKmsAdapter", () => {
         expect(await sign()).toBe("first");
         expect(await sign()).toBe("first");
         expect(built.map((entry) => entry.token)).toEqual([reference, "first"]);
+    });
+
+    it("builds one adapter for concurrent operations", async () => {
+        const { sign, built, retired } = setup();
+        expect(await Promise.all([sign(), sign(), sign()])).toEqual([
+            "first",
+            "first",
+            "first",
+        ]);
+        expect(built.map((entry) => entry.token)).toEqual([reference, "first"]);
+        expect(retired).toEqual([]);
     });
 
     it("rebuilds the adapter when the value rotates and retires the old one", async () => {

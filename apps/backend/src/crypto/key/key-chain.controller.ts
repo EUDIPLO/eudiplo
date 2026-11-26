@@ -124,7 +124,7 @@ export class KeyChainController {
     @ApiOperation({
         summary: "Get tenant KMS provider configuration",
         description:
-            "Returns tenant-specific KMS config (if present) and the effective merged config. Credentials are returned as `<redacted>`, a secret reference (`${vault:…}`, `${env:…}`) as written; `${ENV_VAR}` placeholders of the tenant file are returned as stored. Answers 400 with the reason when the stored tenant `kms.json` is not JSON or no valid KMS configuration, or names a variable, a file or a server it may not use. Requires the `tenant:admin` or `tenants:manage` role.",
+            "Returns tenant-specific KMS config (if present) and the effective merged config. Credentials are returned as `<redacted>`, a secret reference (`${vault:…}`, `${env:…}`) of the tenant file as written; `${ENV_VAR}` placeholders of the tenant file are returned as stored. Answers 400 with the reason when the stored tenant `kms.json` is not JSON or no valid KMS configuration, or names a variable, a file or a server it may not use. Requires the `tenant:admin` or `tenants:manage` role.",
     })
     @ApiResponse({
         status: 200,

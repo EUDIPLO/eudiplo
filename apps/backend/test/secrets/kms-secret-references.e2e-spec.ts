@@ -156,6 +156,19 @@ describe("Secret references in a tenant kms.json", () => {
 
         expect(response.status).toBeGreaterThanOrEqual(400);
         expect(mockKms.lastAuthorization).toBeUndefined();
+        // The provider's health names why: the policy refused the reference.
+        const health = await request(app.getHttpServer())
+            .get("/key-chain/providers/health")
+            .set("Authorization", authorization)
+            .expect(200);
+        const own = health.body.find(
+            (entry: { providerId: string }) => entry.providerId === "own-kms",
+        );
+        expect(own).toMatchObject({
+            ok: false,
+            error: expect.stringContaining("no grant of tenant 'kmsrefs'"),
+        });
+        expect(mockKms.lastAuthorization).toBeUndefined();
         expect(JSON.stringify(response.body)).not.toContain(
             variables.OTHER_KMS_TOKEN,
         );

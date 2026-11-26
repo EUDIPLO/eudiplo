@@ -339,6 +339,43 @@ describe("KmsTenantConfigService", () => {
             expect(atomicWriteFileSync).not.toHaveBeenCalled();
         });
 
+        it("checks a bound reference against the server the credential is sent to", () => {
+            const bound = "${vault:kv/operator/kms#token}";
+            const service = createService(
+                stubSecretReferences({
+                    tenants: {
+                        "tenant-a": {
+                            bound: [
+                                {
+                                    ref: bound,
+                                    fields: [
+                                        "KmsConfig:providers.*.vaultToken",
+                                    ],
+                                    destinations: ["https://vault.example.com"],
+                                },
+                            ],
+                        },
+                    },
+                }).secrets,
+            );
+
+            service.saveTenantConfig("tenant-a", vault(bound));
+            expect(atomicWriteFileSync).toHaveBeenCalledTimes(1);
+            const moved = vault(bound);
+            moved.providers[0].vaultUrl = "https://attacker.example.com";
+            expect(() => service.saveTenantConfig("tenant-a", moved)).toThrow(
+                /providers\[0\] \('vault'\)\.vaultToken: /,
+            );
+            expect(atomicWriteFileSync).toHaveBeenCalledTimes(1);
+        });
+
+        it("reports nothing to plans for a configuration of another shape", () => {
+            const service = createService(stubSecretReferences().secrets);
+            expect(
+                service.refusedSetting("tenant-a", { providers: {} }),
+            ).toBeUndefined();
+        });
+
         it("stores a reference of its own namespace and shows it as written", () => {
             const reference = "${vault:kv/eudiplo/tenant-a/kms#token}";
             const service = createService(stubSecretReferences().secrets);

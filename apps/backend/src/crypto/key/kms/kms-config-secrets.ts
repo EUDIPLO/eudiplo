@@ -2,7 +2,11 @@ import {
     KMS_SECRET_PATHS,
     type KmsConfig,
 } from "../schemas/kms-config.schema.js";
-import { KMS_CREDENTIAL_DESTINATIONS } from "./kms-credential-references.js";
+import {
+    KMS_CREDENTIAL_DESTINATIONS,
+    matches,
+    valueAt,
+} from "./kms-credential-references.js";
 import {
     HOLDS_ENV_PLACEHOLDER,
     KMS_TENANT_AWS_DEFAULT_CREDENTIALS,
@@ -18,14 +22,6 @@ import {
 export const KMS_REDACTED_SECRET = "<redacted>";
 
 const ENV_PLACEHOLDER = /^\$\{[A-Z0-9_]+\}$/;
-
-/**
- * A credential sent as {@link KMS_REDACTED_SECRET} is kept only while the
- * settings that name where it is sent stay the same; otherwise whoever may
- * edit the KMS configuration could send the stored credential to a server
- * of their choice without knowing it.
- */
-const CREDENTIAL_DESTINATIONS = KMS_CREDENTIAL_DESTINATIONS;
 
 /** A redacted credential was sent for a provider that has no stored value. */
 export class KmsSecretNotStoredError extends Error {
@@ -71,26 +67,8 @@ export class KmsInstanceCredentialsRefusedError extends Error {
     }
 }
 
-function matches(pattern: string, path: (string | number)[]): boolean {
-    const parts = pattern.split(".");
-    return (
-        parts.length === path.length &&
-        parts.every((part, index) => part === "*" || part === `${path[index]}`)
-    );
-}
-
 function isSecretPath(path: (string | number)[]): boolean {
     return KMS_SECRET_PATHS.some((pattern) => matches(pattern, path));
-}
-
-function valueAt(node: unknown, path: (string | number)[]): unknown {
-    return path.reduce<unknown>(
-        (current, key) =>
-            current && typeof current === "object"
-                ? (current as Record<string, unknown>)[key]
-                : undefined,
-        node,
-    );
 }
 
 /** Replace the value of every credential field of `value` using `replace`. */
@@ -151,7 +129,7 @@ export function redactKmsConfig(
  *
  * @throws KmsSecretNotStoredError when there is no stored credential.
  * @throws KmsSecretDestinationChangedError when the setting that names where
- * the credential is sent changes ({@link CREDENTIAL_DESTINATIONS}).
+ * the credential is sent changes ({@link KMS_CREDENTIAL_DESTINATIONS}).
  */
 export function restoreKmsSecrets(
     update: KmsConfig,
@@ -178,7 +156,7 @@ export function restoreKmsSecrets(
             throw new KmsSecretNotStoredError(label);
         }
         const destinations = Object.entries(
-            CREDENTIAL_DESTINATIONS[provider.type] ?? {},
+            KMS_CREDENTIAL_DESTINATIONS[provider.type] ?? {},
         ).find(([pattern]) => matches(pattern, fieldPath))?.[1];
         for (const destination of destinations ?? []) {
             const destinationPath = destination.split(".");
@@ -202,7 +180,7 @@ export function restoreKmsSecrets(
  * A value the stored configuration already holds at the same place of the
  * provider with the same `id` and `type` is kept, as long as every setting
  * that names where the provider's credentials are sent
- * ({@link CREDENTIAL_DESTINATIONS}) stays the same.
+ * ({@link KMS_CREDENTIAL_DESTINATIONS}) stays the same.
  *
  * @throws KmsPlaceholderRefusedError
  */
@@ -248,7 +226,9 @@ export function assertNoNewKmsPlaceholders(
             refuse(label);
         }
         const destinations = new Set(
-            Object.values(CREDENTIAL_DESTINATIONS[provider.type] ?? {}).flat(),
+            Object.values(
+                KMS_CREDENTIAL_DESTINATIONS[provider.type] ?? {},
+            ).flat(),
         );
         for (const destination of destinations) {
             const destinationPath = destination.split(".");

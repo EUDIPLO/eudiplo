@@ -4,6 +4,8 @@ import { HttpService } from "@nestjs/axios";
 import { Logger } from "@nestjs/common";
 import { firstValueFrom } from "rxjs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { stubSecretReferences } from "../../../../test/secrets/secret-test-sources.js";
+import type { SecretUse } from "../../../platform/secrets/domain/secret-use.js";
 import { OutboundUrlPolicyService } from "../../../webhook/outbound-url-policy.service.js";
 import type { KmsConfig } from "../schemas/kms-config.schema.js";
 import { AwsKmsAdapter } from "./adapters/aws-kms.adapter.js";
@@ -13,12 +15,12 @@ import {
 } from "./kms-provider.registry.js";
 
 describe("KmsProviderRegistry", () => {
-    const vault = (id: string) =>
+    const vault = (id: string, vaultToken = "token") =>
         ({
             id,
             type: "vault",
             vaultUrl: "https://vault.example",
-            vaultToken: "token",
+            vaultToken,
         }) as KmsConfig["providers"][number];
     const globalConfig: KmsConfig = {
         providers: [{ id: "db", type: "db" }, vault("global-vault")],
@@ -244,6 +246,63 @@ describe("KmsProviderRegistry", () => {
         registry.invalidateTenant("tenant");
 
         expect(registry.resolve("db", "tenant")).not.toBe(before);
+    });
+
+    describe("credentials that are secret references", () => {
+        it("names the tenant's file and the provider's index there, or the instance's", async () => {
+            const { secrets } = stubSecretReferences();
+            const uses: SecretUse[] = [];
+            vi.spyOn(secrets, "valueOf").mockImplementation(async (_, use) => {
+                uses.push(use);
+                throw new Error("stop before any request");
+            });
+            const own = vault(
+                "own-vault",
+                "${vault:kv/eudiplo/acme/kms#token}",
+            );
+            const globalWithReference = vault(
+                "global-ref",
+                "${vault:kv/instance/kms#token}",
+            );
+            const global: KmsConfig = {
+                providers: [{ id: "db", type: "db" }, globalWithReference],
+            };
+            const tenantConfig: KmsConfig = {
+                providers: [{ id: "db", type: "db" }, globalWithReference, own],
+            };
+            const tenantFile: KmsConfig = {
+                providers: [{ id: "db", type: "db" }, own],
+            };
+            const registry = new KmsProviderRegistry(
+                {
+                    getConfig: (tenantId?: string) =>
+                        tenantId ? tenantConfig : global,
+                    getTenantSnapshot: () => ({
+                        config: tenantConfig,
+                        file: tenantFile,
+                    }),
+                } as never,
+                globalHttp as never,
+                { safeLookup } as never,
+                secrets,
+            );
+
+            await registry.resolve("own-vault", "acme").health();
+            await registry.resolve("global-ref", "acme").health();
+
+            expect(uses).toEqual([
+                {
+                    scope: { type: "tenant", tenantId: "acme" },
+                    field: "KmsConfig:providers.1.vaultToken",
+                    destination: "https://vault.example",
+                },
+                {
+                    scope: { type: "instance" },
+                    field: "KmsConfig:providers.1.vaultToken",
+                    destination: "https://vault.example",
+                },
+            ]);
+        });
     });
 
     describe("adapters that are no longer handed out", () => {

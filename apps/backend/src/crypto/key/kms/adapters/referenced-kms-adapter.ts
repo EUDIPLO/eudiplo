@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import type { JWK } from "jose";
-import type { SecretReferences } from "../../../platform/secrets/application/secret-references.js";
-import type { SecretUse } from "../../../platform/secrets/domain/secret-use.js";
-import type { KmsProviderConfig } from "../schemas/kms-config.schema.js";
+import type { SecretReferences } from "../../../../platform/secrets/application/secret-references.js";
+import type { SecretUse } from "../../../../platform/secrets/domain/secret-use.js";
+import type { KmsProviderConfig } from "../../schemas/kms-config.schema.js";
 import type {
     KmsAdapter,
     KmsAdapterCapabilities,
@@ -10,11 +10,11 @@ import type {
     KmsKeyMaterial,
     KmsKeyRef,
     KmsSigningAlg,
-} from "./kms-adapter.js";
+} from "../kms-adapter.js";
 import {
     type KmsCredential,
     withCredential,
-} from "./kms-credential-references.js";
+} from "../kms-credential-references.js";
 
 /**
  * A KMS provider whose credentials include secret references. The

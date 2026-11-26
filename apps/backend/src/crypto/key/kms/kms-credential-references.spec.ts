@@ -36,10 +36,11 @@ describe("KMS credential references", () => {
                     tokenUrl: "https://csc.example/token",
                     clientId: "client",
                     clientSecret: "secret",
+                    sad: "sad",
                     authorizeAuthData: [{ id: "otp", value: "123" }],
                 }),
             ).map((credential) => credential.path.join(".")),
-        ).toEqual(["clientSecret", "authorizeAuthData.0.value"]);
+        ).toEqual(["clientSecret", "sad", "authorizeAuthData.0.value"]);
         expect(
             kmsCredentials(
                 provider({
@@ -50,7 +51,7 @@ describe("KMS credential references", () => {
                     secretAccessKey: "secret",
                 }),
             ).map((credential) => credential.path.join(".")),
-        ).toContain("secretAccessKey");
+        ).toEqual(["secretAccessKey"]);
     });
 
     it("replaces one credential, leaving the provider as it was", () => {
@@ -110,6 +111,19 @@ describe("KMS credential references", () => {
                 ["secretAccessKey"],
             ).destination,
         ).toBe("https://kms.eu-west-1.amazonaws.com");
+        // Only a region name becomes an address.
+        expect(
+            kmsCredentialUse(
+                { type: "instance" },
+                0,
+                provider({
+                    id: "a",
+                    type: "aws-kms",
+                    region: "eu-central-1.amazonaws.com#x",
+                }),
+                ["secretAccessKey"],
+            ).destination,
+        ).toBeUndefined();
         // A PKCS#11 pin goes to a library of the host, which is no URL.
         expect(
             kmsCredentialUse(

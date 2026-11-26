@@ -33,13 +33,17 @@ export const KMS_CREDENTIAL_DESTINATIONS: Record<
     },
 };
 
+/** An AWS region name, such as `eu-central-1` or `us-gov-west-1`. */
+const AWS_REGION = /^[a-z]{2}(?:-[a-z0-9]+)+-\d$/;
+
 /** A credential of a provider: its path below the provider, and its value. */
 export interface KmsCredential {
     path: (string | number)[];
     value: string;
 }
 
-function matches(pattern: string, path: (string | number)[]): boolean {
+/** Whether `path` matches `pattern`, `*` standing for one segment. */
+export function matches(pattern: string, path: (string | number)[]): boolean {
     const parts = pattern.split(".");
     return (
         parts.length === path.length &&
@@ -47,7 +51,8 @@ function matches(pattern: string, path: (string | number)[]): boolean {
     );
 }
 
-function valueAt(node: unknown, path: (string | number)[]): unknown {
+/** The value at `path` of `node`, or undefined. */
+export function valueAt(node: unknown, path: (string | number)[]): unknown {
     return path.reduce<unknown>(
         (current, key) =>
             current && typeof current === "object"
@@ -116,9 +121,14 @@ export function kmsCredentialUse(
     const destinationPath = Object.entries(
         KMS_CREDENTIAL_DESTINATIONS[provider.type] ?? {},
     ).find(([pattern]) => matches(pattern, path))?.[1]?.[0];
+    const region = (provider as { region?: unknown }).region;
     const destination =
         provider.type === "aws-kms"
-            ? `https://kms.${(provider as { region?: string }).region}.amazonaws.com`
+            ? // Only a region name: other text could make the policy see
+              // another origin than the one the SDK calls.
+              typeof region === "string" && AWS_REGION.test(region)
+                ? `https://kms.${region}.amazonaws.com`
+                : undefined
             : destinationPath
               ? valueAt(provider, destinationPath.split("."))
               : undefined;

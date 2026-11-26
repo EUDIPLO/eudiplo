@@ -6,14 +6,16 @@ import {
     Inject,
     Injectable,
     NotFoundException,
-    Optional,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import {
     SECRET_REFERENCES,
     SecretReferences,
 } from "../../../platform/secrets/application/secret-references.js";
-import { assertSecretFieldAllowed } from "../../../platform/secrets/secret-reference-request.js";
+import {
+    SecretReferenceInvalidError,
+    SecretReferenceRefusedError,
+} from "../../../platform/secrets/domain/secret-errors.js";
 import {
     type KmsConfig,
     parseRawKmsConfig,
@@ -51,7 +53,6 @@ export class KmsTenantConfigService {
         private readonly configService: ConfigService,
         private readonly kmsConfigService: KmsConfigService,
         private readonly kmsProviderRegistry: KmsProviderRegistry,
-        @Optional()
         @Inject(SECRET_REFERENCES)
         private readonly secrets: SecretReferences = new SecretReferences(),
     ) {}
@@ -71,20 +72,38 @@ export class KmsTenantConfigService {
         tenantId: string,
         config: KmsConfig,
     ): void {
-        config.providers.forEach((provider, index) => {
-            for (const credential of kmsCredentials(provider))
-                assertSecretFieldAllowed(
-                    this.secrets,
-                    credential.value,
-                    kmsCredentialUse(
-                        { type: "tenant", tenantId },
-                        index,
-                        provider,
-                        credential.path,
-                    ),
-                    `providers[${index}] ('${provider.id}').${credential.path.join(".")}`,
-                );
-        });
+        const refusal = this.credentialReferenceRefusal(tenantId, config);
+        if (refusal) throw new BadRequestException(refusal);
+    }
+
+    /** Why a credential reference of `config` is refused, or undefined. */
+    private credentialReferenceRefusal(
+        tenantId: string,
+        config: KmsConfig,
+    ): string | undefined {
+        for (const [index, provider] of config.providers.entries()) {
+            for (const credential of kmsCredentials(provider)) {
+                try {
+                    this.secrets.assertAllowed(
+                        credential.value,
+                        kmsCredentialUse(
+                            { type: "tenant", tenantId },
+                            index,
+                            provider,
+                            credential.path,
+                        ),
+                    );
+                } catch (error) {
+                    if (
+                        error instanceof SecretReferenceRefusedError ||
+                        error instanceof SecretReferenceInvalidError
+                    )
+                        return `providers[${index}] ('${provider.id}').${credential.path.join(".")}: ${error.message}`;
+                    throw error;
+                }
+            }
+        }
+        return undefined;
     }
 
     /**
@@ -225,13 +244,18 @@ export class KmsTenantConfigService {
             }
             return undefined;
         }
+        let referenceRefusal: string | undefined;
         try {
-            this.assertCredentialReferences(tenantId, config as KmsConfig);
-        } catch (error) {
-            if (error instanceof BadRequestException)
-                return { code: "KMS_SETTING_REFUSED", message: error.message };
-            throw error;
+            referenceRefusal = this.credentialReferenceRefusal(
+                tenantId,
+                config as KmsConfig,
+            );
+        } catch {
+            // A shape the schema refuses; plans report that elsewhere.
+            return undefined;
         }
+        if (referenceRefusal)
+            return { code: "KMS_SETTING_REFUSED", message: referenceRefusal };
         try {
             this.kmsConfigService.resolveTenantConfig(
                 config,
