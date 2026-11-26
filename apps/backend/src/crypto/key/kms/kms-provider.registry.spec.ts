@@ -15,7 +15,7 @@ import {
 } from "./kms-provider.registry.js";
 
 describe("KmsProviderRegistry", () => {
-    const vault = (id: string, vaultToken = "token") =>
+    const vaultProvider = (id: string, vaultToken = "token") =>
         ({
             id,
             type: "vault",
@@ -23,7 +23,7 @@ describe("KmsProviderRegistry", () => {
             vaultToken,
         }) as KmsConfig["providers"][number];
     const globalConfig: KmsConfig = {
-        providers: [{ id: "db", type: "db" }, vault("global-vault")],
+        providers: [{ id: "db", type: "db" }, vaultProvider("global-vault")],
     };
     const globalHttp = {};
     const safeLookup = () => undefined;
@@ -56,7 +56,7 @@ describe("KmsProviderRegistry", () => {
     it("binds the requests of a tenant file's providers to the outbound URL policy, not those of global providers", () => {
         const { registry, replaceConfig } = setup();
         const own = [
-            vault("own-vault"),
+            vaultProvider("own-vault"),
             { id: "own-http", type: "http", baseUrl: "https://kms.example" },
             {
                 id: "own-csc",
@@ -256,11 +256,11 @@ describe("KmsProviderRegistry", () => {
                 uses.push(use);
                 throw new Error("stop before any request");
             });
-            const own = vault(
+            const own = vaultProvider(
                 "own-vault",
                 "${vault:kv/eudiplo/acme/kms#token}",
             );
-            const globalWithReference = vault(
+            const globalWithReference = vaultProvider(
                 "global-ref",
                 "${vault:kv/instance/kms#token}",
             );
@@ -268,7 +268,7 @@ describe("KmsProviderRegistry", () => {
             const global: KmsConfig = {
                 providers: [
                     { id: "db", type: "db" },
-                    vault("global-only"),
+                    vaultProvider("global-only"),
                     globalWithReference,
                 ],
             };
@@ -316,7 +316,7 @@ describe("KmsProviderRegistry", () => {
                 uses.push(use);
                 throw new Error("stop before any request");
             });
-            const own = vault(
+            const own = vaultProvider(
                 "own-vault",
                 "${vault:kv/eudiplo/acme/kms#token}",
             );
