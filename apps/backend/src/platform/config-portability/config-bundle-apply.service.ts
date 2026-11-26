@@ -337,7 +337,7 @@ export class ConfigBundleApplyService {
                 (left, right) => this.order(left.kind) - this.order(right.kind),
             );
         for (const input of ordered) {
-            const { document } = this.migrationService.upgrade(input);
+            const { document } = this.migrationService.upgradeFile(input);
             // The values the plan compared.
             readDocumentFile(document);
             const item = items.get(`${document.kind}/${resourceId(document)}`);

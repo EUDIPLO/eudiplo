@@ -109,7 +109,7 @@ describe("ConfigImportService.replacePlaceholders", () => {
                     open: "${UNSET_VARIABLE}",
                 },
                 "tenant",
-                true,
+                "keep",
             ),
         ).toEqual({
             text: "Hook $${WEBHOOK_KEY}",

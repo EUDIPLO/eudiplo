@@ -360,7 +360,7 @@ export class ConfigFolderBundleService {
         const resolvedPayload = this.configImportService.replacePlaceholders(
             rawPayload,
             resource.kind === "KmsConfig" ? "tenant-kms" : "tenant",
-            true,
+            "keep",
         );
         // A tenant kms.json keeps its placeholders, as the API stores and
         // shows it: KmsConfigService resolves them when the file is loaded.
@@ -398,7 +398,7 @@ export class ConfigFolderBundleService {
         const input = this.migrationService.isDocument(payload)
             ? payload
             : this.migrationService.wrapLegacy(resource.kind, payload, id);
-        const result = this.migrationService.upgrade(input);
+        const result = this.migrationService.upgradeFile(input);
         if (result.document.kind !== resource.kind) {
             throw new Error(
                 `contains ${result.document.kind}, expected ${resource.kind}`,

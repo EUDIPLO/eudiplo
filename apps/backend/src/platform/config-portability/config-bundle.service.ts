@@ -16,6 +16,7 @@ import {
     type ConfigPlaceholder,
     configChanges,
     escapeConfigPlaceholders,
+    readConfigFileValues,
     stableConfigJson,
 } from "@eudiplo/config-format/config-values.js";
 import { publishableDisplayEntries } from "@eudiplo/config-format/display-entries.js";
@@ -109,7 +110,7 @@ import type {
     ConfigResourceKind,
 } from "./config-resource.types.js";
 import { documentAppliedAsIs } from "./config-source-hash.js";
-import { readDocumentFile } from "./document-file.js";
+import { readDocumentFile, wholePlaceholderPaths } from "./document-file.js";
 import {
     clientDocumentRefusal,
     clientKeptWarning,
@@ -124,7 +125,6 @@ import {
     keyChainSettingsSpec,
 } from "./key-chain-document.js";
 import { newStatusListCapacityIssue } from "./status-list-capacity-issue.js";
-import { UNRESOLVED_PLACEHOLDER } from "./unresolved-placeholder.js";
 
 const OMITTED_FIELDS = new Set([
     "tenant",
@@ -216,24 +216,13 @@ function block(
  * environment, so every `${` is written in its escaped form `$${`: placed in
  * the folder, the export gives back the text and reads no variable. The
  * placeholders the export itself writes for secrets are added afterwards
- * (`redact`), except a client's, which its spec already holds. A KMS
+ * (`redact`). A client's spec arrives escaped already: clientSpec escapes
+ * the stored fields before it adds the placeholder of the secret. A KMS
  * configuration has no escaped form and keeps the placeholders of its file.
  */
-function exportedValues(
-    kind: ConfigResourceKind,
-    id: string,
-    spec: unknown,
-): unknown {
-    if (kind === "KmsConfig") return spec;
-    const escaped = escapeConfigPlaceholders(spec) as Record<string, unknown>;
-    const secret = (spec as Record<string, unknown> | null)?.secret;
-    if (
-        kind === "Client" &&
-        secret === `\${${placeholder("Client", id, "secret")}}`
-    ) {
-        escaped.secret = secret;
-    }
-    return escaped;
+function exportedValues(kind: ConfigResourceKind, spec: unknown): unknown {
+    if (kind === "KmsConfig" || kind === "Client") return spec;
+    return escapeConfigPlaceholders(spec);
 }
 
 function placeholder(
@@ -610,11 +599,12 @@ export class ConfigBundleService {
         for (const file of bundle.documents) {
             const input = this.migrationService.normalize(file);
             const sourceVersion = input.$schema!;
-            const result = this.migrationService.upgrade(input);
+            const result = this.migrationService.upgradeFile(input);
             // A document is a file: its values are read here, and no variable
             // of the backend with them. In a folder bundle the loader has
             // filled in the placeholders it could.
             const placeholders = readDocumentFile(result.document);
+            const wholePlaceholders = wholePlaceholderPaths(placeholders);
             upgradedDocuments.push(result.document);
             const exists = await this.exists(
                 tenantId,
@@ -640,7 +630,10 @@ export class ConfigBundleService {
                 systemOwnedKeyChains.has(reference.id);
             const itemIssues = [...result.issues];
             itemIssues.push(
-                ...this.documentValidationService.validate(result.document),
+                ...this.documentValidationService.validate(
+                    result.document,
+                    wholePlaceholders,
+                ),
             );
             if (skipReserved) {
                 itemIssues.push({
@@ -851,6 +844,7 @@ export class ConfigBundleService {
                     this.documentValidationService.validateRegistrationCertificate(
                         result.document,
                         tenantId,
+                        wholePlaceholders,
                     );
                 if (certificateIssues.length > 0) {
                     itemIssues.push(...certificateIssues);
@@ -2289,18 +2283,24 @@ export class ConfigBundleService {
         };
     }
 
-    /** Client secrets are one-way hashed, so the spec names a placeholder. */
+    /**
+     * The spec of a client as an export writes it. Client secrets are one-way
+     * hashed, so the spec names a placeholder. The stored fields are escaped
+     * here, before the placeholder is added, so that the stored text stays
+     * text and the placeholder stays one; exportedValues leaves the spec as
+     * it is.
+     */
     private clientSpec(
         client: Record<string, any>,
         requirements: ConfigBundleRequirement[],
     ): Record<string, unknown> {
-        const spec: Record<string, unknown> = {
+        const spec: Record<string, unknown> = escapeConfigPlaceholders({
             clientId: client.clientId,
             description: client.description ?? undefined,
             roles: client.roles,
             allowedPresentationConfigs: client.allowedPresentationConfigs,
             allowedIssuanceConfigs: client.allowedIssuanceConfigs,
-        };
+        });
         if (client.secret || this.authSettings.mode === "keycloak") {
             const env = placeholder("Client", client.clientId, "secret");
             spec.secret = `\${${env}}`;
@@ -2405,7 +2405,7 @@ export class ConfigBundleService {
         redact = true,
     ): Promise<void> {
         const metadata = await this.ownershipService.get(tenantId, kind, id);
-        const values = exportedValues(kind, id, canonicalize(rawSpec));
+        const values = exportedValues(kind, canonicalize(rawSpec));
         const spec = redact
             ? this.redact(kind, id, values, requirements)
             : values;
@@ -2571,18 +2571,30 @@ export class ConfigBundleService {
         assertConfigBundle(bundle);
     }
 
+    /**
+     * The inputs a document needs before it can be applied: SECRET_REQUIRED
+     * for each value that is an unresolved placeholder, at its JSON pointer.
+     *
+     * @param placeholders those of the document file (readDocumentFile);
+     * undefined for a KMS configuration, whose file has no escaped form and
+     * is searched here.
+     * @param fromRequest whether a request sent the bundle: a placeholder
+     * inside a longer value is then stored as text, with a warning.
+     */
     private collectUnresolvedRequirements(
         document: ConfigDocument,
         issues: ConfigMigrationIssue[],
         placeholders: ConfigPlaceholder[] | undefined,
         fromRequest: boolean,
     ): void {
+        const resource = { kind: document.kind, id: resourceId(document) };
+        const kms = document.kind === "KmsConfig";
         // Each value once, also when it holds several placeholders.
         const reported = new Set<string>();
-        for (const { path, placeholder: text, whole } of placeholders ?? []) {
+        for (const { path, placeholder: text, whole } of placeholders ??
+            readConfigFileValues(document.spec, "none").placeholders) {
             if (reported.has(path)) continue;
             reported.add(path);
-            const resource = { kind: document.kind, id: resourceId(document) };
             if (whole) {
                 issues.push({
                     severity: "required-input",
@@ -2591,9 +2603,11 @@ export class ConfigBundleService {
                     message: `Resolve ${text} before applying this resource.`,
                     resource,
                 });
-            } else if (fromRequest) {
+            } else if (fromRequest && !kms) {
                 // Stored as text, as before. A folder file is not warned
                 // about: its loader has reported what it could not fill in.
+                // KmsTenantConfigService resolves those of a KMS
+                // configuration when it loads the tenant's file.
                 issues.push({
                     severity: "warning",
                     code: "PLACEHOLDER_STORED_AS_TEXT",
@@ -2603,37 +2617,6 @@ export class ConfigBundleService {
                 });
             }
         }
-        const visit = (value: unknown, path: string): void => {
-            if (
-                typeof value === "string" &&
-                value !== "!generate" &&
-                UNRESOLVED_PLACEHOLDER.test(value)
-            ) {
-                issues.push({
-                    severity: "required-input",
-                    code: "SECRET_REQUIRED",
-                    path,
-                    message: `Resolve ${value} before applying this resource.`,
-                    resource: {
-                        kind: document.kind,
-                        id: resourceId(document),
-                    },
-                });
-                return;
-            }
-            if (Array.isArray(value)) {
-                value.forEach((item, index) => visit(item, `${path}/${index}`));
-                return;
-            }
-            if (value && typeof value === "object") {
-                Object.entries(value as Record<string, unknown>).forEach(
-                    ([key, item]) => visit(item, `${path}/${key}`),
-                );
-            }
-        };
-        // The placeholders of a document file are listed above; only a KMS
-        // configuration, which is no such file, is searched here.
-        if (!placeholders) visit(document.spec, "/spec");
         if (
             document.kind === "KeyChain" &&
             (document.spec as any).keySource?.type === "required"
@@ -2644,10 +2627,7 @@ export class ConfigBundleService {
                 path: "/spec/keySource",
                 message:
                     "Supply private key material, an accessible external KMS reference, or explicitly regenerate the key.",
-                resource: {
-                    kind: document.kind,
-                    id: resourceId(document),
-                },
+                resource,
             });
         }
     }

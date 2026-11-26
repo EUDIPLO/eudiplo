@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
     holdsUnresolvedPlaceholderAt,
     readDocumentFile,
+    wholePlaceholderPaths,
 } from "./document-file.js";
 import { importedKeyProblems } from "./key-chain-document.js";
 
@@ -44,47 +45,71 @@ describe("holdsUnresolvedPlaceholderAt", () => {
             other: { jwt: "${B}" },
             keySource: { jwk: { d: "${C}" } },
         });
-        readDocumentFile(file);
+        const whole = wholePlaceholderPaths(readDocumentFile(file));
         const spec = file.spec;
 
         // Both read as "${…}" now; only one is a placeholder.
         expect(spec.registration_cert.jwt).toBe("${A}");
         expect(
             holdsUnresolvedPlaceholderAt(
-                spec,
+                whole,
                 "/registration_cert/jwt",
                 spec.registration_cert.jwt,
             ),
         ).toBe(false);
         expect(
-            holdsUnresolvedPlaceholderAt(spec, "/other/jwt", spec.other.jwt),
+            holdsUnresolvedPlaceholderAt(whole, "/other/jwt", spec.other.jwt),
         ).toBe(true);
         // A placeholder inside the value counts.
         expect(
             holdsUnresolvedPlaceholderAt(
-                spec,
+                whole,
                 "/keySource/jwk",
                 spec.keySource.jwk,
             ),
         ).toBe(true);
     });
 
+    it("keeps the answer for a copy of the spec", () => {
+        const file = document("PresentationConfig", {
+            registration_cert: { jwt: "$${A}" },
+        });
+        const whole = wholePlaceholderPaths(readDocumentFile(file));
+        const copy = structuredClone(file.spec);
+
+        expect(
+            holdsUnresolvedPlaceholderAt(
+                whole,
+                "/registration_cert/jwt",
+                copy.registration_cert.jwt,
+            ),
+        ).toBe(false);
+    });
+
     it("goes by the value for a spec that was not read as a document file", () => {
-        expect(holdsUnresolvedPlaceholderAt({}, "/a", "${A}")).toBe(true);
-        expect(holdsUnresolvedPlaceholderAt({}, "/a", "text")).toBe(false);
+        expect(holdsUnresolvedPlaceholderAt(undefined, "/a", "${A}")).toBe(
+            true,
+        );
+        expect(holdsUnresolvedPlaceholderAt(undefined, "/a", "text")).toBe(
+            false,
+        );
     });
 
     it("lets the key check see an escaped value as the broken key it is", () => {
         const escaped = document("KeyChain", {
             keySource: { type: "private-jwk", jwk: "$${A}" },
         });
-        readDocumentFile(escaped);
-        expect(importedKeyProblems(escaped.spec)).not.toEqual([]);
+        const escapedWhole = wholePlaceholderPaths(readDocumentFile(escaped));
+        expect(importedKeyProblems(escaped.spec, escapedWhole)).not.toEqual([]);
 
         const placeholder = document("KeyChain", {
             keySource: { type: "private-jwk", jwk: "${A}" },
         });
-        readDocumentFile(placeholder);
-        expect(importedKeyProblems(placeholder.spec)).toEqual([]);
+        const placeholderWhole = wholePlaceholderPaths(
+            readDocumentFile(placeholder),
+        );
+        expect(importedKeyProblems(placeholder.spec, placeholderWhole)).toEqual(
+            [],
+        );
     });
 });

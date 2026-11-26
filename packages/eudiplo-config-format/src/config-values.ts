@@ -222,8 +222,14 @@ export interface ConfigReference {
  * escaped form becomes `${`, and each placeholder is left as it is and
  * listed, also one with a default. Secret references are left as they are
  * and listed apart, in `references`; `$${vault:…}` is text, not one.
+ *
+ * @param escapes `none` for a file without an escaped form (a `kms.json`):
+ * the values stay as they are and only the placeholders are listed.
  */
-export function readConfigFileValues<T>(input: T): {
+export function readConfigFileValues<T>(
+    input: T,
+    escapes: Exclude<PlaceholderEscapes, "keep"> = "resolve",
+): {
     value: T;
     placeholders: ConfigPlaceholder[];
     references: ConfigReference[];
@@ -231,13 +237,17 @@ export function readConfigFileValues<T>(input: T): {
     const placeholders: ConfigPlaceholder[] = [];
     const references: ConfigReference[] = [];
     const value = mapStrings(input, (text, path) =>
-        replacePlaceholders(text, ({ type, match }) => {
-            const whole = match === text;
-            if (type === "reference")
-                references.push({ path, reference: match, whole });
-            else placeholders.push({ path, placeholder: match, whole });
-            return undefined;
-        }),
+        replacePlaceholders(
+            text,
+            ({ type, match }) => {
+                const whole = match === text;
+                if (type === "reference")
+                    references.push({ path, reference: match, whole });
+                else placeholders.push({ path, placeholder: match, whole });
+                return undefined;
+            },
+            escapes,
+        ),
     );
     return { value, placeholders, references };
 }
