@@ -2,6 +2,7 @@ import {
     Body,
     Controller,
     ForbiddenException,
+    Inject,
     Post,
     Res,
 } from "@nestjs/common";
@@ -16,7 +17,12 @@ import { Response } from "express";
 import { Role } from "../../../auth/roles/role.enum.js";
 import { Secured } from "../../../auth/secure.decorator.js";
 import { Token, TokenPayload } from "../../../auth/token.decorator.js";
+import {
+    SECRET_REFERENCES,
+    type SecretReferences,
+} from "../../../platform/secrets/application/secret-references.js";
 import { ResponseType } from "../../../verifier/oid4vp/dto/presentation-request.dto.js";
+import { assertNoRequestWebhookReference } from "../../../webhook/stored-webhook-secret.js";
 import {
     FlowType,
     OfferRequestDto,
@@ -29,7 +35,11 @@ import { Oid4vciService } from "../oid4vci/oid4vci.service.js";
 @Secured([Role.IssuanceOffer])
 @Controller("issuer/offer")
 export class CredentialOfferController {
-    constructor(private readonly oid4vciService: Oid4vciService) {}
+    constructor(
+        private readonly oid4vciService: Oid4vciService,
+        @Inject(SECRET_REFERENCES)
+        private readonly secrets: SecretReferences,
+    ) {}
 
     /**
      * Create an offer for a credential.
@@ -77,6 +87,17 @@ export class CredentialOfferController {
                     `Client is not authorized to use issuance config(s): ${unauthorized.join(", ")}`,
                 );
             }
+        }
+
+        for (const [id, source] of Object.entries(
+            body.credentialClaims ?? {},
+        )) {
+            if (source.type === "webhook")
+                assertNoRequestWebhookReference(
+                    this.secrets,
+                    source.webhook,
+                    `credentialClaims.${id}.webhook`,
+                );
         }
 
         const values = await this.oid4vciService.createOffer(

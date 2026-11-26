@@ -3,6 +3,7 @@ import type { SessionStore } from "../../../session/application/session-store.js
 import type { SessionData } from "../../../session/domain/session-data.js";
 import type { TrustListRef } from "../../../trust/types.js";
 import type { WalletAttestationService } from "../../../trust/wallet-attestation.service.js";
+import { storedWebhook } from "../../../webhook/domain/webhook-configuration.js";
 import type { WebhookConfig } from "../../../webhook/webhook.dto.js";
 import type { WebhookService } from "../../../webhook/webhook.service.js";
 import type { CredentialConfigurationRepository } from "../../configuration/credentials/ports/credential-configuration.repository.js";
@@ -170,7 +171,7 @@ export class WebhookWalletUnitRevocationNotifier
                 event.tenantId,
                 endpointId,
             );
-            if (endpoint) return { url: endpoint.url, auth: endpoint.auth };
+            if (endpoint) return storedWebhook("WebhookEndpoint", endpoint);
             this.logger.warn(
                 `Webhook endpoint ${endpointId} of tenant ${event.tenantId} does not exist; the credentials of session ${event.sessionId} revoked with their wallet unit are reported elsewhere or not at all`,
             );

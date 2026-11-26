@@ -1,5 +1,5 @@
 import { HttpService } from "@nestjs/axios";
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import {
     AxiosError,
     type AxiosRequestConfig,
@@ -8,14 +8,21 @@ import {
 } from "axios";
 import { PinoLogger } from "nestjs-pino";
 import { firstValueFrom } from "rxjs";
+import {
+    SECRET_REFERENCES,
+    type SecretReferences,
+} from "../platform/secrets/application/secret-references.js";
 import type {
     Notification,
     SessionData as Session,
 } from "../session/domain/session-data.js";
 import type { SessionOutcome } from "../session/domain/session-outcome.js";
 import { SessionStatus } from "../session/domain/session-state.js";
+import {
+    storedWebhookSecretUse,
+    type WebhookConfiguration,
+} from "./domain/webhook-configuration.js";
 import { OutboundUrlPolicyService } from "./outbound-url-policy.service.js";
-import { WebhookConfig } from "./webhook.dto.js";
 import { extractRawTokenFromSubmission } from "./webhook.utils.js";
 
 /**
@@ -74,11 +81,14 @@ function referenceOf(session: { reference?: string | null }) {
     return session.reference ? { reference: session.reference } : {};
 }
 
-/** The API key header of the webhook, when it uses one. */
-function authHeaders(webhook: WebhookConfig): Record<string, string> {
-    return webhook.auth?.type === "apiKey"
-        ? { [webhook.auth.config.headerName]: webhook.auth.config.value }
-        : {};
+/**
+ * The API key of a webhook could not be read from its secret source. The
+ * message may reach a wallet and names no reference; the log has the cause.
+ */
+class WebhookSecretError extends Error {
+    constructor(cause: unknown) {
+        super("the API key of the webhook could not be read", { cause });
+    }
 }
 
 /**
@@ -101,6 +111,7 @@ class WebhookRedirectError extends Error {
  */
 function deliveryError(err: unknown): string {
     if (err instanceof WebhookRedirectError) return err.message;
+    if (err instanceof WebhookSecretError) return err.message;
     if (isAxiosError(err)) {
         // Only the deadline signal of deliver() cancels a delivery.
         if (err.code === AxiosError.ERR_CANCELED) {
@@ -126,8 +137,33 @@ export class WebhookService {
         private readonly httpService: HttpService,
         private readonly outboundUrlPolicyService: OutboundUrlPolicyService,
         private readonly logger: PinoLogger,
+        @Inject(SECRET_REFERENCES)
+        private readonly secrets: SecretReferences,
     ) {
         this.logger.setContext("WebhookService");
+    }
+
+    /**
+     * The API key header of the webhook, when it uses one. The key of a
+     * stored webhook endpoint or attribute provider may be a secret
+     * reference, resolved for the webhook's URL under the tenant's policy;
+     * the key of a webhook from a request is always sent as written.
+     */
+    private async authHeaders(
+        webhook: WebhookConfiguration,
+    ): Promise<Record<string, string>> {
+        if (webhook.auth?.type !== "apiKey") return {};
+        const { headerName, value } = webhook.auth.config;
+        if (!webhook.storedAs) return { [headerName]: value };
+        const secret = await this.secrets
+            .valueOf(
+                value,
+                storedWebhookSecretUse(webhook.storedAs, webhook.url),
+            )
+            .catch((error: unknown) => {
+                throw new WebhookSecretError(error);
+            });
+        return { [headerName]: secret.reveal() };
     }
 
     /**
@@ -138,10 +174,11 @@ export class WebhookService {
      * origin.
      */
     private async deliver(
-        webhook: WebhookConfig,
+        webhook: WebhookConfiguration,
         payload: unknown,
     ): Promise<AxiosResponse> {
         const origin = new URL(webhook.url).origin;
+        const auth = await this.authHeaders(webhook);
         // One deadline for all hops, body included; axios' `timeout` would
         // end when the response headers arrive.
         const signal = AbortSignal.timeout(WEBHOOK_TIMEOUT_MS);
@@ -149,8 +186,7 @@ export class WebhookService {
         let post = true;
         for (let redirects = 0; ; redirects++) {
             const options: AxiosRequestConfig = {
-                headers:
-                    new URL(url).origin === origin ? authHeaders(webhook) : {},
+                headers: new URL(url).origin === origin ? auth : {},
                 lookup: this.outboundUrlPolicyService.safeLookup as never,
                 // No connection pooling, so safeLookup checks every connection
                 // instead of a socket opened by an earlier request being reused.
@@ -216,6 +252,14 @@ export class WebhookService {
                 ...(err instanceof WebhookRedirectError && err.redirectTarget
                     ? { redirectTarget: err.redirectTarget }
                     : {}),
+                ...(err instanceof WebhookSecretError
+                    ? {
+                          secretError:
+                              err.cause instanceof Error
+                                  ? err.cause.message
+                                  : String(err.cause),
+                      }
+                    : {}),
             },
             `Error sending ${description}`,
         );
@@ -228,7 +272,7 @@ export class WebhookService {
      * @returns WebhookResponse containing claims data or deferred issuance indicator
      */
     sendWebhook(values: {
-        webhook: WebhookConfig;
+        webhook: WebhookConfiguration;
         session: Session;
         credentials?: any[];
         rawPresentationPayload?: any;
@@ -240,7 +284,7 @@ export class WebhookService {
     }
 
     private sendWebhookInternal(values: {
-        webhook: WebhookConfig;
+        webhook: WebhookConfiguration;
         session: Session;
         credentials?: any[];
         rawPresentationPayload?: any;
@@ -307,7 +351,7 @@ export class WebhookService {
      * @param notification The notification payload
      */
     sendWebhookNotification(
-        webhook: WebhookConfig,
+        webhook: WebhookConfiguration,
         session: Session,
         notification: Notification,
     ) {
@@ -327,7 +371,7 @@ export class WebhookService {
      * @param reason Why the offer was cancelled, when given
      */
     sendSessionCancelledWebhook(
-        webhook: WebhookConfig,
+        webhook: WebhookConfiguration,
         session: Session,
         reason?: string,
     ) {
@@ -354,7 +398,7 @@ export class WebhookService {
      * @throws Error when the URL is blocked or the delivery failed
      */
     sendCredentialsRevokedWebhook(
-        webhook: WebhookConfig,
+        webhook: WebhookConfiguration,
         payload: {
             session: string;
             reference?: string;
@@ -375,7 +419,7 @@ export class WebhookService {
      * @throws Error when the URL is blocked or the delivery failed
      */
     private async postSessionEvent(
-        webhook: WebhookConfig,
+        webhook: WebhookConfiguration,
         sessionId: string,
         payload: Record<string, unknown>,
         description: string,
@@ -409,7 +453,7 @@ export class WebhookService {
      * @returns WebhookResponse containing claims data or deferred issuance indicator
      */
     async sendClaimsWebhook(values: {
-        webhook: WebhookConfig;
+        webhook: WebhookConfiguration;
         session: string;
         reference?: string;
         credentialConfigurationId: string;

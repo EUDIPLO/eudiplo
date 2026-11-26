@@ -8,6 +8,13 @@ const event = {
     statusEntries: [{ uri: "https://issuer.example/status/list-1", idx: 3 }],
 };
 
+/** The webhook of a stored endpoint of the event's tenant. */
+const stored = (url: string) => ({
+    url,
+    auth: undefined,
+    storedAs: { kind: "WebhookEndpoint", tenantId: "tenant-1" },
+});
+
 function setup(options: {
     configurationEndpoint?: string;
     session?: Record<string, unknown> | null;
@@ -23,7 +30,11 @@ function setup(options: {
         findForTenant: vi.fn(async (_tenant: string, id: string) =>
             options.missingEndpoints?.includes(id)
                 ? null
-                : { url: `https://hooks.example/${id}`, auth: undefined },
+                : {
+                      tenantId: "tenant-1",
+                      url: `https://hooks.example/${id}`,
+                      auth: undefined,
+                  },
         ),
     };
     const configurations = {
@@ -56,7 +67,7 @@ describe("WebhookWalletUnitRevocationNotifier", () => {
         await notifier.credentialsRevoked(event);
 
         expect(webhooks.sendCredentialsRevokedWebhook).toHaveBeenCalledWith(
-            { url: "https://hooks.example/lifecycle", auth: undefined },
+            stored("https://hooks.example/lifecycle"),
             {
                 session: "session-1",
                 reference: "order-4711",
@@ -74,7 +85,7 @@ describe("WebhookWalletUnitRevocationNotifier", () => {
         await notifier.credentialsRevoked(event);
 
         expect(webhooks.sendCredentialsRevokedWebhook).toHaveBeenCalledWith(
-            { url: "https://hooks.example/offer", auth: undefined },
+            stored("https://hooks.example/offer"),
             expect.not.objectContaining({ reference: expect.anything() }),
         );
     });
@@ -108,7 +119,7 @@ describe("WebhookWalletUnitRevocationNotifier", () => {
         await notifier.credentialsRevoked(event);
 
         expect(webhooks.sendCredentialsRevokedWebhook).toHaveBeenCalledWith(
-            { url: "https://hooks.example/offer", auth: undefined },
+            stored("https://hooks.example/offer"),
             expect.anything(),
         );
     });

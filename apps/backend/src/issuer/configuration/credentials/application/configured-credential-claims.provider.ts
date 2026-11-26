@@ -1,4 +1,7 @@
-import type { WebhookConfiguration } from "../../../../webhook/domain/webhook-configuration.js";
+import {
+    storedWebhook,
+    type WebhookConfiguration,
+} from "../../../../webhook/domain/webhook-configuration.js";
 import type { AttributeProviderRepository } from "../../attribute-provider/ports/attribute-provider.repository.js";
 import type {
     CredentialClaimsProvider,
@@ -111,7 +114,7 @@ export class ConfiguredCredentialClaimsProvider
                 `Attribute provider '${id}' not found`,
             );
         }
-        return { url: provider.url, auth: provider.auth };
+        return storedWebhook("AttributeProvider", provider);
     }
 }
 

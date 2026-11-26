@@ -168,9 +168,21 @@ export function assertApiKeyKeptOnlyForSameUrl(
 /** Path of the API key in a webhook endpoint or attribute provider. */
 const API_KEY = "auth.config.value";
 
-/** A webhook endpoint or attribute provider for an API response. */
-export function redactApiKey<T>(entry: T): T {
-    return redactSecrets(entry, API_KEY);
+/**
+ * A webhook endpoint or attribute provider for an API response. An API key
+ * for which `shown` is true, a secret reference, is no secret and kept.
+ */
+export function redactApiKey<T>(
+    entry: T,
+    shown: (value: string) => boolean = () => false,
+): T {
+    return walk(
+        entry,
+        undefined,
+        API_KEY.split("."),
+        (value) => (shown(value) ? value : REDACTED_SECRET),
+        "",
+    ) as T;
 }
 
 /**

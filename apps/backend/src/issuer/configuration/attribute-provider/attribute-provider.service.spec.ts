@@ -1,5 +1,6 @@
 import { ConflictException, NotFoundException } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
+import { SecretReferences } from "../../../platform/secrets/application/secret-references.js";
 import { AttributeProviderReferences } from "./application/attribute-provider-references.js";
 import { AttributeProviderController } from "./attribute-provider.controller.js";
 import { AttributeProviderService } from "./attribute-provider.service.js";
@@ -32,6 +33,7 @@ function setup(references: AttributeProviderReference[] = []) {
         auditLog as any,
         {} as any,
         registry,
+        new SecretReferences(),
     );
     return { service, repo, source, auditLog };
 }

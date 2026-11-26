@@ -966,6 +966,56 @@ describe("OID4VP request creation", () => {
         );
     }
 
+    it("reads a configured endpoint as a stored webhook of its tenant", async () => {
+        const findOneBy = vi.fn().mockResolvedValue({
+            tenantId: "tenant",
+            url: "https://results.example",
+            auth: { type: "none" },
+        });
+        const service = Object.assign(
+            Object.create(Oid4vpService.prototype) as Oid4vpService,
+            { webhookEndpointRepo: { findOneBy } },
+        );
+
+        const webhook = await (
+            service as unknown as {
+                resolveWebhookFromEndpoint(
+                    id: string,
+                    tenantId: string,
+                ): Promise<unknown>;
+            }
+        ).resolveWebhookFromEndpoint("results", "tenant");
+
+        expect(findOneBy).toHaveBeenCalledWith({
+            id: "results",
+            tenantId: "tenant",
+        });
+        // Its API key may be a secret reference of the tenant.
+        expect(webhook).toEqual({
+            url: "https://results.example",
+            auth: { type: "none" },
+            storedAs: { kind: "WebhookEndpoint", tenantId: "tenant" },
+        });
+    });
+
+    it("keeps only the endpoint ID of a configured webhook with the session", async () => {
+        const service = createService(vi.fn().mockResolvedValue(undefined), {
+            allowedOrigins: ["https://rp"],
+            webhookEndpointId: "results",
+        });
+
+        await service.createRequest("presentation", {}, "tenant", false);
+
+        const execute = (
+            service as unknown as {
+                createSession: { execute: ReturnType<typeof vi.fn> };
+            }
+        ).createSession.execute;
+        const [values] = execute.mock.calls[0];
+        expect(values.webhookEndpointId).toBe("results");
+        expect(values.parsedWebhook).toBeUndefined();
+    });
+
     it("uses the tenant's federation entity id for clientIdScheme openid_federation", async () => {
         const service = createService(vi.fn().mockResolvedValue(undefined));
 

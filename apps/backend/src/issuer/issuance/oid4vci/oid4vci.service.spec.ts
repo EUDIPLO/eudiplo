@@ -884,6 +884,7 @@ describe("OID4VCI notification endpoint lookup", () => {
             webhookEndpointId: "endpoint",
         };
         const endpoint = {
+            tenantId: "tenant",
             url: "https://webhook.example",
             auth: { type: "none" },
         };
@@ -991,7 +992,11 @@ describe("OID4VCI notification endpoint lookup", () => {
         const test = setup();
         await test.execute();
         expect(test.publish).toHaveBeenCalledWith(
-            test.endpoint,
+            {
+                url: test.endpoint.url,
+                auth: test.endpoint.auth,
+                storedAs: { kind: "WebhookEndpoint", tenantId: "tenant" },
+            },
             test.session,
             test.notification,
         );
