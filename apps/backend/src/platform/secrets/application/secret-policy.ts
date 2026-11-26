@@ -371,11 +371,7 @@ function ownPatternProblem(
         return source.tenantTemplates
             ? `would give every tenant the same secrets; name ${TENANT_TEMPLATE} in it, or make it a bound grant`
             : `would give every tenant the same secrets, and ${source.type} has no ${TENANT_TEMPLATE} namespaces; grant it per tenant, or make it a bound grant`;
-    const problem = source.validatePattern(
-        templated ? pattern.replaceAll(TENANT_TEMPLATE, "tenant") : pattern,
-        scopeType,
-    );
-    return problem;
+    return source.validatePattern(pattern, scopeType);
 }
 
 function readBoundGrant(
