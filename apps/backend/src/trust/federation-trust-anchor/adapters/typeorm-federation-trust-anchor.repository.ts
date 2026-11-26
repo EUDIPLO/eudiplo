@@ -1,4 +1,6 @@
 import { In, type Repository } from "typeorm";
+import { insertNew } from "../../../database/insert-new.js";
+import { ResourceIdTaken } from "../../../shared/domain/conflict-error.js";
 import type { FederationTrustAnchorData } from "../domain/federation-trust-anchor-data.js";
 import type { FederationTrustAnchorEntity } from "../entities/federation-trust-anchor.entity.js";
 import type { FederationTrustAnchorRepository } from "../ports/federation-trust-anchor.repository.js";
@@ -34,6 +36,23 @@ export class TypeOrmFederationTrustAnchorRepository
         return (
             await this.repository.findBy({ tenantId, entityId: In(entityIds) })
         ).map(toData);
+    }
+
+    existsForTenant(tenantId: string, id: string): Promise<boolean> {
+        return this.repository.existsBy({ id, tenantId });
+    }
+
+    async create(
+        anchor: FederationTrustAnchorData,
+    ): Promise<FederationTrustAnchorData> {
+        return toData(
+            await insertNew<FederationTrustAnchorEntity>(
+                this.repository,
+                anchor,
+                { id: anchor.id, tenantId: anchor.tenantId },
+                () => new ResourceIdTaken("Federation trust anchor", anchor.id),
+            ),
+        );
     }
 
     async save(

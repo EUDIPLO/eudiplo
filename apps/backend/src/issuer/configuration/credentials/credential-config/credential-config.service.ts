@@ -19,9 +19,9 @@ import {
     ConfigImportOrchestratorService,
     ImportPhase,
 } from "../../../../platform/config-import/config-import-orchestrator.service.js";
+import { ResourceIdTaken } from "../../../../shared/domain/conflict-error.js";
 import { loadConfigDto } from "../../../../shared/utils/config-file-loader.util.js";
 import { FilesService } from "../../../../storage/files.service.js";
-import { ResourceIdTaken } from "../../../../shared/domain/conflict-error.js";
 import { PresentationConfigService } from "../../../../verifier/presentations/configuration/presentation-config.service.js";
 import {
     ACTIVE_CREDENTIALS_REQUIRE_STATUS_MANAGEMENT,
@@ -293,15 +293,23 @@ export class CredentialConfigService {
         actorToken?: TokenPayload,
         requestMeta?: AuditLogRequestMeta,
     ) {
-        await this.assertIdFree(tenantId, config.id);
-        return this.store(tenantId, config, false, actorToken, requestMeta);
-    }
-
-    /** @throws ResourceIdTaken when the tenant has a configuration with this ID. */
-    private async assertIdFree(tenantId: string, id: string): Promise<void> {
-        if (await this.credentialConfigRepository.findForTenant(tenantId, id)) {
-            throw new ResourceIdTaken("Credential configuration", id);
+        // Checked before the image and reference checks for a clear answer;
+        // the insert decides between concurrent creates.
+        if (
+            await this.credentialConfigRepository.existsForTenant(
+                tenantId,
+                config.id,
+            )
+        ) {
+            throw new ResourceIdTaken("Credential configuration", config.id);
         }
+        return this.persist(
+            tenantId,
+            config,
+            { skipValidation: false, replace: false },
+            actorToken,
+            requestMeta,
+        );
     }
 
     /**
@@ -323,6 +331,30 @@ export class CredentialConfigService {
         actorToken?: TokenPayload,
         requestMeta?: AuditLogRequestMeta,
     ) {
+        return this.persist(
+            tenantId,
+            config,
+            { skipValidation, replace: true },
+            actorToken,
+            requestMeta,
+        );
+    }
+
+    /**
+     * Checks and stores a configuration: inserted when `replace` is false,
+     * replacing a stored one when it is true.
+     * @throws ResourceIdTaken when `replace` is false and the ID is taken.
+     */
+    private async persist(
+        tenantId: string,
+        config: CredentialConfigCreate,
+        {
+            skipValidation,
+            replace,
+        }: { skipValidation: boolean; replace: boolean },
+        actorToken?: TokenPayload,
+        requestMeta?: AuditLogRequestMeta,
+    ) {
         assertActiveCredentialsEnforceable(config);
         assertWalletUnitRevocationEnforceable(config);
         await this.replaceImageReferences(tenantId, config);
@@ -330,10 +362,10 @@ export class CredentialConfigService {
         if (!skipValidation) {
             await this.validateIaeActions(tenantId, config);
         }
-        const saved = await this.credentialConfigRepository.save({
-            ...config,
-            tenantId,
-        });
+        const row = { ...config, tenantId };
+        const saved = replace
+            ? await this.credentialConfigRepository.save(row)
+            : await this.credentialConfigRepository.create(row);
 
         if (actorToken) {
             await this.tenantActionLogService.record({

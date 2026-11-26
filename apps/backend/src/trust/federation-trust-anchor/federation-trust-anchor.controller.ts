@@ -16,10 +16,8 @@ import { AuditMeta } from "../../audit-log/audit-log-context.util.js";
 import { Role } from "../../auth/roles/role.enum.js";
 import { Secured } from "../../auth/secure.decorator.js";
 import { Token, TokenPayload } from "../../auth/token.decorator.js";
-import {
-    FederationTrustAnchorConflict,
-    FederationTrustAnchorNotFound,
-} from "./domain/federation-trust-anchor-errors.js";
+import { ConflictError } from "../../shared/domain/conflict-error.js";
+import { FederationTrustAnchorNotFound } from "./domain/federation-trust-anchor-errors.js";
 import {
     FederationTrustAnchorInUseError,
     type FederationTrustAnchorReferenceKind,
@@ -66,7 +64,8 @@ function httpError(error: unknown, token: TokenPayload): never {
     if (error instanceof FederationTrustAnchorNotFound) {
         throw new NotFoundException(error.message);
     }
-    if (error instanceof FederationTrustAnchorConflict) {
+    // A taken ID (ResourceIdTaken) or entity ID (FederationTrustAnchorConflict).
+    if (error instanceof ConflictError) {
         throw new ConflictException(error.message);
     }
     throw error;
