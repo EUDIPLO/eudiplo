@@ -2,7 +2,10 @@ import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { resourceId } from "@eudiplo/config-format/config-format.js";
-import { resolveConfigVariables } from "@eudiplo/config-format/config-values.js";
+import {
+    type PlaceholderEscapes,
+    resolveConfigVariables,
+} from "@eudiplo/config-format/config-values.js";
 import { Injectable, Logger, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { tenantConfigFolder } from "../../shared/utils/tenant-config-folder.util.js";
@@ -263,15 +266,18 @@ export class ConfigImportService {
      * @param scope where the file lives. It decides which variables the file
      * may name (see config-variable-scope.ts); a file that names another one
      * is rejected, whatever CONFIG_VARIABLE_STRICT says.
-     * @param asFile the result is planned as a configuration bundle, which
-     * reads a file: the escaped form `$${` stays, the values filled in are
-     * escaped, and a placeholder left unresolved stays one, so that the plan
-     * can tell it from text (readDocumentFile).
+     * @param escapes what becomes of the escaped form `$${`. `keep` when
+     * the result is planned as a configuration bundle, which reads a file:
+     * the escaped form stays, the values filled in are escaped, and a
+     * placeholder left unresolved stays one, so that the plan can tell it
+     * from text (readDocumentFile). Ignored for a tenant kms.json, which has
+     * no escaped form: KmsConfigService reads `$${VAR}` as a `$` and a
+     * placeholder, so the policy must see that variable too.
      */
     replacePlaceholders<T>(
         input: T,
         scope: Exclude<ConfigFileScope, "global"> = "tenant",
-        asFile = false,
+        escapes: Exclude<PlaceholderEscapes, "none"> = "resolve",
     ): T {
         const configured = this.configService.get<any>(
             "CONFIG_VARIABLE_STRICT",
@@ -310,12 +316,10 @@ export class ConfigImportService {
                 return undefined;
             },
         });
-        // A kms.json has no escaped form: KmsConfigService reads `$${VAR}` as
-        // a `$` and a placeholder, so the policy must see that variable too.
         const result = resolveConfigVariables(
             input,
             env,
-            scope === "tenant-kms" ? "none" : asFile ? "keep" : "resolve",
+            scope === "tenant-kms" ? "none" : escapes,
         );
         // In every mode: a refused variable is not a missing one.
         if (refused.size > 0) throw new Error([...refused].join("; "));

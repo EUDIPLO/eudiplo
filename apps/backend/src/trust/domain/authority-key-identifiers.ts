@@ -1,4 +1,5 @@
 import * as x509 from "@peculiar/x509";
+import { parseX509Certificate } from "../../shared/utils/x509-certificate-cache.js";
 import { isCredentialIssuerServiceType, type TrustedEntity } from "../types.js";
 
 /** DCQL `aki` values for the credential issuers of a trust list. */
@@ -62,11 +63,7 @@ export function credentialIssuerAuthorityKeyIdentifiers(
 /** Trust lists carry base64 DER; PEM is accepted for externally supplied values. */
 function parseCertificate(value: string): x509.X509Certificate | undefined {
     try {
-        return new x509.X509Certificate(
-            value.includes("-----BEGIN")
-                ? value
-                : Buffer.from(value.replaceAll(/\s/g, ""), "base64"),
-        );
+        return parseX509Certificate(value);
     } catch {
         return undefined;
     }

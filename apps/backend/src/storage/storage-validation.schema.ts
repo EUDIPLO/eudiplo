@@ -7,6 +7,8 @@ export const STORAGE_VALIDATION_SCHEMA = Joi.object({
         .default("local")
         .description("The storage driver to use")
         .meta({ group: "storage", order: 10 }),
+    // apps/backend/docker-entrypoint.sh repeats this default to hand the
+    // folder to the backend's user; change it there too.
     LOCAL_STORAGE_DIR: Joi.string()
         .when(Joi.ref("STORAGE_DRIVER"), {
             is: "local",

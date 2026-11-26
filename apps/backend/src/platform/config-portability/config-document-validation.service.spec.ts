@@ -26,40 +26,46 @@ describe("ConfigDocumentValidationService", () => {
 
     it("accepts an explicit key-regeneration decision", () => {
         expect(
-            service.validate({
-                $schema: schemaUrl("KeyChain"),
-                kind: "KeyChain",
-                metadata: {},
-                spec: {
-                    id: "issuer",
-                    usageType: "attestation",
-                    kmsProvider: "db",
-                    keySource: {
-                        type: "regenerate",
-                        keyChainType: "internalChain",
+            service.validate(
+                {
+                    $schema: schemaUrl("KeyChain"),
+                    kind: "KeyChain",
+                    metadata: {},
+                    spec: {
+                        id: "issuer",
+                        usageType: "attestation",
+                        kmsProvider: "db",
+                        keySource: {
+                            type: "regenerate",
+                            keyChainType: "internalChain",
+                        },
                     },
                 },
-            }),
+                undefined,
+            ),
         ).toEqual([]);
     });
 
     it("accepts the null rotation values of earlier exports with a private key", () => {
         expect(
-            service.validate({
-                $schema: schemaUrl("KeyChain"),
-                kind: "KeyChain",
-                metadata: {},
-                spec: {
-                    id: "issuer",
-                    usageType: "attestation",
-                    keySource: { type: "private-jwk", jwk: privateJwk },
-                    rotationPolicy: {
-                        enabled: false,
-                        intervalDays: null,
-                        certValidityDays: null,
+            service.validate(
+                {
+                    $schema: schemaUrl("KeyChain"),
+                    kind: "KeyChain",
+                    metadata: {},
+                    spec: {
+                        id: "issuer",
+                        usageType: "attestation",
+                        keySource: { type: "private-jwk", jwk: privateJwk },
+                        rotationPolicy: {
+                            enabled: false,
+                            intervalDays: null,
+                            certValidityDays: null,
+                        },
                     },
                 },
-            }),
+                undefined,
+            ),
         ).toEqual([]);
     });
 
@@ -81,7 +87,7 @@ describe("ConfigDocumentValidationService", () => {
         it("checks the keys and certificates of an internal chain instead of the importer schema", () => {
             expect(
                 service
-                    .validate(keyChain({ jwk, activeJwk: jwk }))
+                    .validate(keyChain({ jwk, activeJwk: jwk }), undefined)
                     .map(({ code, path, resource }) => ({
                         code,
                         path,
@@ -111,8 +117,23 @@ describe("ConfigDocumentValidationService", () => {
             ]);
         });
 
+        it("checks the text of an escaped form as a key and leaves a placeholder to SECRET_REQUIRED", () => {
+            const codes = (whole: ReadonlySet<string>) =>
+                service
+                    .validate(keyChain({ jwk: "${A}" }), whole)
+                    .map(({ code }) => code);
+
+            // Read from "$${A}": no placeholder at that path.
+            expect(codes(new Set())).toContain("INVALID_PRIVATE_KEY");
+            expect(codes(new Set(["/keySource/jwk"]))).not.toContain(
+                "INVALID_PRIVATE_KEY",
+            );
+        });
+
         it("keeps the importer schema for a private key without activeJwk", () => {
-            expect(service.validate(keyChain({ jwk: privateJwk }))).toEqual([
+            expect(
+                service.validate(keyChain({ jwk: privateJwk }), undefined),
+            ).toEqual([
                 expect.objectContaining({
                     code: "CURRENT_SCHEMA_VALIDATION_FAILED",
                     path: "/spec/",
@@ -135,7 +156,7 @@ describe("ConfigDocumentValidationService", () => {
         ])("rejects a private key %s without activeJwk", (_, key) => {
             expect(
                 service
-                    .validate(keyChain({ jwk: key }))
+                    .validate(keyChain({ jwk: key }), undefined)
                     .filter(({ code }) => code === "INVALID_PRIVATE_KEY"),
             ).toEqual([
                 expect.objectContaining({
@@ -154,7 +175,7 @@ describe("ConfigDocumentValidationService", () => {
         ])("reports no INVALID_PRIVATE_KEY for %s", (_, jwk) => {
             expect(
                 service
-                    .validate(keyChain({ jwk }))
+                    .validate(keyChain({ jwk }), undefined)
                     .filter(({ code }) => code === "INVALID_PRIVATE_KEY"),
             ).toEqual([]);
         });
@@ -182,17 +203,20 @@ describe("ConfigDocumentValidationService", () => {
     ])(
         "reports a type %s that contradicts the key source",
         (type, keySource) => {
-            const issues = service.validate({
-                $schema: schemaUrl("KeyChain"),
-                kind: "KeyChain",
-                metadata: {},
-                spec: {
-                    id: "issuer",
-                    usageType: "attestation",
-                    type,
-                    keySource,
+            const issues = service.validate(
+                {
+                    $schema: schemaUrl("KeyChain"),
+                    kind: "KeyChain",
+                    metadata: {},
+                    spec: {
+                        id: "issuer",
+                        usageType: "attestation",
+                        type,
+                        keySource,
+                    },
                 },
-            });
+                undefined,
+            );
 
             expect(issues).toContainEqual(
                 expect.objectContaining({
@@ -209,31 +233,37 @@ describe("ConfigDocumentValidationService", () => {
         { type: "regenerate" },
     ])("accepts a type that matches the key source %o", (keySource) => {
         expect(
-            service.validate({
-                $schema: schemaUrl("KeyChain"),
-                kind: "KeyChain",
-                metadata: {},
-                spec: {
-                    id: "issuer",
-                    usageType: "attestation",
-                    type: "internalChain",
-                    keySource,
+            service.validate(
+                {
+                    $schema: schemaUrl("KeyChain"),
+                    kind: "KeyChain",
+                    metadata: {},
+                    spec: {
+                        id: "issuer",
+                        usageType: "attestation",
+                        type: "internalChain",
+                        keySource,
+                    },
                 },
-            }),
+                undefined,
+            ),
         ).toEqual([]);
     });
 
     it("accepts identity carried by the schema-described spec", () => {
         expect(
-            service.validate({
-                $schema: schemaUrl("Client"),
-                kind: "Client",
-                metadata: {},
-                spec: {
-                    clientId: "different",
-                    roles: ["clients:manage"],
+            service.validate(
+                {
+                    $schema: schemaUrl("Client"),
+                    kind: "Client",
+                    metadata: {},
+                    spec: {
+                        clientId: "different",
+                        roles: ["clients:manage"],
+                    },
                 },
-            }),
+                undefined,
+            ),
         ).toEqual([]);
     });
 
@@ -272,12 +302,13 @@ describe("ConfigDocumentValidationService", () => {
                             values: [{ trustListId: "pid-issuers" }],
                         },
                     ]),
+                    undefined,
                 ),
             ).toEqual([]);
         });
 
         it("reports credential queries without trusted_authorities", () => {
-            expect(service.validate(presentation())).toEqual([
+            expect(service.validate(presentation(), undefined)).toEqual([
                 expect.objectContaining({
                     severity: "error",
                     code: "TRUSTED_AUTHORITY_REQUIRED",
@@ -292,7 +323,7 @@ describe("ConfigDocumentValidationService", () => {
 
         it("accepts them with SKIP_TRUST_AUTHORITY", () => {
             skipTrustAuthority.value = true;
-            expect(service.validate(presentation())).toEqual([]);
+            expect(service.validate(presentation(), undefined)).toEqual([]);
         });
 
         describe("transaction data", () => {
@@ -316,7 +347,10 @@ describe("ConfigDocumentValidationService", () => {
 
             it("accepts entries that reference an SD-JWT VC query", () => {
                 expect(
-                    service.validate(withTransactionData([entry(["pid"])])),
+                    service.validate(
+                        withTransactionData([entry(["pid"])]),
+                        undefined,
+                    ),
                 ).toEqual([]);
             });
 
@@ -324,6 +358,7 @@ describe("ConfigDocumentValidationService", () => {
                 expect(
                     service.validate(
                         withTransactionData([entry(["pid", "iban"])]),
+                        undefined,
                     ),
                 ).toEqual([
                     expect.objectContaining({
@@ -339,13 +374,16 @@ describe("ConfigDocumentValidationService", () => {
 
             it("leaves malformed credential queries to the schema", () => {
                 const document = withTransactionData([entry(["pid"])]);
-                const issues = service.validate({
-                    ...document,
-                    spec: {
-                        ...document.spec,
-                        dcql_query: { credentials: [{ id: "pid" }] },
+                const issues = service.validate(
+                    {
+                        ...document,
+                        spec: {
+                            ...document.spec,
+                            dcql_query: { credentials: [{ id: "pid" }] },
+                        },
                     },
-                });
+                    undefined,
+                );
                 expect(
                     issues.some(
                         (issue) =>
@@ -357,6 +395,7 @@ describe("ConfigDocumentValidationService", () => {
             it("leaves malformed entries to the schema", () => {
                 const issues = service.validate(
                     withTransactionData([{ type: "x", credential_ids: "pid" }]),
+                    undefined,
                 );
                 expect(
                     issues.some(
@@ -406,6 +445,7 @@ describe("ConfigDocumentValidationService", () => {
                     service.validateRegistrationCertificate(
                         withCertificate({ jwt: certificate(tenantVct) }),
                         "acme",
+                        undefined,
                     ),
                 ).toEqual([]);
             });
@@ -415,6 +455,7 @@ describe("ConfigDocumentValidationService", () => {
                     service.validateRegistrationCertificate(
                         withCertificate({ jwt: certificate(tenantVct) }),
                         "other",
+                        undefined,
                     ),
                 ).toEqual([
                     {
@@ -436,6 +477,7 @@ describe("ConfigDocumentValidationService", () => {
                             jwt: certificate("urn:other", 1_000),
                         }),
                         "acme",
+                        undefined,
                     ),
                 ).toEqual([
                     expect.objectContaining({
@@ -457,6 +499,7 @@ describe("ConfigDocumentValidationService", () => {
                             spec: { ...spec, registration_cert: { jwt: 42 } },
                         },
                         "acme",
+                        undefined,
                     ),
                 ).toEqual([]);
             });
@@ -466,14 +509,38 @@ describe("ConfigDocumentValidationService", () => {
                     service.validateRegistrationCertificate(
                         withCertificate({ jwt: "${RC_JWT}" }),
                         "acme",
+                        undefined,
                     ),
                 ).toEqual([]);
+                expect(
+                    service.validateRegistrationCertificate(
+                        withCertificate({ jwt: "${RC_JWT}" }),
+                        "acme",
+                        new Set(["/registration_cert/jwt"]),
+                    ),
+                ).toEqual([]);
+            });
+
+            it("checks the text of an escaped form as a certificate", () => {
+                // Read from "$${RC_JWT}": no placeholder at that path.
+                expect(
+                    service.validateRegistrationCertificate(
+                        withCertificate({ jwt: "${RC_JWT}" }),
+                        "acme",
+                        new Set(),
+                    ),
+                ).toEqual([
+                    expect.objectContaining({
+                        code: "REGISTRATION_CERTIFICATE_REFUSED",
+                    }),
+                ]);
             });
 
             it("is not part of the document checks, so skipped documents pass", () => {
                 expect(
                     service.validate(
                         withCertificate({ jwt: certificate(tenantVct, 1_000) }),
+                        undefined,
                     ),
                 ).toEqual([]);
             });

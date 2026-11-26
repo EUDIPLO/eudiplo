@@ -149,30 +149,38 @@ describe("StatusListService SQLite concurrency", () => {
         ).toBeNull();
     });
 
-    test("detects concurrent allocations while validating a binding update", async () => {
+    test("keeps an allocation made while a binding update was validated", async () => {
+        // Allocation writes only `stack` and keeps the version, so it does not
+        // conflict with a binding update, and neither write loses the other.
         const repository = dataSource.getRepository(StatusListEntity);
         Object.assign(service, {
             certService: {
                 find: async () => {
-                    await repository.update(
-                        { tenantId: "tenant-1", id: "list-1" },
-                        { stack: [1] },
+                    await service.createEntry(
+                        { id: "session-1", tenantId: "tenant-1" } as never,
+                        "config-1",
                     );
                     return {};
                 },
             },
+            regenerateListTokens: vi.fn().mockResolvedValue({}),
         });
-        await expect(
-            service.updateList("tenant-1", "list-1", { keyChainId: "new-key" }),
-        ).rejects.toThrow("changed concurrently");
-        expect(
-            (
-                await repository.findOneByOrFail({
-                    tenantId: "tenant-1",
-                    id: "list-1",
-                })
-            ).stack,
-        ).toEqual([1]);
+
+        await service.updateList("tenant-1", "list-1", {
+            keyChainId: "new-key",
+        });
+
+        const list = await repository.findOneByOrFail({
+            tenantId: "tenant-1",
+            id: "list-1",
+        });
+        expect(list.keyChainId).toBe("new-key");
+        expect(list.stack).toHaveLength(1);
+        const mappings = await dataSource
+            .getRepository(StatusMapping)
+            .findBy({ tenantId: "tenant-1", statusListId: "list-1" });
+        expect(mappings.map((m) => m.index)).not.toContain(list.stack[0]);
+        expect(mappings).toHaveLength(1);
     });
 
     test("allocates an entry without unsupported pessimistic locks", async () => {
@@ -190,7 +198,9 @@ describe("StatusListService SQLite concurrency", () => {
             .getRepository(StatusListEntity)
             .findOneByOrFail({ id: "list-1", tenantId: "tenant-1" });
         expect(list.stack).toHaveLength(1);
-        expect(list.version).toBe(2);
+        // Allocation does not touch the values, so it keeps the version that
+        // guards them and the tokens signed from them.
+        expect(list.version).toBe(1);
 
         const mappings = await dataSource.getRepository(StatusMapping).find();
         expect(mappings).toHaveLength(1);
@@ -249,6 +259,51 @@ describe("StatusListService SQLite concurrency", () => {
         expect(current.version).toBe(snapshot.version + 1);
         expect(current.jwt).toBeNull();
         expect(current.cwt).toBeNull();
+    });
+
+    test("keeps tokens signed while an entry was allocated", async () => {
+        const repository = dataSource.getRepository(StatusListEntity);
+        const snapshot = await repository.findOneByOrFail({
+            id: "list-1",
+            tenantId: "tenant-1",
+        });
+
+        Object.assign(service as object, {
+            statusListConfigService: {
+                getEffectiveConfig: vi.fn().mockResolvedValue({
+                    ttl: 300,
+                    enableAggregation: false,
+                }),
+            },
+            certService: {
+                find: vi.fn().mockResolvedValue({
+                    keyId: "status-list-key",
+                    crt: [],
+                }),
+                getLeafCertBase64: vi.fn().mockReturnValue(["MAA="]),
+            },
+            keyChainService: {
+                getSigningAlg: vi.fn().mockResolvedValue("ES256"),
+                getPublicKey: vi.fn().mockResolvedValue({ kty: "EC" }),
+                signBytes: vi.fn().mockImplementation(async () => {
+                    await service.createEntry(
+                        { id: "session-1", tenantId: "tenant-1" } as never,
+                        "config-1",
+                    );
+                    return Uint8Array.of(1);
+                }),
+            },
+            signStatusListCwt: vi.fn().mockResolvedValue(Uint8Array.of(1)),
+        });
+
+        await expect(service.createListJWT(snapshot)).resolves.toBe(true);
+
+        const current = await repository.findOneByOrFail({
+            id: snapshot.id,
+            tenantId: snapshot.tenantId,
+        });
+        expect(current.stack).toHaveLength(1);
+        expect(current.jwt).toEqual(expect.any(String));
     });
 
     test("allocates concurrently without transaction conflicts", async () => {
@@ -446,6 +501,199 @@ describe("StatusListService SQLite concurrency", () => {
         // An empty list is no limit.
         await service.updateStatus(update(), "tenant-1", []);
         expect(await elements()).toEqual([1, 1, 0, 0]);
+    });
+
+    describe("reading status lists without their entries", () => {
+        /**
+         * The SELECT statements the service runs while `action` executes.
+         * `elements` and `stack` hold one number per entry, so the hot read
+         * paths must not transfer and parse them.
+         */
+        async function selectsDuring(action: () => Promise<unknown>) {
+            const statements: string[] = [];
+            const spy = vi
+                .spyOn(dataSource.logger, "logQuery")
+                .mockImplementation((query: string) => {
+                    if (/^\s*SELECT/i.test(query)) statements.push(query);
+                });
+            try {
+                await action();
+            } finally {
+                spy.mockRestore();
+            }
+            return statements;
+        }
+
+        beforeEach(async () => {
+            await dataSource.getRepository(StatusListEntity).update(
+                { tenantId: "tenant-1", id: "list-1" },
+                {
+                    jwt: "cached.status.jwt",
+                    cwt: Buffer.from([0xa0]).toString("base64url"),
+                    expiresAt: new Date(Date.now() + 3_600_000),
+                },
+            );
+        });
+
+        test("serves a cached JWT without loading the entries", async () => {
+            let jwt: string | undefined;
+            const statements = await selectsDuring(async () => {
+                jwt = await service.getListJwt("tenant-1", "list-1");
+            });
+
+            expect(jwt).toBe("cached.status.jwt");
+            expect(statements).toHaveLength(1);
+            expect(statements[0]).toMatch(/"jwt"/);
+            expect(statements[0]).not.toMatch(/"elements"|"stack"/);
+        });
+
+        test("serves a cached CWT without loading the entries", async () => {
+            let cwt: Uint8Array | undefined;
+            const statements = await selectsDuring(async () => {
+                cwt = await service.getListCwt("tenant-1", "list-1");
+            });
+
+            expect(cwt).toEqual(Uint8Array.from([0xa0]));
+            expect(statements).toHaveLength(1);
+            expect(statements[0]).toMatch(/"cwt"/);
+            expect(statements[0]).not.toMatch(/"elements"|"stack"/);
+        });
+
+        test("reports an unknown list as not found", async () => {
+            await expect(
+                service.getListJwt("tenant-1", "missing"),
+            ).rejects.toMatchObject({ status: 404 });
+            await expect(
+                service.getListCwt("tenant-1", "missing"),
+            ).rejects.toMatchObject({ status: 404 });
+        });
+
+        test("does not serve a list of another tenant", async () => {
+            await dataSource.getRepository(TenantEntity).save({
+                id: "tenant-2",
+                name: "Tenant 2",
+                status: "active",
+            });
+            await expect(
+                service.getListJwt("tenant-2", "list-1"),
+            ).rejects.toMatchObject({ status: 404 });
+            await expect(
+                service.getListCwt("tenant-2", "list-1"),
+            ).rejects.toMatchObject({ status: 404 });
+        });
+
+        test("lists the URIs in creation order without loading the entries", async () => {
+            await dataSource.getRepository(StatusListEntity).save({
+                id: "list-0",
+                tenantId: "tenant-1",
+                credentialConfigurationId: null,
+                elements: [0],
+                stack: [0],
+                bits: 1,
+                createdAt: new Date(Date.now() + 60_000),
+            });
+
+            let uris: string[] = [];
+            const statements = await selectsDuring(async () => {
+                uris = await service.getStatusListUris("tenant-1");
+            });
+
+            expect(uris).toEqual([
+                "https://issuer.example/issuers/tenant-1/status-management/status-list/list-1",
+                "https://issuer.example/issuers/tenant-1/status-management/status-list/list-0",
+            ]);
+            expect(statements).toHaveLength(1);
+            expect(statements[0]).toMatch(/"id"/);
+            expect(statements[0]).not.toMatch(/"elements"|"stack"/);
+        });
+
+        /** Signing fakes, so expired tokens can be regenerated. */
+        function fakeSigning() {
+            Object.assign(service as object, {
+                statusListConfigService: {
+                    getEffectiveConfig: vi.fn().mockResolvedValue({
+                        ttl: 300,
+                        enableAggregation: false,
+                    }),
+                },
+                certService: {
+                    find: vi.fn().mockResolvedValue({
+                        keyId: "status-list-key",
+                        crt: [],
+                    }),
+                    getLeafCertBase64: vi.fn().mockReturnValue(["MAA="]),
+                },
+                keyChainService: {
+                    getSigningAlg: vi.fn().mockResolvedValue("ES256"),
+                    getPublicKey: vi.fn().mockResolvedValue({ kty: "EC" }),
+                    signBytes: vi.fn().mockResolvedValue(Uint8Array.of(1)),
+                },
+                signStatusListCwt: vi
+                    .fn()
+                    .mockResolvedValue(Uint8Array.of(0xb1)),
+            });
+        }
+
+        test("regenerates an expired JWT instead of serving it", async () => {
+            fakeSigning();
+            const repository = dataSource.getRepository(StatusListEntity);
+            await repository.update(
+                { tenantId: "tenant-1", id: "list-1" },
+                { expiresAt: new Date(Date.now() - 1000) },
+            );
+
+            const jwt = await service.getListJwt("tenant-1", "list-1");
+
+            expect(jwt).not.toBe("cached.status.jwt");
+            const list = await repository.findOneByOrFail({
+                tenantId: "tenant-1",
+                id: "list-1",
+            });
+            expect(list.jwt).toBe(jwt);
+            expect(list.expiresAt!.getTime()).toBeGreaterThan(Date.now());
+        });
+
+        test("regenerates a missing CWT instead of failing", async () => {
+            fakeSigning();
+            await dataSource
+                .getRepository(StatusListEntity)
+                .update(
+                    { tenantId: "tenant-1", id: "list-1" },
+                    { cwt: null as never },
+                );
+
+            const cwt = await service.getListCwt("tenant-1", "list-1");
+
+            expect(cwt).toEqual(Uint8Array.of(0xb1));
+        });
+
+        test("allocates an entry without loading the list's values", async () => {
+            let idx: number | undefined;
+            const statements = await selectsDuring(async () => {
+                const payload = await service.createEntry(
+                    { id: "session-1", tenantId: "tenant-1" } as never,
+                    "config-1",
+                );
+                idx = payload.status.status_list.idx;
+            });
+
+            const listReads = statements.filter((query) =>
+                /FROM "status_list_entity"/.test(query),
+            );
+            expect(listReads.length).toBeGreaterThan(0);
+            for (const query of listReads) {
+                expect(query).not.toMatch(/"elements"|"jwt"|"cwt"/);
+            }
+
+            // The index comes off the stack; values and tokens stay as they were.
+            expect(idx).toBe(1);
+            const list = await dataSource
+                .getRepository(StatusListEntity)
+                .findOneByOrFail({ tenantId: "tenant-1", id: "list-1" });
+            expect(list.stack).toEqual([0]);
+            expect(list.elements).toEqual([0, 0]);
+            expect(list.jwt).toBe("cached.status.jwt");
+        });
     });
 
     describe("deleting a status list", () => {

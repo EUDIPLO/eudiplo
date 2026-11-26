@@ -7,7 +7,10 @@ import {
     retiredConfigIssue,
     schemaUrl,
 } from "@eudiplo/config-format/config-format.js";
-import { validateConfigDocument } from "@eudiplo/config-format/config-validator.js";
+import {
+    validateConfigDocument,
+    validateConfigFile,
+} from "@eudiplo/config-format/config-validator.js";
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { ConfigResourceRegistry } from "./config-resource.registry.js";
 import type {
@@ -69,10 +72,27 @@ export class ConfigMigrationService {
     }
 
     upgrade(input: ConfigFile): ConfigMigrationResult {
+        return this.migrate(input, validateConfigDocument);
+    }
+
+    /**
+     * Upgrades a document of a configuration file, such as one of a bundle
+     * or of a tenant folder. The schema checks the values the file holds
+     * (validateConfigFile), not their escaped form. The document is returned
+     * as the file holds it.
+     */
+    upgradeFile(input: ConfigFile): ConfigMigrationResult {
+        return this.migrate(input, validateConfigFile);
+    }
+
+    private migrate(
+        input: ConfigFile,
+        validate: typeof validateConfigDocument,
+    ): ConfigMigrationResult {
         const retired = retiredConfigIssue(input);
         if (retired) throw new BadRequestException(retired.message);
         try {
-            return migrateDocument(input, validateConfigDocument);
+            return migrateDocument(input, validate);
         } catch (error) {
             throw new BadRequestException(String(error));
         }

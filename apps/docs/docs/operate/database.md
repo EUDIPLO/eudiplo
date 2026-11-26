@@ -47,6 +47,9 @@ DB_SSL_KEY_PATH=/certs/client.key
 DB_SSL_KEY_PASSPHRASE=<passphrase>              # for an encrypted client key
 ```
 
+The files must be readable by the backend's non-root user
+([Non-root user](docker-compose.md#non-root-user)).
+
 `DB_SSL_REJECT_UNAUTHORIZED=false` accepts any server certificate; use it only
 for local tests. All variables are listed under
 [Database](../reference/environment-variables.md#database).
