@@ -39,7 +39,7 @@ export const KMS_TENANT_VARIABLES = "KMS_TENANT_VARIABLES";
  * of a tenant folder cannot name them; the global `kms.json` can, and a
  * tenant `kms.json` only if the operator lists them.
  */
-const CLOUD_CREDENTIAL_VARIABLES: ReadonlyMap<string, string> = new Map([
+export const CLOUD_CREDENTIAL_VARIABLES: ReadonlyMap<string, string> = new Map([
     ["AWS_ACCESS_KEY_ID", "AWS"],
     ["AWS_SECRET_ACCESS_KEY", "AWS"],
     ["AWS_SESSION_TOKEN", "AWS"],
@@ -73,9 +73,26 @@ export function declaredPlaceholderScopes(
 
 let declared: Map<string, PlaceholderScope> | undefined;
 
-function declaredScopes(): Map<string, PlaceholderScope> {
+/** The placeholder scope of every variable EUDIPLO declares. */
+export function declaredScopes(): ReadonlyMap<string, PlaceholderScope> {
     declared ??= declaredPlaceholderScopes(VALIDATION_SCHEMA);
     return declared;
+}
+
+/**
+ * Who may not name a setting of EUDIPLO declared with `scope`: everyone
+ * (`never`), everyone but the operator's instance-wide files
+ * (`instance-only`), or nobody (undefined, also for a variable EUDIPLO does
+ * not declare). `${VAR}` placeholders and `${env:…}` references both follow
+ * it.
+ */
+export function settingRefusal(
+    scope: PlaceholderScope | undefined,
+    forInstance: boolean,
+): "never" | "instance-only" | undefined {
+    if (scope === "none") return "never";
+    if (scope === "global" && !forInstance) return "instance-only";
+    return undefined;
 }
 
 /**
@@ -94,14 +111,14 @@ export function refusedConfigVariable(
 ): string | undefined {
     const declaredScope = declaredScopes().get(name);
     if (declaredScope === "any") return undefined;
-    if (declaredScope === "none") {
+    const setting = settingRefusal(declaredScope, scope === "global");
+    if (setting === "never") {
         return `\${${name}} names a setting of EUDIPLO itself, which no configuration file can use`;
     }
-    if (declaredScope === "global") {
-        return scope === "global"
-            ? undefined
-            : `\${${name}} names a setting of EUDIPLO itself, which only the global kms.json can use`;
+    if (setting === "instance-only") {
+        return `\${${name}} names a setting of EUDIPLO itself, which only the global kms.json can use`;
     }
+    if (declaredScope !== undefined) return undefined;
     const provider = CLOUD_CREDENTIAL_VARIABLES.get(name);
     if (scope === "tenant" && provider) {
         return `\${${name}} holds the ${provider} credentials of the instance, which a file of a tenant folder cannot use`;
