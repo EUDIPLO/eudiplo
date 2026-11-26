@@ -14,7 +14,7 @@ import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import { AllExceptionsFilter } from "../../src/all-exceptions.filter.js";
 import { NOT_A_JWT_MESSAGE } from "../../src/auth/auth.guard.js";
 import { ClientEntity } from "../../src/auth/client/entities/client.entity.js";
-import { Role } from "../../src/auth/roles/role.enum.js";
+import { effectiveRoles, Role } from "../../src/auth/roles/role.enum.js";
 import { ConfigFolderBundleService } from "../../src/platform/config-portability/config-folder-bundle.service.js";
 import { ConfigOwnershipService } from "../../src/platform/config-portability/config-ownership.service.js";
 import { CLIENT_MANAGED_BY_IDENTITY_PROVIDER } from "../../src/platform/config-portability/idp-managed-clients.js";
@@ -199,7 +199,8 @@ describe("Generic OIDC provider (e2e)", () => {
         expect(response.body).toEqual({
             subject: "person-1",
             tenantId: TENANT,
-            roles: [Role.SessionsRead, Role.IssuanceOffer],
+            // with issuance:read, which issuance:offer includes
+            roles: effectiveRoles([Role.SessionsRead, Role.IssuanceOffer]),
         });
     });
 

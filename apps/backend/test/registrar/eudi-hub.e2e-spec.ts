@@ -12,7 +12,7 @@ import { AppModule } from "../../src/app.module.js";
 import { Role } from "../../src/auth/roles/role.enum.js";
 import { createAppValidationPipe } from "../../src/shared/common/zod/zod-schema.util.js";
 import { PresentationConfig } from "../../src/verifier/presentations/entities/presentation-config.entity.js";
-import { getTenantAdminToken, readConfig } from "../utils.js";
+import { clientToken, getTenantAdminToken, readConfig } from "../utils.js";
 
 /** The default EUDI_HUB_API_URL. */
 const hub = "https://api.eudi-hub.gov.de";
@@ -111,11 +111,17 @@ describe("Access certificate from the EUDI Hub (e2e)", () => {
             tenantId,
             [Role.Registrar, Role.Keys, Role.Presentations, Role.Issuances],
         );
-        keysOnlyToken = await getTenantAdminToken(
+        // A tenant admin token has tenant:admin, which includes every role.
+        keysOnlyToken = await clientToken(
             app,
-            clientId,
-            clientSecret,
-            `${tenantId}-keys`,
+            await getTenantAdminToken(
+                app,
+                clientId,
+                clientSecret,
+                `${tenantId}-keys`,
+                [Role.Keys],
+            ),
+            `${tenantId}-keys-only`,
             [Role.Keys],
         );
     });
@@ -461,11 +467,16 @@ describe("Access certificate from the EUDI Hub (e2e)", () => {
     });
 
     test("refuses a verifier registration certificate without the presentation:manage role", async () => {
-        const token = await getTenantAdminToken(
+        const token = await clientToken(
             app,
-            app.get(ConfigService).getOrThrow<string>("AUTH_CLIENT_ID"),
-            app.get(ConfigService).getOrThrow<string>("AUTH_CLIENT_SECRET"),
-            `${tenantId}-registrar-only`,
+            await getTenantAdminToken(
+                app,
+                app.get(ConfigService).getOrThrow<string>("AUTH_CLIENT_ID"),
+                app.get(ConfigService).getOrThrow<string>("AUTH_CLIENT_SECRET"),
+                `${tenantId}-registrar-only`,
+                [Role.Registrar],
+            ),
+            `${tenantId}-registrar-only-client`,
             [Role.Registrar],
         );
 
@@ -653,11 +664,16 @@ describe("Access certificate from the EUDI Hub (e2e)", () => {
     });
 
     test("refuses an issuer registration certificate without the issuance:manage role", async () => {
-        const token = await getTenantAdminToken(
+        const token = await clientToken(
             app,
-            configService.getOrThrow<string>("AUTH_CLIENT_ID"),
-            configService.getOrThrow<string>("AUTH_CLIENT_SECRET"),
-            `${tenantId}-registrar-issuer`,
+            await getTenantAdminToken(
+                app,
+                configService.getOrThrow<string>("AUTH_CLIENT_ID"),
+                configService.getOrThrow<string>("AUTH_CLIENT_SECRET"),
+                `${tenantId}-registrar-issuer`,
+                [Role.Registrar, Role.Presentations],
+            ),
+            `${tenantId}-registrar-issuer-client`,
             [Role.Registrar, Role.Presentations],
         );
 

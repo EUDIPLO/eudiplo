@@ -8,7 +8,7 @@ import {
 import { Reflector } from "@nestjs/core";
 import * as x509 from "@peculiar/x509";
 import { describe, expect, it, vi } from "vitest";
-import { Role } from "../../auth/roles/role.enum.js";
+import { effectiveRoles, Role } from "../../auth/roles/role.enum.js";
 import { RolesGuard } from "../../auth/roles/roles.guard.js";
 import type { TokenPayload } from "../../auth/token.decorator.js";
 import { KeyChainReferences } from "./application/key-chain-references.js";
@@ -880,7 +880,9 @@ describe("KeyChainController authorization", () => {
         ({
             getHandler: () => handler,
             getClass: () => KeyChainController,
-            switchToHttp: () => ({ getRequest: () => ({ user: { roles } }) }),
+            switchToHttp: () => ({
+                getRequest: () => ({ user: { roles: effectiveRoles(roles) } }),
+            }),
         }) as unknown as ExecutionContext;
 
     // Endpoints returning private keys or KMS provider credentials.
@@ -897,15 +899,13 @@ describe("KeyChainController authorization", () => {
         it.each([
             [Role.Issuances],
             [Role.Presentations],
-            [Role.Issuances, Role.Presentations, Role.Clients],
-        ])(
-            "rejects callers with only key chain management roles (%s)",
-            (...roles) => {
-                expect(guard.canActivate(context(handler, roles))).toBe(false);
-            },
-        );
+            [Role.Keys],
+            [Role.Issuances, Role.Presentations, Role.Clients, Role.Keys],
+        ])("rejects callers without keys:export (%s)", (...roles) => {
+            expect(guard.canActivate(context(handler, roles))).toBe(false);
+        });
 
-        it.each([Role.TenantAdmin, Role.Tenants])(
+        it.each([Role.KeysExport, Role.TenantAdmin, Role.Tenants])(
             "allows callers with %s",
             (role) => {
                 expect(guard.canActivate(context(handler, [role]))).toBe(true);
@@ -915,13 +915,20 @@ describe("KeyChainController authorization", () => {
 
     it.each([
         KeyChainController.prototype.getById,
-        KeyChainController.prototype.createCsr,
         KeyChainController.prototype.getProviders,
         KeyChainController.prototype.getProvidersHealth,
-    ])("keeps the management roles for %o", (handler) => {
-        expect(guard.canActivate(context(handler, [Role.Issuances]))).toBe(
+    ])("lets the read roles call %o", (handler) => {
+        expect(guard.canActivate(context(handler, [Role.IssuanceRead]))).toBe(
             true,
         );
+    });
+
+    it("needs keys:manage for a CSR, which signs with the key", () => {
+        const handler = KeyChainController.prototype.createCsr;
+        expect(guard.canActivate(context(handler, [Role.Issuances]))).toBe(
+            false,
+        );
+        expect(guard.canActivate(context(handler, [Role.Keys]))).toBe(true);
     });
 
     it("requires a tenant context", async () => {

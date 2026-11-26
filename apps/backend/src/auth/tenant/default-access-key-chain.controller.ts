@@ -17,7 +17,7 @@ import { TenantService } from "./tenant.service.js";
  * configuration names one. The roles are those that manage key chains.
  */
 @ApiTags("Key Chain")
-@Secured([Role.Issuances, Role.Presentations, Role.Keys])
+@Secured([Role.Keys])
 @Controller("key-chain/access/default")
 export class DefaultAccessKeyChainController {
     constructor(
@@ -25,6 +25,7 @@ export class DefaultAccessKeyChainController {
         private readonly keyChainService: KeyChainService,
     ) {}
 
+    @Secured([Role.IssuanceRead, Role.PresentationRead, Role.Keys])
     @Get()
     @ApiOperation({
         summary: "Get the default access key chain",

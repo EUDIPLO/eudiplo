@@ -216,7 +216,7 @@ const kmsHealthCheck: DoctorCheckDefinition = {
                     return {
                         name: "KMS providers",
                         status: "skip",
-                        message: `Needs a tenant client with issuance:manage, presentation:manage or keys:manage (${response.reason}).`,
+                        message: `Needs a tenant client with issuance:read, presentation:read or keys:manage, or a role that includes one of them (${response.reason}).`,
                     };
                 }
                 return {

@@ -99,7 +99,7 @@ operation report, since nothing was applied. Fix the file and plan again:
 The web client lists ownership and offers **Detach** and **Reset to file**, and
 for clients from the config folder **Apply from file**, under
 **Settings > Config Portability** (shown to a tenant's clients and users with
-`tenant:admin` or `tenants:manage`). Its resource table filters by kind and
+`tenant:admin`, which `tenants:manage` includes). Its resource table filters by kind and
 ownership and searches its Resource and Source columns; the select-all checkbox
 in the table header and **Detach selected** act only on the `file-managed` rows
 the filters show. On the screens of a `file-managed` resource it shows a lock
@@ -266,8 +266,8 @@ the environment variables to set when the file goes into the config folder.
 takes the file and plans it like a bundle with that one resource; there,
 replace each placeholder with its value first
 ([placeholders and the API](../reference/config-bundle-format.md#placeholders-and-the-api)). A key chain document
-contains the private keys of a `db` key chain and needs `tenant:admin` or
-`tenants:manage`.
+contains the private keys of a `db` key chain and needs `keys:export`, which
+`tenant:admin` includes.
 
 ## Upgrade old files
 

@@ -54,6 +54,7 @@ export class WebhookEndpointController {
      * @param user
      * @returns
      */
+    @Secured([Role.IssuanceRead, Role.PresentationRead])
     @Get()
     @ApiResponse({
         status: 200,
@@ -66,6 +67,7 @@ export class WebhookEndpointController {
         );
     }
 
+    @Secured([Role.IssuanceRead, Role.PresentationRead])
     @Get(":id")
     @ApiOperation({ summary: "Get a webhook endpoint by ID" })
     @ApiResponse({

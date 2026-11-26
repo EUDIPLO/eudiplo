@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import {
-    CONFIG_FORMATS,
+    earlierSpecs,
     schemaUrl,
 } from "@eudiplo/config-format/config-format.js";
 import type { ConfigDocument } from "./config-resource.types.js";
@@ -17,10 +17,11 @@ export function documentSourceHash(document: ConfigDocument): string {
 
 /**
  * Whether `sourceHash` is the hash of this document, migrated to the current
- * format, or of the same document under an earlier format version of its
+ * format, or of the document it was under an earlier format version of its
  * kind. A release records the hash of the document migrated to its own
- * current format, and a format version that migrates a document unchanged
- * changes only `$schema`, so a document an earlier release applied (9.x
+ * current format. A format version that migrates a document unchanged changes
+ * only `$schema`, and a step that rewrites the spec names the specs it came
+ * from (`earlierSpecs`), so a document an earlier release applied (9.x
  * included) still matches after the upgrade.
  */
 function matchesSourceHash(
@@ -28,16 +29,18 @@ function matchesSourceHash(
     sourceHash: string | undefined,
 ): boolean {
     if (!sourceHash) return false;
-    for (
-        let version = CONFIG_FORMATS[document.kind].version;
-        version >= 1;
-        version--
-    ) {
-        const earlier = {
-            ...document,
-            $schema: schemaUrl(document.kind, version),
-        };
-        if (documentSourceHash(earlier) === sourceHash) return true;
+    for (const { version, specs } of earlierSpecs(
+        document.kind,
+        document.spec,
+    )) {
+        for (const spec of specs) {
+            const earlier = {
+                ...document,
+                $schema: schemaUrl(document.kind, version),
+                spec,
+            };
+            if (documentSourceHash(earlier) === sourceHash) return true;
+        }
     }
     return false;
 }

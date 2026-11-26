@@ -53,18 +53,18 @@ Create these four files in `config/membership-files/`.
 
 ```json
 {
-  "$schema": "https://eudiplo.dev/schemas/v2/ClientConfigFile.schema.json",
+  "$schema": "https://eudiplo.dev/schemas/v3/ClientConfigFile.schema.json",
   "metadata": { "generation": 1 },
   "spec": {
     "clientId": "membership-files-admin",
     "description": "Administers the tenant from the CLI",
     "secret": "${MEMBERSHIP_FILES_ADMIN_SECRET}",
-    "roles": ["tenant:admin", "issuance:manage"]
+    "roles": ["tenant:admin"]
   }
 }
 ```
 
-`tenant:admin` lets the client read the configuration operations and export the tenant. `issuance:manage` opens the issuer screens of the Web Client and lets `doctor` read the KMS provider health. The secret is a placeholder that the backend fills from its environment.
+`tenant:admin` includes every role of the tenant: it lets the client read the configuration operations and export the tenant, opens the issuer screens of the Web Client and lets `doctor` read the KMS provider health. The secret is a placeholder that the backend fills from its environment.
 
 `key-chains/membership-signing.json`, the key that signs the credentials:
 

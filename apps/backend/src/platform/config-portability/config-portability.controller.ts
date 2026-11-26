@@ -59,7 +59,7 @@ const FOLDER_INVALID_DESCRIPTION =
     "Unknown resource kind, or a file of the requested kind in the tenant folder cannot be imported, for example a trust list file of 9.x without `contactUri` and `website`: `code` `CONFIG_FOLDER_INVALID`, `file` relative to the tenant folder and `issues` with the JSON pointer `path`, the issue `code` and the `resource` of every blocking issue, as the plan of a bundle reports them; a file that cannot be read as a document gets one `CONFIG_FILE_INVALID` issue with the reason and without `path` or `resource`. Fix the file and plan again.";
 
 @ApiTags("Configuration portability")
-@Secured([Role.Tenants, Role.TenantAdmin])
+@Secured([Role.TenantAdmin])
 @Controller("config-bundles")
 export class ConfigPortabilityController {
     constructor(
@@ -301,7 +301,7 @@ export class ConfigPortabilityController {
 
     @Post("documents/upgrade")
     // Upgrading a document reads no tenant.
-    @Secured([Role.Tenants, Role.TenantAdmin], { tenant: "optional" })
+    @Secured([Role.TenantAdmin], { tenant: "optional" })
     @ApiOperation({ summary: "Upgrade one configuration document" })
     upgrade(@Body() input: ConfigFile) {
         const result = this.migrationService.upgradeFile(input);
@@ -317,18 +317,11 @@ export class ConfigPortabilityController {
     @Get("resources/:kind")
     // A literal list for the roles reference; config-resource-access.spec.ts
     // keeps it equal to the roles mayReadConfigOwnership admits.
-    @Secured([
-        Role.Tenants,
-        Role.TenantAdmin,
-        Role.Issuances,
-        Role.Presentations,
-        Role.Clients,
-        Role.Keys,
-    ])
+    @Secured([Role.Issuances, Role.Presentations, Role.Clients, Role.Keys])
     @ApiOperation({
         summary: "List the configuration ownership of one resource kind",
         description:
-            "Lets screens lock file-managed resources before a change fails with 409. Besides `tenant:admin` and `tenants:manage`, it accepts the roles that change the kind through the management API, for example `issuance:manage` for `CredentialConfig` or `presentation:manage` for `PresentationConfig`.",
+            "Lets screens lock file-managed resources before a change fails with 409. It accepts the roles that change the kind through the management API, for example `issuance:manage` for `CredentialConfig`, `presentation:manage` for `PresentationConfig` or `keys:manage` for `KeyChain`; `tenant:admin` has them all.",
     })
     @ApiParam({ name: "kind", enum: CONFIG_RESOURCE_KINDS })
     @ApiResponse({ status: 200, type: [ConfigResourceOwnershipDto] })
@@ -355,18 +348,11 @@ export class ConfigPortabilityController {
     @Get("resources/:kind/:id/document")
     // A literal list for the roles reference; config-resource-access.spec.ts
     // keeps it equal to the roles mayExportConfigDocument admits.
-    @Secured([
-        Role.Tenants,
-        Role.TenantAdmin,
-        Role.Issuances,
-        Role.Presentations,
-        Role.Clients,
-        Role.Keys,
-    ])
+    @Secured([Role.Issuances, Role.Presentations, Role.Clients, Role.Keys])
     @ApiOperation({
         summary: "Export one resource as a configuration document",
         description:
-            "Returns the resource as a `$schema` and `spec` document in the current format version, the format of the files in the config folder and of the documents in a configuration bundle. Secrets are `${PLACEHOLDER}` references, as in the bundle export, and image references name the file. A key chain held in the database keeps its private keys, for a CA chain also the signing key, which `GET /key-chain/{id}/export` leaves out, so a `KeyChain` document needs `tenant:admin` or `tenants:manage`. Other kinds accept the roles that change them through the management API, for example `issuance:manage` for `CredentialConfig` and `keys:manage` for `KeyChainDefaults`. Singleton kinds use their fixed ID: `tenant`, `kms`, `issuance` and `defaults`.",
+            "Returns the resource as a `$schema` and `spec` document in the current format version, the format of the files in the config folder and of the documents in a configuration bundle. Secrets are `${PLACEHOLDER}` references, as in the bundle export, and image references name the file. A key chain held in the database keeps its private keys, for a CA chain also the signing key, which `GET /key-chain/{id}/export` leaves out, so a `KeyChain` document needs `keys:export`, like `KmsConfig`. Other kinds accept the roles that change them through the management API, for example `issuance:manage` for `CredentialConfig` and `keys:manage` for `KeyChainDefaults`. Singleton kinds use their fixed ID: `tenant`, `kms`, `issuance` and `defaults`.",
     })
     @ApiParam({ name: "kind", enum: CONFIG_RESOURCE_KINDS })
     @ApiParam({ name: "id", description: "Resource ID" })
@@ -398,7 +384,7 @@ export class ConfigPortabilityController {
         if (!mayExportConfigDocument(token.roles, kind)) {
             throw new ForbiddenException(
                 kind === "KeyChain"
-                    ? "A key chain document contains private keys and needs tenant:admin or tenants:manage."
+                    ? "A key chain document contains private keys and needs keys:export."
                     : `Exporting ${kind} resources needs a role that manages them.`,
             );
         }

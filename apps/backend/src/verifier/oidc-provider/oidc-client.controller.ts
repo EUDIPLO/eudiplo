@@ -54,6 +54,7 @@ export class OidcClientController {
         private readonly settings: OidcProviderSettings,
     ) {}
 
+    @Secured([Role.PresentationRead])
     @Get()
     @ApiOperation({ summary: "List the tenant's OpenID Connect clients" })
     @ApiResponse({ status: 200, type: [OidcClientResponseDto] })
@@ -65,6 +66,7 @@ export class OidcClientController {
         );
     }
 
+    @Secured([Role.PresentationRead])
     @Get(":id")
     @ApiOperation({ summary: "Get an OpenID Connect client" })
     @ApiResponse({ status: 200, type: OidcClientResponseDto })

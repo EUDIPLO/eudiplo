@@ -1,5 +1,5 @@
 {
-  "$schema": "https://eudiplo.dev/schemas/v2/ClientConfigFile.schema.json",
+  "$schema": "https://eudiplo.dev/schemas/v3/ClientConfigFile.schema.json",
   "metadata": {
     "generation": 1
   },
@@ -8,7 +8,6 @@
     "secret": "${PRESENTATION_TEST_CLIENT_SECRET:presentation-test-secret}",
     "description": "Load test client for OID4VP presentation scenarios",
     "roles": [
-      "presentation:request",
       "presentation:manage"
     ]
   }

@@ -289,7 +289,7 @@ describe("DELETE /key-chain/{id} while configurations name the key chain", () =>
             .expect(409);
 
         expect(response.body.message).toBe(
-            `Key chain "${sharedKey}" is still used by 1 credential config (issuance:manage shows which). Remove these references before deleting the key chain.`,
+            `Key chain "${sharedKey}" is still used by 1 credential config (issuance:read shows which). Remove these references before deleting the key chain.`,
         );
         expect(response.body.references).toEqual([
             { kind: "CredentialConfig" },
@@ -303,21 +303,21 @@ describe("DELETE /key-chain/{id} while configurations name the key chain", () =>
             { kind: "PresentationConfig" },
         ]);
         expect(access.body.message).toContain(
-            "1 presentation config (presentation:manage or presentation:request shows which)",
+            "1 presentation config (presentation:read shows which)",
         );
         const lists = await api()
             .delete(`/key-chain/${statusKey}`)
             .set("Authorization", `Bearer ${token.body.access_token}`)
             .expect(409);
         expect(lists.body.message).toContain(
-            "1 status list (issuance:manage shows which)",
+            "1 status list (issuance:read shows which)",
         );
         const trustList = await api()
             .delete(`/key-chain/${trustListKeyChain}`)
             .set("Authorization", `Bearer ${token.body.access_token}`)
             .expect(409);
         expect(trustList.body.message).toContain(
-            "1 trust list (issuance:manage or presentation:manage shows which)",
+            "1 trust list (issuance:read or presentation:read shows which)",
         );
     });
 

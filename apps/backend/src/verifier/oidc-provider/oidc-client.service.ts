@@ -1,5 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { v4 } from "uuid";
+import type { AuditActionType } from "../../audit-log/audit-action-types.js";
 import {
     type AuditLogRequestMeta,
     AuditLogService,
@@ -8,7 +9,6 @@ import {
     getChangedFields,
     resolveAuditActor,
 } from "../../audit-log/audit-log-context.util.js";
-import type { AuditActionType } from "../../audit-log/audit-action-types.js";
 import type { TokenPayload } from "../../auth/token.decorator.js";
 import { ConflictError } from "../../shared/domain/conflict-error.js";
 import { NotFoundError } from "../../shared/domain/not-found-error.js";

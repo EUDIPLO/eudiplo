@@ -220,8 +220,8 @@ several backend replicas, mount the same `CONFIG_FOLDER` volume into all of them
 only where it was written, and a replica that does not see it would use the
 global provider with the same `id` for the tenant's key chains.
 
-Manage it through the API (roles
-`tenant:admin` or `tenants:manage`, because the configuration contains provider
+Manage it through the API (role `keys:export`, which `tenant:admin` and
+`tenants:manage` include, because the configuration contains provider
 credentials):
 
 | Request                                     | Effect                                                                    |

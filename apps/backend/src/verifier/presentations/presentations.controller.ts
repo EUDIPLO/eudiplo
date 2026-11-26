@@ -41,7 +41,7 @@ export class PresentationManagementController {
      * Returns the presentation request configurations.
      * @returns
      */
-    @Secured([Role.Presentations, Role.PresentationRequest])
+    @Secured([Role.PresentationRead])
     @Get()
     configuration(@Token() user: TokenPayload) {
         return this.presentationConfigService.getPresentationConfigs(
@@ -53,7 +53,7 @@ export class PresentationManagementController {
      * Resolve external OID4VCI issuer metadata server-side.
      * This avoids browser CORS limitations when browsing issuer metadata.
      */
-    @Secured([Role.Presentations, Role.PresentationRequest])
+    @Secured([Role.PresentationRequest])
     @Post("issuer-metadata/resolve")
     @ApiOperation({
         summary: "Resolve external issuer metadata",
@@ -81,7 +81,7 @@ export class PresentationManagementController {
      * This avoids browser CORS limitations when importing schema metadata
      * directly from registrar URLs.
      */
-    @Secured([Role.Presentations, Role.PresentationRequest])
+    @Secured([Role.PresentationRequest])
     @Post("schema-metadata/resolve")
     @ApiOperation({
         summary: "Resolve external schema metadata",
@@ -110,7 +110,7 @@ export class PresentationManagementController {
      * This endpoint accepts a signed JWT and resolves it into DCQL and references
      * without requiring a URL fetch. Useful for resolving catalog entries.
      */
-    @Secured([Role.Presentations, Role.PresentationRequest])
+    @Secured([Role.PresentationRequest])
     @Post("schema-metadata/resolve-jwt")
     @ApiOperation({
         summary: "Resolve schema metadata JWT",
@@ -167,7 +167,7 @@ export class PresentationManagementController {
      * @param user
      * @returns
      */
-    @Secured([Role.Presentations, Role.PresentationRequest])
+    @Secured([Role.PresentationRead])
     @Get(":id")
     @ApiResponse({ status: 200, type: PresentationConfig })
     @ApiResponse({

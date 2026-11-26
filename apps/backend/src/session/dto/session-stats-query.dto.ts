@@ -1,11 +1,11 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
 import { createZodDto } from "nestjs-zod";
 import { z } from "zod";
-import type { SessionStatsFilter } from "../domain/session-stats.js";
 import {
     orderedRange,
     timestamp,
 } from "../../shared/common/zod/query-params.js";
+import type { SessionStatsFilter } from "../domain/session-stats.js";
 
 const SessionStatsQuerySchema = z
     .object({

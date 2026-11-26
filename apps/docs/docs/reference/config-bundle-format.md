@@ -47,7 +47,7 @@ rejects versions newer than its own.
 | Kind                 | `<File>`                      | Current version | Singleton |
 | -------------------- | ----------------------------- | --------------- | --------- |
 | `Tenant`             | `TenantConfigFile`            | 4               | yes       |
-| `Client`             | `ClientConfigFile`            | 2               |           |
+| `Client`             | `ClientConfigFile`            | 3               |           |
 | `KmsConfig`          | `KmsConfigFile`               | 2               | yes       |
 | `KeyChain`           | `KeyChainConfigFile`          | 4               |           |
 | `KeyChainDefaults`   | `KeyChainDefaultsConfigFile`  | 2               | yes       |
@@ -239,6 +239,15 @@ development builds of 10.0 wrote, kept the default key chains in `info.json`
 **Client v2** came with EUDIPLO 10.0 as well. It accepts the roles
 `audit:read`, `sessions:read`, `credentials:status` and `keys:manage`. A v1
 document is migrated unchanged; 9.x cannot read v2 files.
+
+**Client v3** comes with EUDIPLO 11.0. It accepts the roles `issuance:read`,
+`presentation:read` and `keys:export`. Migrating a v2 document adds
+`audit:read` to a client with `clients:manage` and `keys:manage` to one with
+`issuance:manage` or `presentation:manage`, unless it has `tenant:admin` or
+`tenants:manage`, so it keeps the access those roles had in 10.x; the
+migration reports each addition as a warning
+([role model](../upgrade/10.x-to-11.0.md#operators-role-model)). 10.x cannot
+read v3 files.
 
 **KmsConfig v2** came with EUDIPLO 10.0 as well. It adds the optional
 `algorithms` and `defaultAlgorithm` of a provider, which limit the
@@ -512,17 +521,18 @@ All endpoints act on the tenant of the access token and accept `tenant:admin` or
 Exports of bundles and single resources, imports, detach and reattach actions are recorded in the tenant audit log.
 
 `GET /api/config-bundles/resources/:kind` also accepts the roles that change
-resources of that kind, so screens can lock file-managed resources for them:
+resources of that kind, and the roles that include them, so screens can lock
+file-managed resources for them:
 
 | Kind                                                                    | Also readable with                                      |
 | ----------------------------------------------------------------------- | ------------------------------------------------------- |
 | `Tenant` (session and status list settings)                            | `issuance:manage`, `presentation:manage`                |
-| `KeyChain`, `KeyChainDefaults` (default key chains)                     | `issuance:manage`, `presentation:manage`, `keys:manage` |
+| `KeyChain`, `KeyChainDefaults` (default key chains)                     | `keys:manage`                                           |
 | `WebhookEndpoint`, `TrustList`, `FederationTrustAnchor`                 | `issuance:manage`, `presentation:manage`                |
 | `IssuanceConfig`, `CredentialConfig`, `AttributeProvider`, `StatusList` | `issuance:manage`                                       |
 | `PresentationConfig`                                                    | `presentation:manage`                                   |
 | `Client`                                                                | `clients:manage`                                        |
-| `KmsConfig`                                                             | no other role                                           |
+| `KmsConfig`                                                             | `keys:export`                                           |
 
 ### Single resources
 
@@ -547,5 +557,6 @@ the file, which has to be in the folder's `images/` or already stored on the
 target instance. Unlike a bundle, a `KeyChain` document of a key held in the
 database keeps its private keys as `keySource: { "type": "private-jwk" }`,
 for an internal chain with the signing key in `activeJwk`, so its import
-restores the same keys. A `KeyChain` document therefore needs `tenant:admin` or
-`tenants:manage`; the other kinds also accept the roles in the table above.
+restores the same keys. A `KeyChain` document therefore needs `keys:export`,
+which `tenant:admin` includes; the other kinds also accept the roles in the
+table above.

@@ -7,6 +7,7 @@ import {
     type ConfigMigration,
     isConfigDocument,
     isRetiredConfigIssue,
+    earlierSpecs,
     migrateDocument,
     normalizeDocument,
     resolveConfigIdentity,
@@ -899,13 +900,76 @@ describe("portable schema identity and migrations", () => {
         };
         const result = migrateDocument(v1, validateConfigDocument);
         expect(result.issues).toEqual([]);
-        expect(result.migrations).toEqual(["client-v2-read-and-status-roles"]);
-        expect(result.document.$schema).toBe(schemaUrl("Client", 2));
+        expect(result.migrations).toEqual([
+            "client-v2-read-and-status-roles",
+            "client-v3-role-model",
+        ]);
+        expect(result.document.$schema).toBe(schemaUrl("Client", 3));
         expect(result.document.spec).toEqual(v1.spec);
         expect(result.document.metadata).toEqual({ generation: 3 });
         expect(
             migrateDocument(result.document, validateConfigDocument).migrations,
         ).toEqual([]);
+    });
+
+    describe("Client v2 to v3", () => {
+        const v2 = (roles: string[]) => ({
+            $schema: schemaUrl("Client", 2),
+            metadata: { generation: 1 },
+            spec: { clientId: "admin", roles },
+        });
+
+        it("adds the roles that now hold the rights of the narrowed roles", () => {
+            const result = migrateDocument(
+                v2(["clients:manage", "issuance:manage"]),
+                validateConfigDocument,
+            );
+            expect(result.migrations).toEqual(["client-v3-role-model"]);
+            expect(result.document.spec.roles).toEqual([
+                "clients:manage",
+                "issuance:manage",
+                "audit:read",
+                "keys:manage",
+            ]);
+            expect(result.issues).toEqual([
+                expect.objectContaining({
+                    severity: "warning",
+                    code: "CLIENT_ROLES_ADDED",
+                    path: "/spec/roles",
+                }),
+            ]);
+            expect(
+                migrateDocument(result.document, validateConfigDocument)
+                    .migrations,
+            ).toEqual([]);
+        });
+
+        it("keeps clients that need no new role unchanged", () => {
+            for (const roles of [
+                ["issuance:offer"],
+                ["clients:manage", "audit:read"],
+                ["presentation:manage", "keys:manage"],
+                ["tenant:admin", "clients:manage"],
+            ]) {
+                const result = migrateDocument(v2(roles), validateConfigDocument);
+                expect(result.document.spec.roles).toEqual(roles);
+                expect(result.issues).toEqual([]);
+            }
+        });
+
+        it("names the v2 specs it turns into a v3 spec", () => {
+            const [v3, v2Step] = earlierSpecs("Client", {
+                clientId: "admin",
+                roles: ["clients:manage", "presentation:manage", "audit:read", "keys:manage"],
+            });
+            expect(v3.version).toBe(3);
+            expect(v2Step.version).toBe(2);
+            expect(v2Step.specs.map((spec) => spec.roles)).toEqual([
+                ["clients:manage", "presentation:manage", "audit:read", "keys:manage"],
+                ["clients:manage", "presentation:manage", "audit:read"],
+                ["clients:manage", "presentation:manage"],
+            ]);
+        });
     });
 
     it("upgrades a v1 KMS configuration to v2 unchanged", () => {
