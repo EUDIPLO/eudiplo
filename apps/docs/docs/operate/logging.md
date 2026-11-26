@@ -64,14 +64,16 @@ LOG_SESSION_STORE=errors
 | `off` (default)     | Nothing; events go only to the log destinations                         |
 | `errors`            | Warnings and errors                                                     |
 | `all`               | All events                                                              |
-| `verbose`           | All events with full request and response bodies and error stacks       |
+| `verbose`           | All events, and the stack trace of each error                           |
 
 `LOG_SESSION_STORE` has no effect without `LOG_ENABLE_SESSION_LOGGER=true`.
 Read the entries with `GET /api/session/:id/logs` (role `issuance:offer` for
 issuance sessions, `presentation:request` for presentation sessions,
 `sessions:read` for both) or in the **Logs** tab of a session in the web client.
 They are deleted with their session ([session retention](database.md#session-retention)).
-`verbose` stores personal data and much more volume; use it for debugging only.
+`verbose` exposes internal file paths of the server to everyone who can read
+the session logs; use it for debugging only. The web client shows a stored
+stack trace collapsed under **Stack trace**.
 
 ## Correlate logs with sessions
 

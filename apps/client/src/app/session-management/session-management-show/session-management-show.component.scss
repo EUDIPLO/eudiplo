@@ -274,6 +274,7 @@ mat-card mat-card-content {
 
 .log-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   margin-bottom: 4px;
@@ -297,10 +298,82 @@ mat-card mat-card-content {
   overflow-wrap: anywhere;
 }
 
-.log-detail {
-  margin-top: 8px;
-  padding: 8px;
+.log-error-name {
+  padding: 2px 8px;
+  border-radius: var(--mat-sys-corner-small);
+  background: var(--mat-sys-surface-container-highest);
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 12px;
+  color: var(--mat-sys-on-surface);
+  overflow-wrap: anywhere;
+}
+
+.log-fields {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 12px;
+  margin: 8px 0 0;
+  font-size: 12px;
+
+  dt {
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  dd {
+    margin: 0;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+}
+
+.log-disclosure {
+  margin-top: 8px;
+
+  summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px 2px 0;
+    border-radius: var(--mat-sys-corner-small);
+    font: var(--mat-sys-label-large);
+    color: var(--mat-sys-on-surface-variant);
+    cursor: pointer;
+    list-style: none;
+
+    &::-webkit-details-marker {
+      display: none;
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--mat-sys-primary);
+      outline-offset: 2px;
+    }
+  }
+
+  .chevron {
+    width: 18px;
+    height: 18px;
+    font-size: 18px;
+    transition: transform 150ms ease;
+  }
+
+  &[open] .chevron {
+    transform: rotate(90deg);
+  }
+
+  pre {
+    max-height: 320px;
+    margin: 4px 0 0;
+    padding: 8px;
+    overflow: auto;
+    font-size: 12px;
+  }
+
+  button {
+    display: flex;
+    margin-top: 4px;
+  }
 }
 
 .trace-link-btn {

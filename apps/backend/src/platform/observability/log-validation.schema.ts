@@ -56,7 +56,7 @@ export const LOG_VALIDATION_SCHEMA = Joi.object({
         .description(
             "Controls whether session log entries are persisted to the database. " +
                 "'off' disables storage, 'errors' stores only warn/error entries, " +
-                "'all' stores everything, 'verbose' stores everything including full request/response bodies and error stacks.",
+                "'all' stores everything, 'verbose' stores everything plus the stack trace of each error.",
         )
         .meta({ group: "log", order: 35 }),
     LOG_TO_FILE: Joi.boolean()
