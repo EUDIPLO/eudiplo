@@ -122,6 +122,18 @@ describe('RoleChangeService', () => {
     expect(router.navigate).not.toHaveBeenCalled();
   });
 
+  // The backend returns the roles the assigned ones include too; they go with them.
+  it('names only the lost roles that no other lost role includes', async () => {
+    router.routerState.snapshot.root = routeWithRoles(undefined, 'presentation:read');
+    await signIn(['presentation:manage', 'issuance:manage', 'issuance:offer', 'issuance:read']);
+
+    await renew(['presentation:manage', 'issuance:read']);
+
+    expect(texts()).toEqual([
+      'Your API client no longer has the role issuance:manage; the pages that need it are hidden.',
+    ]);
+  });
+
   it('offers to leave a page that needs a lost role, and leaves only on request', async () => {
     router.routerState.snapshot.root = routeWithRoles(undefined, 'issuance:manage');
     await signIn(['presentation:manage', 'issuance:manage']);

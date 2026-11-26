@@ -2,11 +2,9 @@
   <header class="page-header">
     <div>
       <h1 #pageHeading tabindex="-1">Generate Issuance Offer</h1>
-      @if (!formLockedReason) {
-        <p>
-          Choose how and what to issue, fill in the claims, and get a credential offer for a wallet.
-        </p>
-      }
+      <p>
+        Choose how and what to issue, fill in the claims, and get a credential offer for a wallet.
+      </p>
     </div>
   </header>
 
@@ -16,20 +14,12 @@
       <mat-spinner diameter="40" aria-label="Loading credential configs"></mat-spinner>
       <span>Loading configurations...</span>
     </div>
-  } @else if (formLockedReason) {
-    <mat-card appearance="outlined" class="form-locked" role="status">
-      <mat-card-content>
-        <mat-icon aria-hidden="true">lock</mat-icon>
-        <p>{{ formLockedReason }}</p>
-        <a matButton [routerLink]="['/session-management']">Back to Sessions</a>
-      </mat-card-content>
-    </mat-card>
   } @else if (loadErrorMessage) {
     <app-load-error [message]="loadErrorMessage" (retry)="retryLoad()" />
   }
 
   <!-- Main Content - Stepper -->
-  @if (!loading && !formLockedReason && !loadErrorMessage) {
+  @if (!loading && !loadErrorMessage) {
     <mat-stepper #stepper linear class="offer-stepper fx-col">
       <!-- Step 1: Flow Selection -->
       <mat-step [stepControl]="flowStepForm" label="Select Flow">
@@ -92,7 +82,11 @@
                 @if (credentialConfigs.length === 0) {
                   <span>
                     No credential configs available.
-                    <a routerLink="/credential-config/create">Create one</a> to get started.
+                    @if (canCreateCredentialConfigs) {
+                      <a routerLink="/credential-config/create">Create one</a> to get started.
+                    } @else {
+                      Someone with the issuance:manage role has to create one.
+                    }
                   </span>
                 } @else if (isIaeFlow) {
                   <span>

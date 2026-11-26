@@ -14,6 +14,7 @@
           [routerLink]="['edit']"
           matTooltip="Edit trust anchor"
           aria-label="Edit trust anchor"
+          [appRequiresRole]="writeRoles"
           appConfigManaged
           managedKind="FederationTrustAnchor"
           [managedResourceId]="anchor.id"
@@ -44,6 +45,7 @@
           aria-label="Delete trust anchor"
           [disabled]="deleting || references.loading"
           disabledInteractive
+          [appRequiresRole]="writeRoles"
           appConfigManaged
           managedKind="FederationTrustAnchor"
           [managedResourceId]="anchor.id"
@@ -147,8 +149,8 @@
         <mat-card-content class="reference-list">
           @if (!references.canReadIssuanceConfig) {
             <p class="hint">
-              You need the <code>issuance:manage</code> role to see whether the issuance
-              configuration names this trust anchor.
+              You need the <code>issuance:read</code> role to see whether the issuance configuration
+              names this trust anchor.
             </p>
           } @else if (references.issuance.loading) {
             <p class="hint"><output>Loading the issuance configuration…</output></p>
@@ -173,7 +175,7 @@
 
           @if (!references.canReadPresentationConfigs) {
             <p class="hint">
-              You need the <code>presentation:manage</code> role to see which verification configs
+              You need the <code>presentation:read</code> role to see which verification configs
               name this trust anchor.
             </p>
           } @else if (references.presentations.loading) {

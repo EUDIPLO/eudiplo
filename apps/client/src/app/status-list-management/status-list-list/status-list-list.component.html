@@ -12,7 +12,7 @@
         <mat-icon>settings</mat-icon>
         Default settings
       </a>
-      <a matButton="filled" [routerLink]="['create']">
+      <a matButton="filled" [routerLink]="['create']" [appRequiresRole]="writeRoles" matTooltip="">
         <mat-icon>add</mat-icon>
         Create status list
       </a>
@@ -32,7 +32,7 @@
       <p>
         Status lists are created automatically when issuing credentials with revocation support.
       </p>
-      <a matButton="filled" [routerLink]="['create']">
+      <a matButton="filled" [routerLink]="['create']" [appRequiresRole]="writeRoles" matTooltip="">
         <mat-icon>add</mat-icon>
         Create status list
       </a>
@@ -168,6 +168,7 @@
                 <button
                   matIconButton
                   [routerLink]="list.id | itemRoute"
+                  [appRequiresRole]="writeRoles"
                   appConfigManaged
                   managedKind="StatusList"
                   [managedResourceId]="list.id"
@@ -182,6 +183,7 @@
                   (click)="deleteList(list)"
                   [disabled]="deletingId !== undefined || list.usedEntries > 0"
                   disabledInteractive
+                  [appRequiresRole]="writeRoles"
                   appConfigManaged
                   managedKind="StatusList"
                   [managedResourceId]="list.id"

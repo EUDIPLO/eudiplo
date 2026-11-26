@@ -2,12 +2,15 @@ import { client } from '@eudiplo/sdk-core';
 import { vi } from 'vitest';
 
 import type { ApiService } from '../core';
+import type { JwtService, Role } from '../services/jwt.service';
+import { effectiveRoles } from '../services/role-grants';
 import { ConfigOwnershipService } from './config-ownership.service';
 
 describe('ConfigOwnershipService', () => {
   let requests: string[];
   let status: number;
   let service: ConfigOwnershipService;
+  let roles: string[];
 
   beforeEach(() => {
     requests = [];
@@ -44,7 +47,23 @@ describe('ConfigOwnershipService', () => {
         });
       }),
     });
-    service = new ConfigOwnershipService({ client } as ApiService);
+    roles = ['tenant:admin'];
+    service = new ConfigOwnershipService(
+      { client } as ApiService,
+      {
+        hasRole: (role: Role | Role[]) =>
+          [role].flat().some((r) => effectiveRoles(roles).includes(r)),
+      } as JwtService
+    );
+  });
+
+  // The backend refuses readers with 403, which the Web Client would take for lost roles.
+  it('does not ask without a role that changes the kind', async () => {
+    roles = ['presentation:read', 'issuance:manage'];
+
+    expect(await service.get('PresentationConfig', 'pid')).toBeUndefined();
+    expect(await service.get('CredentialConfig', 'pid')).toMatchObject({ ownership: 'unmanaged' });
+    expect(requests).toEqual(['/api/config-bundles/resources/CredentialConfig']);
   });
 
   it('reads one kind with a single request for the lookups of a screen', async () => {

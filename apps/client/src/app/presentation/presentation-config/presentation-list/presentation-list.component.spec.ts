@@ -2,13 +2,18 @@ import { TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { provideRouter } from '@angular/router';
 import type { PresentationConfig } from '@eudiplo/sdk-core';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ConfigOwnershipService } from '../../../config-portability/config-ownership.service';
 import { JwtService } from '../../../services/jwt.service';
 import { PresentationManagementService } from '../presentation-management.service';
 import { PresentationListComponent } from './presentation-list.component';
 import { describeListStates } from '../../../common/base-async-list.testing';
+import { grantEveryRole } from '../../../common/role-lock.testing';
+import { effectiveRoles } from '../../../services/role-grants';
+
+// The tests are about what the actions do; role locks have their own tests.
+beforeEach(() => grantEveryRole());
 
 const configs = [
   { id: 'pid', description: 'PID check', createdAt: '2026-11-01T00:00:00Z' },
@@ -31,7 +36,13 @@ async function render(
       provideRouter([]),
       { provide: PresentationManagementService, useValue: service },
       { provide: MatSnackBar, useValue: snackBar },
-      { provide: JwtService, useValue: { hasRole: (role: string) => roles.includes(role) } },
+      {
+        provide: JwtService,
+        useValue: {
+          hasRole: (role: string | string[]) =>
+            [role].flat().some((r) => effectiveRoles(roles).includes(r)),
+        },
+      },
       { provide: ConfigOwnershipService, useValue: { get: async () => undefined } },
     ],
   }).compileComponents();

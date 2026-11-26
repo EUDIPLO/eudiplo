@@ -19,7 +19,7 @@ import {
 } from '@eudiplo/sdk-core';
 import { JwtService } from '../services/jwt.service';
 import { SESSION_READER_ROLES } from '../session-management/session-roles';
-import { KEY_CHAIN_ROLES } from '../key-management/key-chain.service';
+import { KEY_ADMIN_ROLE, KEY_CHAIN_ROLES } from '../key-management/key-chain.service';
 import { accessKeyChainsInUse } from '../key-management/default-access-key-chain';
 import { apiErrorDetail, groupUnreachable } from '../utils/error-message';
 import { lastDays, lastHours } from '../utils/local-day';
@@ -237,7 +237,7 @@ export class DashboardService {
     const promises: Promise<any>[] = [];
     const promiseKeys: DashboardSource[] = [];
 
-    if (this.canManageKeyChains) {
+    if (this.canReadKeyChains) {
       promises.push(
         Promise.all([
           keyChainControllerGetAll(),
@@ -251,15 +251,15 @@ export class DashboardService {
       promiseKeys.push('keyChains');
     }
 
-    // Credential configs require issuance:manage
-    if (this.jwtService.hasRole('issuance:manage')) {
+    // Credential configs and issuer settings require issuance:read
+    if (this.canReadIssuance) {
       promises.push(credentialConfigControllerGetConfigs());
       promiseKeys.push('credentials');
       promises.push(issuanceConfigControllerGetIssuanceConfigurations());
       promiseKeys.push('issuance');
     }
 
-    // Presentation configs require presentation:manage OR presentation:request
+    // Presentation configs require presentation:read
     if (this.canReadPresentationConfigs) {
       promises.push(presentationManagementControllerConfiguration());
       promiseKeys.push('presentations');
@@ -303,7 +303,7 @@ export class DashboardService {
     }
 
     // KMS health requires the roles of key chains
-    if (this.canManageKeyChains) {
+    if (this.canReadKeyChains) {
       promises.push(keyChainControllerGetProvidersHealth());
       promiseKeys.push('kmsHealth');
     }
@@ -349,8 +349,19 @@ export class DashboardService {
   }
 
   // Role-based visibility helpers
-  get canManageKeyChains(): boolean {
+  /** Key chains and KMS providers can be read with issuance:read, presentation:read or keys:manage. */
+  get canReadKeyChains(): boolean {
     return this.jwtService.hasRole(KEY_CHAIN_ROLES);
+  }
+
+  /** Creating key chains and configuring their certificates needs keys:manage. */
+  get canManageKeyChains(): boolean {
+    return this.jwtService.hasRole(KEY_ADMIN_ROLE);
+  }
+
+  /** Credential configs and issuer settings can be read with issuance:read. */
+  get canReadIssuance(): boolean {
+    return this.jwtService.hasRole('issuance:read');
   }
 
   /** Requesting a certificate from the EUDI Hub needs registrar:manage. */
@@ -379,7 +390,7 @@ export class DashboardService {
   }
 
   get canReadPresentationConfigs(): boolean {
-    return this.canManagePresentation || this.jwtService.hasRole('presentation:request');
+    return this.jwtService.hasRole('presentation:read');
   }
 
   get totalSessions(): number {
@@ -490,7 +501,7 @@ export class DashboardService {
   /** At least one health signal of the operational health card applies to the user. */
   get hasHealthSignals(): boolean {
     return (
-      this.canManageKeyChains ||
+      this.canReadKeyChains ||
       this.canManagePresentation ||
       !!this.sessionStats.issuance ||
       !!this.sessionStats.presentation
@@ -504,8 +515,8 @@ export class DashboardService {
 
   // Issuance readiness
   get isReadyToIssue(): boolean {
-    if (!this.canManageIssuance) {
-      return false; // User can't manage issuance
+    if (!this.canOfferIssuance) {
+      return false; // User can't create offers
     }
     return this.issueReadinessReason === null;
   }
@@ -519,13 +530,17 @@ export class DashboardService {
   }
 
   // Overall setup complete (at least one path is ready)
-  // Request-only access to presentations is not a setup the user completed
+  // Offer-only or request-only access is not a setup the user completed
+  private get isIssuanceSetUp(): boolean {
+    return this.canManageIssuance && this.isReadyToIssue;
+  }
+
   private get isVerificationSetUp(): boolean {
     return this.canManagePresentation && this.isReadyToVerify;
   }
 
   get isSetupComplete(): boolean {
-    return this.isReadyToIssue || this.isVerificationSetUp;
+    return this.isIssuanceSetUp || this.isVerificationSetUp;
   }
 
   // Show setup guide if prerequisites are not met OR neither path is ready
@@ -535,15 +550,12 @@ export class DashboardService {
       return false;
     }
 
-    return !this.hasPrerequisites || (!this.isReadyToIssue && !this.isVerificationSetUp);
+    return !this.hasPrerequisites || (!this.isIssuanceSetUp && !this.isVerificationSetUp);
   }
 
   get issueReadinessReason(): string | null {
-    if (!this.canManageIssuance) {
-      // The issuance form lists credential configs, which need issuance:manage.
-      return this.canOfferIssuance
-        ? 'The issuance form needs the issuance:manage role'
-        : 'Read-only: missing issuance:manage role';
+    if (!this.canOfferIssuance) {
+      return 'Read-only: missing issuance:offer role';
     }
     const prerequisite = this.prerequisiteReason;
     if (prerequisite) {
@@ -556,17 +568,21 @@ export class DashboardService {
       return 'Credential configs could not be loaded';
     }
     if (!this.hasIssuanceConfig) {
-      return 'No issuer settings';
+      return this.canManageIssuance
+        ? 'No issuer settings'
+        : 'No issuer settings; ask a user with issuance:manage to configure them';
     }
     if (this.credentialConfigs === 0) {
-      return 'No credential config';
+      return this.canManageIssuance
+        ? 'No credential config'
+        : 'No credential config; ask a user with issuance:manage to create one';
     }
     return null;
   }
 
   get verifyReadinessReason(): string | null {
     if (!this.canReadPresentationConfigs) {
-      return 'Read-only: missing presentation:manage or presentation:request role';
+      return 'Read-only: missing presentation:read role';
     }
     const prerequisite = this.prerequisiteReason;
     if (prerequisite) {
@@ -583,19 +599,21 @@ export class DashboardService {
     return null;
   }
 
-  // Key chains are only loaded for users who can manage them; not relevant otherwise.
+  // Key chains are only loaded for users who can read them; not relevant otherwise.
   private get prerequisiteReason(): string | null {
-    if (!this.canManageKeyChains) {
+    if (!this.canReadKeyChains) {
       return null;
     }
     if (this.hasFailed('keyChains')) {
       return 'Key chains could not be loaded';
     }
+    // Only keys:manage creates key chains; other callers learn whom to ask.
+    const ask = this.canManageKeyChains ? '' : '; creating one needs the keys:manage role';
     if (this.totalKeyChains === 0) {
-      return 'No key chain configured';
+      return `No key chain configured${ask}`;
     }
     if (this.accessKeyChains === 0) {
-      return 'No access key chain configured';
+      return `No access key chain configured${ask}`;
     }
     if (this.defaultAccessKeyChainMissing) {
       return 'The default access key chain no longer exists';
@@ -612,19 +630,28 @@ export class DashboardService {
   /** The requests the setup guide relies on. */
   private get setupSources(): DashboardSource[] {
     const sources: DashboardSource[] = [];
-    if (this.canManageKeyChains) sources.push('keyChains');
+    if (this.canReadKeyChains) sources.push('keyChains');
     if (this.canManageIssuance) sources.push('credentials', 'issuance');
     if (this.canManagePresentation) sources.push('presentations');
     return sources;
   }
 
   /**
-   * Where to fix the access certificate: the affected key chain, the key list for a default
-   * that no longer exists, or a new key chain.
+   * Where to fix the access certificate: the affected key chain, which readers can open and
+   * registrar:manage can request a certificate on, the key list for a default that no longer
+   * exists, or a new key chain. Null when a key chain would have to be created and the caller
+   * lacks keys:manage.
    */
-  get accessCertificateRoute(): string[] {
+  get accessCertificateRoute(): string[] | null {
     if (this.accessKeyChainId) return ['/keys', this.accessKeyChainId];
-    return this.defaultAccessKeyChainMissing ? ['/keys'] : ['/keys/create'];
+    if (this.defaultAccessKeyChainMissing) return ['/keys'];
+    return this.canManageKeyChains ? ['/keys/create'] : null;
+  }
+
+  /** The label of the link to `accessCertificateRoute`. */
+  get accessCertificateLinkLabel(): string {
+    if (this.canManageKeyChains) return 'Configure';
+    return this.accessKeyChainId ? 'View key chain' : 'View keys';
   }
 
   get accessCertificateStatusLabel(): string {
@@ -689,14 +716,14 @@ export class DashboardService {
 
   // A missing or expired certificate blocks the setup, so the setup guide shows it with a link.
   private get accessCertificateWarning(): DashboardWarning | null {
-    // Key chains are only loaded for users who can manage them.
-    if (!this.canManageKeyChains || !this.isLoaded('keyChains')) {
+    // Key chains are only loaded for users who can read them.
+    if (!this.canReadKeyChains || !this.isLoaded('keyChains')) {
       return null;
     }
     if (this.accessCertificateStatus === 'expiring') {
       return {
         message: `Access certificate expires within ${this.accessCertificateExpiringSoonDays} days. Plan renewal to avoid interruptions.`,
-        action: { label: 'Open Access Key Chain', route: this.accessCertificateRoute },
+        action: { label: 'Open Access Key Chain', route: this.accessCertificateRoute ?? ['/keys'] },
       };
     }
     return null;

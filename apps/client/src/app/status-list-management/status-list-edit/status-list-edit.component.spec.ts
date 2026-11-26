@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, provideRouter, Router } from '@angular/router';
 import { client } from '@eudiplo/sdk-core';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { expectAvailable, expectUnavailable } from '../../common/unavailable-action.testing';
 import { ConfigOwnershipService } from '../../config-portability/config-ownership.service';
@@ -11,6 +11,10 @@ import { CredentialConfigService } from '../../issuance/credential-config/creden
 import { KeyChainService } from '../../key-management/key-chain.service';
 import { StatusListManagementService } from '../status-list-management.service';
 import { StatusListEditComponent } from './status-list-edit.component';
+import { grantEveryRole, grantRoles } from '../../common/role-lock.testing';
+
+// The tests are about what the actions do; role locks have their own tests.
+beforeEach(() => grantEveryRole());
 
 describe('StatusListEditComponent', () => {
   afterEach(() => {
@@ -203,6 +207,36 @@ describe('StatusListEditComponent Save', () => {
     expect(element.querySelector('h1')?.textContent).toContain('Edit Status List');
     expect(element.querySelector('.stats dd')?.textContent?.trim()).toBe('10.0K');
     expect(element.querySelector('.change-state')?.textContent?.trim()).toBe('No changes');
+  });
+
+  it('shows a status list to a reader in a disabled form that sends nothing', async () => {
+    grantRoles(['issuance:read']);
+    const getList = vi.fn().mockResolvedValue({
+      id: 'list-1',
+      tenantId: 'tenant',
+      capacity: 10000,
+      usedEntries: 0,
+      availableEntries: 10000,
+      bits: 1,
+      uri: 'https://x/status/list-1',
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    });
+    const updateList = vi.fn();
+    const { fixture, save } = await render(vi.fn(), { listId: 'list-1', getList, updateList });
+    const element = fixture.nativeElement as HTMLElement;
+
+    expect(element.querySelector('app-read-only-notice')?.textContent).toContain(
+      'Read-only: changing this status list needs the issuance:manage role.'
+    );
+    expect(fixture.componentInstance.form.disabled).toBe(true);
+    expect(save.getAttribute('aria-disabled')).toBe('true');
+    save.click();
+    element.querySelector('form')!.dispatchEvent(new Event('submit'));
+    await fixture.whenStable();
+
+    expect(updateList).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.hasUnsavedChanges()).toBe(false);
   });
 
   it('sends null for a binding changed to Shared or Default and leaves out an unchanged one', async () => {

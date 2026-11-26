@@ -1,3 +1,7 @@
+import {
+  effectiveRoles as expandRoles,
+  includedRoles as rolesIncludedBy,
+} from '@eudiplo/config-format/role-model.js';
 import { RoleDto } from '@eudiplo/sdk-core';
 
 /**
@@ -15,8 +19,11 @@ const roleSet: Record<Role, true> = {
   'credentials:status': true,
   'issuance:manage': true,
   'issuance:offer': true,
+  'issuance:read': true,
+  'keys:export': true,
   'keys:manage': true,
   'presentation:manage': true,
+  'presentation:read': true,
   'presentation:request': true,
   'registrar:manage': true,
   'sessions:read': true,
@@ -26,6 +33,16 @@ const roleSet: Record<Role, true> = {
 };
 
 export const roles = Object.keys(roleSet) as Role[];
+
+/**
+ * `roles` and every role they include, from the table the backend uses
+ * (`@eudiplo/config-format/role-model.js`). The backend already returns these
+ * from `GET /api/auth/me`; expanding again changes nothing.
+ */
+export const effectiveRoles: (assigned: readonly string[]) => string[] = expandRoles;
+
+/** The roles that `role` includes besides itself, for role pickers. */
+export const includedRoles: (role: string) => string[] = rolesIncludedBy;
 
 /**
  * Roles that administer the tenant: its key material, configuration exports
@@ -38,15 +55,15 @@ const reservedRoles: ReadonlySet<Role> = new Set<Role>(['tenants:manage', 'tenan
 
 /**
  * Roles a caller may grant to clients and users, as the backend checks them:
- * every role with `tenants:manage`; with `tenant:admin` every role except the
- * reserved ones; otherwise the roles it holds, except the reserved ones.
+ * every role with `tenants:manage`, otherwise the roles it has, except the
+ * reserved ones. `callerRoles` are the caller's effective roles from
+ * `GET /api/auth/me`, which include the roles its assigned roles imply, so
+ * `tenant:admin` grants every role except the reserved ones.
  */
 export function grantableRoles(callerRoles: string[]): Role[] {
-  if (callerRoles.includes('tenants:manage')) return roles;
-  const source = callerRoles.includes('tenant:admin')
-    ? roles
-    : roles.filter((role) => callerRoles.includes(role));
-  return source.filter((role) => !reservedRoles.has(role));
+  const held = effectiveRoles(callerRoles);
+  if (held.includes('tenants:manage')) return roles;
+  return roles.filter((role) => held.includes(role) && !reservedRoles.has(role));
 }
 
 /** Explains to the caller which roles it can grant. */
@@ -55,7 +72,7 @@ export function grantHint(callerRoles: string[]): string {
   if (callerRoles.includes('tenant:admin')) {
     return 'You can grant every role except tenants:manage and tenant:admin.';
   }
-  return 'You can grant only roles you hold, except tenants:manage and tenant:admin.';
+  return 'You can grant only roles you have, including those your roles include, except tenants:manage and tenant:admin.';
 }
 
 /**
@@ -66,11 +83,10 @@ export function grantHint(callerRoles: string[]): string {
  */
 export function canManageRoles(callerRoles: string[], targetRoles: string[]): boolean {
   const grantable = grantableRoles(callerRoles);
+  const held = effectiveRoles(callerRoles);
   return targetRoles.every(
     (role) =>
-      !roles.includes(role as Role) ||
-      grantable.includes(role as Role) ||
-      callerRoles.includes(role)
+      !roles.includes(role as Role) || grantable.includes(role as Role) || held.includes(role)
   );
 }
 
@@ -99,7 +115,7 @@ export function roleChoices(
   return {
     options: [
       ...grantable.map((role) => ({ role, locked: false })),
-      ...kept.map((role) => ({ role, locked: !callerRoles.includes(role) })),
+      ...kept.map((role) => ({ role, locked: !effectiveRoles(callerRoles).includes(role) })),
     ],
     unmanageable: targetRoles.filter((role) => !canManageRoles(callerRoles, [role])),
   };

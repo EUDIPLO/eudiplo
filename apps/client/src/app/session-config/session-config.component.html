@@ -20,6 +20,9 @@
       (retry)="loadConfig()"
     />
   } @else {
+    @if (readOnly) {
+      <app-read-only-notice subject="these settings" [roles]="writeRoles" />
+    }
     <form #formElement [formGroup]="configForm" (ngSubmit)="onSave()">
       <!-- Each section: what it is for on the left, its fields on the right -->
       <section class="form-section" aria-labelledby="session-ttl-heading">
@@ -58,6 +61,7 @@
                   type="button"
                   [class.selected]="isTtlPreset(preset.seconds)"
                   [attr.aria-pressed]="isTtlPreset(preset.seconds)"
+                  [disabled]="readOnly"
                   (click)="configForm.patchValue({ ttlSeconds: preset.seconds })"
                 >
                   {{ preset.label }}
@@ -197,6 +201,7 @@
           (click)="onReset()"
           [disabled]="isSaving || !hasStoredOverride"
           disabledInteractive
+          [appRequiresRole]="writeRoles"
           appConfigManaged
           managedKind="Tenant"
           managedResourceId="tenant"
@@ -212,6 +217,7 @@
           [disabled]="isSaving"
           disabledInteractive
           [matTooltip]="saveTooltip"
+          [appRequiresRole]="writeRoles"
           appConfigManaged
           managedKind="Tenant"
           managedResourceId="tenant"

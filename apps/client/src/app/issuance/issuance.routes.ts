@@ -1,5 +1,7 @@
 import type { Routes } from '@angular/router';
 import { unsavedChangesGuard } from '../guards/unsaved-changes.guard';
+import { ISSUANCE_WRITE_ROLES, requireRole } from '../services/resource-roles';
+import { RoleGuard } from '../guards/roles.guard';
 
 export const issuanceOfferRoutes: Routes = [
   {
@@ -24,6 +26,7 @@ export const issuanceConfigRoutes: Routes = [
   },
   {
     path: 'edit',
+    ...requireRole(ISSUANCE_WRITE_ROLES),
     loadComponent: () =>
       import('./issuance-config/issuance-config-create/issuance-config-create.component').then(
         (m) => m.IssuanceConfigCreateComponent
@@ -42,6 +45,7 @@ export const credentialConfigRoutes: Routes = [
   },
   {
     path: 'create',
+    ...requireRole(ISSUANCE_WRITE_ROLES),
     loadComponent: () =>
       import('./credential-config/credential-config-create/credential-config-create.component').then(
         (m) => m.CredentialConfigCreateComponent
@@ -57,6 +61,7 @@ export const credentialConfigRoutes: Routes = [
   },
   {
     path: ':id/edit',
+    ...requireRole(ISSUANCE_WRITE_ROLES),
     loadComponent: () =>
       import('./credential-config/credential-config-create/credential-config-create.component').then(
         (m) => m.CredentialConfigCreateComponent
@@ -69,7 +74,8 @@ export const credentialConfigRoutes: Routes = [
       import('./credential-config/credential-config-create/credential-config-create.component').then(
         (m) => m.CredentialConfigCreateComponent
       ),
-    data: { copy: true },
+    canActivate: [RoleGuard],
+    data: { role: ISSUANCE_WRITE_ROLES, copy: true },
     canDeactivate: [unsavedChangesGuard],
   },
 ];
@@ -84,6 +90,7 @@ export const attributeProviderRoutes: Routes = [
   },
   {
     path: 'create',
+    ...requireRole(ISSUANCE_WRITE_ROLES),
     loadComponent: () =>
       import('./attribute-provider/attribute-provider-create/attribute-provider-create.component').then(
         (m) => m.AttributeProviderCreateComponent
@@ -99,6 +106,7 @@ export const attributeProviderRoutes: Routes = [
   },
   {
     path: ':id/edit',
+    ...requireRole(ISSUANCE_WRITE_ROLES),
     loadComponent: () =>
       import('./attribute-provider/attribute-provider-create/attribute-provider-create.component').then(
         (m) => m.AttributeProviderCreateComponent

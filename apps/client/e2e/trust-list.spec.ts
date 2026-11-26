@@ -49,11 +49,11 @@ test.describe('verifier admin', () => {
     await page.goto(`/trust-list/${id ?? ids[0]}`);
   }
 
-  test('is told that credential config references need issuance:manage', async ({ page }) => {
+  test('is told that credential config references need issuance:read', async ({ page }) => {
     await signInOnKeys(page);
     await openTrustList(page);
 
-    await expect(page.getByText('You need the issuance:manage role')).toBeVisible();
+    await expect(page.getByText('You need the issuance:read role')).toBeVisible();
     await expect(page.getByText('No credential configs reference this trust list.')).toHaveCount(0);
   });
 
@@ -80,7 +80,10 @@ test.describe('entities', () => {
       !hasRootCredentials,
       'Set AUTH_CLIENT_ID and AUTH_CLIENT_SECRET of the backend to create a tenant.'
     );
-    const tenant = await createTenant('trust-list-rows', 'Trust List Rows', ['issuance:manage']);
+    const tenant = await createTenant('trust-list-rows', 'Trust List Rows', [
+      'issuance:manage',
+      'keys:manage',
+    ]);
     const api = `${resolvedE2EConfig.apiBaseUrl}/api/trust-list`;
     const headers = { Authorization: `Bearer ${tenant.token}`, 'Content-Type': 'application/json' };
     const keyChainId = await createKeyChain(tenant.token, 'trustList', 'Trust list rows signing');
@@ -173,7 +176,11 @@ test.describe('edit page', () => {
       !hasRootCredentials,
       'Set AUTH_CLIENT_ID and AUTH_CLIENT_SECRET of the backend to create a tenant.'
     );
-    const tenant = await createTenant('trust-list-load', 'Trust List Load', ['issuance:manage']);
+    // Creating the trust list's key chain needs keys:manage.
+    const tenant = await createTenant('trust-list-load', 'Trust List Load', [
+      'issuance:manage',
+      'keys:manage',
+    ]);
     await createTrustList(tenant.token, id, 'Loaded on the edit page');
     await loginWithClientCredentials(page, tenant.clientId, tenant.clientSecret);
     return tenant.token;
@@ -406,8 +413,10 @@ test.describe('create page', () => {
       'Set AUTH_CLIENT_ID and AUTH_CLIENT_SECRET of the backend to create a tenant.'
     );
     // A new tenant has no trust list key chain; the internal entity's key chains exist.
+    // keys:manage creates key chains, so it gets the link to create one.
     const tenant = await createTenant('trust-list-signing', 'Trust List Signing', [
       'issuance:manage',
+      'keys:manage',
     ]);
     await createKeyChain(tenant.token, 'attestation', 'Own issuer');
     await createKeyChain(tenant.token, 'statusList', 'Own status list');

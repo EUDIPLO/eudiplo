@@ -24,6 +24,8 @@
         <button
           matButton="tonal"
           [routerLink]="['edit']"
+          [appRequiresRole]="writeRoles"
+          matTooltip=""
           appConfigManaged
           managedKind="AttributeProvider"
           [managedResourceId]="provider.id"
@@ -55,6 +57,7 @@
               deleting ? 'Deleting the attribute provider…' : 'Delete attribute provider'
             "
             aria-label="Delete attribute provider"
+            [appRequiresRole]="writeRoles"
             appConfigManaged
             managedKind="AttributeProvider"
             [managedResourceId]="provider.id"

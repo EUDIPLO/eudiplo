@@ -23,9 +23,10 @@ import { ConfigOwnershipDirective } from '../../config-portability/config-owners
 import { JwtService } from '../../services/jwt.service';
 import { getApiErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
-import { WEBHOOK_ENDPOINT_ROLES } from '../webhook-endpoint-roles';
 import { WebhookEndpointService } from '../webhook-endpoint.service';
 import { ItemRoutePipe } from '../../common/item-route.pipe';
+import { RoleLockDirective } from '../../common/role-lock.directive';
+import { SHARED_WRITE_ROLES } from '../../services/resource-roles';
 
 @Component({
   selector: 'app-webhook-endpoint-list',
@@ -40,6 +41,7 @@ import { ItemRoutePipe } from '../../common/item-route.pipe';
     FormsModule,
     RouterModule,
     ConfigOwnershipDirective,
+    RoleLockDirective,
     LoadErrorComponent,
   ],
   templateUrl: './webhook-endpoint-list.component.html',
@@ -47,6 +49,9 @@ import { ItemRoutePipe } from '../../common/item-route.pipe';
   styleUrl: './webhook-endpoint-list.component.scss',
 })
 export class WebhookEndpointListComponent extends BaseAsyncListComponent<WebhookEndpointEntity> {
+  /** Creating, changing and deleting it needs issuance:manage or presentation:manage; reading needs less. */
+  readonly writeRoles = SHARED_WRITE_ROLES;
+
   protected readonly loadFailedMessage = 'Failed to load webhook endpoints';
 
   readonly displayedColumns = ['name', 'url', 'auth', 'actions'];
@@ -66,7 +71,7 @@ export class WebhookEndpointListComponent extends BaseAsyncListComponent<Webhook
     jwtService: JwtService
   ) {
     super();
-    this.canManage = jwtService.hasRole(WEBHOOK_ENDPOINT_ROLES);
+    this.canManage = jwtService.hasRole(SHARED_WRITE_ROLES);
   }
 
   get endpoints(): WebhookEndpointEntity[] {

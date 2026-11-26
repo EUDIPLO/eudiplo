@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ConfigDocumentService } from '../../config-portability/config-document.service';
 import { ConfigOwnershipService } from '../../config-portability/config-ownership.service';
@@ -10,6 +10,11 @@ import { PresentationManagementService } from '../../presentation/presentation-c
 import { JwtService, type Role } from '../../services/jwt.service';
 import { FederationTrustAnchorService } from '../federation-trust-anchor.service';
 import { FederationTrustAnchorShowComponent } from './federation-trust-anchor-show.component';
+import { grantEveryRole } from '../../common/role-lock.testing';
+import { effectiveRoles } from '../../services/role-grants';
+
+// The tests are about what the actions do; role locks have their own tests.
+beforeEach(() => grantEveryRole());
 
 const anchor = {
   id: 'eu-federation',
@@ -77,7 +82,7 @@ describe('FederationTrustAnchorShowComponent', () => {
           provide: JwtService,
           useValue: {
             hasRole: (role: Role | Role[]) =>
-              (Array.isArray(role) ? role : [role]).some((r) => roles.includes(r)),
+              (Array.isArray(role) ? role : [role]).some((r) => effectiveRoles(roles).includes(r)),
             canUseConfigPortability: () => false,
           },
         },
@@ -254,7 +259,7 @@ describe('FederationTrustAnchorShowComponent', () => {
     const { fixture } = render({ roles: ['presentation:manage'] });
     const element = await loaded(fixture);
 
-    expect(element.textContent).toContain('You need the issuance:manage role');
+    expect(element.textContent).toContain('You need the issuance:read role');
     expect(element.querySelector('[aria-label="Open verification config pid"]')).not.toBeNull();
   });
 

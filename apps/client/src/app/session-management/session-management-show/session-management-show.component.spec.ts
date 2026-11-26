@@ -1,3 +1,4 @@
+import { effectiveRoles } from '../../services/role-grants';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ApplicationRef, Injector } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
@@ -43,7 +44,8 @@ describe('SessionManagementShowComponent', () => {
         {
           provide: JwtService,
           useValue: {
-            hasRole: (role: string | string[]) => [role].flat().some((r) => roles.includes(r)),
+            hasRole: (role: string | string[]) =>
+              [role].flat().some((r) => effectiveRoles(roles).includes(r)),
           },
         },
       ],
@@ -141,9 +143,9 @@ describe('SessionManagementShowComponent', () => {
     expect(component.canReadCredentialStatus()).toBe(false);
   });
 
-  it('locks Recreate Offer with the reason for issuance:offer without issuance:manage', () => {
+  it('offers Recreate Offer to issuance:offer without issuance:manage, and none without issuance:offer', () => {
     const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
-    roles = ['issuance:offer'];
+    roles = ['sessions:read'];
     component.session = {
       ...issuance,
       createdAt: '2026-10-16T07:04:22.000Z',
@@ -151,17 +153,16 @@ describe('SessionManagementShowComponent', () => {
       notifications: [],
     } as unknown as Session;
     fixture.detectChanges();
+    const recreateButton = () =>
+      [...(fixture.nativeElement as HTMLElement).querySelectorAll('button')].find((button) =>
+        button.textContent?.includes('Recreate Offer')
+      );
+    expect(recreateButton()).toBeUndefined();
 
-    const recreate = [...(fixture.nativeElement as HTMLElement).querySelectorAll('button')].find(
-      (button) => button.textContent?.includes('Recreate Offer')
-    )!;
-    expect(recreate.getAttribute('aria-disabled')).toBe('true');
-    expect(component.recreateTooltip()).toContain('also needs the issuance:manage role');
-    recreate.click();
-    expect(navigate).not.toHaveBeenCalled();
-
-    roles = ['issuance:offer', 'issuance:manage'];
+    // New Issuance needs only issuance:offer.
+    roles = ['issuance:offer'];
     fixture.detectChanges();
+    const recreate = recreateButton()!;
     expect(recreate.getAttribute('aria-disabled')).not.toBe('true');
     expect(component.recreateTooltip()).toBe('Create a new offer with the same parameters');
     recreate.click();
@@ -175,7 +176,6 @@ describe('SessionManagementShowComponent', () => {
     component.session = presentation;
 
     expect(component.canRecreateOffer()).toBe(true);
-    expect(component.recreateLockedReason()).toBe('');
   });
 
   describe('Cancel Offer', () => {
@@ -277,13 +277,14 @@ describe('SessionManagementShowComponent', () => {
     component.session = issuance;
     expect(component.canSeeOffer()).toBe(true);
     expect(component.canCancel()).toBe(true);
-    // Recreating opens the offer page, which needs issuance:offer.
-    expect(component.canRecreateOffer()).toBe(false);
+    // Recreating opens the offer page, which needs issuance:offer; issuance:manage includes it.
+    expect(component.canRecreateOffer()).toBe(true);
 
-    // issuance:manage counts only together with a role that cancels sessions.
-    roles = ['sessions:read', 'issuance:manage'];
+    // A manage role counts only for its own side, though it includes a role that cancels sessions.
+    roles = ['sessions:read', 'presentation:manage'];
     expect(component.canSeeOffer()).toBe(false);
     expect(component.canCancel()).toBe(false);
+    expect(component.canRecreateOffer()).toBe(false);
   });
 
   it.each([

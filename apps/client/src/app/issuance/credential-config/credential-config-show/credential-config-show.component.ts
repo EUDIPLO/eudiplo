@@ -32,6 +32,8 @@ import { LoadErrorComponent } from '../../../common/load-error.component';
 import { walletDisplayEntries } from '../../../utils/display-entries';
 import { CLAIM_FORMAT_LABELS, claimFormatOf } from '../../../utils/claim-formats';
 import { confirmAndDelete } from '../../../common/confirm-delete';
+import { RoleLockDirective } from '../../../common/role-lock.directive';
+import { ISSUANCE_WRITE_ROLES } from '../../../services/resource-roles';
 
 interface ClaimFieldRow {
   key: string;
@@ -67,6 +69,7 @@ interface SchemaPathInfo {
     MatProgressSpinnerModule,
     RouterModule,
     ConfigOwnershipDirective,
+    RoleLockDirective,
     ConfigOwnershipNoticeComponent,
     LoadErrorComponent,
   ],
@@ -75,6 +78,9 @@ interface SchemaPathInfo {
   styleUrl: './credential-config-show.component.scss',
 })
 export class CredentialConfigShowComponent implements OnInit {
+  /** Creating, changing and deleting it needs issuance:manage; reading needs less. */
+  readonly writeRoles = ISSUANCE_WRITE_ROLES;
+
   config: CredentialConfig | undefined;
   /** Set when the page's data could not be loaded, so the page is not left blank. */
   loadError = '';

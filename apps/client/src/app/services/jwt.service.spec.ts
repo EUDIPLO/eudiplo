@@ -5,6 +5,7 @@ import { Subject } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ApiService } from '../core';
 import { type Caller, JwtService, KEEP_CALLER_FAILURE } from './jwt.service';
+import { roles } from './role-grants';
 
 describe('JwtService', () => {
   let api: {
@@ -86,8 +87,13 @@ describe('JwtService', () => {
     await service.loadCaller();
 
     expect(requests).toEqual(['/api/auth/me']);
-    expect(service.getRoles()).toEqual(['issuance:offer', 'users:manage']);
-    expect(service.grantableRoles()).toEqual(['issuance:offer', 'users:manage']);
+    // The assigned roles and every role they imply.
+    expect([...service.getRoles()].sort()).toEqual([
+      'issuance:offer',
+      'issuance:read',
+      'users:manage',
+    ]);
+    expect(service.grantableRoles()).toEqual(['issuance:offer', 'issuance:read', 'users:manage']);
     expect(service.hasRole('users:manage')).toBe(true);
     expect(service.getTenantId()).toBe('acme');
     expect(service.hasTenantContext()).toBe(true);
@@ -131,7 +137,7 @@ describe('JwtService', () => {
     await Promise.all([service.loadCaller(), service.loadCaller()]);
     await service.loadCaller();
     expect(requests).toHaveLength(1);
-    expect(service.getRoles()).toEqual(['tenants:manage']);
+    expect([...service.getRoles()].sort()).toEqual([...roles].sort());
 
     await service.loadCaller({ reload: true });
     expect(requests).toHaveLength(2);
@@ -146,7 +152,7 @@ describe('JwtService', () => {
     api.accessToken = 'token-b';
     navigation = { id: 1, extras: {} };
     await service.loadCaller();
-    expect(service.getRoles()).toEqual(['issuance:offer']);
+    expect(service.getRoles()).toEqual(['issuance:offer', 'issuance:read']);
     expect(snackBar.open).not.toHaveBeenCalled();
 
     callers = [{ subject: 'shop', tenantId: 'acme', roles: [] }];
@@ -195,7 +201,7 @@ describe('JwtService', () => {
 
     api.accessToken = 'token-b';
 
-    expect(service.getRoles()).toEqual(['issuance:offer']);
+    expect(service.getRoles()).toEqual(['issuance:offer', 'issuance:read']);
     callers = [{ subject: 'alice', tenantId: 'acme', roles: [] }];
     await service.loadCaller();
     expect(service.getRoles()).toEqual([]);
@@ -296,7 +302,7 @@ describe('JwtService', () => {
 
     retry.next();
     await vi.waitFor(() => expect(router.navigateByUrl).toHaveBeenCalledWith('/issuance/offer'));
-    expect(service.getRoles()).toEqual(['issuance:offer']);
+    expect(service.getRoles()).toEqual(['issuance:offer', 'issuance:read']);
   });
 
   it('opens the page of a guard that joined a request started after a token renewal', async () => {
@@ -390,7 +396,7 @@ describe('JwtService', () => {
     pending[0].release();
     await first;
 
-    expect(service.getRoles()).toEqual(['issuance:offer']);
+    expect(service.getRoles()).toEqual(['issuance:offer', 'issuance:read']);
     await service.loadCaller();
     expect(pending).toHaveLength(2);
   });

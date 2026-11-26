@@ -11,6 +11,7 @@
     <!-- The list tests name this button by its tooltip and accessible name. -->
     <button
       matButton="filled"
+      [appRequiresRole]="writeRoles"
       [routerLink]="['create']"
       matTooltip="Register a trust anchor"
       aria-label="Register a trust anchor"
@@ -31,7 +32,7 @@
       <span class="empty-icon"><mat-icon>hub</mat-icon></span>
       <p>No federation trust anchors yet.</p>
       <span class="muted">Register the trust anchor of a federation to trust its members.</span>
-      <a matButton="tonal" [routerLink]="['create']">
+      <a matButton="tonal" [routerLink]="['create']" [appRequiresRole]="writeRoles" matTooltip="">
         <mat-icon>add</mat-icon>
         Register trust anchor
       </a>
@@ -80,6 +81,7 @@
                 </a>
                 <a
                   matIconButton
+                  [appRequiresRole]="writeRoles"
                   [routerLink]="anchor.id | itemRoute: 'edit'"
                   matTooltip="Edit"
                   appConfigManaged

@@ -215,3 +215,10 @@ mat-card mat-card-actions {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+// Instead of Create key for a caller without keys:manage
+.role-hint {
+  margin: 0;
+  font: var(--mat-sys-body-medium);
+  color: var(--mat-sys-on-surface-variant);
+}

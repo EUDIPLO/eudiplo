@@ -514,18 +514,24 @@
   <div class="key-chain-actions">
     @for (usage of usages; track usage) {
       @if (noKeyChains(usage)) {
-        <a
-          mat-button
-          routerLink="/keys/create"
-          [queryParams]="keyChainLinkParamsOf(usage)"
-          target="_blank"
-          rel="noopener"
-          (click)="openKeyChainCreation(fields)"
-        >
-          <mat-icon>open_in_new</mat-icon>
-          Create {{ createdKeyChainName(usage) }} key chain
-          <span class="visually-hidden">(opens in a new tab)</span>
-        </a>
+        @if (canCreateKeyChains) {
+          <a
+            mat-button
+            routerLink="/keys/create"
+            [queryParams]="keyChainLinkParamsOf(usage)"
+            target="_blank"
+            rel="noopener"
+            (click)="openKeyChainCreation(fields)"
+          >
+            <mat-icon>open_in_new</mat-icon>
+            Create {{ createdKeyChainName(usage) }} key chain
+            <span class="visually-hidden">(opens in a new tab)</span>
+          </a>
+        } @else {
+          <span class="key-chain-locked"
+            >Creating a {{ createdKeyChainName(usage) }} key chain needs the keys:manage role.</span
+          >
+        }
       }
     }
     <button

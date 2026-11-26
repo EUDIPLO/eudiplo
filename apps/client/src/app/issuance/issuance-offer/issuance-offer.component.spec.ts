@@ -1,5 +1,6 @@
 import { ApplicationRef } from '@angular/core';
 import { JwtService } from '../../services/jwt.service';
+import { effectiveRoles } from '../../services/role-grants';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatAutocompleteTrigger } from '@angular/material/autocomplete';
 import { MatDialog } from '@angular/material/dialog';
@@ -85,7 +86,7 @@ describe('IssuanceOfferComponent', () => {
     }).compileComponents();
 
     vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
-    // A caller who can use the form: issuance:offer and issuance:manage.
+    // A caller who can use the form and every other issuance page.
     vi.spyOn(TestBed.inject(JwtService), 'hasRole').mockReturnValue(true);
     fixture = TestBed.createComponent(IssuanceOfferComponent);
     component = fixture.componentInstance;
@@ -147,26 +148,16 @@ describe('IssuanceOfferComponent', () => {
       }
     });
 
-    it('says why the form cannot be used with issuance:offer alone, without loading or Retry', async () => {
-      vi.mocked(TestBed.inject(JwtService).hasRole).mockImplementation(
-        (role) => role === 'issuance:offer'
+    it('loads the form for issuance:offer alone, which includes issuance:read', async () => {
+      vi.mocked(TestBed.inject(JwtService).hasRole).mockImplementation((role) =>
+        [role].flat().some((r) => effectiveRoles(['issuance:offer']).includes(r))
       );
 
       const page = await render();
 
-      const notice = page.querySelector('.form-locked')!;
-      expect(notice.getAttribute('role')).toBe('status');
-      expect(notice.textContent).toContain(
-        'Creating offers in the Web Client also needs the issuance:manage role'
-      );
-      expect(notice.querySelector('a')?.textContent?.trim()).toBe('Back to Sessions');
-      expect(page.querySelector('app-load-error')).toBeNull();
-      expect(page.querySelector('mat-stepper')).toBeNull();
-      // The header does not invite the caller to fill in a form they cannot use.
-      expect(page.querySelector('.page-header')?.textContent).not.toContain('fill in the claims');
-      expect(TestBed.inject(CredentialConfigService).loadConfigurations).not.toHaveBeenCalled();
-      expect(TestBed.inject(IssuanceConfigService).getConfig).not.toHaveBeenCalled();
-      expect(TestBed.inject(AttributeProviderService).getAll).not.toHaveBeenCalled();
+      expect(page.querySelector('mat-stepper')).not.toBeNull();
+      expect(TestBed.inject(CredentialConfigService).loadConfigurations).toHaveBeenCalled();
+      expect(TestBed.inject(IssuanceConfigService).getConfig).toHaveBeenCalled();
     });
   });
 

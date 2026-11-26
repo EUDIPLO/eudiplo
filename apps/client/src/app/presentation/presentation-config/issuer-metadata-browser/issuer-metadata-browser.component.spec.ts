@@ -12,6 +12,7 @@ import {
   IssuerMetadataBrowserComponent,
   type IssuerMetadataBrowserDialogData,
 } from './issuer-metadata-browser.component';
+import { effectiveRoles } from '../../../services/role-grants';
 
 const METADATA_URL = 'https://backend.test/.well-known/openid-credential-issuer/issuers/tenant%201';
 
@@ -62,7 +63,8 @@ function createDialog(
         provide: JwtService,
         useValue: {
           getTenantId: () => tenantId,
-          hasRole: (role: string) => roles.includes(role),
+          hasRole: (role: string | string[]) =>
+            [role].flat().some((r) => effectiveRoles(roles).includes(r)),
         },
       },
       { provide: CredentialConfigService, useValue: { loadConfigurations } },

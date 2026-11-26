@@ -12,6 +12,7 @@ import { asSentence, getApiErrorMessage, hasHttpStatus } from '../utils/error-me
 import { openErrorSnackBar } from '../utils/error-snackbar';
 import {
   canManageRoles,
+  effectiveRoles,
   grantableRoles,
   grantHint,
   TENANT_ADMIN_ROLES,
@@ -208,9 +209,12 @@ export class JwtService {
     return requiredRoles.some((requiredRole) => callerRoles.includes(requiredRole));
   }
 
-  /** Roles of the signed-in caller, as the backend grants them. */
+  /**
+   * Roles of the signed-in caller, as the backend grants them: the assigned
+   * roles and every role they imply.
+   */
   getRoles(): string[] {
-    return this.getCaller()?.roles ?? [];
+    return effectiveRoles(this.getCaller()?.roles ?? []);
   }
 
   /** Roles the signed-in caller may grant to clients and users. */
