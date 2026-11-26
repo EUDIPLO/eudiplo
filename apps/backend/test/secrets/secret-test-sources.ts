@@ -35,8 +35,13 @@ export class StubVaultSource implements SecretSource {
     reads = 0;
     lastSignal?: AbortSignal;
 
+    /** The patterns the policy asked about, as written. */
+    validated: string[] = [];
+
     validatePattern(pattern: string): string | undefined {
-        return /^[a-z]+\/[A-Za-z0-9/_#-]+$/.test(pattern)
+        this.validated.push(pattern);
+        if (pattern.includes("refused")) return "the stub refuses it";
+        return /^[a-z]+\/(?:[A-Za-z0-9/_#-]|\{tenant\})+$/.test(pattern)
             ? undefined
             : "not a vault grant";
     }

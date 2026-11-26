@@ -22,7 +22,8 @@ export interface SecretSource {
 
     /**
      * Why `pattern` is no grant of this source for a scope of `scopeType`,
-     * or undefined when it is one.
+     * or undefined when it is one. With {@link tenantTemplates}, `pattern`
+     * may hold `{tenant}`; the source decides where it may stand.
      */
     validatePattern(
         pattern: string,

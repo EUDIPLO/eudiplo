@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { secretSourceContract } from "../../../../test/secrets/secret-source.contract.js";
 import {
     envSource,
     reference,
@@ -118,3 +119,17 @@ describe("EnvSecretSource", () => {
             expect(source.overlaps(a, b), `${a} ${b}`).toBe(overlap);
     });
 });
+
+secretSourceContract("EnvSecretSource", () => ({
+    source: envSource({ APP_TOKEN: "app-value", ACME_X: "x" }),
+    present: { reference: "${env:APP_TOKEN}", value: "app-value" },
+    missing: "${env:APP_UNSET}",
+    patterns: ["*", "A*", "APP_*", "APP_TOKEN", "ACME_*", "ACME_X", "B*"],
+    references: [
+        "${env:APP_TOKEN}",
+        "${env:APP_OTHER}",
+        "${env:ACME_X}",
+        "${env:ACME_Y}",
+        "${env:BOB}",
+    ],
+}));

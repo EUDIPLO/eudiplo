@@ -346,6 +346,30 @@ describe("SecretPolicy", () => {
         ]);
     });
 
+    it("lets the source validate {tenant} grants as written", () => {
+        const vault = new StubVaultSource();
+        expect(() =>
+            SecretPolicy.create(
+                {
+                    tenants: {
+                        "*": {
+                            vault: ["kv/t/{tenant}/", "kv/refused/{tenant}/"],
+                        },
+                    },
+                },
+                [vault],
+            ),
+        ).toThrow(
+            new SecretPolicyError([
+                "tenants.*.vault: 'kv/refused/{tenant}/': the stub refuses it",
+            ]),
+        );
+        expect(vault.validated).toEqual([
+            "kv/t/{tenant}/",
+            "kv/refused/{tenant}/",
+        ]);
+    });
+
     it("reports every problem of a policy without repeating values", () => {
         expect(issuesOf(null)).toEqual([expect.stringMatching(/^\(root\): /)]);
         expect(issuesOf({ unknown: true })).toEqual([
