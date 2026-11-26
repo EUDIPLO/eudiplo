@@ -52,10 +52,13 @@ export function createSecretReferences(
     return new SecretReferences(
         new SecretResolver(policy, {
             ...DEFAULT_SECRET_RESOLVER_OPTIONS,
-            onStale: (reference, cause) =>
+            onStale: (reference, cause) => {
+                const reason =
+                    cause instanceof Error ? ` (${cause.message})` : "";
                 logger.warn(
-                    `${reference}: its source failed, the last value is used${cause instanceof Error ? ` (${cause.message})` : ""}`,
-                ),
+                    `${reference}: its source failed, the last value is used${reason}`,
+                );
+            },
         }),
     );
 }
