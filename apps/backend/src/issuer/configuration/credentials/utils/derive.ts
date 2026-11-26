@@ -555,17 +555,30 @@ export function buildDisclosureFrame(
     return hasDisclosure ? frame : undefined;
 }
 
+/**
+ * The path a field's claims metadata names, before the namespace is put in
+ * front: a path that already starts with the field's namespace loses that
+ * segment, so the namespace is not named twice. Empty when there is no
+ * claim to describe.
+ */
+function claimMetadataPath(field: ClaimFieldDefinition): Segment[] {
+    return field.namespace
+        ? namespaceRelativePath(field, field.namespace)
+        : field.path;
+}
+
 export function buildClaimsMetadata(
     fields: ClaimFieldDefinition[],
 ): ClaimMetadata[] {
     return flattenFields(fields)
-        .filter((field) => field.path.length > 0)
-        .map((field) => {
+        .map((field) => ({ field, path: claimMetadataPath(field) }))
+        .filter(({ path }) => path.length > 0)
+        .map(({ field, path }) => {
             // A claims path pointer (OID4VCI 1.0 Appendix C): `null` selects
             // every array element and a non-negative integer one element.
-            // Other numbers are no valid index and stay strings, as before.
+            // Other numbers are no valid index and become strings.
             const metadata: ClaimMetadata = {
-                path: field.path.map((segment) =>
+                path: path.map((segment) =>
                     segment === null || isElementIndex(segment)
                         ? segment
                         : segmentToKey(segment),

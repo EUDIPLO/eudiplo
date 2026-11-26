@@ -113,6 +113,147 @@ describe("config derive helpers", () => {
     });
   });
 
+  it("puts defaults of child fields into the namespace of their parent", () => {
+    expect(
+      buildClaimsByNamespace([
+        {
+          path: ["place_of_birth"],
+          type: "object",
+          namespace: "eu.europa.ec.eudi.pid.1",
+          children: [
+            { path: ["locality"], type: "string", defaultValue: "BERLIN" },
+          ],
+        },
+        {
+          path: ["nationality"],
+          type: "array",
+          namespace: "eu.europa.ec.eudi.pid.1",
+          children: [{ path: [0], type: "string", defaultValue: "DE" }],
+        },
+      ]),
+    ).toEqual({
+      "eu.europa.ec.eudi.pid.1": {
+        place_of_birth: { locality: "BERLIN" },
+        nationality: ["DE"],
+      },
+    });
+  });
+
+  it("keeps the namespace a child names itself", () => {
+    expect(
+      buildClaimsByNamespace([
+        {
+          path: ["place_of_birth"],
+          type: "object",
+          namespace: "eu.europa.ec.eudi.pid.1",
+          children: [
+            {
+              path: ["locality"],
+              type: "string",
+              namespace: "org.example.1",
+              defaultValue: "BERLIN",
+            },
+          ],
+        },
+      ]),
+    ).toEqual({
+      "org.example.1": { place_of_birth: { locality: "BERLIN" } },
+    });
+  });
+
+  it("prefixes child paths with the namespace of their mdoc parent", () => {
+    expect(
+      buildClaimsMetadata([
+        {
+          namespace: "eu.europa.ec.eudi.pid.1",
+          path: ["place_of_birth"],
+          type: "object",
+          children: [
+            { path: ["locality"], type: "string" },
+            { path: ["country"], type: "string" },
+          ],
+        },
+        {
+          namespace: "eu.europa.ec.eudi.pid.1",
+          path: ["nationality"],
+          type: "array",
+          children: [{ path: [null], type: "string" }],
+        },
+      ]).map((claim) => claim.path),
+    ).toEqual([
+      ["eu.europa.ec.eudi.pid.1", "place_of_birth"],
+      ["eu.europa.ec.eudi.pid.1", "place_of_birth", "locality"],
+      ["eu.europa.ec.eudi.pid.1", "place_of_birth", "country"],
+      ["eu.europa.ec.eudi.pid.1", "nationality"],
+      ["eu.europa.ec.eudi.pid.1", "nationality", null],
+    ]);
+  });
+
+  it("names the namespace once when the path already starts with it", () => {
+    const fields: ClaimFieldDefinition[] = [
+      {
+        namespace: "eu.europa.ec.eudi.pid.1",
+        path: ["eu.europa.ec.eudi.pid.1", "address"],
+        type: "object",
+        children: [{ path: ["street"], type: "string", defaultValue: "HEIDESTRASSE" }],
+      },
+      {
+        namespace: "eu.europa.ec.eudi.pid.1",
+        path: ["eu.europa.ec.eudi.pid.1"],
+        type: "string",
+        defaultValue: "no claim",
+      },
+    ];
+
+    expect(buildClaimsMetadata(fields).map((claim) => claim.path)).toEqual([
+      ["eu.europa.ec.eudi.pid.1", "address"],
+      ["eu.europa.ec.eudi.pid.1", "address", "street"],
+    ]);
+    expect(buildClaimsByNamespace(fields)).toEqual({
+      "eu.europa.ec.eudi.pid.1": { address: { street: "HEIDESTRASSE" } },
+    });
+  });
+
+  it("takes the namespace from the first segment of a nested path", () => {
+    expect(
+      buildClaimsByNamespace([
+        {
+          path: ["eu.europa.ec.eudi.pid.1", "birth_date"],
+          type: "string",
+          defaultValue: "1964-08-12",
+        },
+      ]),
+    ).toEqual({
+      "eu.europa.ec.eudi.pid.1": { birth_date: "1964-08-12" },
+    });
+  });
+
+  it("keeps null and element indices in claim paths and turns other numbers into strings", () => {
+    expect(
+      buildClaimsMetadata([
+        { path: ["odd", 1.5], type: "string" },
+        { path: ["all", null], type: "string" },
+        { path: ["first", 0], type: "string" },
+      ]).map((claim) => claim.path),
+    ).toEqual([
+      ["odd", "1.5"],
+      ["all", null],
+      ["first", 0],
+    ]);
+  });
+
+  it("leaves claim paths without a namespace unprefixed", () => {
+    expect(
+      buildClaimsMetadata([
+        {
+          path: ["address"],
+          type: "object",
+          children: [{ path: ["locality"], type: "string" }],
+        },
+      ]).map((claim) => claim.path),
+    ).toEqual([["address"], ["address", "locality"]]);
+  });
+
   it("handles empty fields", () => {
     expect(buildClaims([])).toEqual({});
     expect(buildClaimsMetadata([])).toEqual([]);
