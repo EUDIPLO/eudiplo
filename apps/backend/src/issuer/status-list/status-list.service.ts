@@ -24,6 +24,7 @@ import {
     DataSource,
     EntityManager,
     type FindOptionsSelect,
+    type FindOptionsWhere,
     In,
     IsNull,
     type QueryRunner,
@@ -1047,7 +1048,8 @@ export class StatusListService implements OnApplicationBootstrap {
             } else {
                 const entries = await this.allocateFromList(
                     manager,
-                    list,
+                    list.list,
+                    list.where,
                     options,
                 );
                 await queryRunner.commitTransaction();
@@ -1070,42 +1072,83 @@ export class StatusListService implements OnApplicationBootstrap {
         return { shouldCreateList };
     }
 
+    /**
+     * Find a list with enough free indexes for the allocation and, where the
+     * driver supports it, lock its row until the transaction ends.
+     *
+     * Allocation pops indexes off one list's `stack`, so concurrent issuances
+     * all compete for the same row. With the row locked (`SELECT ... FOR
+     * UPDATE` on PostgreSQL) they wait for each other and each one reads the
+     * stack the previous one committed, instead of failing a version check
+     * and running out of retries under load. Lists are tried in creation
+     * order (then by ID), dedicated before shared, so two transactions never
+     * lock rows in opposite order.
+     *
+     * SQLite has no row locks. There, allocations are serialised within the
+     * process ({@link runSerialized}), and SQLite itself refuses the write of
+     * a transaction whose read was overtaken by another connection.
+     *
+     * The returned `where` includes the list's binding, so the stack write
+     * fails (and the allocation is retried) when the list was bound to
+     * another credential configuration in the meantime.
+     */
     private async findAvailableListForAllocation(
         manager: EntityManager,
         options: EntryAllocationOptions,
-    ): Promise<StatusListEntity | undefined> {
-        const findFirstAvailable = (lists: StatusListEntity[]) =>
-            lists.find((list) => list.stack.length >= options.count);
-        // Allocation reads and writes `stack` and `version` only, so `elements` and the
+    ): Promise<
+        | {
+              list: StatusListEntity;
+              where: FindOptionsWhere<StatusListEntity>;
+          }
+        | undefined
+    > {
+        // Allocation reads and writes `stack` only, so `elements` and the
         // cached tokens are not transferred and parsed on every issuance.
-        const select = { id: true, version: true, stack: true } as const;
-        const dedicatedLists = await manager.find(StatusListEntity, {
-            select,
-            where: {
-                tenantId: options.tenantId,
-                credentialConfigurationId: options.credentialConfigurationId,
-            },
-            order: { createdAt: "ASC" },
-        });
-        const dedicatedList = findFirstAvailable(dedicatedLists);
-        if (dedicatedList) {
-            return dedicatedList;
-        }
+        const select = { id: true, stack: true } as const;
+        const lockRows = this.supportsConcurrentTransactions();
+        const fits = (list: StatusListEntity) =>
+            list.stack.length >= options.count;
 
-        const sharedLists = await manager.find(StatusListEntity, {
-            select,
-            where: {
-                tenantId: options.tenantId,
-                credentialConfigurationId: IsNull(),
-            },
-            order: { createdAt: "ASC" },
-        });
-        return findFirstAvailable(sharedLists);
+        const candidateFilters = [
+            { credentialConfigurationId: options.credentialConfigurationId },
+            { credentialConfigurationId: IsNull() },
+        ];
+        for (const filter of candidateFilters) {
+            const lists = await manager.find(StatusListEntity, {
+                select,
+                where: { tenantId: options.tenantId, ...filter },
+                // `id` breaks ties, so every transaction locks in one order.
+                order: { createdAt: "ASC", id: "ASC" },
+            });
+            for (const list of lists.filter(fits)) {
+                const where = {
+                    id: list.id,
+                    tenantId: options.tenantId,
+                    ...filter,
+                };
+                if (!lockRows) {
+                    return { list, where };
+                }
+                // Read again under the lock: another allocation may have
+                // taken the last free indexes, or the list may have been
+                // bound elsewhere, since the read above.
+                const locked = await manager.findOne(StatusListEntity, {
+                    select,
+                    where,
+                    lock: { mode: "pessimistic_write" },
+                });
+                if (locked && fits(locked)) {
+                    return { list: locked, where };
+                }
+            }
+        }
+        return undefined;
     }
 
     private async allocateFromList(
         manager: EntityManager,
         list: StatusListEntity,
+        where: FindOptionsWhere<StatusListEntity>,
         options: EntryAllocationOptions,
     ): Promise<AllocatedStatusEntry[]> {
         const allocatedIndices = Array.from({ length: options.count }, () => {
@@ -1117,21 +1160,21 @@ export class StatusListService implements OnApplicationBootstrap {
             }
             return index;
         });
-        const updateResult = await manager.update(
-            StatusListEntity,
-            {
-                id: list.id,
-                tenantId: options.tenantId,
-                version: list.version,
-            },
-            {
-                stack: list.stack,
-                version: () => "version + 1",
-            },
-        );
+        // Only `stack` is written, and `version` is kept as it is: the version
+        // guards the values and the cached tokens built from them, which an
+        // allocation does not change. Bumping it made every issuance fail
+        // concurrent revocations and discard freshly signed tokens. TypeORM
+        // increments a version column on every update unless the update sets
+        // it, hence the explicit no-op.
+        const updateResult = await manager.update(StatusListEntity, where, {
+            stack: list.stack,
+            version: () => "version",
+        });
         if (updateResult.affected === 0) {
+            // Deleted or bound to another configuration since it was read;
+            // the retry picks another list.
             throw new ConflictException(
-                "Status list was modified concurrently",
+                "Status list changed during allocation",
             );
         }
 
@@ -1223,8 +1266,10 @@ export class StatusListService implements OnApplicationBootstrap {
      * connection can actually support.
      *
      * This is deliberately not the integrity mechanism: correctness across
-     * processes and instances still rests on the version checks and the unique
-     * `(tenantId, statusListId, index)` constraint. Serialising only prevents a
+     * processes and instances rests on the version checks of value and token
+     * writes, on SQLite refusing a write whose read was overtaken (allocation
+     * has no version check, see {@link findAvailableListForAllocation}) and on
+     * the unique `(tenantId, statusListId, index)` constraint. Serialising only prevents a
      * single process from attempting something the driver cannot do.
      */
     private runSerialized<T>(operation: () => Promise<T>): Promise<T> {

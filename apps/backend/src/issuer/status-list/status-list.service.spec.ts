@@ -149,30 +149,38 @@ describe("StatusListService SQLite concurrency", () => {
         ).toBeNull();
     });
 
-    test("detects concurrent allocations while validating a binding update", async () => {
+    test("keeps an allocation made while a binding update was validated", async () => {
+        // Allocation writes only `stack` and keeps the version, so it does not
+        // conflict with a binding update, and neither write loses the other.
         const repository = dataSource.getRepository(StatusListEntity);
         Object.assign(service, {
             certService: {
                 find: async () => {
-                    await repository.update(
-                        { tenantId: "tenant-1", id: "list-1" },
-                        { stack: [1] },
+                    await service.createEntry(
+                        { id: "session-1", tenantId: "tenant-1" } as never,
+                        "config-1",
                     );
                     return {};
                 },
             },
+            regenerateListTokens: vi.fn().mockResolvedValue({}),
         });
-        await expect(
-            service.updateList("tenant-1", "list-1", { keyChainId: "new-key" }),
-        ).rejects.toThrow("changed concurrently");
-        expect(
-            (
-                await repository.findOneByOrFail({
-                    tenantId: "tenant-1",
-                    id: "list-1",
-                })
-            ).stack,
-        ).toEqual([1]);
+
+        await service.updateList("tenant-1", "list-1", {
+            keyChainId: "new-key",
+        });
+
+        const list = await repository.findOneByOrFail({
+            tenantId: "tenant-1",
+            id: "list-1",
+        });
+        expect(list.keyChainId).toBe("new-key");
+        expect(list.stack).toHaveLength(1);
+        const mappings = await dataSource
+            .getRepository(StatusMapping)
+            .findBy({ tenantId: "tenant-1", statusListId: "list-1" });
+        expect(mappings.map((m) => m.index)).not.toContain(list.stack[0]);
+        expect(mappings).toHaveLength(1);
     });
 
     test("allocates an entry without unsupported pessimistic locks", async () => {
@@ -190,7 +198,9 @@ describe("StatusListService SQLite concurrency", () => {
             .getRepository(StatusListEntity)
             .findOneByOrFail({ id: "list-1", tenantId: "tenant-1" });
         expect(list.stack).toHaveLength(1);
-        expect(list.version).toBe(2);
+        // Allocation does not touch the values, so it keeps the version that
+        // guards them and the tokens signed from them.
+        expect(list.version).toBe(1);
 
         const mappings = await dataSource.getRepository(StatusMapping).find();
         expect(mappings).toHaveLength(1);
@@ -249,6 +259,51 @@ describe("StatusListService SQLite concurrency", () => {
         expect(current.version).toBe(snapshot.version + 1);
         expect(current.jwt).toBeNull();
         expect(current.cwt).toBeNull();
+    });
+
+    test("keeps tokens signed while an entry was allocated", async () => {
+        const repository = dataSource.getRepository(StatusListEntity);
+        const snapshot = await repository.findOneByOrFail({
+            id: "list-1",
+            tenantId: "tenant-1",
+        });
+
+        Object.assign(service as object, {
+            statusListConfigService: {
+                getEffectiveConfig: vi.fn().mockResolvedValue({
+                    ttl: 300,
+                    enableAggregation: false,
+                }),
+            },
+            certService: {
+                find: vi.fn().mockResolvedValue({
+                    keyId: "status-list-key",
+                    crt: [],
+                }),
+                getLeafCertBase64: vi.fn().mockReturnValue(["MAA="]),
+            },
+            keyChainService: {
+                getSigningAlg: vi.fn().mockResolvedValue("ES256"),
+                getPublicKey: vi.fn().mockResolvedValue({ kty: "EC" }),
+                signBytes: vi.fn().mockImplementation(async () => {
+                    await service.createEntry(
+                        { id: "session-1", tenantId: "tenant-1" } as never,
+                        "config-1",
+                    );
+                    return Uint8Array.of(1);
+                }),
+            },
+            signStatusListCwt: vi.fn().mockResolvedValue(Uint8Array.of(1)),
+        });
+
+        await expect(service.createListJWT(snapshot)).resolves.toBe(true);
+
+        const current = await repository.findOneByOrFail({
+            id: snapshot.id,
+            tenantId: snapshot.tenantId,
+        });
+        expect(current.stack).toHaveLength(1);
+        expect(current.jwt).toEqual(expect.any(String));
     });
 
     test("allocates concurrently without transaction conflicts", async () => {

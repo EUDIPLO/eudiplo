@@ -89,8 +89,10 @@ export class StatusListEntity {
 
     /**
      * Optimistic locking version for concurrency control.
-     * Incremented on every modification to stack, elements, or cached tokens.
-     * Used to detect concurrent modifications and ensure consistency.
+     * Incremented on every modification to elements, cached tokens or
+     * bindings, so tokens are never cached for values that changed while they
+     * were signed. Allocation changes only `stack` and does not increment it;
+     * it locks the row instead.
      */
     @VersionColumn()
     version!: number;
