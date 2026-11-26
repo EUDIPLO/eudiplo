@@ -23,7 +23,7 @@ spec:
               done
       containers:
         - name: aws-cli
-          image: amazon/aws-cli:2.40.4
+          image: amazon/aws-cli:2.41.1
           resources:
             requests:
               cpu: "50m"
