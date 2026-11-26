@@ -23,6 +23,7 @@ import { X509Certificate } from "@peculiar/x509";
 import {
     DataSource,
     EntityManager,
+    type FindOptionsSelect,
     In,
     IsNull,
     type QueryRunner,
@@ -507,7 +508,13 @@ export class StatusListService implements OnApplicationBootstrap {
      * @returns Array of status list URIs.
      */
     async getStatusListUris(tenantId: string): Promise<string[]> {
-        const lists = await this.getLists(tenantId);
+        // Only the IDs: a full row carries `elements` and `stack`, one number
+        // per entry, and this endpoint is polled by relying parties.
+        const lists = await this.statusListRepository.find({
+            select: { id: true },
+            where: { tenantId },
+            order: { createdAt: "ASC" },
+        });
         return lists.map((list) => this.buildStatusListUri(tenantId, list.id));
     }
 
@@ -521,14 +528,46 @@ export class StatusListService implements OnApplicationBootstrap {
         tenantId: string,
         listId: string,
     ): Promise<StatusListEntity> {
-        const list = await this.statusListRepository.findOneBy({
-            id: listId,
-            tenantId,
+        return this.findListOrThrow(tenantId, listId);
+    }
+
+    /**
+     * Load a status list of the tenant, optionally only some of its columns.
+     * @throws NotFoundException when the tenant has no list with this ID.
+     */
+    private async findListOrThrow(
+        tenantId: string,
+        listId: string,
+        select?: FindOptionsSelect<StatusListEntity>,
+    ): Promise<StatusListEntity> {
+        const list = await this.statusListRepository.findOne({
+            select,
+            where: { id: listId, tenantId },
         });
         if (!list) {
             throw new NotFoundException(`Status list ${listId} not found`);
         }
         return list;
+    }
+
+    /**
+     * Load only the cached tokens of a status list and their expiry.
+     *
+     * Serving a status list token does not need `elements` or `stack`, which
+     * hold one number per entry (10,000 by default) and would otherwise be
+     * transferred from the database and parsed on every request. The full row
+     * is loaded only when the tokens have to be regenerated.
+     */
+    private async getCachedListTokens(
+        tenantId: string,
+        listId: string,
+    ): Promise<Pick<StatusListEntity, "jwt" | "cwt" | "expiresAt">> {
+        return this.findListOrThrow(tenantId, listId, {
+            id: true,
+            jwt: true,
+            cwt: true,
+            expiresAt: true,
+        });
     }
 
     /**
@@ -538,7 +577,7 @@ export class StatusListService implements OnApplicationBootstrap {
      * @returns The JWT for the status list.
      */
     async getListJwt(tenantId: string, listId: string): Promise<string> {
-        let list = await this.getListById(tenantId, listId);
+        let list = await this.getCachedListTokens(tenantId, listId);
 
         // Check if JWT needs regeneration (expired or missing)
         const needsRegeneration =
@@ -556,7 +595,7 @@ export class StatusListService implements OnApplicationBootstrap {
      * The CWT follows the same caching/freshness policy as JWT status list tokens.
      */
     async getListCwt(tenantId: string, listId: string): Promise<Uint8Array> {
-        let list = await this.getListById(tenantId, listId);
+        let list = await this.getCachedListTokens(tenantId, listId);
 
         const needsRegeneration =
             !list.jwt ||
@@ -1037,7 +1076,11 @@ export class StatusListService implements OnApplicationBootstrap {
     ): Promise<StatusListEntity | undefined> {
         const findFirstAvailable = (lists: StatusListEntity[]) =>
             lists.find((list) => list.stack.length >= options.count);
+        // Allocation reads and writes `stack` and `version` only, so `elements` and the
+        // cached tokens are not transferred and parsed on every issuance.
+        const select = { id: true, version: true, stack: true } as const;
         const dedicatedLists = await manager.find(StatusListEntity, {
+            select,
             where: {
                 tenantId: options.tenantId,
                 credentialConfigurationId: options.credentialConfigurationId,
@@ -1050,6 +1093,7 @@ export class StatusListService implements OnApplicationBootstrap {
         }
 
         const sharedLists = await manager.find(StatusListEntity, {
+            select,
             where: {
                 tenantId: options.tenantId,
                 credentialConfigurationId: IsNull(),
