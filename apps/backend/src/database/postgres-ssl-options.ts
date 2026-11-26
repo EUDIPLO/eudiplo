@@ -37,7 +37,7 @@ function readOptionalFile(path: string, variableName: string): Buffer {
         return readFileSync(path);
     } catch (error) {
         throw new Error(
-            `Failed to read ${variableName} at path \"${path}\": ${error instanceof Error ? error.message : String(error)}.${fileAccessHint(error, path)}`,
+            `Failed to read ${variableName} at path "${path}": ${error instanceof Error ? error.message : String(error)}.${fileAccessHint(error, path)}`,
         );
     }
 }
