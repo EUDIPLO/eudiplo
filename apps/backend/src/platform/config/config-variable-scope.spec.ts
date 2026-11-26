@@ -142,6 +142,10 @@ describe("configuration variable scope", () => {
                 "AWS_*",
             ]),
         ).toBeDefined();
+        // An empty list refuses every variable of the operator.
+        expect(
+            refusedConfigVariable("WEBHOOK_KEY", "tenant", undefined, []),
+        ).toContain("not listed in templates.tenant");
         // `*` alone is the default rule, written out.
         expect(
             refusedConfigVariable("ANY_VAR", "tenant", undefined, ["*"]),

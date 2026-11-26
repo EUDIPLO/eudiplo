@@ -35,6 +35,19 @@ describe("loadSecretSettings", () => {
         expect(value.reveal()).toBe("s3cret");
     });
 
+    it("passes the allow-list for placeholders of tenant folders on", () => {
+        const read = () => {
+            throw new Error("no file is read");
+        };
+        // No file, no allow-list: the default rules decide.
+        expect(loadSecretSettings(config(), {}, read).templates).toEqual({});
+        expect(
+            loadSecretSettings(config("/p.json"), {}, () =>
+                JSON.stringify({ templates: { tenant: ["A_*"] } }),
+            ).templates,
+        ).toEqual({ tenant: ["A_*"] });
+    });
+
     it("stops the startup when the file cannot be read or is invalid", () => {
         expect(() =>
             loadSecretSettings(config("/missing.json"), {}, () => {

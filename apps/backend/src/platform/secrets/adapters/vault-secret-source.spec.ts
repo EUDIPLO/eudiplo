@@ -5,8 +5,8 @@ import { reference } from "../../../../test/secrets/secret-test-sources.js";
 import {
     type VaultAuth,
     VaultSecretSource,
-    VaultUnavailableError,
     type VaultSecretSourceSettings,
+    VaultUnavailableError,
 } from "./vault-secret-source.js";
 
 /** A fake Vault: KV v2 at `kv`, KV v1 at `old`, tokens and AppRole. */

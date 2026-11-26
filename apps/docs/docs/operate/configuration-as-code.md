@@ -191,7 +191,11 @@ the AWS and Azure credential variables in a file other than `kms.json`, and
 warns for every variable a tenant `kms.json` names other than `PUBLIC_URL`, because the backend
 resolves it only if the instance lists it in `KMS_TENANT_VARIABLES`. It does
 not know the variables that configure EUDIPLO itself; the backend refuses
-those on import. A file the backend skips does not
+those on import. Nor does it read the instance's
+[secret policy](secret-references.md#placeholders-in-tenant-folders): with
+`templates.tenant` set, a folder that passes can still fail on an unlisted
+variable, and a cloud credential the policy lists by name fails validation
+although the backend resolves it. A file the backend skips does not
 fail validation: a `registrar.json` left from the removed sandbox registrar
 integration prints `warning registrar.json: …` under its tenant, and the JSON
 report lists it in the tenant's `warnings[]` (`file`, `message`).

@@ -56,9 +56,10 @@ export class ConfigImportService {
         private readonly ownershipService?: ConfigOwnershipService,
         @Optional()
         private readonly resourceRegistry?: ConfigResourceRegistry,
-        @Optional()
+        // Provided by SecretsModule, which ConfigImportModule imports, so a
+        // missing allow-list fails the startup instead of falling back.
         @Inject(CONFIG_TEMPLATE_POLICY)
-        private readonly templatePolicy?: ConfigTemplatePolicy,
+        private readonly templatePolicy: ConfigTemplatePolicy = {},
     ) {}
 
     /**

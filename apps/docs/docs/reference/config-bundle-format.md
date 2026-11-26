@@ -395,7 +395,8 @@ tenant `kms.json` with `${VAR:default}` fails the import in the same way:
 `kms.json` has no default form. So does one with a placeholder in
 `defaultProvider` or the `id` of a provider, whatever the variable. To
 use the value of a refused variable, set a variable of your own to the same
-value and name that one.
+value and name that one; if the secret policy sets `templates.tenant`, list
+that variable there too.
 
 ### Placeholders and the API
 
