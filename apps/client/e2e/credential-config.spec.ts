@@ -294,9 +294,7 @@ test('copies a configuration from its page into a new one', async ({ page, reque
     await expect(idField).toHaveValue(`${id}-copy-2`);
     await idField.fill(copyId);
     await idField.blur();
-    await expect(
-      page.getByText('A credential config with this ID already exists; creating would replace it.')
-    ).toBeVisible();
+    await expect(page.getByText('A credential config with this ID already exists.')).toBeVisible();
   } finally {
     await writeConfig(() => request.delete(`${url}/${id}`, { headers }), `delete ${id}`);
     // Missing when the test failed before the copy was saved.

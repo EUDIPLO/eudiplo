@@ -85,6 +85,11 @@ export class WebhookEndpointController {
         description: "Webhook endpoint created",
         type: WebhookEndpointEntity,
     })
+    @ApiResponse({
+        status: 409,
+        description:
+            "The tenant already has a webhook endpoint with this ID. Change it with PATCH.",
+    })
     @ApiBody({ type: CreateWebhookEndpointDto })
     async create(
         @Body() dto: CreateWebhookEndpointDto,

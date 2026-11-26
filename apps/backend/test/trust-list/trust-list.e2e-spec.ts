@@ -25,6 +25,7 @@ import {
 import request from "supertest";
 import { App } from "supertest/types";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { AllExceptionsFilter } from "../../src/all-exceptions.filter.js";
 import { AppModule } from "../../src/app.module.js";
 import { Role } from "../../src/auth/roles/role.enum.js";
 import { KeyChainImportDto } from "../../src/crypto/key/dto/key-chain-import.dto.js";
@@ -111,6 +112,8 @@ describe("Trust List e2e Tests", () => {
 
         const app = moduleFixture.createNestApplication();
         app.useGlobalPipes(createAppValidationPipe());
+        // Maps domain conflicts, such as a taken ID, to 409 as bootstrap.ts does.
+        app.useGlobalFilters(new AllExceptionsFilter());
 
         const configService = app.get(ConfigService);
         const configFolder = resolve(__dirname + "/../fixtures");
@@ -251,6 +254,47 @@ describe("Trust List e2e Tests", () => {
             expect(response.body.keyChainId).toBe(
                 "570852d7-7e7f-40af-a0e3-a6ebffd75ed0",
             );
+        });
+
+        test("refuses to create a trust list with a taken ID", async () => {
+            const before = await request(ctx.app.getHttpServer())
+                .get(`/trust-list/${testTrustListId}`)
+                .set("Authorization", `Bearer ${ctx.authToken}`)
+                .expect(200);
+            const response = await request(ctx.app.getHttpServer())
+                .post("/trust-list")
+                .set("Authorization", `Bearer ${ctx.authToken}`)
+                .send({
+                    id: testTrustListId,
+                    description: "Replacement",
+                    keyChainId: "570852d7-7e7f-40af-a0e3-a6ebffd75ed0",
+                    entities: [
+                        {
+                            type: "internal",
+                            issuerKeyChainId:
+                                "c3f24b6e-9b71-4b62-8d37-5f1a2c9e47ad",
+                            revocationKeyChainId:
+                                "1f8c6b29-a4d3-4e7f-b2a0-9c5d13e8f746",
+                            info: {
+                                name: "Replacement Provider",
+                                contactUri: "info@example.com",
+                                website: "https://example.com/",
+                            },
+                        },
+                    ],
+                } satisfies TrustListCreateDto)
+                .expect(409);
+            expect(response.body.message).toBe(
+                `Trust list '${testTrustListId}' already exists. Choose another ID, or update the existing one.`,
+            );
+
+            const stored = await request(ctx.app.getHttpServer())
+                .get(`/trust-list/${testTrustListId}`)
+                .set("Authorization", `Bearer ${ctx.authToken}`)
+                .expect(200);
+            expect(stored.body.description).toBe(before.body.description);
+            expect(stored.body.sequenceNumber).toBe(before.body.sequenceNumber);
+            expect(stored.body.jwt).toBe(before.body.jwt);
         });
 
         test("should export a trust list in the create format", async () => {

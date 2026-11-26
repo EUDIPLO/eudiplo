@@ -1139,7 +1139,7 @@ describe('CredentialConfigCreateComponent copying', () => {
     expect(component.copySourceId).toBe('pid');
   });
 
-  it('refuses an ID that is taken, since creating would replace that config', async () => {
+  it('refuses an ID that is taken, since the backend refuses to create it', async () => {
     const { component, saveConfiguration } = copying(['pid', 'pid-v2']);
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     component.ngOnInit();

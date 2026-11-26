@@ -15,6 +15,7 @@ import {
     SECRET_REFERENCES,
     type SecretReferences,
 } from "../../../platform/secrets/application/secret-references.js";
+import { ResourceIdTaken } from "../../../shared/domain/conflict-error.js";
 import { loadConfigDto } from "../../../shared/utils/config-file-loader.util.js";
 import {
     changedEndpointFields,
@@ -104,6 +105,9 @@ export class WebhookEndpointService {
         actorToken?: TokenPayload,
         requestMeta?: AuditLogRequestMeta,
     ) {
+        if (await this.repo.findForTenant(tenantId, dto.id)) {
+            throw new ResourceIdTaken("Webhook endpoint", dto.id);
+        }
         await this.outboundUrlPolicyService.assertSafeUrl(dto.url);
         assertStoredWebhookSecret(
             this.secrets,

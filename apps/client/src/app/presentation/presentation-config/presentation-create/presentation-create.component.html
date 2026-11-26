@@ -89,8 +89,16 @@
                   <mat-form-field>
                     <mat-label>ID</mat-label>
                     <input matInput formControlName="id" placeholder="Enter unique identifier" />
+                    @if (copyMode && takenIdsUnknown) {
+                      <mat-hint
+                        >Could not check which IDs are taken; saving tells you if this one
+                        is.</mat-hint
+                      >
+                    }
                     @if (form.controls['id'].hasError('required')) {
                       <mat-error> ID is required </mat-error>
+                    } @else if (form.controls['id'].hasError('taken')) {
+                      <mat-error>A verification config with this ID already exists.</mat-error>
                     }
                   </mat-form-field>
 

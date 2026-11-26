@@ -39,7 +39,7 @@ A webhook endpoint is a reusable, tenant-scoped target, managed under `/api/issu
 
 | Field         | Required | Description                                       |
 | ------------- | -------- | ------------------------------------------------- |
-| `id`          | yes      | Identifier within the tenant                      |
+| `id`          | yes      | Identifier within the tenant; a create with an `id` in use answers `409`, change the endpoint with `PATCH` |
 | `name`        | yes      | Display name                                      |
 | `description` | no       | Free text                                         |
 | `url`         | yes      | Target of the `POST` requests                     |

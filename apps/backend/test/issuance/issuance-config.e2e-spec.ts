@@ -28,7 +28,7 @@ describe("Issuance - Configuration", () => {
     let ctx: IssuanceTestContext;
 
     beforeAll(async () => {
-        ctx = await setupIssuanceTestApp();
+        ctx = await setupIssuanceTestApp({ exceptionFilter: true });
         app = ctx.app;
         authToken = ctx.authToken;
     });
@@ -368,6 +368,104 @@ describe("Issuance - Configuration", () => {
                 .set("Authorization", `Bearer ${authToken}`)
                 .send({ description: "patched" })
                 .expect(200);
+        });
+    });
+
+    describe("creates refuse a taken ID", () => {
+        const api = () => request(app.getHttpServer());
+
+        test("a credential configuration keeps its stored version", async () => {
+            const existing = await api()
+                .get("/issuer/credentials/citizen")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .expect(200);
+
+            const res = await api()
+                .post("/issuer/credentials")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .send({ ...existing.body, description: "Replacement" })
+                .expect(409);
+            expect(res.body.message).toBe(
+                "Credential configuration 'citizen' already exists. Choose another ID, or update the existing one.",
+            );
+
+            const stored = await api()
+                .get("/issuer/credentials/citizen")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .expect(200);
+            expect(stored.body.description).toBe(existing.body.description);
+        });
+
+        test("a presentation configuration keeps its stored version", async () => {
+            const existing = await api()
+                .get("/verifier/config/pid")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .expect(200);
+
+            const res = await api()
+                .post("/verifier/config")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .send({
+                    ...readConfig<Record<string, unknown>>(
+                        resolve(
+                            __dirname,
+                            "../fixtures/haip/presentation/pid.json",
+                        ),
+                    ),
+                    description: "Replacement",
+                })
+                .expect(409);
+            expect(res.body.message).toBe(
+                "Presentation configuration 'pid' already exists. Choose another ID, or update the existing one.",
+            );
+
+            const stored = await api()
+                .get("/verifier/config/pid")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .expect(200);
+            expect(stored.body.description).toBe(existing.body.description);
+            expect(stored.body.description).not.toBe("Replacement");
+        });
+
+        test.each([
+            ["/issuer/webhook-endpoints", "Webhook endpoint"],
+            ["/issuer/attribute-providers", "Attribute provider"],
+        ])("%s keeps its stored version", async (path, resource) => {
+            const body = {
+                id: "taken-id",
+                name: "Original",
+                url: "https://endpoint.example.com/hook",
+                auth: { type: "none" },
+            };
+            await api()
+                .post(path)
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .send(body)
+                .expect(201);
+
+            const res = await api()
+                .post(path)
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .send({ ...body, name: "Replacement" })
+                .expect(409);
+            expect(res.body.message).toBe(
+                `${resource} 'taken-id' already exists. Choose another ID, or update the existing one.`,
+            );
+
+            const stored = await api()
+                .get(`${path}/taken-id`)
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .expect(200);
+            expect(stored.body.name).toBe("Original");
         });
     });
 

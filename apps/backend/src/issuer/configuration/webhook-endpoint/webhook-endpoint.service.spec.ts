@@ -28,7 +28,10 @@ describe.each([
         const record = vi.fn();
         const instance = Object.assign(Object.create(Service.prototype), {
             repo: {
-                findForTenant: vi.fn().mockResolvedValue(existing),
+                // Only the stored entry exists; a create needs a free ID.
+                findForTenant: vi.fn(async (_tenantId: string, id: string) =>
+                    id === existing.id ? existing : null,
+                ),
                 save: vi.fn(async (value) => value),
                 deleteForTenant: vi.fn(),
             },

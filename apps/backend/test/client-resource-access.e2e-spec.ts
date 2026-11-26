@@ -27,7 +27,7 @@ describe("Client Resource-Level Access Control (e2e)", () => {
         // Add some presentation configs that are needed for the tests
         const configFolder = resolve(__dirname + "/fixtures");
 
-        // Import presentation configs
+        // Import presentation configs; the shared setup already created "pid"
         await request(ctx.app.getHttpServer())
             .post("/verifier/config")
             .trustLocalhost()
@@ -35,17 +35,6 @@ describe("Client Resource-Level Access Control (e2e)", () => {
             .send(
                 readConfig<PresentationConfigCreateDto>(
                     join(configFolder, "haip/presentation/pid-no-hook.json"),
-                ),
-            )
-            .expect(201);
-
-        await request(ctx.app.getHttpServer())
-            .post("/verifier/config")
-            .trustLocalhost()
-            .set("Authorization", `Bearer ${adminToken}`)
-            .send(
-                readConfig<PresentationConfigCreateDto>(
-                    join(configFolder, "haip/presentation/pid.json"),
                 ),
             )
             .expect(201);

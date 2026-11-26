@@ -130,3 +130,31 @@ test('Import from Credential Config fills the query from a credential config of 
     'urn:eudi:pid:de:1'
   );
 });
+
+test('Copy suggests a free ID, refuses a taken one and opens the new config', async ({ page }) => {
+  test.skip(
+    !hasAuthCredentials,
+    'Set E2E_TENANT_CLIENT_ID and E2E_TENANT_CLIENT_SECRET for tenant flow tests.'
+  );
+  // Build mode imports the demo tenant with the configs "pid" and "age-over-18".
+  test.skip(!resolvedE2EConfig.useBuild, 'Needs the demo tenant of build mode.');
+
+  await page.goto('/presentation-config/pid/copy');
+  const id = page.getByRole('textbox', { name: 'ID', exact: true });
+  // A run against the same backend may have left a copy behind.
+  await expect(id).toHaveValue(/^pid-copy(-\d+)?$/);
+  const suggested = await id.inputValue();
+
+  await id.fill('age-over-18');
+  await id.blur();
+  await expect(page.getByText('A verification config with this ID already exists.')).toBeVisible();
+
+  await id.fill(suggested);
+  await page.getByRole('button', { name: 'Create Verification Config' }).click();
+  await expect(page).toHaveURL(new RegExp(`/presentation-config/${suggested}$`));
+
+  // A second copy skips the ID the first one took.
+  await page.goto('/presentation-config/pid/copy');
+  await expect(id).toHaveValue(/^pid-copy(-\d+)?$/);
+  await expect(id).not.toHaveValue(suggested);
+});

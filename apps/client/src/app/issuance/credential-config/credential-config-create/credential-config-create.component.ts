@@ -150,7 +150,7 @@ export class CredentialConfigCreateComponent implements OnInit, PageWithUnsavedC
   public copyMode = false;
   /** The config a copy starts from. */
   copySourceId = '';
-  /** IDs of the existing configs; a copy must not take one, as creating would replace it. */
+  /** IDs of the existing configs; the backend refuses to create one with a taken ID. */
   private takenIds = new Set<string>();
   /** The existing configs could not be listed, so a taken ID goes unnoticed. */
   takenIdsUnknown = false;
@@ -562,8 +562,8 @@ export class CredentialConfigCreateComponent implements OnInit, PageWithUnsavedC
 
   /**
    * Sets the copy's ID to `<source>-copy`, or `<source>-copy-2` and so on when that is taken:
-   * creating a config with an existing ID replaces that config. Without the list of
-   * configs the first suggestion stays, and the user decides.
+   * the backend refuses to create a config with an existing ID. Without the list of
+   * configs the first suggestion stays, and saving tells whether it is taken.
    */
   private async applyCopyId(sourceId: string): Promise<void> {
     this.copySourceId = sourceId;

@@ -203,7 +203,7 @@ curl -X POST "$EUDIPLO_URL/api/issuer/credentials" \
   -d @membership.json
 ```
 
-A `POST` with the `id` of an existing configuration replaces that configuration. In the Web Client, **Copy** on a configuration's page starts a new configuration from it; the form suggests an ID that is not taken yet and refuses one that is.
+A `POST` with the `id` of an existing configuration answers `409 Conflict` and leaves the stored configuration as it is. In the Web Client, **Copy** on a configuration's page starts a new configuration from it; the form suggests an ID that is not taken yet and refuses one that is.
 
 Update a configuration with `PATCH /api/issuer/credentials/{id}`, list them with `GET /api/issuer/credentials`, and remove one with `DELETE /api/issuer/credentials/{id}`. To manage configurations as files, see [Configuration as code](../operate/configuration-as-code.md).
 

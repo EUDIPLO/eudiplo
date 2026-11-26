@@ -37,8 +37,15 @@ describe('Verification config editor', () => {
   let service: {
     createConfiguration: ReturnType<typeof vi.fn>;
     getPresentationById: ReturnType<typeof vi.fn>;
+    loadConfigurations: ReturnType<typeof vi.fn>;
   };
-  let route: { snapshot: { params: Record<string, string>; url: { path: string }[] } };
+  let route: {
+    snapshot: {
+      params: Record<string, string>;
+      url: { path: string }[];
+      data?: Record<string, unknown>;
+    };
+  };
 
   beforeEach(async () => {
     knownCredentials = [];
@@ -58,6 +65,7 @@ describe('Verification config editor', () => {
     service = {
       createConfiguration: vi.fn().mockResolvedValue({ id: 'test' }),
       getPresentationById: vi.fn(),
+      loadConfigurations: vi.fn().mockResolvedValue([]),
     };
     route = { snapshot: { params: {}, url: [] } };
     await TestBed.configureTestingModule({
@@ -999,6 +1007,7 @@ describe('Verification config editor', () => {
   it('copies a configuration with an editable new ID', async () => {
     route.snapshot.params = { id: 'existing' };
     route.snapshot.url = [{ path: 'existing' }, { path: 'copy' }];
+    route.snapshot.data = { copy: true };
     service.getPresentationById.mockResolvedValue({
       id: 'existing',
       description: 'Existing request',
@@ -1013,6 +1022,86 @@ describe('Verification config editor', () => {
     expect(service.createConfiguration).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'existing-copy', dcql_query: query })
     );
+  });
+
+  describe('copy ID', () => {
+    function copyOf(id: string) {
+      route.snapshot.params = { id };
+      route.snapshot.url = [{ path: id }, { path: 'copy' }];
+      route.snapshot.data = { copy: true };
+      service.getPresentationById.mockResolvedValue({
+        id,
+        description: 'Existing request',
+        dcql_query: query,
+      });
+    }
+
+    it('suggests the next free ID and refuses a taken one', async () => {
+      copyOf('existing');
+      service.loadConfigurations.mockResolvedValue([
+        { id: 'existing' },
+        { id: 'existing-copy' },
+        { id: 'existing-copy-2' },
+      ]);
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      const id = component.form.get('id')!;
+      expect(id.value).toBe('existing-copy-3');
+      expect(id.valid).toBe(true);
+      id.setValue('existing-copy');
+      expect(id.hasError('taken')).toBe(true);
+      component.submitPresentation();
+      expect(service.createConfiguration).not.toHaveBeenCalled();
+    });
+
+    it('keeps the first suggestion and says so when the configs cannot be listed', async () => {
+      copyOf('existing');
+      service.loadConfigurations.mockRejectedValue(new Error('offline'));
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(component.form.get('id')!.value).toBe('existing-copy');
+      expect((fixture.nativeElement as HTMLElement).textContent).toContain(
+        'Could not check which IDs are taken; saving tells you if this one is.'
+      );
+    });
+
+    it('marks the ID taken when the backend refuses it with 409', async () => {
+      copyOf('existing');
+      service.createConfiguration.mockRejectedValue({
+        statusCode: 409,
+        message: "Presentation configuration 'existing-copy' already exists.",
+      });
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      component.createOrUpdatePresentation();
+      await vi.waitFor(() => expect(component.form.get('id')!.hasError('taken')).toBe(true));
+      expect(component.activeStep).toBe(0);
+      expect(TestBed.inject(MatSnackBar).open).toHaveBeenCalledWith(
+        "A verification config with ID 'existing-copy' already exists. Choose another ID.",
+        expect.anything(),
+        expect.anything()
+      );
+    });
+
+    it('edits a configuration called "copy" instead of copying it', async () => {
+      route.snapshot.params = { id: 'copy' };
+      route.snapshot.url = [{ path: 'copy' }, { path: 'edit' }];
+      service.getPresentationById.mockResolvedValue({
+        id: 'copy',
+        description: 'Existing request',
+        dcql_query: query,
+      });
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(component.copyMode).toBe(false);
+      expect(component.create).toBe(false);
+      expect(component.form.get('id')!.disabled).toBe(true);
+    });
   });
 
   it('stays an edit page and shows why when the configuration to edit cannot be loaded', async () => {
@@ -1075,6 +1164,7 @@ describe('Verification config editor', () => {
     it('leads a copy back to the list', async () => {
       route.snapshot.params = { id: 'existing' };
       route.snapshot.url = [{ path: 'existing' }, { path: 'copy' }];
+      route.snapshot.data = { copy: true };
       service.getPresentationById.mockResolvedValue({
         id: 'existing',
         description: 'Existing request',
