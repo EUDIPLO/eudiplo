@@ -4,6 +4,7 @@ import { HttpService } from "@nestjs/axios";
 import { Logger, NotImplementedException } from "@nestjs/common";
 import type { JWK } from "jose";
 import { firstValueFrom } from "rxjs";
+import { fileAccessHint } from "../../../../shared/utils/file-access-hint.util.js";
 import {
     assertKmsSigningAlg,
     externalAlgorithmPolicy,
@@ -206,11 +207,21 @@ export class HttpKmsAdapter implements KmsAdapter {
      */
     private readPemFile(path: string, setting: string): Buffer {
         // Checked on the open file, so the path cannot be swapped in between.
-        const fd = fs.openSync(
-            path,
-            // Non-blocking, so a pipe nobody writes to does not block the open.
-            fs.constants.O_RDONLY | (fs.constants.O_NONBLOCK ?? 0),
-        );
+        let fd: number;
+        try {
+            fd = fs.openSync(
+                path,
+                // Non-blocking, so a pipe nobody writes to does not block the open.
+                fs.constants.O_RDONLY | (fs.constants.O_NONBLOCK ?? 0),
+            );
+        } catch (error) {
+            const hint = fileAccessHint(error, path);
+            if (!hint) throw error;
+            throw new Error(
+                `HttpKmsAdapter[${this.providerId}]: auth.${setting} (${path}) cannot be read: ${(error as Error).message}.${hint}`,
+                { cause: error },
+            );
+        }
         try {
             const stat = fs.fstatSync(fd);
             if (!stat.isFile() || stat.size > MAX_PEM_FILE_BYTES) {

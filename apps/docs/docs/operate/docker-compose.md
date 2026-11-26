@@ -158,6 +158,82 @@ is how CLI-managed projects are laid out. Mounting the config folder at
 `/app/config` without setting `CONFIG_FOLDER=/app/config` makes the backend look
 for tenants in `./config/config/`.
 
+### Non-root user
+
+The backend does not run as root. The image starts as root only for its
+entrypoint, which picks a user, hands that user the folders the backend writes
+to and then starts the backend as that user, without capabilities, with
+`no_new_privs` and without supplementary groups.
+
+| Setup | The backend runs as |
+| --- | --- |
+| Default start, root owns `FOLDER` or it does not exist yet (named volumes of earlier releases, new named volumes) | UID and GID `1000` (`node`) |
+| Default start, another user owns `FOLDER` (a CLI project's `./config` on Linux) | that user; the group of `FOLDER`, or the user's UID as GID when the group is root |
+| Started as a non-root user (`user: "1000:1000"`, `--user`, Kubernetes `runAsUser`) | that user; the entrypoint changes nothing |
+| `EUDIPLO_RUN_AS_ROOT=true` | root, as before |
+| Root without the capabilities `SETUID` and `SETGID` (`cap_drop: [ALL]`) | root; the entrypoint logs that it cannot change the user |
+| User namespace (rootless Podman, Docker with `userns-remap`) and root owns `FOLDER` | root, which is the unprivileged host user; a bind mount stays with that user |
+
+An explicit `user: "0"` is the same as the default start. To run the backend
+as `node` under rootless Podman, hand the folder over once with
+`podman unshare chown -R 1000:1000 <folder>` for a bind mount, or set
+`UserNS=keep-id:uid=1000,gid=1000` in a Quadlet
+(`--userns=keep-id:uid=1000,gid=1000` for `podman run`).
+
+**Folders the entrypoint hands over.** In `FOLDER`, `CONFIG_FOLDER`,
+`LOCAL_STORAGE_DIR` and, with `LOG_TO_FILE=true`, the folder of
+`LOG_FILE_PATH`, files and folders that root owns are handed to the backend's
+user, and so is an empty folder that `node` owns, such as a new named volume,
+when the user is not `node`. The startup log says
+`eudiplo-entrypoint: changed the owner of root-owned files in <folder> to <uid>:<gid>`.
+Files of other users keep their owner, and a file with more than one hard link
+is skipped. The entrypoint leaves a folder as it is, and logs why, when its
+path contains a symbolic link or when it is neither a mount point nor
+`/app/config`, `/app/uploads` or `/app/logs` of the image, for example
+`FOLDER=/data/eudiplo` with the volume mounted at `/data`. On a read-only mount
+it logs `could not change the owner of all root-owned files in <folder> ...`.
+In these cases change the owner once yourself:
+
+```bash
+docker compose run --rm --user root --entrypoint chown eudiplo -R 1000:1000 /app/config
+```
+
+(for a bind mount on the host: `sudo chown -R 1000:1000 ./config`; replace
+`/app/config` by the folder and `1000:1000` by the user from the table).
+
+**Files the backend only reads** outside these folders must be readable by its
+user. A file of mode `0600` that root owns on the host is not. This applies to
+the TLS key and certificate (`TLS_*_PATH`), the files of the database
+connection (`DB_SSL_*_PATH`), the mTLS certificates and keys of a KMS provider,
+a PKCS#11 library and the token folder of a software HSM such as SoftHSM
+(which the backend also writes), and Compose secrets. Find them with
+`docker compose exec eudiplo sh -c 'ls -ln /certs /run/secrets'` (replace the
+folders by your mounts), then give them to the backend's user or make them
+readable by its group; a Compose `group_add` no longer applies:
+
+```bash
+sudo chown 1000:1000 ./certs/privkey.pem
+```
+
+When the backend cannot read such a file, its error names the file, the UID
+and GID it runs as, and `EUDIPLO_RUN_AS_ROOT`.
+
+**Home folder.** `HOME` is `/home/node`, or `/tmp` for another user. AWS or
+Azure credentials mounted under `/root` (`/root/.aws`, `/root/.azure`) are no
+longer found; mount them readable by the backend's user and set
+`AWS_SHARED_CREDENTIALS_FILE` and `AWS_CONFIG_FILE`, or use environment
+variables or an IAM role.
+
+`docker exec` still runs as root, so files it writes into these folders belong
+to root until the next start hands them over. An image built on
+`ghcr.io/eudiplo/eudiplo` with its own `CMD` runs that command through the
+entrypoint, as the same user; as with the node base image, a command that
+starts with `-` or is no program runs with `node`.
+
+`EUDIPLO_RUN_AS_ROOT=true` in the environment of the `eudiplo` service keeps the
+backend running as root, as before. It is meant for the time until such files
+are readable by the backend's user.
+
 ## Day-to-day commands
 
 ```bash

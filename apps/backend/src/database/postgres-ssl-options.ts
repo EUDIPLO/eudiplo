@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { TlsOptions } from "node:tls";
+import { fileAccessHint } from "../shared/utils/file-access-hint.util.js";
 
 function parseBoolean(value: unknown): boolean | undefined {
     if (typeof value === "boolean") {
@@ -36,7 +37,7 @@ function readOptionalFile(path: string, variableName: string): Buffer {
         return readFileSync(path);
     } catch (error) {
         throw new Error(
-            `Failed to read ${variableName} at path \"${path}\": ${error instanceof Error ? error.message : String(error)}`,
+            `Failed to read ${variableName} at path \"${path}\": ${error instanceof Error ? error.message : String(error)}.${fileAccessHint(error, path)}`,
         );
     }
 }
