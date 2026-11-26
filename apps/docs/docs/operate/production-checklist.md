@@ -113,8 +113,10 @@ again after major upgrades. Each item links to the guide that explains it.
       match your data protection rules ([Database](database.md#session-retention),
       [Logging](logging.md#audit-log)).
 - [ ] Logs do not capture personal data: `LOG_REDACT_SENSITIVE_DATA=true`,
-      `LOG_HTTP_RESPONSE_BODY=false`, `LOG_OID4VP_DECRYPTED_RESPONSE=false`,
-      `LOG_SESSION_STORE` not `verbose` ([Logging](logging.md)).
+      `LOG_HTTP_RESPONSE_BODY=false`, `LOG_OID4VP_DECRYPTED_RESPONSE=false`
+      ([Logging](logging.md)).
+- [ ] `LOG_SESSION_STORE` is not `verbose`, so session logs do not show
+      server stack traces ([Logging](logging.md#session-logs)).
 
 ## Backups
 
