@@ -93,6 +93,32 @@ describe('ConfigDocumentService', () => {
     }
   });
 
+  it('names no placeholder for stored text that is itself the escaped form', async () => {
+    client.setConfig({
+      fetch: async () =>
+        new Response(
+          JSON.stringify({
+            $schema: 'https://eudiplo.dev/schemas/v1/WebhookEndpointConfigFile.schema.json',
+            // The stored text `$${X}` is exported with its `${` escaped: `$$${X}`.
+            spec: { id: 'hook', name: 'Hook $$${X}' },
+          }),
+          { headers: { 'Content-Type': 'application/json' } }
+        ),
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    const { createObjectURL, revokeObjectURL } = URL;
+    URL.createObjectURL = () => 'blob:document';
+    URL.revokeObjectURL = () => undefined;
+
+    try {
+      await expect(
+        create(['issuance:manage']).download('WebhookEndpoint', 'hook')
+      ).resolves.toEqual([]);
+    } finally {
+      Object.assign(URL, { createObjectURL, revokeObjectURL });
+    }
+  });
+
   describe('downloadWithFeedback', () => {
     it('says that the document was saved', async () => {
       const service = create(['issuance:manage']);
