@@ -267,7 +267,7 @@ export class KeyChainController {
     @ApiOperation({
         summary: "Export a key chain in config-import format",
         description:
-            "Returns the key chain in the same format used by config import JSON files. For keys held in the database (`db` provider) the response includes the private key; for external KMS providers only the public key is returned because the private key never leaves the KMS. Requires the `tenant:admin` or `tenants:manage` role.",
+            "Returns the key chain in the same format used by config import JSON files. For keys held in the database (`db` provider) the response includes the private key; for external KMS providers only the public key is returned because the private key never leaves the KMS. As in every configuration file, a `${` in a stored value is written as `$${`, which a config import reads as `${` and `POST /api/key-chain/import` stores as sent. Requires the `tenant:admin` or `tenants:manage` role.",
     })
     @ApiResponse({
         status: 200,

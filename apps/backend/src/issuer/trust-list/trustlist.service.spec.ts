@@ -1223,6 +1223,33 @@ describe("TrustListService", () => {
     });
 
     describe("exportTrustList", () => {
+        it("writes the `${` of stored text in the escaped form of configuration files", async () => {
+            const { service } = createService([
+                storedList("list", inDays(20), {
+                    description: "${OTHER_TENANT_API_KEY}",
+                    entityConfig: [
+                        {
+                            type: "internal",
+                            issuerKeyChainId: "issuer-key",
+                            revocationKeyChainId: "status-key",
+                            info: {
+                                name: "Issuer ${OTHER_TENANT_API_KEY}",
+                                contactUri: "info@example.com",
+                                website: "https://example.com/",
+                            },
+                        },
+                    ],
+                } as unknown as Partial<TrustList>),
+            ]);
+
+            const exported = await service.exportTrustList("tenant", "list");
+
+            expect(exported.description).toBe("$${OTHER_TENANT_API_KEY}");
+            expect(exported.entities[0].info.name).toBe(
+                "Issuer $${OTHER_TENANT_API_KEY}",
+            );
+        });
+
         it("leaves out an unset description so the create endpoint accepts the export", async () => {
             // A nullable column is read back as null, not undefined.
             const { service } = createService([

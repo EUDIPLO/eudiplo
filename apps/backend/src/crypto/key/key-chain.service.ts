@@ -1,4 +1,5 @@
 import { X509Certificate } from "node:crypto";
+import { escapeConfigPlaceholders } from "@eudiplo/config-format/config-values.js";
 import {
     BadRequestException,
     Injectable,
@@ -398,6 +399,10 @@ export class KeyChainService {
         return this.toResponseDto(await this.getEntity(tenantId, id));
     }
 
+    /**
+     * The key chain as a configuration file, in the escaped form of such
+     * files: every `${` of a stored value reads `$${`.
+     */
     async export(tenantId: string, id: string): Promise<KeyChainExportDto> {
         const keyChain = await this.getManageable(tenantId, id);
         const storedKey = keyChain.hasInternalCa()
@@ -447,7 +452,10 @@ export class KeyChainService {
             };
         }
 
-        return exportDto;
+        // The export is a configuration file, and a tenant folder resolves
+        // `${VAR}` in it: stored text, the ID included, keeps its `${` only
+        // in the escaped form `$${`.
+        return escapeConfigPlaceholders(exportDto);
     }
 
     /**

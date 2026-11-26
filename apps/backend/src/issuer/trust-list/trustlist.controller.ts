@@ -120,7 +120,7 @@ export class TrustListController {
     }
 
     /**
-     * Exports the trust list in the format accepted by create and config import
+     * Exports the trust list in the format of configuration files: a `${` in a stored value is written as `$${`, which a create request stores as sent
      * @param token
      * @param id
      * @returns

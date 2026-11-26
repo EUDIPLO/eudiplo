@@ -1,3 +1,4 @@
+import { escapeConfigPlaceholders } from "@eudiplo/config-format/config-values.js";
 import {
     trustListMailtoUri,
     trustListTelUri,
@@ -206,12 +207,22 @@ export class TrustListService {
         return trustList;
     }
 
-    /** @throws NotFoundException when the tenant has no trust list with this ID */
+    /**
+     * The trust list as a configuration file, in the escaped form of such
+     * files: every `${` of a stored value reads `$${`.
+     *
+     * @throws NotFoundException when the tenant has no trust list with this ID
+     */
     async exportTrustList(
         tenantId: string,
         id: string,
     ): Promise<TrustListCreateDto> {
-        return trustListConfig(await this.get(tenantId, id));
+        // The export is a configuration file, and a tenant folder resolves
+        // `${VAR}` in it: stored text, the ID included, keeps its `${` only
+        // in the escaped form `$${`.
+        return escapeConfigPlaceholders(
+            trustListConfig(await this.get(tenantId, id)),
+        );
     }
 
     /**
