@@ -45,6 +45,11 @@ describe("shared configuration values", () => {
             ["${A:no-close", "${A:no-close"],
             ["$${A}", "$a"],
             ["${A-}${A}", "${A-}a"],
+            // A prefix that looks like a reference and is none.
+            ["${a:${A}}", "${a:a}"],
+            ["${a:b${A}}", "${a:ba}"],
+            ["${vault:kv/a#t}${A}", "${vault:kv/a#t}a"],
+            ["${env:X}:${A}", "${env:X}:a"],
         ];
         for (const [input, expected] of cases) {
             // Without the escaped form, as a kms.json is read.
@@ -118,6 +123,7 @@ describe("shared configuration values", () => {
         expect(readConfigFileValues(file)).toEqual({
             value: stored,
             placeholders: [],
+            references: [],
         });
     });
     it("lists the placeholders of a file and leaves them as they are", () => {
@@ -143,6 +149,7 @@ describe("shared configuration values", () => {
                 { path: "/a~1b/0", placeholder: "${ONE}", whole: false },
                 { path: "/a~1b/0", placeholder: "${TWO}", whole: false },
             ],
+            references: [],
         });
     });
     it("lets a value it fills in form no placeholder with the text next to it", () => {
@@ -155,6 +162,7 @@ describe("shared configuration values", () => {
         expect(readConfigFileValues(sent)).toEqual({
             value: { joined: "${B}", twice: "${B}", literal: "${lower}" },
             placeholders: [],
+            references: [],
         });
     });
     it("keeps the escaped form and escapes the values it fills in when the result is sent on as a file", () => {
@@ -188,6 +196,7 @@ describe("shared configuration values", () => {
             placeholders: [
                 { path: "/open", placeholder: "${MISSING}", whole: true },
             ],
+            references: [],
         });
     });
     it("preserves array order but ignores object key order", () => {
