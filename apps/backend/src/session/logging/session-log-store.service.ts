@@ -38,7 +38,7 @@ export class SessionLogStoreService {
         if (!sessionId) return;
         if (this.mode === "off") return;
         if (this.mode === "errors" && level === "info") return;
-        // "all" and "verbose" store everything; verbose callers pass richer detail
+        // "all" and "verbose" store everything; with "verbose" the loggers add errorStack to error entries
 
         await this.logRepository.save({
             sessionId,

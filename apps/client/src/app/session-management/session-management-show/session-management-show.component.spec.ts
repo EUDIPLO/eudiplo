@@ -1152,3 +1152,126 @@ describe('SessionManagementShowComponent live updates', () => {
     expect(page.querySelector('.polling-indicator')).toBeNull();
   });
 });
+
+describe('SessionManagementShowComponent logs', () => {
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [SessionManagementShowComponent],
+      providers: [
+        provideRouter([]),
+        { provide: ActivatedRoute, useValue: { snapshot: { params: { id: 'session-1' } } } },
+        {
+          provide: SessionManagementService,
+          useValue: {
+            getSession: vi.fn().mockResolvedValue({
+              id: 'session-1',
+              status: 'failed',
+              requestId: 'age-check',
+            }),
+            getSessionLogs: vi.fn().mockResolvedValue([
+              {
+                id: 'log-1',
+                sessionId: 'session-1',
+                timestamp: '2026-11-26T15:49:26Z',
+                level: 'info',
+                stage: 'initialization',
+                message: '[OID4VP] Flow started for session session-1 in tenant playground',
+                detail: { hasWebhook: false, claims: { given_name: 'Erika' } },
+              },
+              {
+                id: 'log-2',
+                sessionId: 'session-1',
+                timestamp: '2026-11-26T15:49:27Z',
+                level: 'error',
+                stage: 'error',
+                message: '[OID4VP] Flow error for session session-1: Status is not valid',
+                detail: {
+                  errorName: 'SdJwtError',
+                  errorMessage: 'Status is not valid',
+                  errorStack: 'SdJwtError: Status is not valid\n    at checkStatusListEntry',
+                  action: 'process_presentation_response',
+                },
+              },
+            ]),
+          },
+        },
+        { provide: JwtService, useValue: { hasRole: () => true } },
+      ],
+    }).compileComponents();
+  });
+
+  afterEach(() => TestBed.resetTestingModule());
+
+  async function openLogsTab() {
+    const fixture = TestBed.createComponent(SessionManagementShowComponent);
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(fixture.componentInstance.sessionLogs).toHaveLength(2));
+    fixture.detectChanges();
+    const page = fixture.nativeElement as HTMLElement;
+    const logsTab = [...page.querySelectorAll<HTMLElement>('[role="tab"]')].find((tab) =>
+      tab.textContent?.includes('Logs (2)')
+    );
+    logsTab!.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    return { fixture, entries: [...page.querySelectorAll<HTMLElement>('.log-entry')] };
+  }
+
+  function disclosure(entry: HTMLElement, label: string): HTMLDetailsElement | undefined {
+    return [...entry.querySelectorAll<HTMLDetailsElement>('details.log-disclosure')].find((d) =>
+      d.querySelector('summary')?.textContent?.includes(label)
+    );
+  }
+
+  it('shows an error entry with its error name and fields, and the stack collapsed', async () => {
+    const { entries } = await openLogsTab();
+    const entry = entries[1];
+
+    expect(entry.querySelector('.log-error-name')?.textContent?.trim()).toBe('SdJwtError');
+    expect(entry.querySelector('.log-fields')?.textContent).toContain(
+      'process_presentation_response'
+    );
+    expect(entry.querySelector('.log-fields')?.textContent).not.toContain('Status is not valid');
+    expect(disclosure(entry, 'Details')).toBeUndefined();
+    const stack = disclosure(entry, 'Stack trace')!;
+    expect(stack.open).toBe(false);
+    expect(stack.querySelector('pre')?.textContent).toContain('at checkStatusListEntry');
+  });
+
+  it('shows object values collapsed under Details, without a stack trace', async () => {
+    const { entries } = await openLogsTab();
+    const entry = entries[0];
+
+    expect(entry.querySelector('.log-error-name')).toBeNull();
+    expect(entry.querySelector('.log-fields')?.textContent).toContain('hasWebhook');
+    expect(disclosure(entry, 'Stack trace')).toBeUndefined();
+    const details = disclosure(entry, 'Details')!;
+    expect(details.open).toBe(false);
+    expect(details.querySelector('pre')?.textContent).toContain('"given_name": "Erika"');
+  });
+
+  it('copies the stack trace as stored', async () => {
+    const { fixture, entries } = await openLogsTab();
+    const copy = vi.spyOn(fixture.componentInstance, 'copyValue').mockResolvedValue();
+
+    const button = disclosure(entries[1], 'Stack trace')!.querySelector<HTMLButtonElement>(
+      'button'
+    )!;
+    expect(button.getAttribute('aria-label')).toMatch(/^Copy stack trace of the entry at \S/);
+    button.click();
+
+    expect(copy).toHaveBeenCalledWith(
+      'SdJwtError: Status is not valid\n    at checkStatusListEntry'
+    );
+  });
+
+  it('copies the Details JSON as shown', async () => {
+    const { fixture, entries } = await openLogsTab();
+    const copy = vi.spyOn(fixture.componentInstance, 'copyValue').mockResolvedValue();
+
+    disclosure(entries[0], 'Details')!.querySelector<HTMLButtonElement>('button')!.click();
+
+    expect(copy).toHaveBeenCalledWith(JSON.stringify({ claims: { given_name: 'Erika' } }, null, 2));
+  });
+});
