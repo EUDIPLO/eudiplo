@@ -106,7 +106,7 @@ describe('ConfigDocumentService', () => {
       });
     });
 
-    it('names the placeholders to set before an import, for longer', async () => {
+    it('names the placeholders to set before an import, until closed', async () => {
       const service = create(['issuance:manage']);
       vi.spyOn(service, 'download').mockResolvedValue(['HOOK_SECRET', 'HOOK_TOKEN']);
 
@@ -115,7 +115,7 @@ describe('ConfigDocumentService', () => {
       expect(snackBar.open).toHaveBeenCalledWith(
         "Configuration downloaded. Its secrets are placeholders (HOOK_SECRET, HOOK_TOKEN): set them in the backend's environment for a config folder, or replace them with the values before importing the file under Config Portability.",
         'Close',
-        // Too long to read in a fixed time: it stays until closed.
+        // The only place that names the variables: it stays until closed.
         { duration: 0 }
       );
     });
