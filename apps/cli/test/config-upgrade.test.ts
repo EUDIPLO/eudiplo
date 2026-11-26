@@ -92,6 +92,37 @@ describe("config upgrade", () => {
         expect(JSON.parse(await readFile(source, "utf8"))).toEqual(legacy);
         expect(context.fetch).not.toHaveBeenCalled();
     });
+    it("checks the values of a file, not its escaped form, against the schema", async () => {
+        const { cwd, context, output } = await setup();
+        // 1000 characters as a value, the maximum; 1001 as the file writes it.
+        const description = `${"x".repeat(989)}$\${VARIABLE}`;
+        const anchor = (text: string) => ({
+            $schema: schemaUrl("FederationTrustAnchor"),
+            metadata: { generation: 1 },
+            spec: {
+                id: "anchor",
+                entityId: "https://anchor.example",
+                description: text,
+                jwks: { keys: [{ kty: "EC", kid: "anchor-key" }] },
+            },
+        });
+        const source = join(cwd, "anchor.json");
+        const document = anchor(description);
+        await writeFile(source, JSON.stringify(document));
+
+        expect(await runCli(["config", "upgrade", source], context)).toBe(0);
+        expect(output.stderr).not.toContain("description");
+        // The file keeps its escaped form.
+        expect(
+            JSON.parse(await readFile(`${source}.upgraded.json`, "utf8")),
+        ).toEqual(document);
+
+        // One character more is still refused.
+        const tooLong = join(cwd, "too-long.json");
+        await writeFile(tooLong, JSON.stringify(anchor(`x${description}`)));
+        expect(await runCli(["config", "upgrade", tooLong], context)).toBe(1);
+        expect(output.stderr).toContain("description");
+    });
     it("preserves canonical singleton manifest IDs", async () => {
         const { cwd, context } = await setup();
         const input = bundle();
