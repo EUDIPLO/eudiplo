@@ -316,7 +316,14 @@ async function loadDocument(
 ): Promise<ConfigFile> {
     // Validated before packing: the file parses and holds an object.
     const payload = JSON.parse(await readFile(join(tenantRoot, file), "utf8"));
-    const resolved = resolveConfigVariables(payload, env).value;
+    // The API reads the bundle as a file: the escaped form `$${` stays, and a
+    // value filled in is escaped, so that the API takes none for a
+    // placeholder. A kms.json has no escaped form.
+    const resolved = resolveConfigVariables(
+        payload,
+        env,
+        kind === "KmsConfig" ? "none" : "keep",
+    ).value;
     const document = normalizeDocument(
         isConfigDocument(resolved) ? resolved : wrapBare(kind, resolved, file),
     );

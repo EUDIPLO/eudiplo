@@ -82,6 +82,32 @@ describe("configuration variable scope", () => {
         ).toBeUndefined();
     });
 
+    it("keeps the cloud credentials of the instance from the files of a tenant folder", () => {
+        for (const [name, provider] of [
+            ["AWS_ACCESS_KEY_ID", "AWS"],
+            ["AWS_SECRET_ACCESS_KEY", "AWS"],
+            ["AWS_SESSION_TOKEN", "AWS"],
+            ["AWS_CONTAINER_AUTHORIZATION_TOKEN", "AWS"],
+            ["AZURE_CLIENT_SECRET", "Azure"],
+            ["AZURE_CLIENT_CERTIFICATE_PASSWORD", "Azure"],
+            ["AZURE_PASSWORD", "Azure"],
+        ]) {
+            expect(refusedConfigVariable(name, "tenant")).toContain(
+                `${provider} credentials of the instance`,
+            );
+            // The global kms.json documents them for an aws-kms provider.
+            expect(refusedConfigVariable(name, "global")).toBeUndefined();
+            // A tenant kms.json needs the operator's listing, as before.
+            expect(refusedConfigVariable(name, "tenant-kms")).toContain(
+                "not listed in KMS_TENANT_VARIABLES",
+            );
+            expect(
+                refusedConfigVariable(name, "tenant-kms", new Set([name])),
+            ).toBeUndefined();
+            expect(parseTenantKmsVariables(name)).toEqual(new Set([name]));
+        }
+    });
+
     it("parses KMS_TENANT_VARIABLES and refuses EUDIPLO's own settings in it", () => {
         expect(parseTenantKmsVariables(undefined)).toEqual(new Set());
         expect(parseTenantKmsVariables("")).toEqual(new Set());

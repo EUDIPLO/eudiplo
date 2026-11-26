@@ -378,7 +378,12 @@ function resolvePlaceholders(
     file: string,
     errors: ValidationIssue[],
 ): unknown {
-    const result = resolveConfigVariables(value, env);
+    // A kms.json has no escaped form; the backend reads it the same way.
+    const result = resolveConfigVariables(
+        value,
+        env,
+        file === "kms.json" ? "none" : "resolve",
+    );
     for (const issue of result.issues)
         errors.push({
             file,

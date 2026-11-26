@@ -320,7 +320,7 @@ exception ([single resources](#single-resources)).
 
 | Value                                                                 | In the export                                                | Requirement code         | On import                                                             |
 | --------------------------------------------------------------------- | ------------------------------------------------------------ | ------------------------ | --------------------------------------------------------------------- |
-| Retrievable secrets (KMS, webhook and attribute-provider credentials, upstream client secrets of chained authorization servers) | `${…}` placeholder | `SECRET_REQUIRED`        | Set the environment variable or replace the value. KMS credentials: through the API replace the value; in a tenant folder also list the variable in `KMS_TENANT_VARIABLES` ([KMS placeholders](../operate/kms.md#placeholders-in-a-tenant-kmsjson)) |
+| Retrievable secrets (KMS, webhook and attribute-provider credentials, upstream client secrets of chained authorization servers) | `${…}` placeholder | `SECRET_REQUIRED`        | In a tenant folder set the environment variable of the backend, in a CLI folder import name it in `--allow-env`; in a bundle sent to the API replace the value ([placeholders and the API](#placeholders-and-the-api)). KMS credentials: through the API replace the value; in a tenant folder also list the variable in `KMS_TENANT_VARIABLES` ([KMS placeholders](../operate/kms.md#placeholders-in-a-tenant-kmsjson)) |
 | Client secrets (stored as bcrypt hash)                                | `${…}` placeholder                                           | `CLIENT_SECRET_REQUIRED` | Supply a secret, or `"secret": "!generate"` to get a new one once in `generatedSecrets` |
 | Private keys of `db` key chains                                       | `keySource: { "type": "required", "publicJwk": … }`          | `PRIVATE_KEY_REQUIRED`   | Supply `private-jwk`, or `{ "type": "regenerate" }` for new key material |
 | Keys in an external KMS                                               | `keySource: { "type": "external-reference", provider, externalKeyId, publicJwk }` | -  | The target provider must reach the same key; checked by signing a challenge, in the plan (not for a key chain the plan leaves `unchanged`) and again on import; only on import (plan warning `KMS_PREFLIGHT_DEFERRED`) when the bundle contains a `KmsConfig` and that makes the provider the tenant's own or the key cannot sign with the KMS configuration in place; without a `KmsConfig` in the bundle, a key that cannot sign blocks the plan (`KMS_REFERENCE_UNAVAILABLE`). On a provider the tenant shares with other tenants, a bundle sent to the API can only name a key the tenant's key chains already hold ([shared providers](../operate/kms.md#keys-of-a-provider-that-tenants-share)) |
@@ -357,27 +357,31 @@ A `private-jwk` key source takes one of two forms:
 
 **Placeholders.** Any string value can be `${VAR}` or `${VAR:default}`
 (uppercase letters, digits, `_`; an empty variable counts as unset). Values are
-substituted once and not interpreted again. In tenant folders, unresolved
+substituted once and not interpreted again. `$${` is the escaped form of the
+text `${` ([placeholders and the API](#placeholders-and-the-api)). In tenant folders, unresolved
 placeholders are handled according to `CONFIG_VARIABLE_STRICT`:
 
 | Value                    | Effect                                                                 |
 | ------------------------ | ---------------------------------------------------------------------- |
 | `skip` (default), `abort`, `true` | Error; the import of this tenant fails, other tenants continue |
-| `ignore`, `false`        | Warning; the placeholder stays as literal text                         |
+| `ignore`, `false`        | Warning; a placeholder inside a longer value stays as literal text, and a value that is only a placeholder blocks that resource with `SECRET_REQUIRED` |
 
 ### Variables a file can use
 
-A placeholder can name any environment variable of your own, such as `${SHOP_BACKEND_SECRET}`.
+A placeholder can name an environment variable of your own, such as `${SHOP_BACKEND_SECRET}`, with the exceptions in the table below.
 The variables that configure EUDIPLO itself
 ([environment variables](environment-variables.md)) are not available to
 configuration files, so that a file cannot hand a secret such as
-`MASTER_SECRET` to a URL it names:
+`MASTER_SECRET` to a URL it names. The same holds in the files of a tenant
+folder other than `kms.json` for the credentials the AWS SDK and the Azure
+identity library read from the environment for the instance:
 
 | Variable                                   | Tenant folder files | Tenant `kms.json`                               | Global `kms.json` |
 | ------------------------------------------ | ------------------- | ----------------------------------------------- | ----------------- |
 | `PUBLIC_URL`                               | resolved            | resolved                                        | resolved          |
 | `VAULT_ADDR`, `VAULT_TOKEN`, `AWS_REGION`  | refused             | refused                                         | resolved          |
 | Every other variable of EUDIPLO            | refused             | refused                                         | refused           |
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_CONTAINER_AUTHORIZATION_TOKEN`, `AZURE_CLIENT_SECRET`, `AZURE_CLIENT_CERTIFICATE_PASSWORD`, `AZURE_PASSWORD` | refused | resolved only if listed in `KMS_TENANT_VARIABLES` | resolved |
 | Your own variables                         | resolved            | resolved only if listed in `KMS_TENANT_VARIABLES` | resolved        |
 
 A file that names a refused variable is rejected, with every value of
@@ -390,6 +394,33 @@ tenant `kms.json` with `${VAR:default}` fails the import in the same way:
 `defaultProvider` or the `id` of a provider, whatever the variable. To
 use the value of a refused variable, set a variable of your own to the same
 value and name that one.
+
+### Placeholders and the API
+
+Placeholders belong to files. A value stored through the API is text, also when
+it contains `${VAR}`: nothing resolves it.
+
+- **Escaped form.** In a configuration file, `$${` stands for the two
+  characters `${` and starts no placeholder: `"Price $${AMOUNT}"` is the text
+  `Price ${AMOUNT}`. An export writes every `${` of a stored value this way, also in a
+  resource ID and in the file name of an uploaded image, and `info.json` is
+  read the same way,
+  so that the export, placed in a tenant folder, gives the text back and reads
+  no variable of the backend. The placeholders the export itself writes for
+  secrets ([secret and key policy](#secret-and-key-policy)) are not escaped.
+  A `kms.json` has no escaped form.
+- **Bundles sent to the API.** The API reads a bundle as a file but resolves
+  no placeholder from the backend's environment. A value that is a
+  placeholder and nothing else, also `${VAR:default}`, is planned with the
+  issue `SECRET_REQUIRED`, which blocks the resource: replace it with the
+  value. A placeholder inside a longer value is stored as text, with the plan
+  warning `PLACEHOLDER_STORED_AS_TEXT`: replace it with the value, or write
+  `$${` to say that you mean the text.
+- **Requests that create or update a resource**, such as
+  `POST /api/issuer/webhook-endpoints`, are no files: they store the value as
+  sent, and `$${` has no meaning there.
+- **The KMS configuration** follows its own rule
+  ([KMS placeholders](../operate/kms.md#placeholders-in-a-tenant-kmsjson)).
 
 ## Import modes and plan actions
 

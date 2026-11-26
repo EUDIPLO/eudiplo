@@ -108,7 +108,7 @@ export async function runPortabilityCommand(
     const allowEnv = readStringFlag(parsed.flags, "allow-env");
     if (allowEnv !== undefined && !folder)
         throw new Error(
-            "--allow-env applies to a tenant folder only; a bundle's placeholders are resolved by the server.",
+            "--allow-env applies to a tenant folder only; replace the placeholders of a bundle with their values.",
         );
     const folderEnv = folderEnvironment(allowEnv, context.env);
     if (folder) {
