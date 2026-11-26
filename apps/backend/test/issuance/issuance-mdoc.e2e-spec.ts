@@ -20,6 +20,10 @@ import { SIGNING_ALG_SPECS } from "../../src/crypto/key/domain/signing-algs.js";
 import { KeyUsageType } from "../../src/crypto/key/types/key-usage-type.js";
 import { MdocIssuerService } from "../../src/issuer/configuration/credentials/issuer/mdoc-issuer/mdoc-issuer.service.js";
 import {
+    buildClaimsMetadata,
+    mdocDefaultNamespace,
+} from "../../src/issuer/configuration/credentials/utils/derive.js";
+import {
     callbacks,
     getSignJwsCallback,
     IssuanceTestContext,
@@ -515,6 +519,105 @@ describe("MdocIssuerService namespace merge behavior", () => {
                 locality: "BERLIN",
                 date: new DateOnly("1964-08-12"),
             },
+        });
+    });
+
+    test("issues fields without a namespace in the namespace their metadata names", () => {
+        const addNamespaceSpy = vi.spyOn(
+            Issuer.prototype as any,
+            "addIssuerNamespace",
+        );
+        const service = createMdocIssuerService() as any;
+        const docType = "org.iso.18013.5.1.mDL";
+        const mdlNamespace = mdocDefaultNamespace(docType);
+        const issuer = new Issuer(docType, mdocContext);
+        const fields = [
+            {
+                path: ["family_name"],
+                type: "string",
+                defaultValue: "MUSTERMANN",
+            },
+            { path: ["given_name"], type: "string" },
+            {
+                path: ["address"],
+                type: "object",
+                children: [
+                    {
+                        path: ["street"],
+                        type: "string",
+                        defaultValue: "HEIDESTRASSE",
+                    },
+                    {
+                        path: ["since"],
+                        type: "string",
+                        format: "date",
+                        defaultValue: "2000-01-01",
+                    },
+                ],
+            },
+        ];
+
+        service.addClaimsToIssuer(issuer, fields, mdlNamespace, {
+            given_name: "ERIKA",
+        });
+
+        // Top-level and child defaults go into the default namespace, not
+        // into one named after the parent.
+        expect(addNamespaceSpy).toHaveBeenCalledTimes(1);
+        expect(addNamespaceSpy).toHaveBeenCalledWith(mdlNamespace, {
+            family_name: "MUSTERMANN",
+            given_name: "ERIKA",
+            address: {
+                street: "HEIDESTRASSE",
+                since: new DateOnly("2000-01-01"),
+            },
+        });
+        expect(
+            buildClaimsMetadata(fields as any, mdlNamespace).map(
+                (claim) => claim.path,
+            ),
+        ).toEqual([
+            [mdlNamespace, "family_name"],
+            [mdlNamespace, "given_name"],
+            [mdlNamespace, "address"],
+            [mdlNamespace, "address", "street"],
+            [mdlNamespace, "address", "since"],
+        ]);
+    });
+
+    test("keeps a session object of a parent without a namespace", () => {
+        const addNamespaceSpy = vi.spyOn(
+            Issuer.prototype as any,
+            "addIssuerNamespace",
+        );
+        const service = createMdocIssuerService() as any;
+        const mdlNamespace = mdocDefaultNamespace("org.iso.18013.5.1.mDL");
+        const issuer = new Issuer("org.iso.18013.5.1.mDL", mdocContext);
+
+        service.addClaimsToIssuer(
+            issuer,
+            [
+                {
+                    path: ["address"],
+                    type: "object",
+                    children: [
+                        {
+                            path: ["street"],
+                            type: "string",
+                            defaultValue: "HEIDESTRASSE",
+                        },
+                    ],
+                },
+            ],
+            mdlNamespace,
+            { address: { street: "MAIN" } },
+        );
+
+        // The session's top-level value replaces the default as a whole;
+        // before, it was left out for a namespace named "address".
+        expect(addNamespaceSpy).toHaveBeenCalledTimes(1);
+        expect(addNamespaceSpy).toHaveBeenCalledWith(mdlNamespace, {
+            address: { street: "MAIN" },
         });
     });
 

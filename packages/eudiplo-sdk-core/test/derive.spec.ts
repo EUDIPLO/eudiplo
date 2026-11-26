@@ -5,6 +5,8 @@ import {
   buildClaimsMetadata,
   buildDisclosureFrame,
   buildJsonSchema,
+  deriveRuntimeArtifacts,
+  mdocDefaultNamespace,
 } from "../src/config";
 import type { ClaimFieldDefinition } from "../src/config";
 
@@ -252,6 +254,56 @@ describe("config derive helpers", () => {
         },
       ]).map((claim) => claim.path),
     ).toEqual([["address"], ["address", "locality"]]);
+  });
+
+  it("puts the default namespace in front of mdoc fields that name none", () => {
+    expect(
+      buildClaimsMetadata(
+        [
+          { path: ["given_name"], type: "string" },
+          {
+            path: ["address"],
+            type: "object",
+            children: [{ path: ["street"], type: "string" }],
+          },
+          { namespace: "org.example.1", path: ["level"], type: "string" },
+          { path: ["org.example.2", "rank"], type: "string" },
+        ],
+        mdocDefaultNamespace("org.iso.18013.5.1.mDL"),
+      ).map((claim) => claim.path),
+    ).toEqual([
+      ["org.iso.18013.5.1", "given_name"],
+      ["org.iso.18013.5.1", "address"],
+      ["org.iso.18013.5.1", "address", "street"],
+      ["org.example.1", "level"],
+      ["org.example.2", "rank"],
+    ]);
+    expect(mdocDefaultNamespace("eu.europa.ec.eudi.pid.1")).toBe(
+      "eu.europa.ec.eudi.pid.1",
+    );
+  });
+
+  it("puts default values of mdoc fields that name none in the default namespace", () => {
+    const fields: ClaimFieldDefinition[] = [
+      { path: ["given_name"], type: "string", defaultValue: "Erika" },
+      {
+        path: ["address"],
+        type: "object",
+        children: [{ path: ["street"], type: "string", defaultValue: "Main" }],
+      },
+    ];
+    expect(buildClaimsByNamespace(fields, "org.iso.18013.5.1")).toEqual({
+      "org.iso.18013.5.1": { given_name: "Erika", address: { street: "Main" } },
+    });
+    expect(
+      deriveRuntimeArtifacts(fields, "org.iso.18013.5.1").claimsMetadata.map(
+        (c) => c.path,
+      ),
+    ).toEqual([
+      ["org.iso.18013.5.1", "given_name"],
+      ["org.iso.18013.5.1", "address"],
+      ["org.iso.18013.5.1", "address", "street"],
+    ]);
   });
 
   it("handles empty fields", () => {

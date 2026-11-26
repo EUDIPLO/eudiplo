@@ -49,7 +49,7 @@ import {
     type TypedCredentialConfig,
     toCredentialConfigurationSupported,
 } from "./types/credential-config-types.js";
-import { buildClaimsMetadata } from "./utils/index.js";
+import { buildClaimsMetadata, mdocDefaultNamespace } from "./utils/index.js";
 
 /**
  * Service for managing credentials and their configurations.
@@ -306,8 +306,13 @@ export class CredentialsService {
         };
     }
 
+    /**
+     * @param defaultNamespace for `mso_mdoc`, the namespace the issuer puts
+     *   claims in that name none (see {@link mdocDefaultNamespace})
+     */
     private buildCredentialMetadata(
         entity: CredentialConfig,
+        defaultNamespace?: string,
     ): Record<string, unknown> | undefined {
         const metadata: Record<string, unknown> = {};
         // OID4VCI 1.0 Section 12.2.4: `display`, when present, is a non-empty array of
@@ -317,7 +322,10 @@ export class CredentialsService {
             metadata.display = publishableDisplayEntries(entity.config.display);
         }
         if (entity.fields.length > 0) {
-            metadata.claims = buildClaimsMetadata(entity.fields as any);
+            metadata.claims = buildClaimsMetadata(
+                entity.fields as any,
+                defaultNamespace,
+            );
         }
         if (entity.config.credentialReusePolicy) {
             metadata.credential_reuse_policy =
@@ -377,8 +385,13 @@ export class CredentialsService {
             );
         }
 
-        // Build credential_metadata with display and claims
-        const credentialMetadata = this.buildCredentialMetadata(entity);
+        // Build credential_metadata with display and claims. Claims without
+        // a namespace are issued in the docType's default namespace, so their
+        // claims path pointers name it (OID4VCI 1.0 Appendix C.2).
+        const credentialMetadata = this.buildCredentialMetadata(
+            entity,
+            mdocDefaultNamespace(doctype),
+        );
 
         // An mDOC is always bound to its device key; `keyBinding` does not
         // apply to it (see `requiresKeyProof`).

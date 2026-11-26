@@ -16,6 +16,7 @@ export {
   buildJsonSchema,
   deriveRuntimeArtifacts,
   flattenFields,
+  mdocDefaultNamespace,
 } from "./derive";
 
 export { type UnsupportedConstraint, unsupportedConstraints } from "./constraints";

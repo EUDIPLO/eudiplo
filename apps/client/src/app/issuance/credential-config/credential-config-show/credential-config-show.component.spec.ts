@@ -453,3 +453,44 @@ describe('CredentialConfigShowComponent delete', () => {
     expect(component.deleting).toBe(false);
   });
 });
+
+describe('CredentialConfigShowComponent mDOC default namespace', () => {
+  function create(config: Record<string, unknown>): CredentialConfigShowComponent {
+    TestBed.configureTestingModule({
+      imports: [CredentialConfigShowComponent],
+      providers: [provideRouter([])],
+    });
+    const component = TestBed.createComponent(CredentialConfigShowComponent).componentInstance;
+    component.config = config as unknown as CredentialConfig;
+    return component;
+  }
+
+  it('groups default values of fields without a namespace under the docType namespace', () => {
+    const component = create({
+      id: 'mdl',
+      config: { format: 'mso_mdoc', docType: 'org.iso.18013.5.1.mDL' },
+      fields: [
+        { path: ['given_name'], type: 'string', defaultValue: 'ERIKA' },
+        {
+          path: ['age_over_18'],
+          type: 'boolean',
+          namespace: 'org.example.1',
+          defaultValue: true,
+        },
+      ],
+    });
+
+    // The issuer's default namespace, also when other namespaces have defaults.
+    expect(component.defaultNamespaceValue).toBe('org.iso.18013.5.1');
+    expect(component.claimsByNamespaceValue).toEqual({
+      'org.iso.18013.5.1': { given_name: 'ERIKA' },
+      'org.example.1': { age_over_18: true },
+    });
+  });
+
+  it('names no default namespace for SD-JWT VC', () => {
+    expect(
+      create({ id: 'pid', config: { format: 'dc+sd-jwt' }, fields: [] }).defaultNamespaceValue
+    ).toBeNull();
+  });
+});
