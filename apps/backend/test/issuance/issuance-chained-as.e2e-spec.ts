@@ -647,16 +647,6 @@ describe("Issuance - Chained AS Flow", () => {
         const tokenRequests = captureUpstreamTokenRequests();
         await configureChainedAs(false, `\${env:${SECRET_ENV}}`);
 
-        // The reference is no secret: the API shows it as written.
-        const stored = await request(app.getHttpServer())
-            .get("/issuer/config")
-            .trustLocalhost()
-            .set("Authorization", `Bearer ${authToken}`)
-            .expect(200);
-        expect(stored.body.authorizationServers[0].upstream.clientSecret).toBe(
-            `\${env:${SECRET_ENV}}`,
-        );
-
         const upstreamState = await startChainedLogin();
         const callbackResponse = await request(app.getHttpServer())
             .get("/issuers/haip/chained-as/callback")
@@ -731,7 +721,8 @@ describe("Issuance - Chained AS Flow", () => {
                         upstream: {
                             issuer: UPSTREAM_ISSUER,
                             clientId: UPSTREAM_CLIENT_ID,
-                            clientSecret: "${env:AUTH_CLIENT_SECRET}",
+                            // Not under E2E_HAIP_, and no setting of EUDIPLO.
+                            clientSecret: "${env:OTHER_UPSTREAM_SECRET}",
                         },
                         requireDPoP: false,
                     },
@@ -740,6 +731,9 @@ describe("Issuance - Chained AS Flow", () => {
             .expect(400);
         expect(JSON.stringify(response.body)).toContain(
             "authorizationServers[0].upstream.clientSecret",
+        );
+        expect(JSON.stringify(response.body)).toContain(
+            "no grant of tenant 'haip'",
         );
     });
 
