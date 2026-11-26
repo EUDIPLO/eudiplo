@@ -118,6 +118,14 @@ describe("version compatibility", () => {
         expect(compareVersions("8.1.3", "8.1.0").status).toBe("pass");
     });
 
+    it("warns on a patch difference across the escaped form of configuration files", () => {
+        const check = compareVersions("10.1.1", "10.1.0");
+        expect(check.status).toBe("warn");
+        expect(check.message).toContain("escaped form");
+        expect(compareVersions("10.1.2", "10.1.1").status).toBe("pass");
+        expect(compareVersions("10.1.0", "10.1.1").status).toBe("pass");
+    });
+
     it("warns on a minor difference", () => {
         const check = compareVersions("8.0.2", "8.1.0");
         expect(check.status).toBe("warn");

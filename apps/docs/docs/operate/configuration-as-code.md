@@ -182,9 +182,14 @@ such as the check of a presentation configuration's registration certificate,
 so an import can still fail on a folder that passed validation. Like the
 backend, the validator resolves `${VAR}` placeholders from its environment and
 fails on one without a value or default, so give the CI job a dummy value for
-each; the real secrets stay on the instance. The validator does not check
-[which variables a file can use](../reference/config-bundle-format.md#variables-a-file-can-use);
-the backend refuses the others on import. A file the backend skips does not
+each; the real secrets stay on the instance. Of the rules on
+[which variables a file can use](../reference/config-bundle-format.md#variables-a-file-can-use),
+the validator checks only those it can know without the instance: it fails on
+the AWS and Azure credential variables in a file other than `kms.json`, and
+warns for every variable a tenant `kms.json` names other than `PUBLIC_URL`, because the backend
+resolves it only if the instance lists it in `KMS_TENANT_VARIABLES`. It does
+not know the variables that configure EUDIPLO itself; the backend refuses
+those on import. A file the backend skips does not
 fail validation: a `registrar.json` left from the removed sandbox registrar
 integration prints `warning registrar.json: …` under its tenant, and the JSON
 report lists it in the tenant's `warnings[]` (`file`, `message`).
