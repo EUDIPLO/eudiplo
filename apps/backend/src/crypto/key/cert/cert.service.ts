@@ -7,6 +7,7 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import * as x509 from "@peculiar/x509";
+import { parseX509Certificate } from "../../../shared/utils/x509-certificate-cache.js";
 import { KeyChainUpdateDto } from "../dto/key-chain-update.dto.js";
 import { KeyChainEntity } from "../entities/key-chain.entity.js";
 import { KeyChainService } from "../key-chain.service.js";
@@ -196,7 +197,7 @@ export class CertService {
     ): Promise<CertValidationResult> {
         try {
             const leafPem = cert.crt[0];
-            const x509Cert = new x509.X509Certificate(leafPem);
+            const x509Cert = parseX509Certificate(leafPem);
             const now = new Date();
 
             // Check expiry
@@ -318,7 +319,7 @@ export class CertService {
      */
     getCertHash(cert: CertificateInfo): string {
         const leafPem = cert.crt[0];
-        const x509Cert = new x509.X509Certificate(leafPem);
+        const x509Cert = parseX509Certificate(leafPem);
         const hash = createHash("sha256")
             .update(Buffer.from(x509Cert.rawData))
             .digest();
@@ -331,7 +332,7 @@ export class CertService {
      */
     getCertDnsName(cert: CertificateInfo): string {
         const leafPem = cert.crt[0];
-        const x509Cert = new x509.X509Certificate(leafPem);
+        const x509Cert = parseX509Certificate(leafPem);
         const san = x509Cert.getExtension(x509.SubjectAlternativeNameExtension);
         const dnsName = san?.names.items.find((name) => name.type === x509.DNS);
 
@@ -346,7 +347,7 @@ export class CertService {
 
     private toBase64Der(pem: string): string {
         try {
-            const x509Cert = new x509.X509Certificate(pem);
+            const x509Cert = parseX509Certificate(pem);
             // Convert raw DER bytes to base64 (not base64url)
             return Buffer.from(x509Cert.rawData).toString("base64");
         } catch {
