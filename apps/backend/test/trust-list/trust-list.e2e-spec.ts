@@ -14,6 +14,7 @@ import {
 import { INestApplication } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Test, TestingModule } from "@nestjs/testing";
+import { getRepositoryToken } from "@nestjs/typeorm";
 import {
     decodeJwt,
     decodeProtectedHeader,
@@ -24,13 +25,14 @@ import {
 } from "jose";
 import request from "supertest";
 import { App } from "supertest/types";
-import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import { AllExceptionsFilter } from "../../src/all-exceptions.filter.js";
 import { AppModule } from "../../src/app.module.js";
 import { Role } from "../../src/auth/roles/role.enum.js";
 import { KeyChainImportDto } from "../../src/crypto/key/dto/key-chain-import.dto.js";
 import { KeyUsageType } from "../../src/crypto/key/types/key-usage-type.js";
 import { TrustListCreateDto } from "../../src/issuer/trust-list/dto/trust-list-create.dto.js";
+import { TrustList } from "../../src/issuer/trust-list/entities/trust-list.entity.js";
 import { TrustListService } from "../../src/issuer/trust-list/trustlist.service.js";
 import type {
     ConfigBundle,
@@ -295,6 +297,62 @@ describe("Trust List e2e Tests", () => {
             expect(stored.body.description).toBe(before.body.description);
             expect(stored.body.sequenceNumber).toBe(before.body.sequenceNumber);
             expect(stored.body.jwt).toBe(before.body.jwt);
+        });
+
+        test("two concurrent creates of the same new ID store one", async () => {
+            const bodies = ["First", "Second"].map(
+                (description) =>
+                    ({
+                        id: "race-trust-list",
+                        description,
+                        keyChainId: "570852d7-7e7f-40af-a0e3-a6ebffd75ed0",
+                        entities: [
+                            {
+                                type: "internal",
+                                issuerKeyChainId:
+                                    "c3f24b6e-9b71-4b62-8d37-5f1a2c9e47ad",
+                                revocationKeyChainId:
+                                    "1f8c6b29-a4d3-4e7f-b2a0-9c5d13e8f746",
+                                info: {
+                                    name: "Race Provider",
+                                    contactUri: "info@example.com",
+                                    website: "https://example.com/",
+                                },
+                            },
+                        ],
+                    }) satisfies TrustListCreateDto,
+            );
+            // Both requests pass the early ID check, as when both check
+            // before either is stored: the insert decides.
+            const check = vi
+                .spyOn(
+                    ctx.app.get(getRepositoryToken(TrustList), {
+                        strict: false,
+                    }),
+                    "existsBy",
+                )
+                .mockResolvedValueOnce(false)
+                .mockResolvedValueOnce(false);
+            const responses = await Promise.all(
+                bodies.map((body) =>
+                    request(ctx.app.getHttpServer())
+                        .post("/trust-list")
+                        .set("Authorization", `Bearer ${ctx.authToken}`)
+                        .send(body)
+                        .then((res) => res),
+                ),
+            );
+            check.mockRestore();
+            expect(responses.map((res) => res.status).sort()).toEqual([
+                201, 409,
+            ]);
+            const winner = bodies[responses.findIndex((r) => r.status === 201)];
+            const stored = await request(ctx.app.getHttpServer())
+                .get("/trust-list/race-trust-list")
+                .set("Authorization", `Bearer ${ctx.authToken}`)
+                .expect(200);
+            expect(stored.body.description).toBe(winner.description);
+            expect(stored.body.sequenceNumber).toBe(1);
         });
 
         test("should export a trust list in the create format", async () => {

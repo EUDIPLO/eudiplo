@@ -13,6 +13,7 @@ import {
     resolveAuditActor,
 } from "../../../audit-log/audit-log-context.util.js";
 import { TokenPayload } from "../../../auth/token.decorator.js";
+import { insertNew } from "../../../database/insert-new.js";
 import { ConfigImportService } from "../../../platform/config-import/config-import.service.js";
 import {
     ConfigImportOrchestratorService,
@@ -40,6 +41,10 @@ import {
     type PresentationSettings,
 } from "../presentation-settings.js";
 import { PresentationRegistrationCertificateService } from "./presentation-registration-certificate.service.js";
+
+function idTaken(id: string): ResourceIdTaken {
+    return new ResourceIdTaken("Presentation configuration", id);
+}
 
 /**
  * Tenant-scoped CRUD for presentation configurations, including the
@@ -157,15 +162,15 @@ export class PresentationConfigService {
         actorToken?: TokenPayload,
         requestMeta?: AuditLogRequestMeta,
     ) {
+        // Checked before the trust and certificate checks for a clear answer;
+        // the insert decides between concurrent creates.
         if (await this.repository.existsBy({ id: vprequest.id, tenantId })) {
-            throw new ResourceIdTaken(
-                "Presentation configuration",
-                vprequest.id,
-            );
+            throw idTaken(vprequest.id);
         }
-        return this.storePresentationConfig(
+        return this.persist(
             tenantId,
             vprequest,
+            false,
             actorToken,
             requestMeta,
         );
@@ -186,6 +191,21 @@ export class PresentationConfigService {
         actorToken?: TokenPayload,
         requestMeta?: AuditLogRequestMeta,
     ) {
+        return this.persist(tenantId, vprequest, true, actorToken, requestMeta);
+    }
+
+    /**
+     * Checks and stores a configuration: inserted when `replace` is false,
+     * replacing a stored one when it is true.
+     * @throws ResourceIdTaken when `replace` is false and the ID is taken.
+     */
+    private async persist(
+        tenantId: string,
+        vprequest: PresentationConfigCreateDto,
+        replace: boolean,
+        actorToken?: TokenPayload,
+        requestMeta?: AuditLogRequestMeta,
+    ) {
         requireCheckableTransactionData(vprequest);
         await this.requireTrustedAuthorities(tenantId, vprequest);
         const merged = {
@@ -194,7 +214,14 @@ export class PresentationConfigService {
         } as PresentationConfig;
         this.registrationCertificates.validate(merged);
 
-        const saved = await this.repository.save(merged);
+        const saved = replace
+            ? await this.repository.save(merged)
+            : await insertNew(
+                  this.repository,
+                  merged,
+                  { id: merged.id, tenantId },
+                  () => idTaken(merged.id),
+              );
 
         if (actorToken) {
             await this.auditLogService.record({

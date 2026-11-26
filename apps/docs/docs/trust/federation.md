@@ -270,7 +270,7 @@ A credential verified through federation needs an `iss` claim and a `kid` header
 | Presentation request                | `400`: `clientIdScheme openid_federation needs federation.entityId, at least one trust anchor and openid_credential_verifier in federation.entityTypes ...`, or `clientIdScheme openid_federation needs a valid federation.entityId ...` with the reason for a stored `entityId` saved before 10.0 |
 | Request object fetched by the wallet | `400`: `The OpenID Federation verifier identity of this request is no longer configured`, when `entityId` or `entityTypes` changed after the request was created |
 | Issuance or presentation configuration | `400`: `OpenID Federation trust anchors without pinned keys: <entity IDs>. ...`; [register](#register-trust-anchors) them first |
-| Trust anchor registration           | `400` for an invalid entity ID or key; `409`: `Federation trust anchor '<id>' already exists`, `Trust anchor <entity ID> is already registered as '<id>'`, or `FEDERATION_TRUST_ANCHOR_IN_USE` ([Delete a trust anchor](#delete-a-trust-anchor)) |
+| Trust anchor registration           | `400` for an invalid entity ID or key; `409`: `Federation trust anchor '<id>' already exists. Choose another ID, or update the existing one.`, `Trust anchor <entity ID> is already registered as '<id>'`, or `FEDERATION_TRUST_ANCHOR_IN_USE` ([Delete a trust anchor](#delete-a-trust-anchor)) |
 
 Common reasons:
 
