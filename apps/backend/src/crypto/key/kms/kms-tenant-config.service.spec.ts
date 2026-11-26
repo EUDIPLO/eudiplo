@@ -369,6 +369,30 @@ describe("KmsTenantConfigService", () => {
             expect(atomicWriteFileSync).toHaveBeenCalledTimes(1);
         });
 
+        it("refuses a malformed reference instead of storing it as text", () => {
+            const service = createService(stubSecretReferences().secrets);
+            const update = vault("${vault:kv}");
+
+            expect(() => service.saveTenantConfig("tenant-a", update)).toThrow(
+                /providers\[0\] \('vault'\)\.vaultToken: /,
+            );
+            expect(service.refusedSetting("tenant-a", update)?.code).toBe(
+                "KMS_SETTING_REFUSED",
+            );
+            expect(atomicWriteFileSync).not.toHaveBeenCalled();
+        });
+
+        it("keeps reference-like text a redacted literal without a policy", () => {
+            const service = createService();
+            vi.mocked(existsSync).mockReturnValue(true);
+            vi.mocked(readFileSync).mockReturnValue(
+                JSON.stringify(vault("${vault:kv/x#y}")),
+            );
+            expect(
+                service.getTenantConfigView("tenant-a")?.providers[0],
+            ).toMatchObject({ vaultToken: "<redacted>" });
+        });
+
         it("reports nothing to plans for a configuration of another shape", () => {
             const service = createService(stubSecretReferences().secrets);
             expect(

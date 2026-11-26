@@ -133,7 +133,10 @@ EUDIPLO's Vault token or AppRole read access to the granted paths only.
   malformed reference is answered with `400`; a bundle with one is refused when
   it is imported, not yet when it is planned; a configuration folder file with
   one is skipped and logged at startup, like any file that does not import,
-  and the stored resource it would replace is kept.
+  and the stored resource it would replace is kept. A `kms.json` of a folder
+  is the operator's file and is not checked at startup: a refused reference in
+  it fails when a key operation uses it
+  ([KMS](kms.md#secret-references-in-a-tenant-kmsjson)).
   Changing only the `url` (or `upstream.issuer`) checks it again, so a bound
   reference cannot follow the resource to a new address.
 - **Sending.** EUDIPLO checks the policy again and reads the value. Values are
@@ -150,8 +153,9 @@ EUDIPLO's Vault token or AppRole read access to the granted paths only.
 ## What EUDIPLO shows
 
 A reference is no secret. Responses of the webhook endpoint, attribute
-provider, issuance configuration and tenant KMS configuration API and audit
-log entries show it as written; a literal API key stays
+provider, issuance configuration and tenant KMS configuration API show it as
+written, and so do the audit log entries of the first three (the KMS
+configuration is not audited); a literal API key stays
 `<redacted>` in responses and `[REDACTED]` in the audit log, as does a
 literal upstream client secret. A
 [configuration export](configuration-as-code.md#export-a-tenant) still replaces

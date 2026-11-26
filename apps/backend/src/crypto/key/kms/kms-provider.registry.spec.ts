@@ -264,8 +264,13 @@ describe("KmsProviderRegistry", () => {
                 "global-ref",
                 "${vault:kv/instance/kms#token}",
             );
+            // Another index in the global file than in the merged one.
             const global: KmsConfig = {
-                providers: [{ id: "db", type: "db" }, globalWithReference],
+                providers: [
+                    { id: "db", type: "db" },
+                    vault("global-only"),
+                    globalWithReference,
+                ],
             };
             const tenantConfig: KmsConfig = {
                 providers: [{ id: "db", type: "db" }, globalWithReference, own],
@@ -298,8 +303,47 @@ describe("KmsProviderRegistry", () => {
                 },
                 {
                     scope: { type: "instance" },
-                    field: "KmsConfig:providers.1.vaultToken",
+                    field: "KmsConfig:providers.2.vaultToken",
                     destination: "https://vault.example",
+                },
+            ]);
+        });
+
+        it("gives no destination when the file changed since the configuration was built", async () => {
+            const { secrets } = stubSecretReferences();
+            const uses: SecretUse[] = [];
+            vi.spyOn(secrets, "valueOf").mockImplementation(async (_, use) => {
+                uses.push(use);
+                throw new Error("stop before any request");
+            });
+            const own = vault(
+                "own-vault",
+                "${vault:kv/eudiplo/acme/kms#token}",
+            );
+            const tenantConfig: KmsConfig = {
+                providers: [{ id: "db", type: "db" }, own],
+            };
+            const registry = new KmsProviderRegistry(
+                {
+                    getConfig: (tenantId?: string) =>
+                        tenantId ? tenantConfig : globalConfig,
+                    // Another state of the file than the configuration's.
+                    getTenantSnapshot: () => ({
+                        config: { providers: [] },
+                        file: { providers: [own] },
+                    }),
+                } as never,
+                globalHttp as never,
+                { safeLookup } as never,
+                secrets,
+            );
+
+            await registry.resolve("own-vault", "acme").health();
+
+            expect(uses).toEqual([
+                {
+                    scope: { type: "tenant", tenantId: "acme" },
+                    field: "KmsConfig:providers.-1.vaultToken",
                 },
             ]);
         });

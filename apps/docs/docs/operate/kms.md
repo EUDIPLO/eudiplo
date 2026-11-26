@@ -323,7 +323,8 @@ decides what it may name:
   for `aws-kms`). A PKCS#11 `pin` goes to a library of the host, no server, so
   it can only be a reference of the tenant's own namespace.
 - A provider with a reference counts as shared, like one with a `${VAR}`
-  placeholder: EUDIPLO keeps the tenant to its own keys on it
+  placeholder, also without a secret policy (then the text is a literal
+  credential): EUDIPLO keeps the tenant to its own keys on it
   ([shared providers](#keys-of-a-provider-that-tenants-share)).
 - The reference is checked again each time the credential is used, so one in a
   file you wrote, or one the policy no longer grants, fails the key operation

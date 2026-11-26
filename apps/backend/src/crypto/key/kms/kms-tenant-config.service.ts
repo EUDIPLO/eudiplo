@@ -244,16 +244,12 @@ export class KmsTenantConfigService {
             }
             return undefined;
         }
-        let referenceRefusal: string | undefined;
-        try {
-            referenceRefusal = this.credentialReferenceRefusal(
-                tenantId,
-                config as KmsConfig,
-            );
-        } catch {
-            // A shape the schema refuses; plans report that elsewhere.
-            return undefined;
-        }
+        // A shape the schema refuses is reported elsewhere.
+        const referenceRefusal = Array.isArray(
+            (config as Partial<KmsConfig> | null)?.providers,
+        )
+            ? this.credentialReferenceRefusal(tenantId, config as KmsConfig)
+            : undefined;
         if (referenceRefusal)
             return { code: "KMS_SETTING_REFUSED", message: referenceRefusal };
         try {
