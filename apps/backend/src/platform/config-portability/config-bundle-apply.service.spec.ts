@@ -72,7 +72,7 @@ describe("ConfigBundleApplyService", () => {
             checkpoint: vi.fn(),
         };
         service.bundleService = { plan: vi.fn().mockResolvedValue(plan) };
-        service.migrationService = { upgrade: vi.fn() };
+        service.migrationService = { upgradeFile: vi.fn() };
         service.ownershipService = { markApplied: vi.fn(), remove: vi.fn() };
 
         await expect(
@@ -85,7 +85,7 @@ describe("ConfigBundleApplyService", () => {
         expect(planned.manifest.warnings).toEqual([
             expect.objectContaining({ code: "REGISTRAR_CONFIG_REMOVED" }),
         ]);
-        expect(service.migrationService.upgrade).not.toHaveBeenCalled();
+        expect(service.migrationService.upgradeFile).not.toHaveBeenCalled();
     });
 
     it("does not apply or claim ownership of resources skipped in create mode", async () => {
@@ -138,7 +138,7 @@ describe("ConfigBundleApplyService", () => {
         service.bundleService = { plan: vi.fn().mockResolvedValue(plan) };
         service.filesService = { saveImportedAsset: vi.fn() };
         service.migrationService = {
-            upgrade: vi.fn((document) => ({ document })),
+            upgradeFile: vi.fn((document) => ({ document })),
         };
         service.ownershipService = {
             markApplied: vi.fn(),
@@ -197,7 +197,9 @@ function setupApply(
     };
     service.bundleService = { plan: vi.fn().mockResolvedValue(plan) };
     service.filesService = { saveImportedAsset: vi.fn() };
-    service.migrationService = { upgrade: vi.fn((document) => ({ document })) };
+    service.migrationService = {
+        upgradeFile: vi.fn((document) => ({ document })),
+    };
     service.ownershipService = {
         get: vi.fn().mockResolvedValue({ ownership: "unmanaged" }),
         markApplied: vi.fn(),

@@ -1,5 +1,5 @@
 /** A `${VAR}` placeholder the plan reports as SECRET_REQUIRED. */
-export const UNRESOLVED_PLACEHOLDER = /^\$\{[A-Z0-9_]+(?::[^}]*)?\}$/;
+const UNRESOLVED_PLACEHOLDER = /^\$\{[A-Z0-9_]+(?::[^}]*)?\}$/;
 
 /** Whether `value`, or a string inside it, is an unresolved `${VAR}` placeholder. */
 export function holdsUnresolvedPlaceholder(value: unknown): boolean {

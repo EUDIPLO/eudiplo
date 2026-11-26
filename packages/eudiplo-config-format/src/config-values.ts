@@ -161,21 +161,31 @@ export interface ConfigPlaceholder {
  * Reads the values of a configuration file without an environment: the
  * escaped form becomes `${`, and each placeholder is left as it is and
  * listed, also one with a default.
+ *
+ * @param escapes `none` for a file without an escaped form (a `kms.json`):
+ * the values stay as they are and only the placeholders are listed.
  */
-export function readConfigFileValues<T>(input: T): {
+export function readConfigFileValues<T>(
+    input: T,
+    escapes: Exclude<PlaceholderEscapes, "keep"> = "resolve",
+): {
     value: T;
     placeholders: ConfigPlaceholder[];
 } {
     const placeholders: ConfigPlaceholder[] = [];
     const value = mapStrings(input, (text, path) =>
-        replacePlaceholders(text, (match) => {
-            placeholders.push({
-                path,
-                placeholder: match,
-                whole: match === text,
-            });
-            return undefined;
-        }),
+        replacePlaceholders(
+            text,
+            (match) => {
+                placeholders.push({
+                    path,
+                    placeholder: match,
+                    whole: match === text,
+                });
+                return undefined;
+            },
+            escapes,
+        ),
     );
     return { value, placeholders };
 }
