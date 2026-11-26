@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -58,6 +59,14 @@ setGlobalDispatcher(
 const UPSTREAM_ISSUER = "http://mock-keycloak:8080/realms/test";
 const UPSTREAM_CLIENT_ID = "eudiplo-chained";
 const UPSTREAM_CLIENT_SECRET = "test-secret";
+
+/**
+ * The secret policy of this suite lets tenant `haip` name environment
+ * variables starting with `E2E_HAIP_` as secret references.
+ */
+const SECRET_ENV = "E2E_HAIP_UPSTREAM_SECRET";
+const SECRET_VALUE = "upstream-secret-from-env";
+const MISSING_ENV = "E2E_HAIP_NOT_SET";
 
 /**
  * Sets up nock mocks for the upstream OIDC provider
@@ -180,9 +189,22 @@ describe("Issuance - Chained AS Flow", () => {
     let publicUrl: string;
     let sessionStore: SessionStore;
 
+    let policyDir: string;
+
     beforeAll(async () => {
         // Delete the database
         rmSync("../../tmp/service.db", { force: true });
+
+        // Read when the app starts. A literal client secret stays a literal.
+        policyDir = mkdtempSync(join(tmpdir(), "eudiplo-chained-policy-"));
+        const policyFile = join(policyDir, "secret-policy.json");
+        writeFileSync(
+            policyFile,
+            JSON.stringify({ tenants: { haip: { env: ["E2E_HAIP_*"] } } }),
+        );
+        process.env.SECRET_POLICY_FILE = policyFile;
+        process.env[SECRET_ENV] = SECRET_VALUE;
+        delete process.env[MISSING_ENV];
 
         const moduleFixture: TestingModule = await Test.createTestingModule({
             imports: [AppModule],
@@ -299,10 +321,14 @@ describe("Issuance - Chained AS Flow", () => {
 
     afterAll(async () => {
         await app?.close();
+        delete process.env.SECRET_POLICY_FILE;
+        delete process.env[SECRET_ENV];
+        rmSync(policyDir, { recursive: true, force: true });
     });
 
     async function configureChainedAs(
         refreshTokenEnabled = false,
+        upstreamClientSecret = UPSTREAM_CLIENT_SECRET,
     ): Promise<void> {
         // First get the current issuance config
         const currentConfigResponse = await request(app.getHttpServer())
@@ -328,7 +354,7 @@ describe("Issuance - Chained AS Flow", () => {
                         upstream: {
                             issuer: UPSTREAM_ISSUER,
                             clientId: UPSTREAM_CLIENT_ID,
-                            clientSecret: UPSTREAM_CLIENT_SECRET,
+                            clientSecret: upstreamClientSecret,
                             scopes: ["openid", "profile", "email"],
                         },
                         token: {
@@ -569,6 +595,146 @@ describe("Issuance - Chained AS Flow", () => {
             refreshedTokenResponse.body.access_token,
         );
         expect(refreshedTokenPayload.issuer_state).toBeDefined();
+    });
+
+    /** PAR and authorize as a wallet; returns the state of the upstream redirect. */
+    async function startChainedLogin(): Promise<string> {
+        const parResponse = await request(app.getHttpServer())
+            .post("/issuers/haip/chained-as/par")
+            .trustLocalhost()
+            .send({
+                response_type: "code",
+                client_id: "test-wallet",
+                redirect_uri: "http://wallet.example.com/callback",
+                code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+                code_challenge_method: "S256",
+            })
+            .expect(201);
+        const authorizeResponse = await request(app.getHttpServer())
+            .get("/issuers/haip/chained-as/authorize")
+            .query({
+                client_id: "test-wallet",
+                request_uri: parResponse.body.request_uri,
+            })
+            .trustLocalhost()
+            .redirects(0)
+            .expect(302);
+        return new URL(authorizeResponse.headers.location).searchParams.get(
+            "state",
+        )!;
+    }
+
+    /** The bodies of the upstream token requests, answered with tokens. */
+    function captureUpstreamTokenRequests(): URLSearchParams[] {
+        const bodies: URLSearchParams[] = [];
+        nock(UPSTREAM_ISSUER)
+            .post("/protocol/openid-connect/token", (body) => {
+                bodies.push(new URLSearchParams(body));
+                return true;
+            })
+            .reply(200, {
+                access_token: "mock-upstream-access-token",
+                token_type: "Bearer",
+                expires_in: 3600,
+                id_token: createFakeIdToken({ sub: "referenced-secret-user" }),
+            })
+            .persist();
+        return bodies;
+    }
+
+    test("sends the value of a secret reference as the upstream client secret", async () => {
+        setupUpstreamOidcMocks();
+        const tokenRequests = captureUpstreamTokenRequests();
+        await configureChainedAs(false, `\${env:${SECRET_ENV}}`);
+
+        const upstreamState = await startChainedLogin();
+        const callbackResponse = await request(app.getHttpServer())
+            .get("/issuers/haip/chained-as/callback")
+            .query({ code: "upstream-auth-code", state: upstreamState })
+            .trustLocalhost()
+            .redirects(0)
+            .expect(302);
+
+        expect(tokenRequests).toHaveLength(1);
+        expect(tokenRequests[0].get("client_id")).toBe(UPSTREAM_CLIENT_ID);
+        expect(tokenRequests[0].get("client_secret")).toBe(SECRET_VALUE);
+        expect(tokenRequests[0].get("code")).toBe("upstream-auth-code");
+
+        const walletRedirect = new URL(callbackResponse.headers.location);
+        expect(walletRedirect.searchParams.get("error")).toBeNull();
+        const code = walletRedirect.searchParams.get("code");
+        expect(code).toEqual(expect.any(String));
+
+        const tokenResponse = await request(app.getHttpServer())
+            .post("/issuers/haip/chained-as/token")
+            .trustLocalhost()
+            .send({
+                grant_type: "authorization_code",
+                code,
+                redirect_uri: "http://wallet.example.com/callback",
+                code_verifier: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+            })
+            .expect(200);
+        expect(decodeJwt(tokenResponse.body.access_token)).toMatchObject({
+            upstream_iss: UPSTREAM_ISSUER,
+            upstream_sub: "referenced-secret-user",
+        });
+    });
+
+    test("ends the login with server_error when a referenced secret has no value", async () => {
+        setupUpstreamOidcMocks();
+        const tokenRequests = captureUpstreamTokenRequests();
+        // Granted, so it can be stored; the variable is not set.
+        await configureChainedAs(false, `\${env:${MISSING_ENV}}`);
+
+        const upstreamState = await startChainedLogin();
+        const callbackResponse = await request(app.getHttpServer())
+            .get("/issuers/haip/chained-as/callback")
+            .query({ code: "upstream-auth-code", state: upstreamState })
+            .trustLocalhost()
+            .redirects(0)
+            .expect(302);
+
+        const walletRedirect = new URL(callbackResponse.headers.location);
+        expect(walletRedirect.searchParams.get("error")).toBe("server_error");
+        expect(walletRedirect.searchParams.get("code")).toBeNull();
+        expect(tokenRequests).toHaveLength(0);
+    });
+
+    test("refuses to store a reference the tenant's secret policy does not grant", async () => {
+        const current = await request(app.getHttpServer())
+            .get("/issuer/config")
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .expect(200);
+        const response = await request(app.getHttpServer())
+            .post("/issuer/config")
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .send({
+                ...current.body,
+                authorizationServers: [
+                    {
+                        id: "chained-auth",
+                        type: "chained",
+                        enabled: true,
+                        upstream: {
+                            issuer: UPSTREAM_ISSUER,
+                            clientId: UPSTREAM_CLIENT_ID,
+                            // Not under E2E_HAIP_, and no setting of EUDIPLO.
+                            clientSecret: "${env:OTHER_UPSTREAM_SECRET}",
+                        },
+                        requireDPoP: false,
+                    },
+                ],
+            })
+            .expect(400);
+        expect(JSON.stringify(response.body)).toContain(
+            "authorizationServers[0].upstream.clientSecret",
+        );
+        expect(JSON.stringify(response.body)).toContain(
+            "no grant of tenant 'haip'",
+        );
     });
 
     test("disabled refresh tokens are neither advertised nor accepted in Chained AS flow", async () => {
