@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import type { AuditLogService } from "../../audit-log/audit-log.service.js";
+import { ResourceIdTaken } from "../../shared/domain/conflict-error.js";
 import { FederationTrustAnchorReferences } from "./application/federation-trust-anchor-references.js";
 import type { FederationTrustAnchorData } from "./domain/federation-trust-anchor-data.js";
+import { FederationTrustAnchorConflict } from "./domain/federation-trust-anchor-errors.js";
 import {
     FederationTrustAnchorInUseError,
     type FederationTrustAnchorReference,
@@ -23,7 +25,14 @@ function service(named: FederationTrustAnchorReference[]) {
         findForTenant: vi.fn(async (_tenant: string, id: string) =>
             id === anchor.id ? anchor : null,
         ),
-        findByEntityIds: vi.fn(async () => []),
+        findByEntityIds: vi.fn(
+            async (_tenant: string, _entityIds: string[]) =>
+                [] as FederationTrustAnchorData[],
+        ),
+        existsForTenant: vi.fn(
+            async (_tenant: string, id: string) => id === anchor.id,
+        ),
+        create: vi.fn(async (data: FederationTrustAnchorData) => data),
         save: vi.fn(async (data: FederationTrustAnchorData) => data),
         deleteForTenant: vi.fn(async () => undefined),
     } satisfies FederationTrustAnchorRepository;
@@ -50,6 +59,62 @@ const pid: FederationTrustAnchorReference = {
 };
 
 describe("FederationTrustAnchorService", () => {
+    const fresh = { ...anchor, id: "other", entityId: "https://ta2.example" };
+
+    it("refuses a taken ID before inserting, with ResourceIdTaken", async () => {
+        const { service: anchors, repo } = service([]);
+
+        await expect(
+            anchors.create("acme", { ...fresh, id: "eu" }),
+        ).rejects.toThrow(new ResourceIdTaken("Federation trust anchor", "eu"));
+        expect(repo.create).not.toHaveBeenCalled();
+    });
+
+    it("inserts a new anchor instead of saving it", async () => {
+        const { service: anchors, repo } = service([]);
+
+        await anchors.create("acme", fresh);
+
+        expect(repo.create).toHaveBeenCalledWith({
+            ...fresh,
+            tenantId: "acme",
+        });
+        expect(repo.save).not.toHaveBeenCalled();
+    });
+
+    it("passes on ResourceIdTaken from a concurrent create of the same ID", async () => {
+        const { service: anchors, repo } = service([]);
+        const taken = new ResourceIdTaken("Federation trust anchor", "other");
+        repo.create.mockRejectedValueOnce(taken);
+
+        await expect(anchors.create("acme", fresh)).rejects.toBe(taken);
+        // A taken ID needs no second entity ID lookup.
+        expect(repo.findByEntityIds).toHaveBeenCalledTimes(1);
+    });
+
+    it("passes on another database error when the entity ID is still free", async () => {
+        const { service: anchors, repo } = service([]);
+        const failure = new Error("connection lost");
+        repo.create.mockRejectedValueOnce(failure);
+
+        await expect(anchors.create("acme", fresh)).rejects.toBe(failure);
+        expect(repo.findByEntityIds).toHaveBeenCalledTimes(2);
+    });
+
+    it("names the entity ID a concurrent create registered first", async () => {
+        const { service: anchors, repo } = service([]);
+        repo.create.mockRejectedValueOnce(new Error("unique violation"));
+        repo.findByEntityIds
+            .mockResolvedValueOnce([])
+            .mockResolvedValueOnce([{ ...fresh, id: "winner" }]);
+
+        await expect(anchors.create("acme", fresh)).rejects.toThrow(
+            new FederationTrustAnchorConflict(
+                `Trust anchor ${fresh.entityId} is already registered as 'winner'`,
+            ),
+        );
+    });
+
     it("refuses to delete an anchor whose entity ID a configuration names", async () => {
         const { service: anchors, repo } = service([pid]);
 

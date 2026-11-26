@@ -1,4 +1,6 @@
 import type { Repository } from "typeorm";
+import { insertNew } from "../../../../database/insert-new.js";
+import { ResourceIdTaken } from "../../../../shared/domain/conflict-error.js";
 import type { AttributeProviderData } from "../domain/attribute-provider-data.js";
 import type { AttributeProviderEntity } from "../entities/attribute-provider.entity.js";
 import type { AttributeProviderRepository } from "../ports/attribute-provider.repository.js";
@@ -22,6 +24,23 @@ export class TypeOrmAttributeProviderRepository
     ): Promise<AttributeProviderData | null> {
         const config = await this.repository.findOneBy({ id, tenantId });
         return config ? this.toData(config) : null;
+    }
+
+    existsForTenant(tenantId: string, id: string): Promise<boolean> {
+        return this.repository.existsBy({ id, tenantId });
+    }
+
+    async create(
+        config: AttributeProviderData,
+    ): Promise<AttributeProviderData> {
+        return this.toData(
+            await insertNew<AttributeProviderEntity>(
+                this.repository,
+                config,
+                { id: config.id, tenantId: config.tenantId },
+                () => new ResourceIdTaken("Attribute provider", config.id),
+            ),
+        );
     }
 
     async save(config: AttributeProviderData): Promise<AttributeProviderData> {

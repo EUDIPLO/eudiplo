@@ -48,7 +48,7 @@ policy was set is read as a reference from then on.
 
 ## The policy file
 
-The policy file says which sources exist and what each tenant may name. An
+The policy file says which sources exist, what each tenant may name and, optionally, which variables the [placeholders of tenant folders](#placeholders-in-tenant-folders) may use. An
 `instance` key next to `tenants` holds the grants of the global `kms.json`
 ([KMS](kms.md#secret-references-in-a-tenant-kmsjson)). EUDIPLO reads it once at startup and does not start when it is
 invalid. It is not part of any tenant configuration and cannot be changed
@@ -122,6 +122,36 @@ tenant's own namespace (the tenant could read it).
 
 The credentials are environment variables, so the file holds no secret. Give
 EUDIPLO's Vault token or AppRole read access to the granted paths only.
+
+### Placeholders in tenant folders
+
+By default, a `${VAR}` placeholder in a file of a tenant folder may name any
+variable that is no setting of EUDIPLO and no cloud credential of the instance
+([variables a file can use](../reference/config-bundle-format.md#variables-a-file-can-use)).
+That deny-list cannot know your own secrets. With `templates.tenant`, the
+files of every tenant folder may name only the variables you list:
+
+```json
+{
+    "templates": { "tenant": ["PUBLIC_URL", "SHOP_*"] }
+}
+```
+
+- An entry is a variable name or a prefix ending in `*`. A prefix never covers
+  the cloud credentials of the instance (`AWS_SECRET_ACCESS_KEY` and the
+  others in the table linked above); list one by name to allow it.
+- Settings of EUDIPLO keep their own rules: `PUBLIC_URL` is always available,
+  the others never, listed or not.
+- A file that names a variable not on the list fails the import of its tenant,
+  as any refused placeholder does; other tenants continue.
+- It applies to the files of tenant folders read by the backend. The `kms.json`
+  of a tenant keeps `KMS_TENANT_VARIABLES`, the global `kms.json` its own
+  rules, and the CLI resolves placeholders of a folder it sends from its own
+  environment (`--allow-env`).
+- `templates` needs `tenant`; `["*"]` writes out the default rule.
+- Without `templates`, the default above applies, as in earlier versions.
+- A policy file set only for `templates` also turns secret references on:
+  with no grants, every [reference](#reference-syntax) is then refused.
 
 ## When a value is read
 

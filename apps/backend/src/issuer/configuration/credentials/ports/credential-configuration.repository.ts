@@ -23,6 +23,20 @@ export interface CredentialConfigurationRepository {
         tenantId: string,
         id: string,
     ): Promise<CredentialConfiguration>;
+    /** Whether the tenant has a configuration with this ID, without loading it. */
+    existsForTenant(tenantId: string, id: string): Promise<boolean>;
+    /**
+     * Stores a new configuration; never replaces a stored one, also not
+     * under concurrent creates of the same ID.
+     * @throws ResourceIdTaken when the tenant has a configuration with this ID.
+     */
+    create(
+        config: Partial<CredentialConfiguration> & {
+            id: string;
+            tenantId: string;
+        },
+    ): Promise<CredentialConfiguration>;
+    /** Stores a configuration, replacing a stored one with the same ID. */
     save(
         config: Partial<CredentialConfiguration> & {
             id: string;

@@ -31,6 +31,7 @@ import {
 } from "../../crypto/key/cert/cert.service.js";
 import { KeyChainService } from "../../crypto/key/key-chain.service.js";
 import { KeyUsageType } from "../../crypto/key/types/key-usage-type.js";
+import { insertNew } from "../../database/insert-new.js";
 import { ConfigImportService } from "../../platform/config-import/config-import.service.js";
 import {
     ConfigImportOrchestratorService,
@@ -178,6 +179,8 @@ export class TrustListService {
                 id: values.id,
             }))
         ) {
+            // Checked before the list is built and signed for a clear
+            // answer; the insert decides between concurrent creates.
             throw new ResourceIdTaken("Trust list", values.id);
         }
         return this.buildAndSaveTrustList(values, tenant);
@@ -450,7 +453,14 @@ export class TrustListService {
         );
         trustList.jwt = await this.generateJwt(trustList);
         if (!previous) {
-            return this.trustListRepo.save(trustList);
+            // Inserted, never saved: a concurrent create of the same ID must
+            // not replace the stored list. Folder imports delete first.
+            return insertNew(
+                this.trustListRepo,
+                trustList,
+                { tenantId: trustList.tenantId, id: trustList.id },
+                () => new ResourceIdTaken("Trust list", trustList.id),
+            );
         }
 
         const published = await this.publishNextVersion(previous, {

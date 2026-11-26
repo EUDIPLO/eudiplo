@@ -108,6 +108,79 @@ describe("configuration variable scope", () => {
         }
     });
 
+    it("lets the secret policy's allow-list decide for the files of a tenant folder", () => {
+        const allowed = ["SHOP_*", "PARTNER_TOKEN", "AWS_SECRET_ACCESS_KEY"];
+        expect(
+            refusedConfigVariable("SHOP_URL", "tenant", undefined, allowed),
+        ).toBeUndefined();
+        expect(
+            refusedConfigVariable(
+                "PARTNER_TOKEN",
+                "tenant",
+                undefined,
+                allowed,
+            ),
+        ).toBeUndefined();
+        // Anything not listed, which the deny-list let through.
+        expect(
+            refusedConfigVariable("WEBHOOK_KEY", "tenant", undefined, allowed),
+        ).toContain("not listed in templates.tenant of the secret policy");
+        expect(
+            refusedConfigVariable("PARTNER", "tenant", undefined, allowed),
+        ).toBeDefined();
+        // A cloud credential only by name, never by a prefix.
+        expect(
+            refusedConfigVariable(
+                "AWS_SECRET_ACCESS_KEY",
+                "tenant",
+                undefined,
+                allowed,
+            ),
+        ).toBeUndefined();
+        expect(
+            refusedConfigVariable("AWS_SESSION_TOKEN", "tenant", undefined, [
+                "AWS_*",
+            ]),
+        ).toBeDefined();
+        // An empty list refuses every variable of the operator.
+        expect(
+            refusedConfigVariable("WEBHOOK_KEY", "tenant", undefined, []),
+        ).toContain("not listed in templates.tenant");
+        // `*` alone is the default rule, written out.
+        expect(
+            refusedConfigVariable("ANY_VAR", "tenant", undefined, ["*"]),
+        ).toBeUndefined();
+        expect(
+            refusedConfigVariable(
+                "AWS_SECRET_ACCESS_KEY",
+                "tenant",
+                undefined,
+                ["*"],
+            ),
+        ).toBeDefined();
+        // EUDIPLO's settings keep their own scope, listed or not.
+        expect(
+            refusedConfigVariable("MASTER_SECRET", "tenant", undefined, [
+                "MASTER_SECRET",
+            ]),
+        ).toContain("setting of EUDIPLO itself");
+        expect(
+            refusedConfigVariable("PUBLIC_URL", "tenant", undefined, []),
+        ).toBeUndefined();
+        // Only the files of tenant folders: kms.json files keep their rules.
+        expect(
+            refusedConfigVariable("WEBHOOK_KEY", "global", undefined, []),
+        ).toBeUndefined();
+        expect(
+            refusedConfigVariable(
+                "WEBHOOK_KEY",
+                "tenant-kms",
+                new Set(["WEBHOOK_KEY"]),
+                [],
+            ),
+        ).toBeUndefined();
+    });
+
     it("refuses only the listed cloud credentials, not every variable with their prefix", () => {
         for (const name of [
             "AZURE_TENANT_ID",

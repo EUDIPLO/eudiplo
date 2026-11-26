@@ -374,15 +374,17 @@ The variables that configure EUDIPLO itself
 configuration files, so that a file cannot hand a secret such as
 `MASTER_SECRET` to a URL it names. The same holds in the files of a tenant
 folder other than `kms.json` for the credentials the AWS SDK and the Azure
-identity library read from the environment for the instance:
+identity library read from the environment for the instance, unless the
+operator's [secret policy](../operate/secret-references.md#placeholders-in-tenant-folders)
+lists one by name:
 
 | Variable                                   | Tenant folder files | Tenant `kms.json`                               | Global `kms.json` |
 | ------------------------------------------ | ------------------- | ----------------------------------------------- | ----------------- |
 | `PUBLIC_URL`                               | resolved            | resolved                                        | resolved          |
 | `VAULT_ADDR`, `VAULT_TOKEN`, `AWS_REGION`  | refused             | refused                                         | resolved          |
 | Every other variable of EUDIPLO            | refused             | refused                                         | refused           |
-| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_CONTAINER_AUTHORIZATION_TOKEN`, `AZURE_CLIENT_SECRET`, `AZURE_CLIENT_CERTIFICATE_PASSWORD`, `AZURE_PASSWORD` | refused | resolved only if listed in `KMS_TENANT_VARIABLES` | resolved |
-| Your own variables                         | resolved            | resolved only if listed in `KMS_TENANT_VARIABLES` | resolved        |
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_CONTAINER_AUTHORIZATION_TOKEN`, `AZURE_CLIENT_SECRET`, `AZURE_CLIENT_CERTIFICATE_PASSWORD`, `AZURE_PASSWORD` | refused, unless `templates.tenant` lists it by name | resolved only if listed in `KMS_TENANT_VARIABLES` | resolved |
+| Your own variables                         | resolved, or only if listed in `templates.tenant` of the [secret policy](../operate/secret-references.md#placeholders-in-tenant-folders) | resolved only if listed in `KMS_TENANT_VARIABLES` | resolved        |
 
 A file that names a refused variable is rejected, with every value of
 `CONFIG_VARIABLE_STRICT` and also for `${VAR:default}`: in a tenant folder the
@@ -393,7 +395,8 @@ tenant `kms.json` with `${VAR:default}` fails the import in the same way:
 `kms.json` has no default form. So does one with a placeholder in
 `defaultProvider` or the `id` of a provider, whatever the variable. To
 use the value of a refused variable, set a variable of your own to the same
-value and name that one.
+value and name that one; if the secret policy sets `templates.tenant`, list
+that variable there too.
 
 ### Placeholders and the API
 

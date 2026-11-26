@@ -7,6 +7,7 @@ import { AttributeProviderEntity } from "../../src/issuer/configuration/attribut
 import type { AttributeProviderRepository } from "../../src/issuer/configuration/attribute-provider/ports/attribute-provider.repository.js";
 import { TypeOrmWebhookEndpointRepository } from "../../src/issuer/configuration/webhook-endpoint/adapters/typeorm-webhook-endpoint.repository.js";
 import { WebhookEndpointEntity } from "../../src/issuer/configuration/webhook-endpoint/entities/webhook-endpoint.entity.js";
+import { ResourceIdTaken } from "../../src/shared/domain/conflict-error.js";
 
 export const endpointEntities = [
     TenantEntity,
@@ -113,6 +114,34 @@ export function endpointRepositoryContract(
             await expect(
                 adapter.deleteForTenant("tenant-a", config.id),
             ).resolves.toBeUndefined();
+        });
+
+        it("creates once and refuses a second create of the same ID in the tenant", async () => {
+            const label =
+                kind === "attribute-provider"
+                    ? "Attribute provider"
+                    : "Webhook endpoint";
+            expect(await adapter.existsForTenant("tenant-a", config.id)).toBe(
+                false,
+            );
+            const created = await adapter.create(config);
+            expect(created).not.toBeInstanceOf(entity);
+            expect(created).toMatchObject(config);
+            expect(await adapter.existsForTenant("tenant-a", config.id)).toBe(
+                true,
+            );
+
+            await expect(
+                adapter.create({ ...config, name: "Second" }),
+            ).rejects.toThrow(new ResourceIdTaken(label, config.id));
+            expect(
+                await adapter.findForTenant("tenant-a", config.id),
+            ).toMatchObject({ name: "Endpoint" });
+            // The same ID in another tenant is free.
+            await adapter.create({ ...config, tenantId: "tenant-b" });
+            expect(await adapter.existsForTenant("tenant-b", config.id)).toBe(
+                true,
+            );
         });
 
         it("preserves merged descriptions and clears explicit nulls on save", async () => {

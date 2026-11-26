@@ -1,13 +1,18 @@
 import { resolve } from "node:path";
 import { INestApplication } from "@nestjs/common";
+import { getRepositoryToken } from "@nestjs/typeorm";
 import request from "supertest";
 import { App } from "supertest/types";
 import { Agent, setGlobalDispatcher } from "undici";
-import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import { AttributeProviderService } from "../../src/issuer/configuration/attribute-provider/attribute-provider.service.js";
+import { ATTRIBUTE_PROVIDER_REPOSITORY } from "../../src/issuer/configuration/attribute-provider/ports/attribute-provider.repository.js";
+import { CREDENTIAL_CONFIGURATION_REPOSITORY } from "../../src/issuer/configuration/credentials/ports/credential-configuration.repository.js";
 import { IssuanceDto } from "../../src/issuer/configuration/issuance/dto/issuance.dto.js";
 import { IssuanceService } from "../../src/issuer/configuration/issuance/issuance.service.js";
+import { WEBHOOK_ENDPOINT_REPOSITORY } from "../../src/issuer/configuration/webhook-endpoint/ports/webhook-endpoint.repository.js";
 import { WebhookEndpointService } from "../../src/issuer/configuration/webhook-endpoint/webhook-endpoint.service.js";
+import { PresentationConfig } from "../../src/verifier/presentations/entities/presentation-config.entity.js";
 import {
     IssuanceTestContext,
     readConfig,
@@ -466,6 +471,104 @@ describe("Issuance - Configuration", () => {
                 .set("Authorization", `Bearer ${authToken}`)
                 .expect(200);
             expect(stored.body.name).toBe("Original");
+        });
+
+        /**
+         * Sends two creates of the same new ID at once, with the services'
+         * early ID check answering "free" to both, as when both requests
+         * check before either is stored: one is stored (201), the other
+         * refused (409), and the stored resource is the one from the 201.
+         * @param preCheck - The repository and method of the early check.
+         */
+        async function createConcurrently(
+            path: string,
+            bodies: [Record<string, unknown>, Record<string, unknown>],
+            field: string,
+            preCheck: [token: unknown, method: string],
+        ) {
+            const repository = app.get(preCheck[0] as string, {
+                strict: false,
+            });
+            const check = vi
+                .spyOn(repository, preCheck[1] as never)
+                .mockResolvedValueOnce(false as never)
+                .mockResolvedValueOnce(false as never);
+            const responses = await Promise.all(
+                bodies.map((body) =>
+                    api()
+                        .post(path)
+                        .trustLocalhost()
+                        .set("Authorization", `Bearer ${authToken}`)
+                        .send(body)
+                        .then((res) => res),
+                ),
+            );
+            check.mockRestore();
+            expect(responses.map((res) => res.status).sort()).toEqual([
+                201, 409,
+            ]);
+            const loser = responses.find((r) => r.status === 409)!;
+            expect(loser.body.message).toMatch(/already exists/);
+            const winner = bodies[responses.findIndex((r) => r.status === 201)];
+            const stored = await api()
+                .get(`${path}/${String(bodies[0].id)}`)
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .expect(200);
+            expect(stored.body[field]).toBe(winner[field]);
+        }
+
+        test("two concurrent credential configuration creates store one", async () => {
+            const existing = await api()
+                .get("/issuer/credentials/citizen")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .expect(200);
+            const { tenantId: _tenantId, ...body } = existing.body;
+            await createConcurrently(
+                "/issuer/credentials",
+                [
+                    { ...body, id: "race-cred", description: "First" },
+                    { ...body, id: "race-cred", description: "Second" },
+                ],
+                "description",
+                [CREDENTIAL_CONFIGURATION_REPOSITORY, "existsForTenant"],
+            );
+        });
+
+        test("two concurrent presentation configuration creates store one", async () => {
+            const body = readConfig<Record<string, unknown>>(
+                resolve(__dirname, "../fixtures/haip/presentation/pid.json"),
+            );
+            await createConcurrently(
+                "/verifier/config",
+                [
+                    { ...body, id: "race-pid", description: "First" },
+                    { ...body, id: "race-pid", description: "Second" },
+                ],
+                "description",
+                [getRepositoryToken(PresentationConfig), "existsBy"],
+            );
+        });
+
+        test.each([
+            ["/issuer/webhook-endpoints", WEBHOOK_ENDPOINT_REPOSITORY],
+            ["/issuer/attribute-providers", ATTRIBUTE_PROVIDER_REPOSITORY],
+        ])("two concurrent %s creates store one", async (path, token) => {
+            const body = {
+                id: "race-id",
+                url: "https://endpoint.example.com/hook",
+                auth: { type: "none" },
+            };
+            await createConcurrently(
+                path,
+                [
+                    { ...body, name: "First" },
+                    { ...body, name: "Second" },
+                ],
+                "name",
+                [token, "existsForTenant"],
+            );
         });
     });
 
