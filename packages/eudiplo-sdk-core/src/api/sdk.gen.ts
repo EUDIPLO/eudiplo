@@ -412,7 +412,7 @@ export const keyChainControllerUpdate = <ThrowOnError extends boolean = true>(op
 /**
  * Export a key chain in config-import format
  *
- * Returns the key chain in the same format used by config import JSON files. For keys held in the database (`db` provider) the response includes the private key; for external KMS providers only the public key is returned because the private key never leaves the KMS. Requires the `tenant:admin` or `tenants:manage` role.
+ * Returns the key chain in the same format used by config import JSON files. For keys held in the database (`db` provider) the response includes the private key; for external KMS providers only the public key is returned because the private key never leaves the KMS. As in every configuration file, a `${` in a stored value is written as `$${`, which a config import reads as `${` and `POST /api/key-chain/import` stores as sent. Requires the `tenant:admin` or `tenants:manage` role.
  */
 export const keyChainControllerExport = <ThrowOnError extends boolean = true>(options: Options<KeyChainControllerExportData, ThrowOnError>): RequestResult<KeyChainControllerExportResponses, KeyChainControllerExportErrors, ThrowOnError> => (options.client ?? client).get<KeyChainControllerExportResponses, KeyChainControllerExportErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
@@ -716,7 +716,7 @@ export const trustListControllerUpdateTrustList = <ThrowOnError extends boolean 
 });
 
 /**
- * Exports the trust list in the format accepted by create and config import
+ * Exports the trust list in the format of configuration files: a `${` in a stored value is written as `$${`, which a create request stores as sent
  */
 export const trustListControllerExportTrustList = <ThrowOnError extends boolean = true>(options: Options<TrustListControllerExportTrustListData, ThrowOnError>): RequestResult<TrustListControllerExportTrustListResponses, TrustListControllerExportTrustListErrors, ThrowOnError> => (options.client ?? client).get<TrustListControllerExportTrustListResponses, TrustListControllerExportTrustListErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],

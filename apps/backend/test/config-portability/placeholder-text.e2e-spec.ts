@@ -2,6 +2,7 @@ import { generateKeyPairSync } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { schemaUrl } from "@eudiplo/config-format/config-format.js";
 import type { INestApplication } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Test } from "@nestjs/testing";
@@ -65,11 +66,15 @@ describe("placeholder text in configuration stored through the API", () => {
         expect(document, `exported document of ${id}`).toBeDefined();
         return document;
     };
-    const writeFolderFile = (id: string, document: unknown) => {
+    const writeFolderFile = (
+        id: string,
+        document: unknown,
+        subfolder = "webhook-endpoints",
+    ) => {
         const folder = join(
             app.get(ConfigService).getOrThrow<string>("CONFIG_FOLDER"),
             tenantId,
-            "webhook-endpoints",
+            subfolder,
         );
         mkdirSync(folder, { recursive: true });
         writeFileSync(join(folder, `${id}.json`), JSON.stringify(document));
@@ -368,6 +373,120 @@ describe("placeholder text in configuration stored through the API", () => {
         expect((await exportedDocument("asset")).spec.name).toBe(
             "$${OTHER_TENANT_API_KEY}.png",
         );
+    });
+
+    // The bare exports of these two endpoints are files of a tenant folder
+    // too (keys-and-certificates.md, trust-lists.md).
+    const createKeyChain = async (usageType: string, description: string) =>
+        (
+            await request(http())
+                .post("/key-chain")
+                .set("Authorization", authorization)
+                .send({ usageType, type: "standalone", description })
+                .expect(201)
+        ).body.id as string;
+
+    it("escapes the text of a key chain export, and the folder gives it back", async () => {
+        const id = await createKeyChain(
+            "attestation",
+            "${OTHER_TENANT_API_KEY}",
+        );
+        const exported = (
+            await request(http())
+                .get(`/key-chain/${id}/export`)
+                .set("Authorization", authorization)
+                .expect(200)
+        ).body;
+        expect(exported.description).toBe("$${OTHER_TENANT_API_KEY}");
+
+        // Changed in the file, so that the import has to write it.
+        exported.description = `${exported.description} v2`;
+        writeFolderFile(id, exported, "key-chains");
+        await app
+            .get(ConfigFolderBundleService)
+            .applyTenantFolder(tenantId, "upsert");
+        const keyChain = (
+            await request(http())
+                .get(`/key-chain/${id}`)
+                .set("Authorization", authorization)
+                .expect(200)
+        ).body;
+        expect(keyChain.description).toBe("${OTHER_TENANT_API_KEY} v2");
+        expect(JSON.stringify(keyChain)).not.toContain(SECRET);
+    });
+
+    it("escapes the text of a trust list export, and the folder gives it back", async () => {
+        const keyChainId = await createKeyChain("trustList", "List signer");
+        const id = "texty-list";
+        await request(http())
+            .post("/trust-list")
+            .set("Authorization", authorization)
+            .send({
+                id,
+                keyChainId,
+                description: "${OTHER_TENANT_API_KEY}",
+                entities: [
+                    {
+                        type: "internal",
+                        issuerKeyChainId: await createKeyChain(
+                            "attestation",
+                            "Issuer",
+                        ),
+                        revocationKeyChainId: await createKeyChain(
+                            "statusList",
+                            "Revocation",
+                        ),
+                        info: {
+                            name: "Provider ${OTHER_TENANT_API_KEY}",
+                            contactUri: "info@example.com",
+                            website: "https://example.com/",
+                        },
+                    },
+                ],
+            })
+            .expect((response) =>
+                expect(response.status, JSON.stringify(response.body)).toBe(
+                    201,
+                ),
+            );
+        const exported = (
+            await request(http())
+                .get(`/trust-list/${id}/export`)
+                .set("Authorization", authorization)
+                .expect(200)
+        ).body;
+        expect(exported.description).toBe("$${OTHER_TENANT_API_KEY}");
+        expect(exported.entities[0].info.name).toBe(
+            "Provider $${OTHER_TENANT_API_KEY}",
+        );
+
+        exported.description = `${exported.description} v2`;
+        // A bare trust list file is read as TrustList v1, which has no
+        // `website`, so the export goes into the folder as a document.
+        writeFolderFile(
+            id,
+            {
+                $schema: schemaUrl("TrustList"),
+                kind: "TrustList",
+                metadata: { generation: 1 },
+                spec: exported,
+            },
+            "trust-lists",
+        );
+        await app
+            .get(ConfigFolderBundleService)
+            .applyTenantFolder(tenantId, "upsert");
+        const trustList = (
+            await request(http())
+                .get(`/trust-list/${id}`)
+                .set("Authorization", authorization)
+                .expect(200)
+        ).body;
+        expect(trustList.description).toBe("${OTHER_TENANT_API_KEY} v2");
+        expect(JSON.stringify(trustList)).toContain(
+            '"name":"Provider ${OTHER_TENANT_API_KEY}"',
+        );
+        expect(JSON.stringify(trustList)).not.toContain(SECRET);
     });
 
     it("keeps the placeholder an export writes for a client secret, and escapes the client's text", async () => {

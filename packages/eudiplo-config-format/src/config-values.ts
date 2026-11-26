@@ -5,6 +5,21 @@ export interface PlaceholderIssue {
 }
 const isVariableChar = (char: string) =>
     (char >= "A" && char <= "Z") || (char >= "0" && char <= "9") || char === "_";
+const isLower = (char: string) => char >= "a" && char <= "z";
+const isSourceChar = (char: string) =>
+    isLower(char) || (char >= "0" && char <= "9") || char === "-";
+/**
+ * The characters of the locator of a secret reference. `$`, `{`, `}` and
+ * whitespace are not among them, so a locator never holds another
+ * placeholder and the scan stays linear.
+ */
+const LOCATOR_CHARS = new Set(
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._~/:@+=,#-",
+);
+/** What the scanner found between `${` and `}`. */
+type PlaceholderToken =
+    | { type: "variable"; match: string; variable: string; fallback?: string }
+    | { type: "reference"; match: string; source: string; locator: string };
 /**
  * What becomes of `$${`, the escaped form of a literal `${`:
  *
@@ -21,15 +36,15 @@ const escapeText = (text: string) => text.replaceAll("${", () => "$${");
  * `/\$\{([A-Z0-9_]+)(?::([^}]*))?\}/g`, which backtracks polynomially on
  * inputs like repeated `${A:` without a closing brace. A `${` that follows a
  * `$` is no placeholder but the escaped form of these two characters.
+ *
+ * It also finds secret references, `${source:locator}` with a lowercase
+ * source (see {@link parseSecretReference}). No reader fills them in, but in a
+ * file sent on (`keep`) they stay references instead of becoming text.
  */
 function replacePlaceholders(
     input: string,
     /** The value of the placeholder, or undefined to leave it as it is. */
-    replace: (
-        match: string,
-        variable: string,
-        fallback?: string,
-    ) => string | undefined,
+    replace: (token: PlaceholderToken) => string | undefined,
     escapes: PlaceholderEscapes = "resolve",
 ): string {
     let output = "";
@@ -52,23 +67,57 @@ function replacePlaceholders(
             start = input.indexOf("${", copied);
             continue;
         }
-        let cursor = start + 2;
-        while (cursor < input.length && isVariableChar(input[cursor])) cursor++;
-        const variable = input.slice(start + 2, cursor);
+        let token: PlaceholderToken | undefined;
         let end = -1;
-        let fallback: string | undefined;
-        if (variable && input[cursor] === "}") end = cursor;
-        else if (variable && input[cursor] === ":" && !noClosingBrace) {
-            end = input.indexOf("}", cursor + 1);
-            if (end === -1) noClosingBrace = true;
-            else fallback = input.slice(cursor + 1, end);
+        let cursor = start + 2;
+        if (isLower(input[cursor] ?? "")) {
+            // A reference: the source, a colon, the locator, a closing brace.
+            while (cursor < input.length && isSourceChar(input[cursor]))
+                cursor++;
+            const source = input.slice(start + 2, cursor);
+            if (input[cursor] === ":") {
+                const locatorStart = cursor + 1;
+                cursor = locatorStart;
+                while (
+                    cursor < input.length &&
+                    LOCATOR_CHARS.has(input[cursor])
+                )
+                    cursor++;
+                if (cursor > locatorStart && input[cursor] === "}") {
+                    end = cursor;
+                    token = {
+                        type: "reference",
+                        match: input.slice(start, end + 1),
+                        source,
+                        locator: input.slice(locatorStart, end),
+                    };
+                }
+            }
+        } else {
+            while (cursor < input.length && isVariableChar(input[cursor]))
+                cursor++;
+            const variable = input.slice(start + 2, cursor);
+            let fallback: string | undefined;
+            if (variable && input[cursor] === "}") end = cursor;
+            else if (variable && input[cursor] === ":" && !noClosingBrace) {
+                end = input.indexOf("}", cursor + 1);
+                if (end === -1) noClosingBrace = true;
+                else fallback = input.slice(cursor + 1, end);
+            }
+            if (end !== -1)
+                token = {
+                    type: "variable",
+                    match: input.slice(start, end + 1),
+                    variable,
+                    fallback,
+                };
         }
-        if (end === -1) {
+        if (!token) {
             start = input.indexOf("${", start + 2);
             continue;
         }
-        const match = input.slice(start, end + 1);
-        const replacement = replace(match, variable, fallback);
+        const { match } = token;
+        const replacement = replace(token);
         text += input.slice(copied, start);
         if (replacement !== undefined) text += replacement;
         else if (escapes === "keep") {
@@ -125,7 +174,10 @@ export function resolveConfigVariables<T>(
     const value = mapStrings(input, (text, path) =>
         replacePlaceholders(
             text,
-            (match, variable: string, fallback?: string) => {
+            (token) => {
+                // A secret reference is resolved when it is used, not here.
+                if (token.type === "reference") return undefined;
+                const { variable, fallback } = token;
                 const found = env[variable];
                 if (found !== undefined && found !== "") return found;
                 if (fallback !== undefined) return fallback;
@@ -157,10 +209,19 @@ export interface ConfigPlaceholder {
     /** Whether the placeholder is the whole value. */
     whole: boolean;
 }
+export interface ConfigReference {
+    /** JSON pointer of the value that holds the reference. */
+    path: string;
+    /** The reference as written, for example `${vault:kv/app#token}`. */
+    reference: string;
+    /** Whether the reference is the whole value. */
+    whole: boolean;
+}
 /**
  * Reads the values of a configuration file without an environment: the
  * escaped form becomes `${`, and each placeholder is left as it is and
- * listed, also one with a default.
+ * listed, also one with a default. Secret references are left as they are
+ * and listed apart, in `references`; `$${vault:…}` is text, not one.
  *
  * @param escapes `none` for a file without an escaped form (a `kms.json`):
  * the values stay as they are and only the placeholders are listed.
@@ -171,23 +232,162 @@ export function readConfigFileValues<T>(
 ): {
     value: T;
     placeholders: ConfigPlaceholder[];
+    references: ConfigReference[];
 } {
     const placeholders: ConfigPlaceholder[] = [];
+    const references: ConfigReference[] = [];
     const value = mapStrings(input, (text, path) =>
         replacePlaceholders(
             text,
-            (match) => {
-                placeholders.push({
-                    path,
-                    placeholder: match,
-                    whole: match === text,
-                });
+            ({ type, match }) => {
+                const whole = match === text;
+                if (type === "reference")
+                    references.push({ path, reference: match, whole });
+                else placeholders.push({ path, placeholder: match, whole });
                 return undefined;
             },
             escapes,
         ),
     );
-    return { value, placeholders };
+    return { value, placeholders, references };
+}
+/** The sources a secret reference can name in this release. */
+export const SECRET_REFERENCE_SOURCES = ["env", "vault", "required"] as const;
+/** Sources the grammar keeps for later releases. */
+const RESERVED_SOURCES = new Set(["aws-sm", "azure-kv"]);
+/** A secret reference, split into what its source needs to find the value. */
+export type SecretReference =
+    | { source: "env"; reference: string; variable: string }
+    | {
+          source: "vault";
+          reference: string;
+          /** The secrets engine mount, the first segment. */
+          mount: string;
+          /** The path of the secret below the mount, without `data/`. */
+          path: string;
+          /** The key inside the secret. */
+          field: string;
+          /** A KV version; the latest one when absent. */
+          version?: number;
+      }
+    | {
+          source: "required";
+          reference: string;
+          /** What the value is for; it never resolves. */
+          hint: string;
+      };
+export type SecretReferenceParse =
+    | { ok: true; reference: SecretReference }
+    | { ok: false; source: string; message: string };
+const ENV_VARIABLE = /^[A-Z0-9_]+$/;
+// No `@` or `#`: they end the path and the key.
+const VAULT_SEGMENT = /^[A-Za-z0-9._~+=,:-]+$/;
+const VAULT_FIELD = /^[A-Za-z0-9._-]+$/;
+const VAULT_VERSION = /^[1-9][0-9]{0,8}$/;
+/**
+ * Parses a value that is a secret reference as a whole:
+ * `${<source>:<locator>}` with a lowercase source and no default.
+ *
+ * - `${env:NAME}`: an environment variable of the backend.
+ * - `${vault:<mount>/<path>#<key>[@<version>]}`: a key of a KV secret;
+ *   colons inside the path are part of it.
+ * - `${required:<hint>}`: a value that must be supplied; it never resolves.
+ *
+ * Syntax only: a reference that parses is not one a file may use. Whoever
+ * resolves it checks first that the file's scope may name it (the
+ * operator's policy for the tenant or the instance), so that a tenant cannot
+ * send itself a setting of EUDIPLO or another tenant's secret.
+ *
+ * @returns undefined when `value` is no reference as a whole (text, a
+ * `${VAR}` template, or a reference inside a longer value), and an error for
+ * a reference that is malformed or names a source this release does not
+ * support.
+ */
+export function parseSecretReference(
+    value: string,
+): SecretReferenceParse | undefined {
+    let token: PlaceholderToken | undefined;
+    replacePlaceholders(value, (found) => {
+        token ??= found;
+        return undefined;
+    });
+    if (token?.type !== "reference" || token.match !== value) return undefined;
+    const { source, locator } = token;
+    // The message names the source, never the locator: a value written by
+    // mistake in place of a reference must not reach a log.
+    const invalid = (message: string): SecretReferenceParse => ({
+        ok: false,
+        source,
+        message,
+    });
+    switch (source) {
+        case "env":
+            return ENV_VARIABLE.test(locator)
+                ? {
+                      ok: true,
+                      reference: {
+                          source,
+                          reference: value,
+                          variable: locator,
+                      },
+                  }
+                : invalid(
+                      "an env reference names a variable of A-Z, 0-9 and _",
+                  );
+        case "vault": {
+            const hash = locator.indexOf("#");
+            if (hash === -1)
+                return invalid(
+                    "a vault reference names the key inside the secret after #",
+                );
+            const at = locator.indexOf("@", hash);
+            const field = locator.slice(hash + 1, at === -1 ? undefined : at);
+            const version = at === -1 ? undefined : locator.slice(at + 1);
+            const segments = locator.slice(0, hash).split("/");
+            if (
+                segments.length < 2 ||
+                segments.some(
+                    (segment) =>
+                        segment === "." ||
+                        segment === ".." ||
+                        !VAULT_SEGMENT.test(segment),
+                )
+            )
+                return invalid(
+                    "a vault reference is <mount>/<path>#<key>, with no empty, . or .. segment",
+                );
+            if (!VAULT_FIELD.test(field))
+                return invalid(
+                    "the key after # is made of A-Z, a-z, 0-9, ., _ and -",
+                );
+            if (version !== undefined && !VAULT_VERSION.test(version))
+                return invalid("the version after @ is a positive number");
+            return {
+                ok: true,
+                reference: {
+                    source,
+                    reference: value,
+                    mount: segments[0],
+                    path: segments.slice(1).join("/"),
+                    field,
+                    ...(version === undefined
+                        ? {}
+                        : { version: Number(version) }),
+                },
+            };
+        }
+        case "required":
+            return {
+                ok: true,
+                reference: { source, reference: value, hint: locator },
+            };
+        default:
+            return invalid(
+                RESERVED_SOURCES.has(source)
+                    ? `the source '${source}' is not available in this release`
+                    : `unknown source '${source}'; use one of ${SECRET_REFERENCE_SOURCES.join(", ")}`,
+            );
+    }
 }
 export interface ConfigChange {
     path: string;

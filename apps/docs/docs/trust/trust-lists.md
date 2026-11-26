@@ -122,7 +122,7 @@ EUDIPLO publishes the signed JWT at `GET /issuers/{tenantId}/trust-list/{id}` wi
 
 `DELETE` refuses a list that configurations still use ([Delete a trust list](#delete-a-trust-list)). In the Web Client, the page of a list shows the credential configurations (with `issuance:manage`) and the presentation configurations (with `presentation:manage` or `presentation:request`) that reference it, and the delete button (**Delete list**) says so instead of sending the request. The page does not show `walletProviderTrustLists` of the issuance configuration; check those as described in [Wallet and Key Attestation](attestation.md#1-provide-wallet-provider-trust-lists).
 
-To manage lists as files, put the same JSON into `config/<tenant>/trust-lists/` ([Configuration as Code](../operate/configuration-as-code.md)). `GET /api/trust-list/{id}/export` returns a list in this format; **Download configuration** in the Web Client saves it as a document with `$schema` and `spec` ([single resources](../reference/config-bundle-format.md#single-resources)).
+To manage lists as files, put them into `config/<tenant>/trust-lists/` as documents with `$schema` and `spec` ([Configuration as Code](../operate/configuration-as-code.md)): a file of the bare JSON is read as TrustList v1, which has no `website`. **Download configuration** in the Web Client saves a list as such a document ([single resources](../reference/config-bundle-format.md#single-resources)). `GET /api/trust-list/{id}/export` returns the bare JSON, written as a configuration file: a value that contained `${` reads `$${` in it, which `POST /api/trust-list` stores as sent ([placeholders and the API](../reference/config-bundle-format.md#placeholders-and-the-api)).
 
 ### Delete a trust list
 

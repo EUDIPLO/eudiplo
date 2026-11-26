@@ -1,7 +1,8 @@
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { CLOUD_CREDENTIAL_VARIABLES } from "../src/commands/config/validate/validator.js";
 import { runCli } from "../src/runtime.js";
 import type { CommandContext } from "../src/types.js";
 
@@ -353,6 +354,182 @@ describe("eudiplo config validate tenant(s)", () => {
         expect(output.stdout).not.toContain("super-secret-value");
     });
 
+    it("reads $${ in a tenant file as text, not as a placeholder", async () => {
+        const { context, output, cwd } = await createContext();
+        const tenantDir = join(cwd, "root");
+        await writeTenantInfo(tenantDir, { name: "Hook $${UNSET}" });
+
+        const code = await runCli(
+            ["config", "validate", "tenant", tenantDir],
+            context,
+        );
+
+        expect(code).toBe(0);
+        expect(output.stdout).not.toContain("Unresolved placeholder");
+        expect(output.stdout).not.toContain("UNSET");
+    });
+
+    it("reads $${ in a kms.json as a $ and a placeholder, which has no escaped form", async () => {
+        const { context, output, cwd } = await createContext();
+        const tenantDir = join(cwd, "root");
+        await writeTenantInfo(tenantDir, { name: "Root Tenant" });
+        await writeKms(tenantDir, "$${UNSET}");
+
+        const code = await runCli(
+            ["config", "validate", "tenant", tenantDir],
+            context,
+        );
+
+        expect(code).toBe(1);
+        expect(output.stdout).toContain("Unresolved placeholder ${UNSET}");
+    });
+
+    it("refuses the cloud credentials of the instance in a tenant file, with the backend's reason", async () => {
+        const { context, output, cwd } = await createContext();
+        // A value does not make the variable usable, nor does a default.
+        context.env.AWS_SECRET_ACCESS_KEY = "instance-credential";
+        const tenantDir = join(cwd, "root");
+        await writeTenantInfo(tenantDir, { name: "Root Tenant" });
+        await writeResource(tenantDir, "clients", "root.json", {
+            clientId: "root",
+            secret: "${AWS_SECRET_ACCESS_KEY}",
+            description: "${AZURE_CLIENT_SECRET:none}",
+            roles: ["issuance:manage"],
+        });
+
+        const code = await runCli(
+            ["config", "validate", "tenant", tenantDir, "--format", "json"],
+            context,
+        );
+
+        expect(code).toBe(1);
+        const [tenant] = JSON.parse(output.stdout).tenants;
+        expect(tenant.errors).toEqual([
+            {
+                file: "clients/root.json",
+                message:
+                    "${AWS_SECRET_ACCESS_KEY} holds the AWS credentials of the instance, which a file of a tenant folder cannot use",
+            },
+            {
+                file: "clients/root.json",
+                message:
+                    "${AZURE_CLIENT_SECRET} holds the Azure credentials of the instance, which a file of a tenant folder cannot use",
+            },
+        ]);
+        expect(output.stdout).not.toContain("instance-credential");
+    });
+
+    it("reports a refused variable without a value once, not also as unresolved", async () => {
+        const { context, output, cwd } = await createContext();
+        const tenantDir = join(cwd, "root");
+        await writeTenantInfo(tenantDir, { name: "${AWS_SESSION_TOKEN}" });
+
+        const code = await runCli(
+            ["config", "validate", "tenant", tenantDir],
+            context,
+        );
+
+        expect(code).toBe(1);
+        expect(output.stdout).toContain(
+            "${AWS_SESSION_TOKEN} holds the AWS credentials of the instance",
+        );
+        expect(output.stdout).not.toContain("Unresolved placeholder");
+    });
+
+    it("refuses the cloud credentials the backend refuses, and no others", async () => {
+        // The backend's list, read from its source: the CLI keeps a copy.
+        const source = await readFile(
+            resolve(
+                import.meta.dirname,
+                "../../backend/src/platform/config/config-variable-scope.ts",
+            ),
+            "utf8",
+        );
+        const block =
+            /CLOUD_CREDENTIAL_VARIABLES[^=]*=\s*new Map\(\[([\s\S]*?)\]\);/.exec(
+                source,
+            )?.[1];
+        const backend = [
+            ...(block ?? "").matchAll(/\["([A-Z0-9_]+)",\s*"([A-Za-z]+)"\]/g),
+        ].map(([, name, provider]) => [name, provider]);
+        expect(backend.length).toBeGreaterThan(0);
+        expect([...CLOUD_CREDENTIAL_VARIABLES]).toEqual(backend);
+    });
+
+    it("checks the variables of every tenant under a configuration root", async () => {
+        const { context, output, cwd } = await createContext();
+        await writeTenantInfo(join(cwd, "root"), { name: "Root Tenant" });
+        await writeResource(join(cwd, "root"), "clients", "x.json", {
+            clientId: "x",
+            secret: "${AWS_ACCESS_KEY_ID}",
+            roles: ["issuance:manage"],
+        });
+
+        const code = await runCli(
+            ["config", "validate", "tenants", cwd, "--format", "json"],
+            context,
+        );
+
+        expect(code).toBe(1);
+        const [tenant] = JSON.parse(output.stdout).tenants;
+        expect(tenant.errors[0].message).toContain("holds the AWS credentials");
+    });
+
+    it("warns that a tenant kms.json resolves only the variables the instance lists", async () => {
+        const { context, output, cwd } = await createContext();
+        context.env.SHOP_VAULT_TOKEN = "vault-token-value";
+        const tenantDir = join(cwd, "root");
+        await writeTenantInfo(tenantDir, { name: "Root Tenant" });
+        await writeKms(tenantDir, "${SHOP_VAULT_TOKEN}");
+
+        const code = await runCli(
+            ["config", "validate", "tenant", tenantDir],
+            context,
+        );
+
+        // A warning: the CLI cannot read the instance's KMS_TENANT_VARIABLES.
+        expect(code).toBe(0);
+        expect(output.stdout).toContain(
+            "warning kms.json: ${SHOP_VAULT_TOKEN} is resolved only if the instance lists SHOP_VAULT_TOKEN in KMS_TENANT_VARIABLES",
+        );
+        expect(output.stdout).not.toContain("vault-token-value");
+    });
+
+    it("only warns for the cloud credentials in a tenant kms.json, which the instance can list", async () => {
+        const { context, output, cwd } = await createContext();
+        context.env.AWS_SECRET_ACCESS_KEY = "instance-credential";
+        const tenantDir = join(cwd, "root");
+        await writeTenantInfo(tenantDir, { name: "Root Tenant" });
+        await writeKms(tenantDir, "${AWS_SECRET_ACCESS_KEY}");
+
+        const code = await runCli(
+            ["config", "validate", "tenant", tenantDir],
+            context,
+        );
+
+        expect(code).toBe(0);
+        expect(output.stdout).toContain(
+            "warning kms.json: ${AWS_SECRET_ACCESS_KEY} is resolved only if",
+        );
+        expect(output.stdout).not.toContain("holds the AWS credentials");
+    });
+
+    it("does not warn for PUBLIC_URL in a tenant kms.json, which every file can use", async () => {
+        const { context, output, cwd } = await createContext();
+        context.env.PUBLIC_URL = "https://issuer.example";
+        const tenantDir = join(cwd, "root");
+        await writeTenantInfo(tenantDir, { name: "Root Tenant" });
+        await writeKms(tenantDir, "${PUBLIC_URL}");
+
+        const code = await runCli(
+            ["config", "validate", "tenant", tenantDir],
+            context,
+        );
+
+        expect(code).toBe(0);
+        expect(output.stdout).not.toContain("KMS_TENANT_VARIABLES");
+    });
+
     it("validates every tenant under a configuration root and collects errors", async () => {
         const { context, output, cwd } = await createContext();
         await writeTenantInfo(join(cwd, "root"), { name: "Root Tenant" });
@@ -438,6 +615,23 @@ async function writeTenantInfo(
     await writeFile(
         join(tenantDir, "info.json"),
         JSON.stringify(payload, null, 2),
+        "utf8",
+    );
+}
+
+async function writeKms(tenantDir: string, vaultToken: string): Promise<void> {
+    await writeFile(
+        join(tenantDir, "kms.json"),
+        JSON.stringify({
+            providers: [
+                {
+                    id: "vault",
+                    type: "vault",
+                    vaultUrl: "https://vault.example",
+                    vaultToken,
+                },
+            ],
+        }),
         "utf8",
     );
 }

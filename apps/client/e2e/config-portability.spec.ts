@@ -178,7 +178,8 @@ async function openConfigPortability(page: Page, tenant: Tenant): Promise<void> 
   await expect(page.getByRole('heading', { name: 'Configuration Portability' })).toBeVisible();
 }
 
-async function planBundle(page: Page, bundle: unknown): Promise<void> {
+/** Uploads and plans a bundle, and waits for the plan, applicable or not. */
+async function submitBundle(page: Page, bundle: unknown): Promise<void> {
   await page.locator('#bundleInput').setInputFiles({
     name: 'endpoint-bundle.json',
     mimeType: 'application/json',
@@ -186,6 +187,11 @@ async function planBundle(page: Page, bundle: unknown): Promise<void> {
   });
   await expect(page.getByText('endpoint-bundle.json')).toBeVisible();
   await page.getByRole('button', { name: 'Plan and validate' }).click();
+  await expect(page.getByRole('heading', { name: 'Import plan' })).toBeVisible();
+}
+
+async function planBundle(page: Page, bundle: unknown): Promise<void> {
+  await submitBundle(page, bundle);
   await expect(page.getByText('Ready to apply')).toBeVisible();
 }
 
@@ -399,4 +405,39 @@ test('detaches only the file-managed resources the filters show', async ({ page 
   await ownership.getByRole('button', { name: 'Clear Filters' }).click();
   await expect(rows).toHaveCount(total);
   await expect(rows.filter({ hasText: 'detached' })).toHaveCount(1);
+});
+
+// An upload resolves no environment variable: a placeholder inside a longer value is kept as
+// text with a warning, a value that is only a placeholder blocks the resource.
+test('warns that a placeholder inside a longer value is stored as text', async ({ page }) => {
+  const tenant = await createTenant();
+  await openConfigPortability(page, tenant);
+
+  await planBundle(page, endpointBundle(tenant.id, { ...endpointSpec, name: 'Events ${STAGE}' }));
+
+  const issue = page.locator('div.issue.warning', { hasText: 'PLACEHOLDER_STORED_AS_TEXT' });
+  await expect(issue).toHaveCount(1);
+  await expect(issue).toContainText('${STAGE} is stored as text');
+  await expect(issue).toContainText('/spec/name');
+  await expect(page.getByRole('button', { name: 'Apply bundle' })).toBeEnabled();
+});
+
+test('blocks a value that is only a placeholder until it is resolved', async ({ page }) => {
+  const tenant = await createTenant();
+  await openConfigPortability(page, tenant);
+
+  await submitBundle(
+    page,
+    endpointBundle(tenant.id, {
+      ...endpointSpec,
+      auth: { type: 'apiKey', config: { headerName: 'X-Key', value: '${EVENTS_KEY}' } },
+    })
+  );
+
+  await expect(page.getByText('Resolve blocking issues before import')).toBeVisible();
+  const issue = page.locator('div.issue', { hasText: 'SECRET_REQUIRED' });
+  await expect(issue).toHaveCount(1);
+  await expect(issue).toContainText('Resolve ${EVENTS_KEY} before applying this resource.');
+  await expect(issue).toContainText('/spec/auth/config/value');
+  await expect(page.getByRole('button', { name: 'Apply bundle' })).toBeDisabled();
 });
