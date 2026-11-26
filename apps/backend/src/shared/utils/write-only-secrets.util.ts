@@ -89,13 +89,25 @@ function storedItem(item: unknown, index: number, stored: unknown[]): unknown {
 
 /** Copy of `value` with the strings at `paths` replaced by {@link REDACTED_SECRET}. */
 export function redactSecrets<T>(value: T, ...paths: string[]): T {
+    return redactSecretsShowing(value, () => false, ...paths);
+}
+
+/**
+ * {@link redactSecrets}, except for the strings for which `shown` is true:
+ * secret references, which are no secrets.
+ */
+export function redactSecretsShowing<T>(
+    value: T,
+    shown: (value: string) => boolean,
+    ...paths: string[]
+): T {
     return paths.reduce<unknown>(
         (current, path) =>
             walk(
                 current,
                 undefined,
                 path.split("."),
-                () => REDACTED_SECRET,
+                (leaf) => (shown(leaf) ? leaf : REDACTED_SECRET),
                 "",
             ),
         value,
@@ -176,13 +188,7 @@ export function redactApiKey<T>(
     entry: T,
     shown: (value: string) => boolean = () => false,
 ): T {
-    return walk(
-        entry,
-        undefined,
-        API_KEY.split("."),
-        (value) => (shown(value) ? value : REDACTED_SECRET),
-        "",
-    ) as T;
+    return redactSecretsShowing(entry, shown, API_KEY);
 }
 
 /**

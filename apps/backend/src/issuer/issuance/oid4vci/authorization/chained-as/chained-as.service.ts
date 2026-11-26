@@ -12,12 +12,17 @@ import { MetricService, TraceService } from "nestjs-otel";
 import { v4 } from "uuid";
 import { CryptoService } from "../../../../../crypto/crypto.service.js";
 import { KeyChainService } from "../../../../../crypto/key/key-chain.service.js";
+import {
+    SECRET_REFERENCES,
+    type SecretReferences,
+} from "../../../../../platform/secrets/application/secret-references.js";
 import { SessionStore } from "../../../../../session/application/session-store.js";
 import { FederationTrustService } from "../../../../../trust/federation-trust.service.js";
 import { FederationTrustSource } from "../../../../../trust/types.js";
 import { WalletAttestationService } from "../../../../../trust/wallet-attestation.service.js";
 import type { TrustListRef } from "../../../../../verifier/presentations/entities/presentation-config.entity.js";
 import { AuthorizationIdentity } from "../../../../configuration/credentials/domain/authorization-identity.js";
+import { upstreamClientSecretUse } from "../../../../configuration/issuance/domain/upstream-client-secret.js";
 import type { ChainedAsConfig } from "../../../../configuration/issuance/dto/chained-as-config.dto.js";
 import { IssuanceService } from "../../../../configuration/issuance/issuance.service.js";
 import { toOAuthHttpError } from "../../exceptions/token-error.exception.js";
@@ -87,6 +92,13 @@ import {
  * This enables session correlation without requiring modifications to
  * the upstream OIDC provider (e.g., Keycloak).
  */
+/**
+ * The chained server of the issuance configuration, with its position in
+ * `authorizationServers`, which names its upstream client secret in the
+ * secret policy.
+ */
+type StoredChainedAsConfig = ChainedAsConfig & { serverIndex: number };
+
 @Injectable()
 export class ChainedAsService {
     private readonly logger = new Logger(ChainedAsService.name);
@@ -137,6 +149,8 @@ export class ChainedAsService {
         private readonly cryptoService: CryptoService,
         @Inject(DPOP_PROOF_REPLAY_REGISTRY)
         private readonly dpopProofs: DpopProofReplayRegistry,
+        @Inject(SECRET_REFERENCES)
+        private readonly secrets: SecretReferences,
         @Optional() private readonly metricService?: MetricService,
     ) {
         this.discoveryHitsCounter = this.metricService?.getCounter(
@@ -190,7 +204,7 @@ export class ChainedAsService {
      * Get the Chained AS configuration for a tenant.
      * @throws NotFoundException if chained AS is not configured or not enabled
      */
-    async getChainedAsConfig(tenantId: string): Promise<ChainedAsConfig> {
+    async getChainedAsConfig(tenantId: string): Promise<StoredChainedAsConfig> {
         const issuanceConfig =
             await this.issuanceService.getIssuanceConfiguration(tenantId);
 
@@ -210,7 +224,8 @@ export class ChainedAsService {
             >;
         };
 
-        const chainedServer = (issuanceConfig.authorizationServers ?? []).find(
+        const servers = issuanceConfig.authorizationServers ?? [];
+        const serverIndex = servers.findIndex(
             (server): server is ChainedServerConfig => {
                 const candidate = server as Partial<ChainedServerConfig>;
                 return (
@@ -223,8 +238,12 @@ export class ChainedAsService {
             },
         );
 
+        const chainedServer = servers[serverIndex] as
+            | ChainedServerConfig
+            | undefined;
         if (chainedServer) {
             return {
+                serverIndex,
                 enabled: true,
                 upstream: chainedServer.upstream,
                 token: chainedServer.token,
@@ -235,7 +254,7 @@ export class ChainedAsService {
                     chainedServer.walletProviderTrustLists,
                 walletAttestationStatusCheckMode:
                     chainedServer.walletAttestationStatusCheckMode,
-            } as ChainedAsConfig;
+            } as StoredChainedAsConfig;
         }
 
         throw new NotFoundException(
@@ -613,16 +632,40 @@ export class ChainedAsService {
     private async exchangeUpstreamCode(
         session: ChainedAsSession,
         code: string,
-        config: ChainedAsConfig,
+        config: StoredChainedAsConfig,
         discovery: OidcDiscoveryDocument,
         callbackUrl: string,
     ): Promise<void> {
+        const upstream = config.upstream!;
+        const use = (destination: string) =>
+            upstreamClientSecretUse(
+                session.tenantId,
+                config.serverIndex,
+                destination,
+            );
+        let clientSecret: string | undefined;
+        if (upstream.clientSecret) {
+            // The client secret may be a secret reference. It goes to the
+            // token endpoint the discovery document names, which may lie on
+            // another origin than the issuer: a reference bound to origins
+            // must allow both.
+            this.secrets.assertAllowed(
+                upstream.clientSecret,
+                use(discovery.token_endpoint),
+            );
+            clientSecret = (
+                await this.secrets.valueOf(
+                    upstream.clientSecret,
+                    use(upstream.issuer),
+                )
+            ).reveal();
+        }
         const tokens = await this.oidcTokenExchanger.exchange({
             tokenEndpoint: discovery.token_endpoint,
             code,
             redirectUri: callbackUrl,
-            clientId: config.upstream!.clientId,
-            clientSecret: config.upstream!.clientSecret,
+            clientId: upstream.clientId,
+            clientSecret,
             codeVerifier: session.upstreamCodeVerifier,
         });
 
@@ -701,7 +744,6 @@ export class ChainedAsService {
                 callbackUrl,
             );
         } catch (err) {
-            console.log(err);
             this.logger.error("Failed to exchange code at upstream", err);
             session.status = ChainedAsSessionStatus.EXPIRED;
             await this.sessionRepository.save(session);

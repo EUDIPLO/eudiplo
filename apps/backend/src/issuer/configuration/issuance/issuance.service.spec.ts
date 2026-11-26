@@ -1,5 +1,7 @@
 import { BadRequestException } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
+import { stubSecretReferences } from "../../../../test/secrets/secret-test-sources.js";
+import { SecretReferences } from "../../../platform/secrets/application/secret-references.js";
 import { IssuanceService } from "./issuance.service.js";
 
 describe("IssuanceService.storeIssuanceConfiguration", () => {
@@ -314,8 +316,9 @@ describe("IssuanceService audit log", () => {
         upstream: upstream(clientSecret),
     });
 
-    it("lists a new upstream client secret as a changed field without storing it", async () => {
+    function service(secrets = new SecretReferences()) {
         const record = vi.fn();
+        const save = vi.fn(async (config) => config);
         const issuance = Object.assign(
             Object.create(IssuanceService.prototype),
             {
@@ -324,14 +327,161 @@ describe("IssuanceService audit log", () => {
                         tenantId: "tenant-1",
                         authorizationServers: [chained("old-secret")],
                     }),
-                    save: vi.fn(async (config) => config),
+                    save,
                 },
                 tenantActionLogService: { record },
                 federationTrustAnchors: {
                     unregistered: vi.fn().mockResolvedValue([]),
                 },
+                secrets,
             },
         ) as IssuanceService;
+        return { issuance, record, save };
+    }
+
+    it("shows a secret reference as the upstream client secret in the audit log", async () => {
+        const { issuance, record } = service(stubSecretReferences().secrets);
+        const reference = "${vault:kv/eudiplo/tenant-1/idp#secret}";
+
+        await issuance.storeIssuanceConfiguration(
+            "tenant-1",
+            { authorizationServers: [chained(reference)] } as any,
+            { client: { clientId: "admin" } } as any,
+        );
+
+        const [entry] = record.mock.calls[0];
+        expect(entry.before.authorizationServers[0].upstream).toEqual(
+            upstream("[REDACTED]"),
+        );
+        expect(entry.after.authorizationServers[0].upstream).toEqual(
+            upstream(reference),
+        );
+    });
+
+    it("refuses an upstream client secret reference outside the tenant's grant, storing nothing", async () => {
+        const { issuance, save } = service(stubSecretReferences().secrets);
+
+        await expect(
+            issuance.storeIssuanceConfiguration("tenant-1", {
+                authorizationServers: [
+                    { type: "built-in", id: "own" },
+                    chained("${vault:kv/eudiplo/other/idp#secret}"),
+                ],
+            } as any),
+        ).rejects.toThrow(
+            /authorizationServers\[1\]\.upstream\.clientSecret: .*no grant of tenant 'tenant-1'/,
+        );
+        expect(save).not.toHaveBeenCalled();
+    });
+
+    it("checks a bound reference against the upstream issuer and refuses a malformed one", async () => {
+        const bound = "${vault:kv/operator/idp#secret}";
+        const { issuance, save } = service(
+            stubSecretReferences({
+                tenants: {
+                    "tenant-1": {
+                        bound: [
+                            {
+                                ref: bound,
+                                fields: [
+                                    "IssuanceConfig:authorizationServers.*.upstream.clientSecret",
+                                ],
+                                destinations: ["https://idp.example"],
+                            },
+                        ],
+                    },
+                },
+            }).secrets,
+        );
+        const store = (server: unknown) =>
+            issuance.storeIssuanceConfiguration("tenant-1", {
+                authorizationServers: [{ type: "built-in", id: "own" }, server],
+            } as any);
+
+        await expect(store(chained(bound))).resolves.toBeDefined();
+        save.mockClear();
+        await expect(
+            store({
+                ...chained(bound),
+                upstream: {
+                    ...upstream(bound),
+                    issuer: "https://elsewhere.example",
+                },
+            }),
+        ).rejects.toThrow(/authorizationServers\[1\]\.upstream\.clientSecret/);
+        await expect(store(chained("${vault:kv}"))).rejects.toThrow(
+            /authorizationServers\[1\]\.upstream\.clientSecret/,
+        );
+        expect(save).not.toHaveBeenCalled();
+    });
+
+    it("refuses only a change that sets authorizationServers for a reference no longer granted", async () => {
+        const { issuance, save } = service(stubSecretReferences().secrets);
+        (
+            issuance as unknown as {
+                issuanceConfigRepo: { getForTenant: ReturnType<typeof vi.fn> };
+            }
+        ).issuanceConfigRepo.getForTenant.mockResolvedValue({
+            tenantId: "tenant-1",
+            authorizationServers: [
+                chained("${vault:kv/eudiplo/other/idp#secret}"),
+            ],
+        });
+
+        await expect(
+            issuance.storeIssuanceConfiguration("tenant-1", {
+                offerLifetimeSeconds: 60,
+            } as any),
+        ).resolves.toBeDefined();
+        expect(save).toHaveBeenCalledTimes(1);
+        await expect(
+            issuance.storeIssuanceConfiguration("tenant-1", {
+                authorizationServers: [
+                    chained("${vault:kv/eudiplo/other/idp#secret}"),
+                ],
+            } as any),
+        ).rejects.toThrow(/authorizationServers\[0\]\.upstream\.clientSecret/);
+        expect(save).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps the stored configuration when a folder file names a refused reference", async () => {
+        const { issuance } = service(stubSecretReferences().secrets);
+        const importConfigsForTenant = vi.fn();
+        const deleteForTenant = vi.fn();
+        Object.assign(issuance, {
+            configImportService: { importConfigsForTenant },
+        });
+        Object.assign(
+            (issuance as unknown as { issuanceConfigRepo: object })
+                .issuanceConfigRepo,
+            { deleteForTenant },
+        );
+        await (
+            issuance as unknown as {
+                importForTenant(tenantId: string): Promise<void>;
+            }
+        ).importForTenant("tenant-1");
+        const { deleteExisting } = importConfigsForTenant.mock.calls[0][1];
+
+        await expect(
+            deleteExisting("tenant-1", {
+                authorizationServers: [
+                    chained("${vault:kv/eudiplo/other/idp#secret}"),
+                ],
+            }),
+        ).rejects.toThrow(/authorizationServers\[0\]\.upstream\.clientSecret/);
+        expect(deleteForTenant).not.toHaveBeenCalled();
+
+        await deleteExisting("tenant-1", {
+            authorizationServers: [
+                chained("${vault:kv/eudiplo/tenant-1/idp#secret}"),
+            ],
+        });
+        expect(deleteForTenant).toHaveBeenCalledWith("tenant-1");
+    });
+
+    it("lists a new upstream client secret as a changed field without storing it", async () => {
+        const { issuance, record } = service();
 
         await issuance.storeIssuanceConfiguration(
             "tenant-1",

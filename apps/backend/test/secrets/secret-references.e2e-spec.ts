@@ -20,7 +20,7 @@ import { setupIssuanceTestApp } from "../utils.js";
 const receiver = "http://localhost:8788";
 const granted = "${env:E2E_ROOT_SHOP_TOKEN}";
 
-describe("Secret references in webhook endpoints and attribute providers", () => {
+describe("Secret references in webhook endpoints, attribute providers and the issuance configuration", () => {
     let app: INestApplication<App>;
     let authToken: string;
     let policyDir: string;
@@ -132,6 +132,53 @@ describe("Secret references in webhook endpoints and attribute providers", () =>
         await post("/issuer/attribute-providers", {
             ...endpoint("crm", granted),
         }).expect(201);
+    });
+
+    test("checks and shows a reference as the upstream client secret", async () => {
+        const current = await api()
+            .get("/issuer/config")
+            .set("Authorization", `Bearer ${authToken}`)
+            .expect(200);
+        const withSecret = (clientSecret: string) => ({
+            ...current.body,
+            authorizationServers: [
+                {
+                    id: "chained-auth",
+                    type: "chained",
+                    enabled: true,
+                    upstream: {
+                        issuer: "https://idp.example",
+                        clientId: "eudiplo",
+                        clientSecret,
+                        scopes: ["openid"],
+                    },
+                    requireDPoP: false,
+                },
+            ],
+        });
+
+        const refused = await post(
+            "/issuer/config",
+            withSecret("${env:E2E_OTHER_TOKEN}"),
+        ).expect(400);
+        expect(JSON.stringify(refused.body)).toContain(
+            "authorizationServers[0].upstream.clientSecret",
+        );
+
+        const stored = await post("/issuer/config", withSecret(granted)).expect(
+            201,
+        );
+        expect(stored.body.authorizationServers[0].upstream.clientSecret).toBe(
+            granted,
+        );
+        const shown = await api()
+            .get("/issuer/config")
+            .set("Authorization", `Bearer ${authToken}`)
+            .expect(200);
+        expect(shown.body.authorizationServers[0].upstream.clientSecret).toBe(
+            granted,
+        );
+        expect(JSON.stringify(shown.body)).not.toContain("value-from-env");
     });
 
     test("refuses a reference in the webhook of a presentation request", async () => {

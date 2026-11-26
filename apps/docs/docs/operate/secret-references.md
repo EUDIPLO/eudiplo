@@ -4,8 +4,9 @@ title: Secret References
 
 # Secret References
 
-Keep the API keys of webhook endpoints and attribute providers in a secret
-store instead of in EUDIPLO's database. The key is then a reference such as
+Keep the API keys of webhook endpoints and attribute providers, and the
+upstream client secrets of chained authorization servers, in a secret store
+instead of in EUDIPLO's database. The value is then a reference such as
 `${vault:kv/eudiplo/acme/shop#token}`, which EUDIPLO reads when it sends a
 request and keeps only in memory.
 
@@ -20,6 +21,7 @@ written, as in earlier versions.
 | ------------------ | ------------------- | -------------------------------------- |
 | Webhook endpoint   | `auth.config.value` | Each time a webhook is sent            |
 | Attribute provider | `auth.config.value` | Each time claims are fetched           |
+| Issuance configuration | `authorizationServers[].upstream.clientSecret` of a `chained` server | Each time an upstream code is exchanged at the token endpoint |
 
 The reference must be the whole value. A webhook defined in a session request
 (an offer's `credentialClaims.<id>.webhook`, a presentation request's `webhook`)
@@ -92,7 +94,14 @@ only the tenant's own secrets there.
   settings or, for a tenant, the cloud credentials of the instance.
 - `bound` lists operator secrets a tenant may use but not read: the reference
   is accepted only in the listed fields and only while the field's URL has one
-  of the listed origins.
+  of the listed origins. Fields are written `<Kind>:<path>`, with `*` for any
+  key or array index: `WebhookEndpoint:auth.config.value`,
+  `AttributeProvider:auth.config.value`,
+  `IssuanceConfig:authorizationServers.*.upstream.clientSecret`. The URL of an
+  API key is the endpoint's or provider's `url`. An upstream client secret is
+  checked for `upstream.issuer` when it is stored and, when it is sent, also
+  for the token endpoint that the issuer's discovery document names: list the
+  origins of both when they differ.
 
 EUDIPLO refuses a policy in which two tenants' namespaces overlap, a tenant's
 namespace reaches into the instance's, or a `bound` secret lies inside a
@@ -113,27 +122,33 @@ EUDIPLO's Vault token or AppRole read access to the granted paths only.
 
 ## When a value is read
 
-- **Writing.** Creating or updating a webhook endpoint or attribute provider,
-  through the API, a bundle or a configuration folder, checks the reference
-  against the policy without reading it. Through the API, a refused or
+- **Writing.** Creating or updating a webhook endpoint, an attribute provider
+  or the authorization servers of the issuance configuration, through the API,
+  a bundle or a configuration folder, checks the reference against the policy
+  without reading it. Through the API, a refused or
   malformed reference is answered with `400`; a bundle with one is refused when
   it is imported, not yet when it is planned; a configuration folder file with
-  one is skipped and logged at startup, like any file that does not import.
-  Changing only the `url` checks it again, so a bound
-  reference cannot follow the endpoint to a new address.
+  one is skipped and logged at startup, like any file that does not import,
+  and the stored resource it would replace is kept.
+  Changing only the `url` (or `upstream.issuer`) checks it again, so a bound
+  reference cannot follow the resource to a new address.
 - **Sending.** EUDIPLO checks the policy again and reads the value. Values are
   cached in memory for 5 minutes, so a rotated secret is used at the latest
   5 minutes later. While the source does not answer, the last value is used for
-  up to 1 hour and a warning is logged; after that the delivery fails.
+  up to 1 hour and a warning is logged; after that the request that needs it
+  fails.
 - **Failing.** When a value cannot be read, the webhook delivery fails with
-  "the API key of the webhook could not be read". The log names the reference
-  and the reason, never the value.
+  "the API key of the webhook could not be read", and the upstream login of a
+  chained authorization server ends with `server_error` for the wallet. The log
+  names the reference and the reason, never the value.
 
 ## What EUDIPLO shows
 
-A reference is no secret. Responses of the webhook endpoint and attribute
-provider API and audit log entries show it as written; a literal API key stays
-`<redacted>` in responses and `[REDACTED]` in the audit log. A
+A reference is no secret. Responses of the webhook endpoint, attribute
+provider and issuance configuration API and audit log entries show it as
+written; a literal API key stays
+`<redacted>` in responses and `[REDACTED]` in the audit log, as does a
+literal upstream client secret. A
 [configuration export](configuration-as-code.md#export-a-tenant) still replaces
-the key with a `${…}` placeholder, reference or not; set it again in the target. Sessions keep only the ID of a configured webhook endpoint, so
+the value with a `${…}` placeholder, reference or not; set it again in the target. Sessions keep only the ID of a configured webhook endpoint, so
 neither the reference nor the value is copied into session data.
