@@ -213,7 +213,7 @@ jobs:
       - run: npx @eudiplo/cli@10 config upgrade ./config --check
 ```
 
-Use the CLI major version that matches your backend. The dummy value only lets the placeholder resolve; the real secret stays on the instance ([Validate in CI](../operate/configuration-as-code.md#validate-in-ci)). The backend runs a few checks that the schemas cannot express, so an import can still fail on a folder that passed (see [Troubleshooting](#troubleshooting)). The upgrade check also fails when a newer 10.x CLI raises a format version; upgrade the files only once the instance runs that release too ([Upgrade old files](../operate/configuration-as-code.md#upgrade-old-files)).
+Use the CLI major version that matches your backend, and for `config plan` and `config import` a CLI on the same side as the backend of the fix that writes placeholder text as `$${` ([Exports](../upgrade/10.x-fixes.md#exports-placeholder-text-is-written-in-an-escaped-form)). The dummy value only lets the placeholder resolve; the real secret stays on the instance ([Validate in CI](../operate/configuration-as-code.md#validate-in-ci)). The backend runs a few checks that the schemas cannot express, so an import can still fail on a folder that passed (see [Troubleshooting](#troubleshooting)). The upgrade check also fails when a newer 10.x CLI raises a format version; upgrade the files only once the instance runs that release too ([Upgrade old files](../operate/configuration-as-code.md#upgrade-old-files)).
 
 **Checkpoint:** the job's commands pass locally without the real secret, and on GitHub the workflow passes:
 

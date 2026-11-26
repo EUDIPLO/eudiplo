@@ -418,7 +418,12 @@ it contains `${VAR}`: nothing resolves it.
   `$${` to say that you mean the text.
 - **Requests that create or update a resource**, such as
   `POST /api/issuer/webhook-endpoints`, are no files: they store the value as
-  sent, and `$${` has no meaning there.
+  sent, and `$${` has no meaning there. `GET /api/key-chain/{id}/export`
+  and `GET /api/trust-list/{id}/export` return configuration files, so a
+  value that contained `${` reads `$${` in them, and a create request
+  stores that as sent. To bring such an export back through the API without
+  changing it, send it as a document in a bundle, which reads the escaped
+  form.
 - **The KMS configuration** follows its own rule
   ([KMS placeholders](../operate/kms.md#placeholders-in-a-tenant-kmsjson)).
 

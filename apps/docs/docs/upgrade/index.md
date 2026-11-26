@@ -55,7 +55,7 @@ EUDIPLO follows [Semantic Versioning](https://semver.org/):
 - **Deprecation before removal** where feasible: a minor release deprecates, the next major removes.
 - **Database migrations are automatic.** No manual SQL is needed.
 - **Configuration files are versioned per resource.** A release imports files of its own and older format versions and upgrades them; it rejects files with a newer version. Files exported from a new major can therefore not be imported into the previous one.
-- **Client and backend** of the same release work together; releases that differ only in the patch version are compatible.
+- **Web Client, CLI and backend** of the same release work together; releases that differ only in the patch version are compatible. The exception is the CLI and the backend of a release on either side of the fix that writes placeholder text as `$${`: they read `$${` differently, so upgrade them together ([Exports: placeholder text is written in an escaped form](./10.x-fixes.md#exports-placeholder-text-is-written-in-an-escaped-form)).
 
 ## Verifying release artifacts
 

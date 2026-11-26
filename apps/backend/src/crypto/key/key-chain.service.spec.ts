@@ -106,6 +106,18 @@ describe("KeyChainService.export", () => {
         expect(exported.key).not.toHaveProperty("d");
     });
 
+    it("writes the `${` of stored text in the escaped form of configuration files", async () => {
+        const service = serviceFor(
+            keyChain({ description: "Key ${OTHER_TENANT_API_KEY}" }),
+            "db",
+        );
+
+        const exported = await service.export("tenant", "key");
+
+        expect(exported.description).toBe("Key $${OTHER_TENANT_API_KEY}");
+        expect(exported.key.d).toBe(privateJwk.d);
+    });
+
     it("leaves out unset optional columns so the import accepts the export", async () => {
         // Nullable columns are read back as null, not undefined.
         const service = serviceFor(

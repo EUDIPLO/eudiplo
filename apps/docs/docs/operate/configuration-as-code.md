@@ -207,7 +207,10 @@ jobs:
       - run: npx @eudiplo/cli@10 config upgrade ./config --check
 ```
 
-Use the CLI major version that matches your backend. For completion and inline
+Use the CLI major version that matches your backend, and for `config plan` and
+`config import` a CLI on the same side as the backend of the fix that writes
+placeholder text as `$${`
+([Exports](../upgrade/10.x-fixes.md#exports-placeholder-text-is-written-in-an-escaped-form)). For completion and inline
 validation in VS Code, run `eudiplo config editor setup` in the repository; it
 copies the schemas of the installed CLI to `.vscode/eudiplo-schemas/` and adds
 the file associations to `.vscode/settings.json`.
