@@ -131,6 +131,11 @@ service of the project. Options that `up`, `down`, `ps`, `logs`, `restart` and
 `docker compose`, for example `eudiplo down --volumes --remove-orphans`. Write
 `--volumes` in full: `-v` prints the CLI version.
 
+The backend runs as the owner of the project's `config/` folder, or as UID
+`1000` when root owns it, not as root; with rootless Podman it can stay root.
+Files it only reads, such as a PKCS#11 library or mTLS keys, must be readable
+by that user ([Non-root user](docker-compose.md#non-root-user)).
+
 ### Upgrade the application
 
 `eudiplo upgrade` changes the backend and client images of a Compose instance,

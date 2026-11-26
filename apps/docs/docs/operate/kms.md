@@ -139,7 +139,9 @@ tag, so `kms:TagResource` is needed as well), `GetPublicKey`, `Sign`,
 
 **PKCS#11.** The vendor's PKCS#11 library must be available in the backend
 container, and for a provider in a tenant `kms.json` listed in
-`KMS_TENANT_FILES`; `slot` is the slot index or the token label. `readOnly: true` opens a
+`KMS_TENANT_FILES`. The backend's non-root user must be able to read it, and
+for a software HSM such as SoftHSM also write its token folder
+([Non-root user](docker-compose.md#non-root-user)); `slot` is the slot index or the token label. `readOnly: true` opens a
 read-only session, which cannot create or delete keys. Keys are created with
 `CKM_EC_KEY_PAIR_GEN` on the curve of the key chain's algorithm and sign with
 `CKM_ECDSA` over the matching SHA-2 digest.

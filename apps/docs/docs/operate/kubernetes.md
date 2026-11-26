@@ -164,6 +164,13 @@ folders. Tenant KMS configurations saved through the API are written there too,
 so several backend replicas need the same writable volume
 ([Per-tenant providers](kms.md#per-tenant-providers)).
 
+The base deployment runs the backend as UID `1000` (`runAsUser`), the `node`
+user of the image, with `fsGroup: 1000` for its volumes, so the image's entrypoint changes no
+file owners ([Non-root user](docker-compose.md#non-root-user)). A volume that
+`fsGroup` does not cover, such as a `hostPath`, must be writable by UID `1000`;
+files the backend reads, such as a PKCS#11 library or mTLS keys, must be
+readable by it.
+
 ## Manage the deployment with the CLI
 
 Register the cluster as a `kubernetes` instance to run `eudiplo doctor`,

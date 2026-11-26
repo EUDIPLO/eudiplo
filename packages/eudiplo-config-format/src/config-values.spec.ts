@@ -72,10 +72,23 @@ describe("shared configuration values", () => {
     });
     it("resolves unterminated placeholders in linear time", () => {
         const input = "${A:".repeat(100_000);
-        const started = performance.now();
-        expect(resolveConfigVariables(input, {}).value).toBe(input);
-        expect(readConfigFileValues(input).placeholders).toEqual([]);
-        expect(performance.now() - started).toBeLessThan(1000);
+        // Each scan timed on its own, so that the bound of one scan does not
+        // depend on the other on a loaded runner.
+        const timed = (scan: () => void) => {
+            const started = performance.now();
+            scan();
+            return performance.now() - started;
+        };
+        expect(
+            timed(() =>
+                expect(resolveConfigVariables(input, {}).value).toBe(input),
+            ),
+        ).toBeLessThan(1000);
+        expect(
+            timed(() =>
+                expect(readConfigFileValues(input).placeholders).toEqual([]),
+            ),
+        ).toBeLessThan(1000);
     });
     it("reads $${ as the two characters ${ and never as a placeholder", () => {
         const env = { A: "a" };
@@ -123,6 +136,22 @@ describe("shared configuration values", () => {
         expect(readConfigFileValues(file)).toEqual({
             value: stored,
             placeholders: [],
+            references: [],
+        });
+    });
+    it("lists the placeholders of a file without an escaped form and changes no value", () => {
+        expect(
+            readConfigFileValues(
+                { token: "${A}", text: "$${B}", other: "x${C}" },
+                "none",
+            ),
+        ).toEqual({
+            value: { token: "${A}", text: "$${B}", other: "x${C}" },
+            placeholders: [
+                { path: "/token", placeholder: "${A}", whole: true },
+                { path: "/text", placeholder: "${B}", whole: false },
+                { path: "/other", placeholder: "${C}", whole: false },
+            ],
             references: [],
         });
     });

@@ -1,5 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import * as x509 from "@peculiar/x509";
+import { parseX509Certificate } from "../../../shared/utils/x509-certificate-cache.js";
 import { OutboundUrlPolicyService } from "../../../webhook/outbound-url-policy.service.js";
 
 /** Upper bound for a CRL download. */
@@ -96,7 +97,7 @@ export class CrlValidationService {
         chainPems: string[] = [],
     ): Promise<CrlValidationResult> {
         try {
-            const cert = new x509.X509Certificate(certPem);
+            const cert = parseX509Certificate(certPem);
 
             // Check certificate validation cache first (avoids repeated validation within short window)
             const certFingerprint = await cert.getThumbprint("SHA-256");
@@ -302,7 +303,7 @@ export class CrlValidationService {
         for (const pem of chainPems) {
             let candidate: x509.X509Certificate;
             try {
-                candidate = new x509.X509Certificate(pem);
+                candidate = parseX509Certificate(pem);
             } catch {
                 continue;
             }

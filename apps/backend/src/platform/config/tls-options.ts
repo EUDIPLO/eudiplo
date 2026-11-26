@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { fileAccessHint } from "../../shared/utils/file-access-hint.util.js";
 
 /**
  * TLS options passed to the HTTPS server (`httpsOptions` of NestFactory).
@@ -51,7 +52,7 @@ async function readTlsFile(variable: string, path: string): Promise<Buffer> {
         return await readFile(path);
     } catch (error) {
         throw new TlsConfigurationError(
-            `TLS_ENABLED is true but ${variable} (${path}) cannot be read: ${(error as Error).message}`,
+            `TLS_ENABLED is true but ${variable} (${path}) cannot be read: ${(error as Error).message}.${fileAccessHint(error, path)}`,
             { cause: error },
         );
     }

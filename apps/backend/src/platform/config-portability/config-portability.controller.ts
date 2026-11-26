@@ -304,7 +304,7 @@ export class ConfigPortabilityController {
     @Secured([Role.Tenants, Role.TenantAdmin], { tenant: "optional" })
     @ApiOperation({ summary: "Upgrade one configuration document" })
     upgrade(@Body() input: ConfigFile) {
-        const result = this.migrationService.upgrade(input);
+        const result = this.migrationService.upgradeFile(input);
         return { ...result, document: serializeDocument(result.document) };
     }
 

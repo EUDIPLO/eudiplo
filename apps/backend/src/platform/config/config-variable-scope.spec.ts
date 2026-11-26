@@ -108,6 +108,17 @@ describe("configuration variable scope", () => {
         }
     });
 
+    it("refuses only the listed cloud credentials, not every variable with their prefix", () => {
+        for (const name of [
+            "AZURE_TENANT_ID",
+            "AZURE_CLIENT_ID",
+            "AWS_ACCESS_KEY_ID_OF_PARTNER",
+            "MY_AWS_SECRET_ACCESS_KEY",
+        ]) {
+            expect(refusedConfigVariable(name, "tenant")).toBeUndefined();
+        }
+    });
+
     it("parses KMS_TENANT_VARIABLES and refuses EUDIPLO's own settings in it", () => {
         expect(parseTenantKmsVariables(undefined)).toEqual(new Set());
         expect(parseTenantKmsVariables("")).toEqual(new Set());

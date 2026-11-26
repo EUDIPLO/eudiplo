@@ -114,7 +114,7 @@ services:
 
   # S3 bucket initialization using the AWS CLI
   rustfs-init:
-    image: amazon/aws-cli:2.40.4
+    image: amazon/aws-cli:2.41.1
     profiles: ['s3', 'standard', 'full']
     depends_on:
       rustfs:

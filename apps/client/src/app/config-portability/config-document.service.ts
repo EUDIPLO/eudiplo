@@ -10,7 +10,7 @@ import {
   getApiErrorMessage,
   hasHttpStatus,
 } from '../utils/error-message';
-import { errorSnackBarDuration, openErrorSnackBar } from '../utils/error-snackbar';
+import { openErrorSnackBar } from '../utils/error-snackbar';
 import type { ConfigResourceKind } from './config-ownership.service';
 
 /**
@@ -82,8 +82,8 @@ export class ConfigDocumentService {
       // Secrets are `${…}` placeholders: variables for a config folder, values for an upload.
       if (placeholders.length) {
         const message = `Configuration downloaded. Its secrets are placeholders (${placeholders.join(', ')}): set them in the backend's environment for a config folder, or replace them with the values before importing the file under Config Portability.`;
-        // Long enough to read: this is the only place that names the variables.
-        this.snackBar.open(message, 'Close', { duration: errorSnackBarDuration(message) });
+        // Open until closed, whatever its length: this is the only place that names the variables.
+        this.snackBar.open(message, 'Close', { duration: 0 });
       } else {
         this.snackBar.open('Configuration downloaded', 'Close', { duration: 3000 });
       }

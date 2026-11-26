@@ -771,6 +771,23 @@ describe("Key Chain — KMS configuration management (e2e)", () => {
                 description: "${E2E_TENANT_KMS_TOKEN}",
                 auth: { token: "${E2E_TENANT_KMS_TOKEN}" },
             });
+
+            // A kms.json has no escaped form: an export keeps the
+            // placeholders of the file as they are, unlike stored text of
+            // the other resources, which it writes as $${.
+            const exported = await request(app.getHttpServer())
+                .get("/config-bundles/export")
+                .set("Authorization", `Bearer ${authToken}`)
+                .expect(200);
+            expect(JSON.stringify(exported.body)).not.toContain(LISTED_SECRET);
+            const kmsDocument = exported.body.documents.find((document: any) =>
+                String(document.$schema).includes("KmsConfigFile"),
+            );
+            expect(
+                kmsDocument.spec.providers.find(
+                    (provider: { id: string }) => provider.id === "remote",
+                ).description,
+            ).toBe("${E2E_TENANT_KMS_TOKEN}");
         });
 
         test("keeps a stored placeholder that is sent back, for the same address only", async () => {
@@ -969,6 +986,44 @@ describe("Key Chain — KMS configuration management (e2e)", () => {
                     message: expect.stringContaining("E2E_UNLISTED_SECRET"),
                 }),
             );
+        });
+
+        test("a bundle plan asks for a whole-value placeholder of a KMS configuration and stores none as text", async () => {
+            const plan = await request(app.getHttpServer())
+                .post("/config-bundles/plan?mode=upsert")
+                .set("Authorization", `Bearer ${authToken}`)
+                .send(
+                    documentBundle(TENANT_ID, "KmsConfig", "kms", "kms.json", {
+                        providers: [
+                            {
+                                id: "whole",
+                                type: "db",
+                                description: "${E2E_TENANT_KMS_TOKEN}",
+                            },
+                            {
+                                id: "inside",
+                                type: "db",
+                                description: "x${E2E_TENANT_KMS_TOKEN}",
+                            },
+                        ],
+                    }),
+                )
+                .expect(201);
+            const issues = plan.body.items[0].issues;
+            expect(issues).toContainEqual(
+                expect.objectContaining({
+                    code: "SECRET_REQUIRED",
+                    path: "/spec/providers/0/description",
+                }),
+            );
+            expect(
+                issues.filter(
+                    (issue: { path: string; code: string }) =>
+                        issue.path === "/spec/providers/1/description" ||
+                        issue.code === "PLACEHOLDER_STORED_AS_TEXT",
+                ),
+            ).toEqual([]);
+            expect(JSON.stringify(plan.body)).not.toContain(LISTED_SECRET);
         });
 
         test.each([
