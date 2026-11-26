@@ -19,7 +19,6 @@ import {
     StatusListCwt,
     signStatusListJwt,
 } from "@owf/token-status-list";
-import { X509Certificate } from "@peculiar/x509";
 import {
     DataSource,
     EntityManager,
@@ -41,6 +40,7 @@ import {
     ImportPhase,
 } from "../../platform/config-import/config-import-orchestrator.service.js";
 import type { SessionData as Session } from "../../session/domain/session-data.js";
+import { parseX509Certificate } from "../../shared/utils/x509-certificate-cache.js";
 import type { AttestationKind } from "../../trust/domain/attestation-status-claims.js";
 import type { CredentialConfiguration } from "../configuration/credentials/domain/credential-configuration.js";
 import {
@@ -448,7 +448,7 @@ export class StatusListService implements OnApplicationBootstrap {
         },
     ): Promise<Uint8Array> {
         const x5chain = certChainPem.map(
-            (pem) => new Uint8Array(new X509Certificate(pem).rawData),
+            (pem) => new Uint8Array(parseX509Certificate(pem).rawData.slice(0)),
         );
         const algorithm =
             SignatureAlgorithm[

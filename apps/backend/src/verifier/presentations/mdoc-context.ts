@@ -23,6 +23,7 @@ import {
     formatCertificateDate,
 } from "../../shared/utils/certificate-validity.util.js";
 import { coseReadyJwk } from "../../shared/utils/cose-key-jwk.util.js";
+import { parseX509CertificateDer } from "../../shared/utils/x509-certificate-cache.js";
 
 const NOBLE_CURVES = { ES256: p256, ES384: p384, ES512: p521 } as const;
 
@@ -198,8 +199,7 @@ const trimChainToTrustedAnchor = async (
     }
 
     const parsedTrustedCertificates = trustedCertificates.map(
-        (trustedCertificate) =>
-            new X509Certificate(toBuffer(trustedCertificate)),
+        parseX509CertificateDer,
     );
 
     const trustedCertificateIndex = parsedChain.findIndex((cert) =>
@@ -479,10 +479,15 @@ export const mdocContext: Omit<MdocContext, "fetch"> = {
             const parsedLeafCertificate = new x509.X509Certificate(
                 toBuffer(certificateChain[0]),
             );
-            const certificatesToBuildChain = toX509Certificates([
-                ...certificateChain,
-                ...(trustedCertificates ?? []),
-            ]);
+            // The chain comes from outside and is parsed as it is. The
+            // trusted certificates are the same few on every presentation and
+            // come from the process-wide cache, so the same instances are
+            // shared by all requests and tenants: they are only read, never
+            // modified or used to carry per-request state.
+            const certificatesToBuildChain = [
+                ...toX509Certificates(certificateChain),
+                ...(trustedCertificates ?? []).map(parseX509CertificateDer),
+            ];
 
             // Within MAX_CERTIFICATE_PATH_LENGTH and
             // MAX_PATH_SIGNATURE_CHECKS, whatever the trust list holds.
@@ -533,7 +538,7 @@ export const mdocContext: Omit<MdocContext, "fetch"> = {
             return {
                 chain: [...parsedChain]
                     .reverse()
-                    .map((cert) => new Uint8Array(cert.rawData)),
+                    .map((cert) => new Uint8Array(cert.rawData.slice(0))),
             };
         },
         getCertificateData: async (input: { certificate: Uint8Array }) => {

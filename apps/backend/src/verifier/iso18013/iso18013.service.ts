@@ -15,7 +15,6 @@ import {
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import type { ItemsRequest, ReaderAuth } from "@owf/mdoc";
-import { X509Certificate } from "@peculiar/x509";
 import { exportJWK } from "jose";
 import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
 import { Repository } from "typeorm";
@@ -42,6 +41,7 @@ import {
     SessionNotUsable,
 } from "../../session/domain/session-usability.js";
 import { SessionAuditService } from "../../session/logging/session-audit.service.js";
+import { parseX509Certificate } from "../../shared/utils/x509-certificate-cache.js";
 import {
     DEFAULT_VERIFIER_SKEW_SECONDS,
     RevocationCheckMode,
@@ -397,7 +397,7 @@ export class Iso18013Service {
         )) as Record<string, unknown>;
 
         const certificateChain = cert.crt.map(
-            (pem) => new Uint8Array(new X509Certificate(pem).rawData),
+            (pem) => new Uint8Array(parseX509Certificate(pem).rawData.slice(0)),
         );
 
         return buildReaderAuth(
