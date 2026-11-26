@@ -98,6 +98,36 @@ describe.each([
             ).not.toHaveBeenCalled();
         });
 
+        it("keeps the stored entry when a folder file names a refused reference", async () => {
+            const { instance } = service(stubSecretReferences().secrets);
+            const importConfigsForTenant = vi.fn();
+            Object.assign(instance, {
+                configImportService: { importConfigsForTenant },
+            });
+            await (
+                instance as unknown as {
+                    importForTenant(tenantId: string): Promise<void>;
+                }
+            ).importForTenant("t");
+            const { deleteExisting } = importConfigsForTenant.mock.calls[0][1];
+            const repo = (
+                instance as unknown as {
+                    repo: { deleteForTenant: ReturnType<typeof vi.fn> };
+                }
+            ).repo;
+
+            await expect(
+                deleteExisting("t", {
+                    ...existing,
+                    auth: auth("${vault:kv/eudiplo/other/shop#token}"),
+                }),
+            ).rejects.toThrow(/auth\.config\.value/);
+            expect(repo.deleteForTenant).not.toHaveBeenCalled();
+
+            await deleteExisting("t", existing);
+            expect(repo.deleteForTenant).toHaveBeenCalledWith("t", "e");
+        });
+
         it("refuses a malformed reference instead of storing it as text", async () => {
             const { instance } = service(stubSecretReferences().secrets);
 

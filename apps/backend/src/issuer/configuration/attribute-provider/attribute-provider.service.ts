@@ -67,10 +67,17 @@ export class AttributeProviderService {
                     this.getById(tid, data.id)
                         .then(() => true)
                         .catch(() => false),
-                deleteExisting: (tid, data) =>
-                    this.repo
-                        .deleteForTenant(tid, data.id)
-                        .then(() => undefined),
+                deleteExisting: async (tid, data) => {
+                    // Reject before deleting, so a file naming a refused
+                    // secret reference does not remove the stored entry.
+                    assertStoredWebhookSecret(
+                        this.secrets,
+                        "AttributeProvider",
+                        tid,
+                        data,
+                    );
+                    await this.repo.deleteForTenant(tid, data.id);
+                },
                 loadData: (filePath) =>
                     loadConfigDto(
                         filePath,

@@ -1,9 +1,6 @@
 import { BadRequestException } from "@nestjs/common";
 import type { SecretReferences } from "../platform/secrets/application/secret-references.js";
-import {
-    SecretReferenceInvalidError,
-    SecretReferenceRefusedError,
-} from "../platform/secrets/domain/secret-errors.js";
+import { assertSecretFieldAllowed } from "../platform/secrets/secret-reference-request.js";
 import {
     type StoredWebhook,
     storedWebhookSecretUse,
@@ -24,21 +21,12 @@ export function assertStoredWebhookSecret(
     entry: { url: string; auth?: WebhookConfiguration["auth"] },
 ): void {
     if (entry.auth?.type !== "apiKey") return;
-    try {
-        secrets.assertAllowed(
-            entry.auth.config.value,
-            storedWebhookSecretUse({ kind, tenantId }, entry.url),
-        );
-    } catch (error) {
-        if (
-            error instanceof SecretReferenceRefusedError ||
-            error instanceof SecretReferenceInvalidError
-        )
-            throw new BadRequestException(
-                `auth.config.value: ${error.message}`,
-            );
-        throw error;
-    }
+    assertSecretFieldAllowed(
+        secrets,
+        entry.auth.config.value,
+        storedWebhookSecretUse({ kind, tenantId }, entry.url),
+        "auth.config.value",
+    );
 }
 
 /**

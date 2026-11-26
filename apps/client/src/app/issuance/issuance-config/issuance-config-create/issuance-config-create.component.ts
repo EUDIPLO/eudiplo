@@ -1047,7 +1047,8 @@ export class IssuanceConfigCreateComponent implements OnInit, PageWithUnsavedCha
                 upstream: {
                   issuer: server.chained?.issuer,
                   clientId: server.chained?.clientId,
-                  // Shown as <redacted> when stored, which keeps it; empty means no secret.
+                  // A stored literal is shown as <redacted>, which keeps it (a secret
+                  // reference as written); empty means no secret.
                   clientSecret: server.chained?.clientSecret || undefined,
                   scopes: server.chained?.scopes,
                 },

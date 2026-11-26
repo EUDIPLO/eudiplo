@@ -1,5 +1,7 @@
 import type { MetricService } from "nestjs-otel";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { stubSecretReferences } from "../../../../../../test/secrets/secret-test-sources.js";
+import { SecretReferences } from "../../../../../platform/secrets/application/secret-references.js";
 import { ChainedAsService } from "./chained-as.service.js";
 import type { OidcDiscoveryResolver } from "./ports/oidc-discovery-resolver.js";
 
@@ -235,5 +237,134 @@ describe("ChainedAsService wallet attestation settings", () => {
         const config = await service.getChainedAsConfig("tenant-1");
 
         expect(config.walletAttestationStatusCheckMode).toBe("strict");
+    });
+
+    it("names the chained server's position, as the stored check does", async () => {
+        const service = Object.assign(
+            Object.create(ChainedAsService.prototype) as ChainedAsService,
+            {
+                issuanceService: {
+                    getIssuanceConfiguration: vi.fn().mockResolvedValue({
+                        authorizationServers: [
+                            { type: "built-in", id: "own" },
+                            {
+                                type: "chained",
+                                id: "chained",
+                                upstream: {
+                                    issuer: "https://upstream.example.org",
+                                },
+                            },
+                        ],
+                    }),
+                },
+            },
+        );
+
+        const config = await service.getChainedAsConfig("tenant-1");
+
+        expect(config.serverIndex).toBe(1);
+    });
+});
+
+describe("ChainedAsService upstream client secret", () => {
+    function exchange(
+        clientSecret: string,
+        secrets: SecretReferences,
+        tokenEndpoint = "https://idp.example/token",
+    ) {
+        const exchanger = {
+            exchange: vi.fn().mockResolvedValue({ accessToken: "a.b.c" }),
+        };
+        const service = Object.assign(
+            Object.create(ChainedAsService.prototype),
+            { oidcTokenExchanger: exchanger, secrets },
+        ) as unknown as {
+            exchangeUpstreamCode(...args: unknown[]): Promise<void>;
+        };
+        const run = service.exchangeUpstreamCode(
+            { tenantId: "tenant-1", upstreamCodeVerifier: "v" },
+            "code",
+            {
+                serverIndex: 1,
+                upstream: {
+                    issuer: "https://idp.example",
+                    clientId: "client",
+                    clientSecret,
+                },
+            },
+            { token_endpoint: tokenEndpoint },
+            "https://eudiplo.example/callback",
+        );
+        return { run, exchanger };
+    }
+
+    it("sends the value of a granted reference to the token endpoint", async () => {
+        const { secrets, vault } = stubSecretReferences();
+        vault.values.set("kv/eudiplo/tenant-1/idp#secret", "from-vault");
+        const { run, exchanger } = exchange(
+            "${vault:kv/eudiplo/tenant-1/idp#secret}",
+            secrets,
+        );
+
+        await run;
+
+        expect(exchanger.exchange).toHaveBeenCalledWith(
+            expect.objectContaining({
+                clientId: "client",
+                clientSecret: "from-vault",
+            }),
+        );
+    });
+
+    it("sends a bound secret only when the token endpoint's origin is granted too", async () => {
+        const { secrets, vault } = stubSecretReferences({
+            tenants: {
+                "tenant-1": {
+                    bound: [
+                        {
+                            ref: "${vault:kv/operator/idp#secret}",
+                            fields: [
+                                "IssuanceConfig:authorizationServers.*.upstream.clientSecret",
+                            ],
+                            destinations: ["https://idp.example"],
+                        },
+                    ],
+                },
+            },
+        });
+        vault.values.set("kv/operator/idp#secret", "operator");
+        const bound = "${vault:kv/operator/idp#secret}";
+
+        const same = exchange(bound, secrets);
+        await same.run;
+        expect(same.exchanger.exchange).toHaveBeenCalledWith(
+            expect.objectContaining({ clientSecret: "operator" }),
+        );
+
+        const elsewhere = exchange(
+            bound,
+            secrets,
+            "https://attacker.example/token",
+        );
+        await expect(elsewhere.run).rejects.toThrow(/refused/);
+        expect(elsewhere.exchanger.exchange).not.toHaveBeenCalled();
+    });
+
+    it("sends a literal secret as it is, and no secret of another tenant", async () => {
+        const literal = exchange("literal", new SecretReferences());
+        await literal.run;
+        expect(literal.exchanger.exchange).toHaveBeenCalledWith(
+            expect.objectContaining({ clientSecret: "literal" }),
+        );
+
+        const { secrets, vault } = stubSecretReferences();
+        vault.values.set("kv/eudiplo/other/idp#secret", "foreign");
+        const foreign = exchange(
+            "${vault:kv/eudiplo/other/idp#secret}",
+            secrets,
+        );
+        await expect(foreign.run).rejects.toThrow(/no grant of tenant/);
+        expect(foreign.exchanger.exchange).not.toHaveBeenCalled();
+        expect(vault.reads).toBe(0);
     });
 });

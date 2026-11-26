@@ -93,7 +93,8 @@ and ID), detach and reattach actions, generated client secrets and cancelled ses
 reason). Secrets are not recorded: the API keys of webhook endpoints and
 attribute providers and the upstream client secrets of chained authorization
 servers appear as `[REDACTED]`, and a changed secret is still listed among the
-changed fields. Not audited: key chains, trust lists, API clients and users (including
+changed fields. A [secret reference](secret-references.md#what-eudiplo-shows)
+in their place is no secret and is recorded as written. Not audited: key chains, trust lists, API clients and users (including
 role changes and secret rotation), KMS provider configuration,
 and session retention settings.
 
