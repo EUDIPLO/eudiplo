@@ -112,7 +112,7 @@ describe("config plan / import with a tenant folder", () => {
         expect(output.stderr).toContain(
             "registrar.json: registrar.json is skipped",
         );
-        const [, init] = vi.mocked(context.fetch).mock.calls[0];
+        const [, init] = bundleCalls(context)[0];
         const bundle = await sentBundle(init);
         expect(bundle.manifest.resources.map((r) => r.path)).not.toContain(
             "registrar.json",
@@ -131,7 +131,7 @@ describe("config plan / import with a tenant folder", () => {
         );
 
         expect(code).toBe(0);
-        const [url, init] = vi.mocked(context.fetch).mock.calls[0];
+        const [url, init] = bundleCalls(context)[0];
         expect(url).toBe(
             "https://example.test/api/config-bundles/plan/archive?mode=upsert",
         );
@@ -185,7 +185,7 @@ describe("config plan / import with a tenant folder", () => {
             vi.useRealTimers();
         }
 
-        const calls = vi.mocked(context.fetch).mock.calls;
+        const calls = bundleCalls(context);
         expect(calls[1][0]).toBe(
             `https://example.test/api/config-bundles/import/archive?mode=upsert&planFingerprint=${fingerprint}`,
         );
@@ -223,9 +223,7 @@ describe("config plan / import with a tenant folder", () => {
         );
 
         expect(code).toBe(0);
-        const bundle = await sentBundle(
-            vi.mocked(context.fetch).mock.calls[0][1],
-        );
+        const bundle = await sentBundle(bundleCalls(context)[0][1]);
         expect(
             bundle.manifest.resources.map((r) => `${r.kind}:${r.path}`),
         ).toEqual([
@@ -335,14 +333,209 @@ describe("config plan / import with a tenant folder", () => {
         );
 
         expect(code).toBe(0);
-        const bundle = await sentBundle(
-            vi.mocked(context.fetch).mock.calls[0][1],
-        );
+        const bundle = await sentBundle(bundleCalls(context)[0][1]);
         // The API reads `$${` as `${`, so neither value is a placeholder there.
         expect(bundle.documents[1].spec).toMatchObject({
             secret: "pa$${NOT_A_PLACEHOLDER}ss",
             description: "Portal $${PORTAL_SECRET}",
         });
+    });
+
+    it("sends a kms.json without an escaped form: $${ is a $ and the value, which is not escaped", async () => {
+        context.env.VAULT_TOKEN = "hvs.${NOT_A_PLACEHOLDER}";
+        await writeJson(join(tenant, "kms.json"), {
+            providers: [
+                {
+                    id: "vault",
+                    type: "vault",
+                    vaultUrl: "https://vault.example",
+                    vaultToken: "$${VAULT_TOKEN}",
+                },
+            ],
+        });
+
+        const code = await runPortabilityCommand(
+            "plan",
+            config,
+            { positionals: ["acme"], flags: { "allow-env": "VAULT_TOKEN" } },
+            context,
+        );
+
+        expect(code).toBe(0);
+        const bundle = await sentBundle(bundleCalls(context)[0][1]);
+        const kms = bundle.documents.find((document) =>
+            String(document.$schema).includes("KmsConfigFile"),
+        );
+        expect(kms?.spec).toMatchObject({
+            providers: [{ vaultToken: "$hvs.${NOT_A_PLACEHOLDER}" }],
+        });
+    });
+
+    it("refuses --allow-env for a bundle file, whose placeholders the CLI does not fill in", async () => {
+        await writeFile(join(cwd, "bundle.json"), "{}");
+
+        await expect(
+            runPortabilityCommand(
+                "plan",
+                config,
+                {
+                    positionals: ["bundle.json"],
+                    flags: { "allow-env": "PORTAL_SECRET" },
+                },
+                context,
+            ),
+        ).rejects.toThrow(
+            "--allow-env applies to a tenant folder only; replace the placeholders of a bundle with their values.",
+        );
+        expect(context.fetch).not.toHaveBeenCalled();
+    });
+
+    it("warns before sending a folder to a backend that predates the escaped form", async () => {
+        vi.mocked(context.fetch).mockImplementation(async (url) =>
+            String(url).endsWith("/api/version")
+                ? new Response(JSON.stringify({ version: "10.1.0" }))
+                : new Response(JSON.stringify(plan)),
+        );
+
+        const code = await runPortabilityCommand(
+            "plan",
+            config,
+            { positionals: ["acme"], flags: { "allow-env": "PORTAL_SECRET" } },
+            context,
+        );
+
+        expect(code).toBe(0);
+        expect(vi.mocked(context.fetch).mock.calls[0][0]).toBe(
+            "https://example.test/api/version",
+        );
+        expect(output.stderr).toContain(
+            "the backend (10.1.0) does not read the escaped form $${ of configuration files",
+        );
+        expect(output.stderr).toContain(
+            "Upgrade the CLI and the backend together.",
+        );
+    });
+
+    it.each([
+        ["a later release", { version: "10.1.1" }, 200],
+        ["a development build", { version: "main" }, 200],
+        ["an unreadable version", {}, 500],
+    ])("does not warn for %s", async (_name, body, status) => {
+        vi.mocked(context.fetch).mockImplementation(async (url) =>
+            String(url).endsWith("/api/version")
+                ? new Response(JSON.stringify(body), { status })
+                : new Response(JSON.stringify(plan)),
+        );
+
+        const code = await runPortabilityCommand(
+            "plan",
+            config,
+            { positionals: ["acme"], flags: { "allow-env": "PORTAL_SECRET" } },
+            context,
+        );
+
+        expect(code).toBe(0);
+        expect(output.stderr).not.toContain("escaped form");
+    });
+
+    it("does not warn when the version request fails, and still sends the folder", async () => {
+        vi.mocked(context.fetch).mockImplementation(async (url) => {
+            if (String(url).endsWith("/api/version"))
+                throw new TypeError("fetch failed");
+            return new Response(JSON.stringify(plan));
+        });
+
+        const code = await runPortabilityCommand(
+            "plan",
+            config,
+            { positionals: ["acme"], flags: { "allow-env": "PORTAL_SECRET" } },
+            context,
+        );
+
+        expect(code).toBe(0);
+        expect(bundleCalls(context)).toHaveLength(1);
+        expect(output.stderr).not.toContain("escaped form");
+    });
+
+    it("warns before an import stores anything", async () => {
+        vi.mocked(context.fetch).mockImplementation(async (url) =>
+            String(url).endsWith("/api/version")
+                ? new Response(JSON.stringify({ version: "10.1.0" }))
+                : new Response(JSON.stringify(plan)),
+        );
+
+        await runPortabilityCommand(
+            "import",
+            config,
+            {
+                positionals: ["acme"],
+                flags: {
+                    "plan-fingerprint": fingerprint,
+                    "allow-env": "PORTAL_SECRET",
+                },
+            },
+            context,
+        );
+
+        const calls = vi.mocked(context.fetch).mock.calls;
+        expect(calls[0][0]).toBe("https://example.test/api/version");
+        expect(String(calls[1][0])).toContain(
+            "/api/config-bundles/import/archive",
+        );
+        expect(output.stderr).toContain("the backend (10.1.0)");
+    });
+
+    it("leaves the CONFIG_FOLDER variable rules to tenant validate: the CLI fills the folder", async () => {
+        await writeJson(join(tenant, "info.json"), {
+            name: "${AWS_SESSION_TOKEN}",
+        });
+
+        const code = await runPortabilityCommand(
+            "plan",
+            config,
+            { positionals: ["acme"], flags: {} },
+            context,
+        );
+
+        expect(code).toBe(0);
+        expect(bundleCalls(context)).toHaveLength(1);
+        expect(output.stderr).toContain("SECRET_REQUIRED");
+        expect(output.stderr).not.toContain("holds the AWS credentials");
+    });
+
+    it("masks a filled-in value that contains ${, also in its escaped form", async () => {
+        context.env.PORTAL_SECRET = "pa${NOT_A_PLACEHOLDER}ss";
+        const leaky = {
+            ...plan,
+            items: [
+                {
+                    kind: "Client",
+                    id: "portal",
+                    action: "update",
+                    changes: [
+                        {
+                            path: "/spec/description",
+                            before: "Stored pa$${NOT_A_PLACEHOLDER}ss",
+                            after: "Now pa${NOT_A_PLACEHOLDER}ss",
+                        },
+                    ],
+                },
+            ],
+        };
+        vi.mocked(context.fetch).mockImplementation(
+            async () => new Response(JSON.stringify(leaky), { status: 200 }),
+        );
+
+        await runPortabilityCommand(
+            "plan",
+            config,
+            { positionals: ["acme"], flags: { "allow-env": "PORTAL_SECRET" } },
+            context,
+        );
+
+        const [change] = JSON.parse(output.stdout).items[0].changes;
+        expect(change.before).toBe("Stored ${PORTAL_SECRET}");
+        expect(change.after).toBe("Now ${PORTAL_SECRET}");
     });
 
     it("keeps a placeholder that --allow-env does not name for the server, without its value", async () => {
@@ -361,9 +554,7 @@ describe("config plan / import with a tenant folder", () => {
             "clients/portal.json /secret: Unresolved placeholder ${PORTAL_SECRET}",
         );
         expect(output.stderr).toContain("SECRET_REQUIRED");
-        const bundle = await sentBundle(
-            vi.mocked(context.fetch).mock.calls[0][1],
-        );
+        const bundle = await sentBundle(bundleCalls(context)[0][1]);
         expect(bundle.documents[1].spec).toMatchObject({
             secret: "${PORTAL_SECRET}",
         });
@@ -438,7 +629,7 @@ describe("config plan / import with a tenant folder", () => {
         );
 
         expect(code).toBe(0);
-        expect(context.fetch).toHaveBeenCalledOnce();
+        expect(bundleCalls(context)).toHaveLength(1);
     });
 
     it("never fills in the CLI's own EUDIPLO_* variables", async () => {
@@ -456,9 +647,7 @@ describe("config plan / import with a tenant folder", () => {
         );
 
         expect(code).toBe(0);
-        const bundle = await sentBundle(
-            vi.mocked(context.fetch).mock.calls[0][1],
-        );
+        const bundle = await sentBundle(bundleCalls(context)[0][1]);
         expect(bundle.documents[1].spec).toMatchObject({
             secret: "${EUDIPLO_TOKEN}",
         });
@@ -612,9 +801,7 @@ describe("config plan / import with a tenant folder", () => {
         );
 
         expect(code).toBe(0);
-        const bundle = await sentBundle(
-            vi.mocked(context.fetch).mock.calls[0][1],
-        );
+        const bundle = await sentBundle(bundleCalls(context)[0][1]);
         expect(bundle.documents[1].spec).toMatchObject({
             secret: "s3cr3t-value",
         });
@@ -657,4 +844,11 @@ async function sentBundle(
     init: RequestInit | undefined,
 ): Promise<ConfigBundle> {
     return new ConfigBundleCodec().decode(await sentZip(init));
+}
+
+/** The calls to the config-bundles API, without the version request. */
+function bundleCalls(context: CommandContext) {
+    return vi
+        .mocked(context.fetch)
+        .mock.calls.filter(([url]) => !String(url).endsWith("/api/version"));
 }

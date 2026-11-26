@@ -11,7 +11,8 @@ export interface ProviderHealth {
 /**
  * Compares the CLI version with the backend version. A different major
  * version is a failure, a different minor version a warning; patch
- * differences are fine. Unparsable versions (e.g. "main" from a dev build)
+ * differences are fine, except for a CLI after a backend that predates the
+ * escaped form ({@link LAST_RELEASE_WITHOUT_ESCAPED_FORM}). Unparsable versions (e.g. "main" from a dev build)
  * cannot be judged, so they warn rather than fail.
  */
 export function compareVersions(
@@ -43,11 +44,56 @@ export function compareVersions(
             message: `CLI ${cliVersion} and backend ${backendVersion} differ in minor version; some commands may not be supported.`,
         };
     }
+    if (
+        compare(cli, LAST_RELEASE_WITHOUT_ESCAPED_FORM) > 0 &&
+        compare(backend, LAST_RELEASE_WITHOUT_ESCAPED_FORM) <= 0
+    ) {
+        return {
+            name,
+            status: "warn",
+            message: `CLI ${cliVersion} and backend ${backendVersion} read the escaped form $\${ of configuration files differently; config plan and import of a tenant folder store values containing \${ or $\${ differently. Upgrade the backend to match the CLI.`,
+        };
+    }
     return {
         name,
         status: "pass",
         message: `CLI ${cliVersion} matches backend ${backendVersion}.`,
     };
+}
+
+/**
+ * The last release whose backend does not know the escaped form `$${` of
+ * configuration files. The form came with the first release after this one,
+ * whichever number that release got.
+ */
+const LAST_RELEASE_WITHOUT_ESCAPED_FORM: Version = {
+    major: 10,
+    minor: 1,
+    patch: 0,
+};
+
+/**
+ * A warning for `config plan`/`import` of a tenant folder when the backend
+ * predates the escaped form: this CLI sends `$${` as it is and escapes the
+ * values it fills in, which such a backend stores as they are. Undefined for
+ * a backend that knows the form, or whose version is unknown or cannot be
+ * compared (a development build reports "main").
+ */
+export function escapedFormWarning(
+    backendVersion: string | undefined,
+): string | undefined {
+    const backend = backendVersion ? parse(backendVersion) : undefined;
+    if (!backend || compare(backend, LAST_RELEASE_WITHOUT_ESCAPED_FORM) > 0)
+        return undefined;
+    return `Warning: the backend (${backendVersion}) does not read the escaped form $\${ of configuration files, which this CLI sends: values containing \${ or $\${ will be stored differently from what the files say. Upgrade the CLI and the backend together.`;
+}
+
+function compare(left: Version, right: Version): number {
+    return (
+        left.major - right.major ||
+        left.minor - right.minor ||
+        left.patch - right.patch
+    );
 }
 
 export function readBackendVersion(body: unknown): string | undefined {
@@ -120,9 +166,13 @@ export function summarizeProviderHealth(
     };
 }
 
-function parse(
-    version: string,
-): { major: number; minor: number; patch: number } | undefined {
+interface Version {
+    major: number;
+    minor: number;
+    patch: number;
+}
+
+function parse(version: string): Version | undefined {
     const match = /^v?(\d+)\.(\d+)\.(\d+)/.exec(version.trim());
     if (!match) {
         return undefined;

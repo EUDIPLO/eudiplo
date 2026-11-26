@@ -73,6 +73,9 @@ describe("reviewed CLI import plans", () => {
             context,
         );
 
+        // A bundle file goes as it is: no version request for the warning
+        // about the escaped form, which concerns what the CLI fills in.
+        expect(context.fetch).toHaveBeenCalledOnce();
         const [url, init] = vi.mocked(context.fetch).mock.calls[0];
         expect(url).toBe(
             "https://example.test/api/config-bundles/plan/archive?mode=upsert",

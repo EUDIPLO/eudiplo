@@ -62,9 +62,13 @@ export async function validateTenantConfig(
                       basename(rootPath),
                       schemas,
                       context.env,
+                      // As the backend loads the folder from CONFIG_FOLDER.
+                      { folderVariablePolicy: true },
                   ),
               ]
-            : await validateTenantsRoot(rootPath, schemas, context.env);
+            : await validateTenantsRoot(rootPath, schemas, context.env, {
+                  folderVariablePolicy: true,
+              });
 
     context.stdout.write(
         format === "json"

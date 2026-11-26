@@ -57,7 +57,9 @@ eudiplo config import ./config/acme --instance staging --mode upsert --plan plan
 1. The CLI validates the folder offline, like
    [`eudiplo config tenant validate`](configuration-as-code.md#validate-in-ci).
    A folder with errors exits with `1` and is not sent, and so is a folder
-   with a symbolic link that points outside it or does not resolve.
+   with a symbolic link that points outside it or does not resolve. The
+   rules on which variables a file of `CONFIG_FOLDER` can use do not apply
+   here, because the CLI fills in the placeholders (step 2).
 2. It fills in `${VAR}` placeholders from the variables named in
    `--allow-env` (see below). A placeholder without a value is named in a
    warning and sent as it is; the plan blocks that resource with
@@ -73,7 +75,13 @@ eudiplo config import ./config/acme --instance staging --mode upsert --plan plan
    ([servers in a tenant `kms.json`](kms.md#servers-in-a-tenant-kmsjson)).
 3. It sends the folder as a bundle archive, `info.json` and `images/` included.
    The bundle is the same for the same files and environment, so the import
-   matches the reviewed plan.
+   matches the reviewed plan. `$${` stays as it is and a filled-in value that
+   contains `${` is sent as `$${`, except in `kms.json`, which has no escaped
+   form. Before it sends the folder, the CLI reads the backend's version
+   from `/api/version` and warns when the backend is 10.1.0 or older: such a
+   backend stores `$${` as it is, so values containing `${` or `$${` are
+   stored differently. Upgrade the CLI and the backend together
+   ([upgrade notes](../upgrade/10.x-fixes.md#exports-placeholder-text-is-written-in-an-escaped-form)).
 
 The tenant comes from the access token, not from the folder name.
 

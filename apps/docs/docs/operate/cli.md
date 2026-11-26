@@ -225,7 +225,10 @@ certificate expiry (warning within 30 days), authentication, CLI/backend
 version compatibility, KMS provider health and web client reachability, plus
 the driver: the container runtime, Compose files and container health for
 Compose; `kubectl`, namespace, permissions, workloads and service endpoints for
-Kubernetes.
+Kubernetes. The version check fails on a different major version and warns on
+a different minor version. Within one minor version, it also warns for a
+backend of 10.1.0 or older with a later CLI, which read the escaped form `$${`
+of configuration files differently.
 
 Each check reports `PASS`, `WARN`, `FAIL` or `SKIP`. The exit code is 1 if a
 check failed; `--strict` also fails on warnings, `SKIP` never fails. `--all`
