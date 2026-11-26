@@ -94,6 +94,16 @@ export class VaultUnavailableError extends Error {
     }
 }
 
+/** Why one segment of a grant path is none, or undefined. */
+function segmentProblem(segment: string): string | undefined {
+    if (segment === TENANT_SEGMENT) return undefined;
+    if (segment.includes(TENANT_SEGMENT))
+        return "{tenant} must be a whole path segment, such as kv/tenants/{tenant}/";
+    if (segment === "." || segment === ".." || !SEGMENT.test(segment))
+        return "a vault grant is a path of segments of A-Z, a-z, 0-9 and ._~+=,:- with no empty, . or .. segment";
+    return undefined;
+}
+
 const keyOf = (reference: SecretReference) =>
     reference.source === "vault" ? `${reference.mount}/${reference.path}` : "";
 
@@ -140,7 +150,9 @@ export class VaultSecretSource implements SecretSource {
             throw new Error(
                 "The Vault address uses http:, which would send the token unencrypted; use https: or allow http explicitly",
             );
-        this.address = settings.address.replace(/\/+$/, "");
+        let end = settings.address.length;
+        while (end > 0 && settings.address[end - 1] === "/") end--;
+        this.address = settings.address.slice(0, end);
         if (settings.auth.method === "token")
             this.token = {
                 value: settings.auth.token,
@@ -161,13 +173,8 @@ export class VaultSecretSource implements SecretSource {
             return "the key after # is made of A-Z, a-z, 0-9, ., _ and -";
         if (!prefix && segments.length < 2)
             return "a vault grant names a mount and a path, such as kv/eudiplo/";
-        for (const segment of segments) {
-            if (segment === TENANT_SEGMENT) continue;
-            if (segment.includes(TENANT_SEGMENT))
-                return "{tenant} must be a whole path segment, such as kv/tenants/{tenant}/";
-            if (segment === "." || segment === ".." || !SEGMENT.test(segment))
-                return "a vault grant is a path of segments of A-Z, a-z, 0-9 and ._~+=,:- with no empty, . or .. segment";
-        }
+        const problem = segments.map(segmentProblem).find(Boolean);
+        if (problem) return problem;
         if (segments[0] === TENANT_SEGMENT)
             return "{tenant} cannot be the mount";
         const mount = segments[0];
