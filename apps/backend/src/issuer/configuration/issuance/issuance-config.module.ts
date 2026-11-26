@@ -3,6 +3,7 @@ import { getRepositoryToken, TypeOrmModule } from "@nestjs/typeorm";
 import type { Repository } from "typeorm";
 import { AuditLogModule } from "../../../audit-log/audit-log.module.js";
 import { provideKeyChainReferenceSource } from "../../../crypto/key/key-chain-reference-source.provider.js";
+import { SecretsModule } from "../../../platform/secrets/secrets.module.js";
 import { provideFederationTrustAnchorReferenceSource } from "../../../trust/federation-trust-anchor/adapters/federation-trust-anchor-reference-source.provider.js";
 import { FederationTrustAnchorModule } from "../../../trust/federation-trust-anchor/federation-trust-anchor.module.js";
 import { OutboundUrlPolicyModule } from "../../../webhook/outbound-url-policy.module.js";
@@ -26,6 +27,7 @@ import { ISSUANCE_CONFIG_REPOSITORY } from "./ports/issuance-config.repository.j
         TrustListModule,
         FederationTrustAnchorModule,
         OutboundUrlPolicyModule,
+        SecretsModule,
     ],
     controllers: [IssuanceConfigController],
     providers: [

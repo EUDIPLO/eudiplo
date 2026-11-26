@@ -7,6 +7,7 @@ import {
     assertCertificatePathConstraints,
     CertificatePathConstraintViolation,
 } from "../../../shared/utils/certificate-path-constraints.util.js";
+import { parseX509Certificate } from "../../../shared/utils/x509-certificate-cache.js";
 import { getRevocationServices } from "../../../trust/domain/status-list-signers.js";
 import {
     describeDiscardedTrustLists,
@@ -617,8 +618,8 @@ export class CredentialChainValidationService {
         entity: TrustedEntity,
     ): Uint8Array | undefined {
         try {
-            const cert = new x509.X509Certificate(certValue as any);
-            return new Uint8Array(cert.rawData);
+            const cert = parseX509Certificate(certValue);
+            return new Uint8Array(cert.rawData.slice(0));
         } catch (e: any) {
             this.logger.warn(
                 `Failed to parse certificate from entity ${entity.entityId}: ${e?.message ?? e}`,

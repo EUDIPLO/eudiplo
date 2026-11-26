@@ -1,14 +1,18 @@
-import { Body, Controller, Get, Post } from "@nestjs/common";
+import { Body, Controller, Get, Inject, Post } from "@nestjs/common";
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import type { AuditLogRequestMeta } from "../../../audit-log/audit-log.service.js";
 import { AuditMeta } from "../../../audit-log/audit-log-context.util.js";
 import { Role } from "../../../auth/roles/role.enum.js";
 import { Secured } from "../../../auth/secure.decorator.js";
 import { Token, TokenPayload } from "../../../auth/token.decorator.js";
+import {
+    SECRET_REFERENCES,
+    type SecretReferences,
+} from "../../../platform/secrets/application/secret-references.js";
 import { createConfigBodyPipe } from "../../../shared/common/zod/zod-schema.util.js";
 import {
     assertUpstreamSecretsKeptOnlyForSameIssuer,
-    redactSecrets,
+    redactSecretsShowing,
     restoreSecrets,
 } from "../../../shared/utils/write-only-secrets.util.js";
 import type { IssuanceConfiguration } from "./domain/issuance-configuration.js";
@@ -32,17 +36,30 @@ const readOnly = [
 ];
 
 /**
- * Upstream client secrets of chained servers are write-only: returned as
- * `<redacted>`, which keeps the stored secret of the server with the same id.
+ * Upstream client secrets of chained servers are write-only: a literal is
+ * returned as `<redacted>`, which keeps the stored secret of the server with
+ * the same id; a secret reference is no secret and returned as written.
  */
 const SECRET = "authorizationServers.*.upstream.clientSecret";
-const redact = (config: IssuanceConfiguration) => redactSecrets(config, SECRET);
 
 @ApiTags("Issuer")
 @Secured([Role.Issuances])
 @Controller("issuer/config")
 export class IssuanceConfigController {
-    constructor(private readonly issuanceService: IssuanceService) {}
+    constructor(
+        private readonly issuanceService: IssuanceService,
+        @Inject(SECRET_REFERENCES)
+        private readonly secrets: SecretReferences,
+    ) {}
+
+    /** The configuration for a response: a reference shown, a secret not. */
+    private redact(config: IssuanceConfiguration): IssuanceConfiguration {
+        return redactSecretsShowing(
+            config,
+            (value) => this.secrets.isShown(value),
+            SECRET,
+        );
+    }
 
     /**
      * Returns the issuance configurations for this tenant. Creates a default one if it does not exist.
@@ -54,7 +71,7 @@ export class IssuanceConfigController {
     async getIssuanceConfigurations(
         @Token() user: TokenPayload,
     ): Promise<IssuanceConfiguration> {
-        return redact(
+        return this.redact(
             await this.issuanceService
                 .getIssuanceConfiguration(user.entity!.id)
                 .catch(() =>
@@ -94,7 +111,7 @@ export class IssuanceConfigController {
             config.authorizationServers,
             stored?.authorizationServers,
         );
-        return redact(
+        return this.redact(
             await this.issuanceService.storeIssuanceConfiguration(
                 user.entity!.id,
                 restoreSecrets(config, stored, SECRET),

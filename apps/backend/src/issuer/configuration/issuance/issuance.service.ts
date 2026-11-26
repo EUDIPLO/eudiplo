@@ -18,6 +18,11 @@ import {
     ConfigImportOrchestratorService,
     ImportPhase,
 } from "../../../platform/config-import/config-import-orchestrator.service.js";
+import {
+    SECRET_REFERENCES,
+    type SecretReferences,
+} from "../../../platform/secrets/application/secret-references.js";
+import { assertSecretFieldAllowed } from "../../../platform/secrets/secret-reference-request.js";
 import { loadConfigDto } from "../../../shared/utils/config-file-loader.util.js";
 import { FilesService } from "../../../storage/files.service.js";
 import { unregisteredTrustAnchorsMessage } from "../../../trust/federation-trust-anchor/domain/federation-trust-anchor-errors.js";
@@ -36,6 +41,7 @@ import {
     REMOVED_CHAINED_VP_MESSAGE,
     usesRemovedChainedVp,
 } from "./domain/removed-authorization-servers.js";
+import { upstreamClientSecretUse } from "./domain/upstream-client-secret.js";
 import { DisplayInfo } from "./dto/display.dto.js";
 import { IssuanceDto } from "./dto/issuance.dto.js";
 import {
@@ -71,6 +77,8 @@ export class IssuanceService {
         private readonly outboundUrlPolicy: OutboundUrlPolicyService,
         private readonly configService: ConfigService,
         private readonly keyChainService: KeyChainService,
+        @Inject(SECRET_REFERENCES)
+        private readonly secrets: SecretReferences,
     ) {
         this.configImportOrchestrator.register(
             "issuance",
@@ -112,6 +120,11 @@ export class IssuanceService {
                             unregisteredTrustAnchorsMessage(unregistered),
                         );
                     }
+                    // Likewise for a refused upstream secret reference.
+                    this.assertUpstreamSecretReferences(
+                        tid,
+                        data.authorizationServers ?? [],
+                    );
                     await this.issuanceConfigRepo.deleteForTenant(tid);
                 },
                 loadData: (filePath) =>
@@ -334,6 +347,14 @@ export class IssuanceService {
             configuredAuthorizationServers,
             existingConfig.authorizationServers,
         );
+        // Only when this change sets authorizationServers, so other changes
+        // are not refused for a reference the policy no longer grants; then
+        // every server is checked, so a changed issuer is checked again.
+        if (hasIncomingAuthorizationServers)
+            this.assertUpstreamSecretReferences(
+                tenantId,
+                configuredAuthorizationServers,
+            );
 
         const before =
             "tenantId" in existingConfig
@@ -368,6 +389,34 @@ export class IssuanceService {
         }
 
         return saved;
+    }
+
+    /**
+     * Refuses an upstream client secret that is a secret reference the
+     * tenant's secret policy does not let this server name for its upstream
+     * issuer. A literal secret passes.
+     */
+    private assertUpstreamSecretReferences(
+        tenantId: string,
+        servers: Array<{
+            type?: string;
+            upstream?: { issuer?: string; clientSecret?: string };
+        }>,
+    ): void {
+        servers.forEach((server, index) => {
+            const secret = server.upstream?.clientSecret;
+            if (server.type !== "chained" || !secret) return;
+            assertSecretFieldAllowed(
+                this.secrets,
+                secret,
+                upstreamClientSecretUse(
+                    tenantId,
+                    index,
+                    server.upstream?.issuer ?? "",
+                ),
+                `authorizationServers[${index}].upstream.clientSecret`,
+            );
+        });
     }
 
     /**
@@ -437,9 +486,13 @@ export class IssuanceService {
                 return {
                     ...server,
                     // Upstream client secret of chained servers.
-                    ...(upstream?.clientSecret && {
-                        upstream: { ...upstream, clientSecret: "[REDACTED]" },
-                    }),
+                    ...(upstream?.clientSecret &&
+                        !this.secrets.isShown(upstream.clientSecret) && {
+                            upstream: {
+                                ...upstream,
+                                clientSecret: "[REDACTED]",
+                            },
+                        }),
                     walletProviderTrustLists: sanitizeWalletProviderTrustLists(
                         (
                             server as typeof server & {

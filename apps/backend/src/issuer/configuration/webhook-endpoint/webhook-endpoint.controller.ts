@@ -4,6 +4,7 @@ import {
     Delete,
     Get,
     HttpCode,
+    Inject,
     Param,
     Patch,
     Post,
@@ -14,6 +15,10 @@ import { AuditMeta } from "../../../audit-log/audit-log-context.util.js";
 import { Role } from "../../../auth/roles/role.enum.js";
 import { Secured } from "../../../auth/secure.decorator.js";
 import { Token, TokenPayload } from "../../../auth/token.decorator.js";
+import {
+    SECRET_REFERENCES,
+    type SecretReferences,
+} from "../../../platform/secrets/application/secret-references.js";
 import {
     redactApiKey,
     restoreApiKey,
@@ -33,7 +38,16 @@ import { WebhookEndpointService } from "./webhook-endpoint.service.js";
 @Secured([Role.Issuances, Role.Presentations])
 @Controller("issuer/webhook-endpoints")
 export class WebhookEndpointController {
-    constructor(private readonly service: WebhookEndpointService) {}
+    constructor(
+        private readonly service: WebhookEndpointService,
+        @Inject(SECRET_REFERENCES)
+        private readonly secrets: SecretReferences,
+    ) {}
+
+    /** The entry for a response: a literal API key redacted, a reference shown. */
+    private redact<T>(entry: T): T {
+        return redactApiKey(entry, (value) => this.secrets.isShown(value));
+    }
 
     /**
      * List all webhook endpoints for the tenant.
@@ -47,7 +61,9 @@ export class WebhookEndpointController {
         type: [WebhookEndpointEntity],
     })
     async getAll(@Token() user: TokenPayload): Promise<WebhookEndpointData[]> {
-        return (await this.service.getAll(user.entity!.id)).map(redactApiKey);
+        return (await this.service.getAll(user.entity!.id)).map((entry) =>
+            this.redact(entry),
+        );
     }
 
     @Get(":id")
@@ -59,7 +75,7 @@ export class WebhookEndpointController {
     })
     @ApiResponse({ status: 404, description: "Webhook endpoint not found" })
     async getById(@Param("id") id: string, @Token() user: TokenPayload) {
-        return redactApiKey(await this.service.getById(user.entity!.id, id));
+        return this.redact(await this.service.getById(user.entity!.id, id));
     }
 
     @Post()
@@ -80,7 +96,7 @@ export class WebhookEndpointController {
         @Token() user: TokenPayload,
         @AuditMeta() requestMeta: AuditLogRequestMeta,
     ) {
-        return redactApiKey(
+        return this.redact(
             await this.service.create(
                 user.entity!.id,
                 restoreApiKey(dto),
@@ -107,7 +123,7 @@ export class WebhookEndpointController {
     ) {
         const endpoint = await this.service.getById(user.entity!.id, id);
         const endpointUpdate = restoreApiKey(dto, endpoint);
-        return redactApiKey(
+        return this.redact(
             await this.service.update(
                 user.entity!.id,
                 id,

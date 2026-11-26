@@ -60,6 +60,12 @@ Connection to the German EUDI Hub ([EUDI Hub](../trust/eudi-hub.md)).
 
 <ConfigTable group="registrar" />
 
+## Secret references
+
+See [Secret references](../operate/secret-references.md).
+
+<ConfigTable group="secrets" />
+
 ## Session
 
 <ConfigTable group="session" />

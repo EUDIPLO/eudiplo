@@ -7,6 +7,12 @@ import {
     declaredScopes,
 } from "../../src/platform/config/config-variable-scope.js";
 import { EnvSecretSource } from "../../src/platform/secrets/adapters/env-secret-source.js";
+import { SecretPolicy } from "../../src/platform/secrets/application/secret-policy.js";
+import { SecretReferences } from "../../src/platform/secrets/application/secret-references.js";
+import {
+    DEFAULT_SECRET_RESOLVER_OPTIONS,
+    SecretResolver,
+} from "../../src/platform/secrets/application/secret-resolver.js";
 import { SecretValue } from "../../src/platform/secrets/domain/secret-value.js";
 import type { SecretSource } from "../../src/platform/secrets/ports/secret-source.js";
 
@@ -89,3 +95,24 @@ export const envSource = (environment: Record<string, string>) =>
         declaredScopes(),
         CLOUD_CREDENTIAL_VARIABLES,
     );
+
+/**
+ * Test helper: secret references read under a policy that grants every
+ * tenant `kv/eudiplo/{tenant}/` of a stub Vault, plus `extra`.
+ */
+export function stubSecretReferences(extra: Record<string, unknown> = {}) {
+    const vault = new StubVaultSource();
+    const secrets = new SecretReferences(
+        new SecretResolver(
+            SecretPolicy.create(
+                {
+                    tenants: { "*": { vault: ["kv/eudiplo/{tenant}/"] } },
+                    ...extra,
+                },
+                [vault],
+            ),
+            DEFAULT_SECRET_RESOLVER_OPTIONS,
+        ),
+    );
+    return { secrets, vault };
+}

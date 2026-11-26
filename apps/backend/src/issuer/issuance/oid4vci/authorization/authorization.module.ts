@@ -6,6 +6,7 @@ import type { Repository } from "typeorm";
 import { CryptoModule } from "../../../../crypto/crypto.module.js";
 import { CryptoService } from "../../../../crypto/crypto.service.js";
 import { KeyChainService } from "../../../../crypto/key/key-chain.service.js";
+import { SecretsModule } from "../../../../platform/secrets/secrets.module.js";
 import { CreateSession } from "../../../../session/application/create-session.js";
 import { RecordFailedTxCodeAttempt } from "../../../../session/application/record-failed-tx-code-attempt.js";
 import { SessionStore } from "../../../../session/application/session-store.js";
@@ -228,6 +229,7 @@ export const builtInAuthorizationServerProviders = [
  */
 @Module({
     imports: [
+        SecretsModule,
         CryptoModule,
         ConfigurationModule,
         Oid4vpModule,

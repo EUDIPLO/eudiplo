@@ -166,7 +166,7 @@ export class PresentationCreateComponent implements OnInit, PageWithUnsavedChang
   public create = true;
   public copyMode = false;
   /** IDs of the existing configs; the backend refuses to create one with a taken ID. */
-  private takenIds = new Set<string>();
+  private readonly takenIds = new Set<string>();
   /** The existing configs could not be listed, so a taken ID shows only when saving. */
   takenIdsUnknown = false;
 
@@ -396,7 +396,11 @@ export class PresentationCreateComponent implements OnInit, PageWithUnsavedChang
       this.takenIdsUnknown = true;
     }
     let id = `${sourceId}-copy`;
-    for (let n = 2; this.takenIds.has(id); n++) id = `${sourceId}-copy-${n}`;
+    let n = 2;
+    while (this.takenIds.has(id)) {
+      id = `${sourceId}-copy-${n}`;
+      n++;
+    }
     this.form.get('id')?.setValue(id);
   }
 

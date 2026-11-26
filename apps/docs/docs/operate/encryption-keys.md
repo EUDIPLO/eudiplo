@@ -16,7 +16,7 @@ startup from `ENCRYPTION_KEY_SOURCE`.
 | Key chains                         | `rootJwk`, `activeJwk`, `previousJwk` (private keys of `db` key chains)                  |
 | Webhook endpoints, attribute providers | The API key in `auth` (`config.value`)                                              |
 | Issuance configuration             | The upstream client secret of chained authorization servers in `authorizationServers`  |
-| Sessions                           | `credentials` (verified presentations), `credentialPayload` (offer claims), `offer`, `auth_queries`, `responseEncryptionPrivateJwk` (per-request key that decrypts the wallet response), the webhook API key in `parsedWebhook` |
+| Sessions                           | `credentials` (verified presentations), `credentialPayload` (offer claims), `offer`, `auth_queries`, `responseEncryptionPrivateJwk` (per-request key that decrypts the wallet response), the webhook API key in `parsedWebhook` (a webhook of the session request; a configured webhook endpoint is not copied there) |
 | Interactive authorization sessions | `authorizationDetails`, `presentationData`, `completedStepsData`                         |
 | Chained authorization sessions     | `upstreamIdTokenClaims`, `upstreamAccessTokenClaims`                                    |
 

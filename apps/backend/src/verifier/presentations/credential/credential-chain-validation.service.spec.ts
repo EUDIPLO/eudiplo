@@ -944,6 +944,44 @@ describe("CredentialChainValidationService — status list signer", () => {
             ]);
             expect(warn).toHaveBeenCalledTimes(2);
         });
+
+        it("drops a trust-list certificate encoded as hex instead of base64", async () => {
+            // ETSI TS 119 602 lists carry base64 DER; other encodings are not
+            // guessed at.
+            const warn = vi.fn();
+            const service = new CredentialChainValidationService(
+                {
+                    getTrustStore: vi.fn().mockResolvedValue({
+                        entities: [
+                            {
+                                entityId: "hex-issuance",
+                                services: [
+                                    {
+                                        serviceTypeIdentifier: ISSUANCE,
+                                        certValue: Buffer.from(
+                                            b64(pidCa),
+                                            "base64",
+                                        ).toString("hex"),
+                                    },
+                                ],
+                            },
+                        ],
+                    }),
+                } as any,
+                new X509ValidationService(),
+                {
+                    setContext: vi.fn(),
+                    error: vi.fn(),
+                    warn,
+                    debug: vi.fn(),
+                } as any,
+            );
+
+            await expect(
+                service.getTrustedCertificateEntries(LOTE_SOURCE),
+            ).resolves.toEqual([]);
+            expect(warn).toHaveBeenCalledTimes(1);
+        });
     });
 
     describe("entity with a pinned issuance certificate in pathEnd mode", () => {

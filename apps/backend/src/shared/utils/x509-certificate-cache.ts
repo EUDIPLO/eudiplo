@@ -28,6 +28,8 @@ const TTL_MS = 60 * 60 * 1000;
  * encodings, such as hex, are not accepted.
  *
  * The returned object is shared between callers and must not be modified.
+ * That includes the buffer behind `rawData`: callers that hand its bytes to
+ * other code copy them first (`rawData.slice(0)`).
  *
  * @throws When the value is not a certificate. Failures are not cached.
  */
@@ -48,4 +50,12 @@ export function parseX509Certificate(encoded: string): x509.X509Certificate {
         Date.now() + TTL_MS,
     );
     return cert;
+}
+
+/**
+ * {@link parseX509Certificate} for DER bytes, such as the trusted
+ * certificates handed to the mdoc library.
+ */
+export function parseX509CertificateDer(der: Uint8Array): x509.X509Certificate {
+    return parseX509Certificate(Buffer.from(der).toString("base64"));
 }

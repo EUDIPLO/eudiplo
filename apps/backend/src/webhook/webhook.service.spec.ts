@@ -1,5 +1,6 @@
 import { of } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
+import { SecretReferences } from "../platform/secrets/application/secret-references.js";
 import type { SessionData } from "../session/domain/session-data.js";
 import { WebhookService } from "./webhook.service.js";
 
@@ -25,6 +26,7 @@ describe("WebhookService presentation payloads", () => {
             { post } as never,
             policy as never,
             { setContext: vi.fn(), debug: vi.fn(), error: vi.fn() } as never,
+            new SecretReferences(),
         );
         return { service, post, policy };
     }

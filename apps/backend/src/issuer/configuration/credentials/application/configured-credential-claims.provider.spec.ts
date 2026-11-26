@@ -84,6 +84,7 @@ describe("ConfiguredCredentialClaimsProvider", () => {
         };
         const attributeProviders = {
             findForTenant: vi.fn().mockResolvedValue({
+                tenantId: "tenant-1",
                 url: "https://claims.example",
                 auth: { type: "none" },
             }),
@@ -120,6 +121,15 @@ describe("ConfiguredCredentialClaimsProvider", () => {
         );
         expect(fetchClaims).toHaveBeenCalledWith(
             expect.objectContaining({
+                // Its API key may be a secret reference of this field.
+                webhook: {
+                    url: "https://claims.example",
+                    auth: { type: "none" },
+                    storedAs: {
+                        kind: "AttributeProvider",
+                        tenantId: "tenant-1",
+                    },
+                },
                 identity,
                 credentials: [{ id: "presented" }],
                 credentialConfigurationId: "pid",

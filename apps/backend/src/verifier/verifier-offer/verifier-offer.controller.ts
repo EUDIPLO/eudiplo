@@ -2,6 +2,7 @@ import {
     Body,
     Controller,
     ForbiddenException,
+    Inject,
     Post,
     Res,
 } from "@nestjs/common";
@@ -17,6 +18,11 @@ import { Role } from "../../auth/roles/role.enum.js";
 import { Secured } from "../../auth/secure.decorator.js";
 import { Token, TokenPayload } from "../../auth/token.decorator.js";
 import { OfferResponse } from "../../issuer/issuance/oid4vci/dto/offer-request.dto.js";
+import {
+    SECRET_REFERENCES,
+    type SecretReferences,
+} from "../../platform/secrets/application/secret-references.js";
+import { assertNoRequestWebhookReference } from "../../webhook/stored-webhook-secret.js";
 import { Iso18013OfferResponse } from "../iso18013/dto/iso18013-offer-response.dto.js";
 import { Iso18013Service } from "../iso18013/iso18013.service.js";
 import {
@@ -33,6 +39,8 @@ export class VerifierOfferController {
     constructor(
         private readonly oid4vpService: Oid4vpService,
         private readonly iso18013Service: Iso18013Service,
+        @Inject(SECRET_REFERENCES)
+        private readonly secrets: SecretReferences,
     ) {}
 
     /**
@@ -98,6 +106,8 @@ export class VerifierOfferController {
                 );
             }
         }
+
+        assertNoRequestWebhookReference(this.secrets, body.webhook, "webhook");
 
         // Only the caller's explicit value counts: an Origin header here is
         // that of whoever reached the caller's backend, not the caller's own

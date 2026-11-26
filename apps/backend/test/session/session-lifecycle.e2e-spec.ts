@@ -112,6 +112,10 @@ describe("session lifecycle module wiring", () => {
                     webhook: {
                         url: "https://claims.example",
                         auth: { type: "none" },
+                        storedAs: {
+                            kind: "AttributeProvider",
+                            tenantId: session.tenantId,
+                        },
                     },
                     session: "claims-session",
                     credentialConfigurationId: id,

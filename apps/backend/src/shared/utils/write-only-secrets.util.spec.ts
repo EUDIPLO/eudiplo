@@ -3,6 +3,7 @@ import {
     assertApiKeyKeptOnlyForSameUrl,
     assertUpstreamSecretsKeptOnlyForSameIssuer,
     REDACTED_SECRET,
+    redactApiKey,
     redactSecrets,
     restoreSecrets,
     SecretNotStoredError,
@@ -183,5 +184,24 @@ describe("assertUpstreamSecretsKeptOnlyForSameIssuer", () => {
         expect(() =>
             assertUpstreamSecretsKeptOnlyForSameIssuer([moved], stored),
         ).not.toThrow();
+    });
+});
+
+describe("redactApiKey", () => {
+    const entry = (value: string) => ({
+        id: "e",
+        url: "https://x",
+        auth: auth(value),
+    });
+
+    it("redacts the API key unless it is shown", () => {
+        const reference = "${vault:kv/eudiplo/acme/shop#token}";
+        const shown = (value: string) => value === reference;
+
+        expect(redactApiKey(entry("key"))).toEqual(entry(REDACTED_SECRET));
+        expect(redactApiKey(entry("key"), shown)).toEqual(
+            entry(REDACTED_SECRET),
+        );
+        expect(redactApiKey(entry(reference), shown)).toEqual(entry(reference));
     });
 });

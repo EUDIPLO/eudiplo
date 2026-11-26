@@ -15,6 +15,7 @@ describe("HandleCredentialNotification", () => {
         } as SessionData;
         const endpoint = {
             id: "issuance-events",
+            tenantId: "tenant-1",
             url: "https://backend.example/notify",
             auth: { type: "none" },
         };
@@ -108,7 +109,11 @@ describe("HandleCredentialNotification", () => {
             "Storage full",
         );
         expect(test.publisher).toHaveBeenCalledExactlyOnceWith(
-            { url: "https://backend.example/notify", auth: { type: "none" } },
+            {
+                url: "https://backend.example/notify",
+                auth: { type: "none" },
+                storedAs: { kind: "WebhookEndpoint", tenantId: "tenant-1" },
+            },
             test.session,
             test.notification,
         );

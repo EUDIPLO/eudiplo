@@ -98,6 +98,7 @@ const sidebars: SidebarsConfig = {
         'operate/oidc-provider',
         'operate/database',
         'operate/encryption-keys',
+        'operate/secret-references',
         'operate/object-storage',
         'operate/kms',
         'operate/logging',
