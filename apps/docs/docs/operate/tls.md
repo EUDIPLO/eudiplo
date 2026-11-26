@@ -97,6 +97,11 @@ services:
             - ./certs:/certs:ro
 ```
 
+The backend does not run as root, so the key and certificate must be readable
+by its user, UID `1000` or the owner of `FOLDER`: a root-owned `privkey.pem`
+of mode `0600`, as Let's Encrypt clients write it, is not
+([Non-root user](docker-compose.md#non-root-user)).
+
 Behavior since 9.0:
 
 - **TLS fails closed.** With `TLS_ENABLED=true`, startup fails if `TLS_CERT_PATH`

@@ -16,7 +16,7 @@ Attribute providers are tenant resources managed with the `issuance:manage` role
 | --- | --- | --- |
 | `GET` | `/api/issuer/attribute-providers` | List providers |
 | `GET` | `/api/issuer/attribute-providers/{id}` | Get one provider |
-| `POST` | `/api/issuer/attribute-providers` | Create a provider |
+| `POST` | `/api/issuer/attribute-providers` | Create a provider; `409` when the tenant already has a provider with this `id` |
 | `PATCH` | `/api/issuer/attribute-providers/{id}` | Update fields of a provider |
 | `DELETE` | `/api/issuer/attribute-providers/{id}` | Delete a provider no credential config uses ([Delete an attribute provider](../issuance/attribute-provider.md#delete-an-attribute-provider)) |
 
@@ -26,7 +26,7 @@ An offer `webhook` source has the shape `{ "url", "auth", "includeRawTokensFor"?
 
 ## Request
 
-EUDIPLO sends `POST <url>` with `Content-Type: application/json` and, for `apiKey` authentication, the configured header. It calls the provider when the wallet requests the credential, once per credential request.
+EUDIPLO sends `POST <url>` with `Content-Type: application/json` and, for `apiKey` authentication, the configured header. For a configured attribute provider, its value can be a secret reference, read when the provider is called ([Secret references](../operate/secret-references.md)); an offer `webhook` source cannot use one. It calls the provider when the wallet requests the credential, once per credential request.
 
 ```json
 {

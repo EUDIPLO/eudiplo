@@ -71,6 +71,8 @@ describe('ConfigDocumentService', () => {
             $schema: 'https://eudiplo.dev/schemas/v1/WebhookEndpointConfigFile.schema.json',
             spec: {
               id: 'hook',
+              // Stored text in its escaped form: no placeholder to set.
+              name: 'Hook $${STORED_TEXT}',
               auth: { config: { value: '${WEBHOOKENDPOINT_HOOK_AUTH_CONFIG_VALUE}' } },
             },
           }),
@@ -91,6 +93,32 @@ describe('ConfigDocumentService', () => {
     }
   });
 
+  it('names no placeholder for stored text that is itself the escaped form', async () => {
+    client.setConfig({
+      fetch: async () =>
+        new Response(
+          JSON.stringify({
+            $schema: 'https://eudiplo.dev/schemas/v1/WebhookEndpointConfigFile.schema.json',
+            // The stored text `$${X}` is exported with its `${` escaped: `$$${X}`.
+            spec: { id: 'hook', name: 'Hook $$${X}' },
+          }),
+          { headers: { 'Content-Type': 'application/json' } }
+        ),
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    const { createObjectURL, revokeObjectURL } = URL;
+    URL.createObjectURL = () => 'blob:document';
+    URL.revokeObjectURL = () => undefined;
+
+    try {
+      await expect(
+        create(['issuance:manage']).download('WebhookEndpoint', 'hook')
+      ).resolves.toEqual([]);
+    } finally {
+      Object.assign(URL, { createObjectURL, revokeObjectURL });
+    }
+  });
+
   describe('downloadWithFeedback', () => {
     it('says that the document was saved', async () => {
       const service = create(['issuance:manage']);
@@ -104,16 +132,17 @@ describe('ConfigDocumentService', () => {
       });
     });
 
-    it('names the placeholders to set before an import, for longer', async () => {
+    it('names the placeholders to set before an import, until closed', async () => {
       const service = create(['issuance:manage']);
       vi.spyOn(service, 'download').mockResolvedValue(['HOOK_SECRET', 'HOOK_TOKEN']);
 
       await service.downloadWithFeedback('WebhookEndpoint', 'hook');
 
       expect(snackBar.open).toHaveBeenCalledWith(
-        'Configuration downloaded. Its secrets are placeholders: set HOOK_SECRET, HOOK_TOKEN before importing it.',
+        "Configuration downloaded. Its secrets are placeholders (HOOK_SECRET, HOOK_TOKEN): set them in the backend's environment for a config folder, or replace them with the values before importing the file under Config Portability.",
         'Close',
-        { duration: 8000 }
+        // The only place that names the variables: it stays until closed.
+        { duration: 0 }
       );
     });
 

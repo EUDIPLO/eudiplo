@@ -15,7 +15,10 @@ import {
     resourceId,
     serializeDocument,
 } from "@eudiplo/config-format/config-format.js";
-import { resolveConfigVariables } from "@eudiplo/config-format/config-values.js";
+import {
+    escapeConfigPlaceholders,
+    resolveConfigVariables,
+} from "@eudiplo/config-format/config-values.js";
 import {
     compareCodePoints,
     imageContentType,
@@ -103,17 +106,25 @@ const VALUE_KEYS = new Set(["before", "after", "message"]);
 /**
  * Replaces values filled in from the environment with their `${VAR}`
  * placeholder in `text`. A value shorter than eight characters is only
- * replaced where it is the whole text.
+ * replaced where it is the whole text. A value that contains `${` is also
+ * replaced in the escaped form the CLI sent it in (`$${`), which a message
+ * can quote and a backend without the escaped form stores.
  */
 export function maskFilledText(
     text: string,
     filled: Map<string, string>,
 ): string {
     const secrets = [...filled]
-        .map(([variable, secret]) => ({
-            secret,
-            placeholder: `\${${variable}}`,
-        }))
+        .flatMap(([variable, secret]) => {
+            const placeholder = `\${${variable}}`;
+            const escaped = escapeConfigPlaceholders(secret);
+            return escaped === secret
+                ? [{ secret, placeholder }]
+                : [
+                      { secret, placeholder },
+                      { secret: escaped, placeholder },
+                  ];
+        })
         // Longest first, so a value that contains another is masked whole.
         .sort((left, right) => right.secret.length - left.secret.length);
     for (const { secret, placeholder } of secrets) {
@@ -316,7 +327,14 @@ async function loadDocument(
 ): Promise<ConfigFile> {
     // Validated before packing: the file parses and holds an object.
     const payload = JSON.parse(await readFile(join(tenantRoot, file), "utf8"));
-    const resolved = resolveConfigVariables(payload, env).value;
+    // The API reads the bundle as a file: the escaped form `$${` stays, and a
+    // value filled in is escaped, so that the API takes none for a
+    // placeholder. A kms.json has no escaped form.
+    const resolved = resolveConfigVariables(
+        payload,
+        env,
+        kind === "KmsConfig" ? "none" : "keep",
+    ).value;
     const document = normalizeDocument(
         isConfigDocument(resolved) ? resolved : wrapBare(kind, resolved, file),
     );

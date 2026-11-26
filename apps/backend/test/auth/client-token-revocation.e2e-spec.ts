@@ -35,7 +35,8 @@ describe("Client token revocation (e2e)", () => {
 
     beforeAll(async () => {
         ctx = await setupIssuanceTestApp();
-        for (const file of ["pid.json", "pid-no-hook.json"]) {
+        // The shared setup already created "pid".
+        for (const file of ["pid-no-hook.json"]) {
             await request(ctx.app.getHttpServer())
                 .post("/verifier/config")
                 .set("Authorization", `Bearer ${ctx.authToken}`)

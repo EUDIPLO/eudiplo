@@ -19,6 +19,14 @@ describe("WebhookConfigSchema", () => {
         ["an empty header name", apiKey("", "secret")],
         ["an empty API key", apiKey("x-api-key", "")],
         ["no auth", { url: "https://hooks.example/result" }],
+        // Only a stored endpoint or provider may have its key resolved.
+        [
+            "the in-memory marker of a stored webhook",
+            {
+                ...apiKey("x-api-key", "secret"),
+                storedAs: { kind: "WebhookEndpoint", tenantId: "other" },
+            },
+        ],
     ])("rejects %s", (_, webhook) => {
         expect(WebhookConfigSchema.safeParse(webhook).success).toBe(false);
     });

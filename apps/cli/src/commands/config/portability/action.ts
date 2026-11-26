@@ -3,6 +3,10 @@ import { basename, extname, isAbsolute, join, resolve } from "node:path";
 import { ConfigBundleCodec } from "@eudiplo/config-format/config-bundle.js";
 import { atomicWriteFile } from "@eudiplo/config-format/config-io.js";
 import { readStringFlag } from "../../../options.js";
+import {
+    escapedFormWarning,
+    readBackendVersion,
+} from "../../../services/backend-checks.js";
 import { resolveInstance } from "../../../services/instance-selection.js";
 import type { CliConfig, CommandContext, ParsedArgs } from "../../../types.js";
 import { buildJsonReport, formatTextReport } from "../validate/report.js";
@@ -108,7 +112,7 @@ export async function runPortabilityCommand(
     const allowEnv = readStringFlag(parsed.flags, "allow-env");
     if (allowEnv !== undefined && !folder)
         throw new Error(
-            "--allow-env applies to a tenant folder only; a bundle's placeholders are resolved by the server.",
+            "--allow-env applies to a tenant folder only; replace the placeholders of a bundle with their values.",
         );
     const folderEnv = folderEnvironment(allowEnv, context.env);
     if (folder) {
@@ -190,6 +194,13 @@ export async function runPortabilityCommand(
         body = JSON.stringify(bundle);
         headers = { ...headers, "content-type": "application/json" };
     }
+    if (folder) {
+        // Before the request: an import stores the values right away.
+        const warning = escapedFormWarning(
+            await backendVersion(baseUrl, authHeaders, context),
+        );
+        if (warning) context.stderr.write(`${warning}\n`);
+    }
     const response = await context.fetch(
         `${baseUrl}/api/config-bundles/${endpoint}?${query}`,
         { method: "POST", headers, body },
@@ -242,6 +253,26 @@ export async function runPortabilityCommand(
         );
     } else context.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     return (result as any).applicable === false ? 1 : 0;
+}
+
+/**
+ * The version `/api/version` reports, or undefined when it cannot be read.
+ * It only informs a warning, so a failure never stops the command.
+ */
+async function backendVersion(
+    baseUrl: string,
+    headers: Record<string, string>,
+    context: CommandContext,
+): Promise<string | undefined> {
+    try {
+        const response = await context.fetch(`${baseUrl}/api/version`, {
+            headers,
+        });
+        if (!response.ok) return undefined;
+        return readBackendVersion(await response.json());
+    } catch {
+        return undefined;
+    }
 }
 
 /**

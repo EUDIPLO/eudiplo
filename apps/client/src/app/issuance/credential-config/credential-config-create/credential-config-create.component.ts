@@ -146,14 +146,26 @@ export class CredentialConfigCreateComponent implements OnInit, PageWithUnsavedC
 
   public form: FormGroup;
   public create = true;
+  /** Copying an existing credential config: the form starts from it and saves a new one. */
+  public copyMode = false;
+  /** The config a copy starts from. */
+  copySourceId = '';
+  /** IDs of the existing configs; the backend refuses to create one with a taken ID. */
+  private takenIds = new Set<string>();
+  /** The existing configs could not be listed, so a taken ID goes unnoticed. */
+  takenIdsUnknown = false;
+  /** A new config that starts empty or from a template, not from an existing one. */
+  get fromScratch(): boolean {
+    return this.create && !this.copyMode;
+  }
   /** The credential config created for that form; the page then says to return to the form's tab. */
   createdForForm: CreatedForForm | null = null;
   public loading = false;
-  /** While the configuration to edit loads; saving before would overwrite it with defaults. */
+  /** While the configuration to edit or copy loads; saving before would overwrite it with defaults. */
   loadingConfig = false;
   /** Whether a document from JSON View was applied since the last template. */
   private editedInJsonView = false;
-  /** Set when the configuration to edit could not be loaded; the form stays hidden. */
+  /** Set when the configuration to edit or copy could not be loaded; the form stays hidden. */
   loadError = '';
   /** Load state of the options of each select, so a failed load is not shown as "none exist". */
   readonly loadState: Record<CredentialConfigSource, SourceLoadState> = {
@@ -452,7 +464,9 @@ export class CredentialConfigCreateComponent implements OnInit, PageWithUnsavedC
     this.displayConfigs.valueChanges.subscribe(() => this.revalidateDisplayLocales());
 
     if (this.route.snapshot.params['id']) {
-      this.create = false;
+      // From the route's data, not its URL: a config may be called "copy".
+      this.copyMode = this.route.snapshot.data?.['copy'] === true;
+      this.create = this.copyMode;
       this.guidedMode = false;
     }
   }
@@ -507,7 +521,7 @@ export class CredentialConfigCreateComponent implements OnInit, PageWithUnsavedC
     }
   }
 
-  /** Loads the configuration to edit; on failure the form stays hidden behind a retry. */
+  /** Loads the configuration to edit or copy; on failure the form stays hidden behind a retry. */
   loadConfigForEdit(): void {
     const id = this.route.snapshot.params['id'];
     const retrying = this.loadError !== '';
@@ -516,17 +530,23 @@ export class CredentialConfigCreateComponent implements OnInit, PageWithUnsavedC
     this.credentialConfigService
       .getConfig(id)
       .then(
-        (config) => {
+        async (config) => {
           if (!config) {
             this.snackBar.open('Config not found', 'Close', {
               duration: 3000,
             });
-            this.router.navigate(['../'], { relativeTo: this.route });
+            // Up to the list; for edit and copy, one level up is the missing config itself.
+            this.router.navigate(['../../'], { relativeTo: this.route });
             return;
           }
 
           this.patchFormFromConfig(config);
-          this.form.get('id')?.disable();
+          if (this.copyMode) {
+            // The copy gets its own ID, which stays editable; the rest of the form is the source's.
+            await this.applyCopyId(config.id);
+          } else {
+            this.form.get('id')?.disable();
+          }
           // The retry removed the error card with its focused Retry button.
           if (retrying) {
             focusAfterRenderIfLost(this.injector, () => this.pageHeading?.nativeElement);
@@ -538,6 +558,30 @@ export class CredentialConfigCreateComponent implements OnInit, PageWithUnsavedC
         }
       )
       .finally(() => (this.loadingConfig = false));
+  }
+
+  /**
+   * Sets the copy's ID to `<source>-copy`, or `<source>-copy-2` and so on when that is taken:
+   * the backend refuses to create a config with an existing ID. Without the list of
+   * configs the first suggestion stays, and saving tells whether it is taken.
+   */
+  private async applyCopyId(sourceId: string): Promise<void> {
+    this.copySourceId = sourceId;
+    try {
+      this.takenIds = new Set(
+        (await this.credentialConfigService.loadConfigurations()).map((c) => c.id)
+      );
+    } catch (error) {
+      console.error('Error loading credential configs for the copy ID:', error);
+      this.takenIdsUnknown = true;
+    }
+    let id = `${sourceId}-copy`;
+    for (let n = 2; this.takenIds.has(id); n++) id = `${sourceId}-copy-${n}`;
+    const control = this.form.get('id');
+    control?.addValidators((c: AbstractControl): ValidationErrors | null =>
+      this.takenIds.has(c.value) ? { taken: true } : null
+    );
+    control?.setValue(id);
   }
 
   onSubmit() {
@@ -602,8 +646,10 @@ export class CredentialConfigCreateComponent implements OnInit, PageWithUnsavedC
               'Close',
               { duration: 3000 }
             );
-            // Both open the config's page, as the verification config editor does.
-            this.router.navigate(this.create ? ['../', formValue.id] : ['../'], {
+            // Both open the config's page, as the verification config editor does. A copy
+            // is one segment deeper (:id/copy).
+            const up = this.copyMode ? '../../' : '../';
+            this.router.navigate(this.create ? [up, formValue.id] : ['../'], {
               relativeTo: this.route,
             });
           },
@@ -1464,7 +1510,8 @@ export class CredentialConfigCreateComponent implements OnInit, PageWithUnsavedC
    */
   private buildConfigurationPayload(): any {
     const formValue = { ...this.form.value };
-    formValue.id = this.route.snapshot.params['id'] || formValue.id;
+    // An edit keeps the ID of its route; a copy saves under the ID in the form.
+    if (!this.create) formValue.id = this.route.snapshot.params['id'];
 
     const isMdoc = formValue.format === 'mso_mdoc';
 

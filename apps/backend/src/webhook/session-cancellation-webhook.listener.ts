@@ -10,6 +10,7 @@ import {
     SESSION_CANCELLED,
     type SessionCancelledEvent,
 } from "../session/ports/session-event-publisher.js";
+import { storedWebhook } from "./domain/webhook-configuration.js";
 import type { WebhookConfig } from "./webhook.dto.js";
 import { WebhookService } from "./webhook.service.js";
 
@@ -74,7 +75,7 @@ export class SessionCancellationWebhookListener {
             webhookEndpointId,
         );
         return endpoint
-            ? { url: endpoint.url, auth: endpoint.auth }
+            ? storedWebhook("WebhookEndpoint", endpoint)
             : undefined;
     }
 }

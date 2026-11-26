@@ -255,6 +255,7 @@ The client fetches and renews its token. `waitForSession` polls the session ever
 | `403` "Client is not authorized to use ..."   | The configuration is not in the client's allow-list                    | Add it to `allowedIssuanceConfigs` or `allowedPresentationConfigs`, or use the listed one.                  |
 | `400` that names an unrecognized key          | Request bodies are strict; a field name is misspelled                  | Compare with the examples and the [API reference](../reference/api.md).                                     |
 | Creating the webhook endpoint fails           | The outbound URL policy rejects the URL, or the host does not resolve in the container | Set the two `OUTBOUND_URL_*` variables, run `eudiplo up --instance cookbook`, and check the host name. |
+| `409` "Webhook endpoint 'membership-backend' already exists" | An earlier run stored the endpoint | Change it with `PATCH /api/issuer/webhook-endpoints/membership-backend`, sending the new `url` and the API key again ([Webhooks](../reference/webhooks.md)). |
 | The receiver logs nothing                     | Webhook not attached, or the receiver is not reachable from the container | Check `webhookEndpointId` of `membership-check` and the backend log.                                   |
 | No `response_code` in the redirect            | The wallet declined, or you scanned `crossDeviceUri`, which has no redirect | Use `uri` for same-device flows; handle the `error` parameter.                                         |
 

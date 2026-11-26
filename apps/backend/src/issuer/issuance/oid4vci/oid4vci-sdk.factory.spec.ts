@@ -180,6 +180,9 @@ describe("Oid4vciSdkFactory resource server requests", () => {
             authorizationServers: [
                 {
                     issuer,
+                    // Full metadata: without token_endpoint the library
+                    // fetches it from the issuer's well-known URL.
+                    token_endpoint: `${issuer}/token`,
                     ...authorizationServer,
                 } as AuthorizationServerMetadata,
             ],

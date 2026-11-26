@@ -11,12 +11,18 @@ import {
     ConfigImportOrchestratorService,
     ImportPhase,
 } from "../../../platform/config-import/config-import-orchestrator.service.js";
+import {
+    SECRET_REFERENCES,
+    type SecretReferences,
+} from "../../../platform/secrets/application/secret-references.js";
+import { ResourceIdTaken } from "../../../shared/domain/conflict-error.js";
 import { loadConfigDto } from "../../../shared/utils/config-file-loader.util.js";
 import {
     changedEndpointFields,
     redactWebhookAuth,
 } from "../../../webhook/domain/webhook-configuration.js";
 import { OutboundUrlPolicyService } from "../../../webhook/outbound-url-policy.service.js";
+import { assertStoredWebhookSecret } from "../../../webhook/stored-webhook-secret.js";
 import { AttributeProviderReferences } from "./application/attribute-provider-references.js";
 import type { AttributeProviderData } from "./domain/attribute-provider-data.js";
 import { AttributeProviderInUseError } from "./domain/attribute-provider-reference.js";
@@ -40,6 +46,8 @@ export class AttributeProviderService {
         private readonly tenantActionLogService: AuditLogService,
         private readonly outboundUrlPolicyService: OutboundUrlPolicyService,
         private readonly references: AttributeProviderReferences,
+        @Inject(SECRET_REFERENCES)
+        private readonly secrets: SecretReferences,
     ) {
         this.configImportOrchestrator.register(
             "attribute-providers",
@@ -60,10 +68,17 @@ export class AttributeProviderService {
                     this.getById(tid, data.id)
                         .then(() => true)
                         .catch(() => false),
-                deleteExisting: (tid, data) =>
-                    this.repo
-                        .deleteForTenant(tid, data.id)
-                        .then(() => undefined),
+                deleteExisting: async (tid, data) => {
+                    // Reject before deleting, so a file naming a refused
+                    // secret reference does not remove the stored entry.
+                    assertStoredWebhookSecret(
+                        this.secrets,
+                        "AttributeProvider",
+                        tid,
+                        data,
+                    );
+                    await this.repo.deleteForTenant(tid, data.id);
+                },
                 loadData: (filePath) =>
                     loadConfigDto(
                         filePath,
@@ -96,7 +111,16 @@ export class AttributeProviderService {
         actorToken?: TokenPayload,
         requestMeta?: AuditLogRequestMeta,
     ) {
+        if (await this.repo.findForTenant(tenantId, dto.id)) {
+            throw new ResourceIdTaken("Attribute provider", dto.id);
+        }
         await this.outboundUrlPolicyService.assertSafeUrl(dto.url);
+        assertStoredWebhookSecret(
+            this.secrets,
+            "AttributeProvider",
+            tenantId,
+            dto,
+        );
 
         const saved = await this.repo.save({
             ...dto,
@@ -133,12 +157,16 @@ export class AttributeProviderService {
             await this.outboundUrlPolicyService.assertSafeUrl(dto.url);
         }
 
-        const saved = await this.repo.save({
-            ...existing,
-            ...dto,
-            id,
+        const next = { ...existing, ...dto, id, tenantId };
+        // Also when only the URL changes: a reference may be bound to it.
+        assertStoredWebhookSecret(
+            this.secrets,
+            "AttributeProvider",
             tenantId,
-        });
+            next,
+        );
+
+        const saved = await this.repo.save(next);
 
         if (actorToken) {
             await this.tenantActionLogService.record({
@@ -201,7 +229,9 @@ export class AttributeProviderService {
             name: provider.name,
             description: provider.description,
             url: provider.url,
-            auth: redactWebhookAuth(provider.auth),
+            auth: redactWebhookAuth(provider.auth, (value) =>
+                this.secrets.isShown(value),
+            ),
         };
     }
 }

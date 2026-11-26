@@ -128,6 +128,9 @@ jobs:
       - name: Build SDK Core
         run: pnpm --filter @eudiplo/sdk-core build
 
+      - name: Run SDK Core unit tests
+        run: pnpm --filter @eudiplo/sdk-core test
+
   build-cli:
     name: Build CLI
     if: github.event_name != 'push'
@@ -822,6 +825,12 @@ jobs:
           echo "=== Container Logs ==="
           docker logs eudiplo-test || true
           exit 1
+
+      # Which user the backend runs as, and how the entrypoint hands data
+      # folders of earlier releases to that user.
+      - name: Check the backend runs as non-root
+        if: matrix.arch == 'amd64'
+        run: apps/backend/test/docker/image-user.sh ghcr.io/eudiplo/eudiplo:test
 
       - name: Stop test container
         if: ${{ always() && matrix.arch == 'amd64' }}

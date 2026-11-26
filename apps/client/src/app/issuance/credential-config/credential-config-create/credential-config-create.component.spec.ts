@@ -1064,6 +1064,195 @@ describe('CredentialConfigCreateComponent editing', () => {
   });
 });
 
+describe('CredentialConfigCreateComponent copying', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const source = {
+    id: 'pid',
+    description: 'Person identification',
+    keyChainId: 'issuer-key',
+    vct: 'urn:eudi:pid:1',
+    config: { format: 'dc+sd-jwt', display: [{ name: 'PID', locale: 'en-US' }] },
+    fields: [],
+  };
+
+  function opened(
+    route: { params: Record<string, string>; data?: Record<string, unknown> },
+    getConfig: () => Promise<unknown> = vi.fn().mockResolvedValue(source),
+    existing: string[] = [],
+    loadConfigurations?: () => Promise<unknown>
+  ) {
+    const saveConfiguration = vi.fn().mockResolvedValue({});
+    const updateConfiguration = vi.fn().mockResolvedValue({});
+    const router = { navigate: vi.fn() };
+    const component = new CredentialConfigCreateComponent(
+      {
+        getConfig,
+        loadConfigurations:
+          loadConfigurations ?? vi.fn().mockResolvedValue(existing.map((id) => ({ id }))),
+        saveConfiguration,
+        updateConfiguration,
+      } as any,
+      router as any,
+      {
+        snapshot: { ...route, queryParamMap: convertToParamMap({}) },
+      } as any,
+      { open: vi.fn() } as any,
+      {} as any,
+      { loadConfigurations: vi.fn().mockResolvedValue([]) } as any,
+      { getConfig: vi.fn().mockResolvedValue(null) } as any,
+      { getTenantId: () => 'tenant' } as any,
+      { get: () => ({ destroyed: true }) } as any
+    );
+    return { component, router, saveConfiguration, updateConfiguration };
+  }
+
+  const copying = (existing: string[] = [], loadConfigurations?: () => Promise<unknown>) =>
+    opened(
+      { params: { id: 'pid' }, data: { copy: true } },
+      undefined,
+      existing,
+      loadConfigurations
+    );
+
+  it('starts from the source config with an editable ID ending in -copy', async () => {
+    const { component } = copying();
+
+    component.ngOnInit();
+    await vi.waitFor(() => expect(component.loadingConfig).toBe(false));
+
+    expect(component.copyMode).toBe(true);
+    expect(component.create).toBe(true);
+    expect(component.form.get('id')?.enabled).toBe(true);
+    expect(component.form.get('id')?.value).toBe('pid-copy');
+    expect(component.form.get('description')?.value).toBe('Person identification');
+    expect(component.form.get('vctString')?.value).toBe('urn:eudi:pid:1');
+  });
+
+  it('picks the next free ID, since creating with a taken ID replaces that config', async () => {
+    const { component } = copying(['pid', 'pid-copy', 'pid-copy-2']);
+
+    component.ngOnInit();
+    await vi.waitFor(() => expect(component.loadingConfig).toBe(false));
+
+    expect(component.form.get('id')?.value).toBe('pid-copy-3');
+    expect(component.copySourceId).toBe('pid');
+  });
+
+  it('refuses an ID that is taken, since the backend refuses to create it', async () => {
+    const { component, saveConfiguration } = copying(['pid', 'pid-v2']);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    component.ngOnInit();
+    await vi.waitFor(() => expect(component.loadingConfig).toBe(false));
+
+    component.form.get('id')?.setValue('pid-v2');
+    expect(component.form.get('id')?.hasError('taken')).toBe(true);
+    component.onSubmit();
+    expect(saveConfiguration).not.toHaveBeenCalled();
+
+    component.form.get('id')?.setValue('pid-v3');
+    expect(component.form.get('id')?.valid).toBe(true);
+  });
+
+  it('suggests <id>-copy when the list of configs cannot be loaded', async () => {
+    const { component } = copying([], vi.fn().mockRejectedValue(new Error('offline')));
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    component.ngOnInit();
+    await vi.waitFor(() => expect(component.loadingConfig).toBe(false));
+
+    expect(component.form.get('id')?.value).toBe('pid-copy');
+    expect(component.takenIdsUnknown).toBe(true);
+  });
+
+  it("creates a new config under the form's ID and opens its page", async () => {
+    const { component, router, saveConfiguration, updateConfiguration } = copying();
+    component.ngOnInit();
+    await vi.waitFor(() => expect(component.loadingConfig).toBe(false));
+    component.form.get('id')?.setValue('pid-v2');
+
+    component.onSubmit();
+
+    await vi.waitFor(() => expect(router.navigate).toHaveBeenCalled());
+    expect(updateConfiguration).not.toHaveBeenCalled();
+    expect(saveConfiguration).toHaveBeenCalledOnce();
+    expect(saveConfiguration.mock.lastCall?.[0]).toMatchObject({
+      id: 'pid-v2',
+      description: 'Person identification',
+      keyChainId: 'issuer-key',
+      vct: 'urn:eudi:pid:1',
+    });
+    expect(router.navigate.mock.lastCall?.[0]).toEqual(['../../', 'pid-v2']);
+  });
+
+  it('edits, not copies, a config whose ID is "copy"', async () => {
+    const { component, saveConfiguration, updateConfiguration } = opened(
+      { params: { id: 'copy' } },
+      vi.fn().mockResolvedValue({ ...source, id: 'copy' })
+    );
+
+    component.ngOnInit();
+    await vi.waitFor(() => expect(component.loadingConfig).toBe(false));
+
+    expect(component.copyMode).toBe(false);
+    expect(component.create).toBe(false);
+    expect(component.form.get('id')?.disabled).toBe(true);
+    component.onSubmit();
+    await vi.waitFor(() => expect(updateConfiguration).toHaveBeenCalledOnce());
+    expect(updateConfiguration.mock.lastCall?.[0]).toBe('copy');
+    expect(saveConfiguration).not.toHaveBeenCalled();
+  });
+
+  for (const data of [{ copy: true }, {}]) {
+    it(`goes to the list when the config is missing (${data.copy ? 'copy' : 'edit'})`, async () => {
+      const { component, router, saveConfiguration } = opened(
+        { params: { id: 'gone' }, data },
+        vi.fn().mockResolvedValue(null)
+      );
+
+      component.ngOnInit();
+      await vi.waitFor(() => expect(router.navigate).toHaveBeenCalled());
+
+      expect(router.navigate.mock.lastCall?.[0]).toEqual(['../../']);
+      expect(saveConfiguration).not.toHaveBeenCalled();
+    });
+  }
+
+  it('hides the form and creates nothing when the config to copy cannot be loaded', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { component, saveConfiguration } = opened(
+      { params: { id: 'pid' }, data: { copy: true } },
+      vi.fn().mockRejectedValue({ statusCode: 403, message: 'Forbidden resource' })
+    );
+
+    component.ngOnInit();
+    await vi.waitFor(() => expect(component.loadingConfig).toBe(false));
+
+    expect(component.loadError).toBe('Failed to load credential config: Forbidden resource');
+    expect(component.copySourceId).toBe('');
+    component.onSubmit();
+    expect(saveConfiguration).not.toHaveBeenCalled();
+  });
+
+  it('starts the copy once a retry loads the source', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const getConfig = vi
+      .fn()
+      .mockRejectedValueOnce({ statusCode: 500, message: 'Internal server error' })
+      .mockResolvedValue(source);
+    const { component } = opened({ params: { id: 'pid' }, data: { copy: true } }, getConfig);
+    component.ngOnInit();
+    await vi.waitFor(() => expect(component.loadError).not.toBe(''));
+
+    component.loadConfigForEdit();
+    await vi.waitFor(() => expect(component.loadingConfig).toBe(false));
+
+    expect(component.loadError).toBe('');
+    expect(component.form.get('id')?.value).toBe('pid-copy');
+    expect(component.form.get('id')?.enabled).toBe(true);
+  });
+});
+
 describe('CredentialConfigCreateComponent retry', () => {
   afterEach(() => vi.restoreAllMocks());
 

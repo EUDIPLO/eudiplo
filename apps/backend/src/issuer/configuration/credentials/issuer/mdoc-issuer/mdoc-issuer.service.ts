@@ -7,7 +7,6 @@ import {
     SignatureAlgorithm,
     StatusOptions,
 } from "@owf/mdoc";
-import { X509Certificate } from "@peculiar/x509";
 import { exportJWK, importX509 } from "jose";
 import { CertService } from "../../../../../crypto/key/cert/cert.service.js";
 import {
@@ -19,6 +18,7 @@ import type { KmsSigningAlg } from "../../../../../crypto/key/kms/kms-adapter.js
 import { KeyUsageType } from "../../../../../crypto/key/types/key-usage-type.js";
 import type { SessionData as Session } from "../../../../../session/domain/session-data.js";
 import { coseReadyJwk } from "../../../../../shared/utils/cose-key-jwk.util.js";
+import { parseX509Certificate } from "../../../../../shared/utils/x509-certificate-cache.js";
 import { mdocContext } from "../../../../../verifier/presentations/mdoc-context.js";
 import type { WalletUnitReference } from "../../../../status-list/domain/wallet-unit-reference.js";
 import { StatusListService } from "../../../../status-list/status-list.service.js";
@@ -28,7 +28,10 @@ import {
     maintenancePeriodEnd,
 } from "../../domain/maintenance-period.js";
 import { formattedClaimFields } from "../../utils/derive.js";
-import { buildClaimsByNamespace } from "../../utils/index.js";
+import {
+    buildClaimsByNamespace,
+    mdocDefaultNamespace,
+} from "../../utils/index.js";
 import {
     clampCredentialValidityToCertificate,
     roundedCredentialValidity,
@@ -83,7 +86,7 @@ export class MdocIssuerService {
 
         const issuer = new Issuer(docType, mdocContext);
 
-        const defaultNamespace = this.getDefaultNamespace(docType);
+        const defaultNamespace = mdocDefaultNamespace(docType);
         this.addClaimsToIssuer(
             issuer,
             credentialConfiguration.fields as any,
@@ -117,13 +120,13 @@ export class MdocIssuerService {
         // Convert all certificates in the chain to Uint8Array
         // certificate.crt is an array: [leaf, intermediate..., root]
         const certificateChain = certificate.crt.map((certPem) => {
-            const x509Cert = new X509Certificate(certPem);
-            return new Uint8Array(x509Cert.rawData);
+            const x509Cert = parseX509Certificate(certPem);
+            return new Uint8Array(x509Cert.rawData.slice(0));
         });
 
         // Diagnostic: log the leaf cert that will be embedded in the mDOC.
         try {
-            const leaf = new X509Certificate(certificate.crt[0]);
+            const leaf = parseX509Certificate(certificate.crt[0]);
             const thumb = Buffer.from(
                 await crypto.subtle.digest("SHA-256", leaf.rawData),
             )
@@ -148,7 +151,7 @@ export class MdocIssuerService {
         // Set validity dates
         // Use lifeTime from config or default to 1 year, kept within the leaf
         // certificate's validity (ISO 18013-5 checks the signed date against it)
-        const leafCertificate = new X509Certificate(certificate.crt[0]);
+        const leafCertificate = parseX509Certificate(certificate.crt[0]);
         let issuedAt: number;
         let expiresAt: number;
         try {
@@ -277,18 +280,6 @@ export class MdocIssuerService {
     }
 
     /**
-     * Get the default namespace for a given docType.
-     */
-    private getDefaultNamespace(docType: string): string {
-        // For mDL, the namespace is typically "org.iso.18013.5.1"
-        if (docType === "org.iso.18013.5.1.mDL") {
-            return "org.iso.18013.5.1";
-        }
-        // For other docTypes, use the docType as namespace
-        return docType;
-    }
-
-    /**
      * Adds the claims per namespace. Claims of fields with a `format` are
      * encoded as `full-date` (tag 1004) or `tdate` (tag 0); fields without
      * one keep their JSON value, so a date stays a text string.
@@ -300,8 +291,11 @@ export class MdocIssuerService {
         defaultNamespace: string,
         inputClaims: Record<string, any>,
     ): void {
-        const claimsByNamespace = buildClaimsByNamespace(fields);
-        const dateFields = formattedClaimFields(fields ?? []);
+        const claimsByNamespace = buildClaimsByNamespace(
+            fields,
+            defaultNamespace,
+        );
+        const dateFields = formattedClaimFields(fields ?? [], defaultNamespace);
         let claims = inputClaims;
         if (dateFields.length > 0) {
             // The caller's claims stay JSON: other credentials of the same

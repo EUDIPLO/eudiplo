@@ -53,10 +53,10 @@ Each entry of `fields[]` describes one claim: its `path`, `type`, whether it is 
 }
 ```
 
-- Nest claims with `children`; child paths are relative to the parent. `null` in a path stands for every array element (the web client writes it as `nationalities.*`), an integer for one element. The issuer metadata publishes these paths with `null` and integers as well.
+- Nest claims with `children`; child paths are relative to the parent. `null` in a path stands for every array element (the web client writes it as `nationalities.*`), an integer for one element. The issuer metadata publishes these paths with `null` and integers as well, for mDOC prefixed with the namespace when the field or its parent sets `namespace`.
 - A disclosable element path gives every element of the issued array its own disclosure (SD-JWT, RFC 9901 Section 4.2.2), so the holder can disclose some elements and withhold others. In the example the array and its elements are both disclosable, as the EUDI PID rules require (ARF Annex 2, PID_21); with only `["nationalities"]` disclosable, the holder discloses the array as a whole. The elements are taken from the claims being issued: an empty array has no element disclosures, and an index beyond the end of the array is ignored. Properties of array elements work the same way, for example `["addresses", null, "street"]`.
 - `display` entries use `{ "locale", "name" }` and are published in the issuer metadata.
-- For mDOC, set `namespace` on each field, for example `eu.europa.ec.eudi.pid.1`. Without it, the first segment of a nested path or the document type is used.
+- For mDOC, set `namespace` on each top-level field, for example `eu.europa.ec.eudi.pid.1`; `children` inherit it unless they set their own. Without it, the first segment of a nested path or the document type's namespace (`org.iso.18013.5.1` for the mDL) is used; see the [reference](../reference/credential-configuration.md).
 - `defaultValue` provides a static value. Where claim values come from and how they are validated is described in [Claims](claims.md).
 
 ## 3. Set the wallet display
@@ -202,6 +202,8 @@ curl -X POST "$EUDIPLO_URL/api/issuer/credentials" \
   -H "Content-Type: application/json" \
   -d @membership.json
 ```
+
+A `POST` with the `id` of an existing configuration answers `409 Conflict` and leaves the stored configuration as it is. In the Web Client, **Copy** on a configuration's page starts a new configuration from it; the form suggests an ID that is not taken yet and refuses one that is.
 
 Update a configuration with `PATCH /api/issuer/credentials/{id}`, list them with `GET /api/issuer/credentials`, and remove one with `DELETE /api/issuer/credentials/{id}`. To manage configurations as files, see [Configuration as code](../operate/configuration-as-code.md).
 

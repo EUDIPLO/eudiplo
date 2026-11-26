@@ -8,6 +8,7 @@ import {
     buildDisclosureFrame,
     buildJsonSchema,
     formattedClaimFields,
+    mdocDefaultNamespace,
 } from "../../../../../src/issuer/configuration/credentials/utils/derive.js";
 import type { ClaimFieldDefinition } from "../../../../../src/issuer/configuration/credentials/utils/types.js";
 import { builtInShape, changedBuiltIns } from "../../../../shared/built-ins.js";
@@ -23,6 +24,28 @@ function compile(fields: ClaimFieldDefinition[]) {
 }
 
 describe("buildClaimsByNamespace", () => {
+    it("keeps the namespace a child names itself", () => {
+        expect(
+            buildClaimsByNamespace([
+                {
+                    namespace: "eu.europa.ec.eudi.pid.1",
+                    path: ["place_of_birth"],
+                    type: "object",
+                    children: [
+                        {
+                            path: ["country"],
+                            type: "string",
+                            namespace: "org.example.1",
+                            defaultValue: "DE",
+                        },
+                    ],
+                },
+            ] as any),
+        ).toEqual({
+            "org.example.1": { place_of_birth: { country: "DE" } },
+        });
+    });
+
     it("infers the namespace from the first path segment when namespace is omitted", () => {
         const claimsByNamespace = buildClaimsByNamespace([
             {
@@ -60,6 +83,65 @@ describe("buildClaimsByNamespace", () => {
                 given_name: "ERIKA",
             },
         });
+    });
+
+    it("puts defaults of child fields into the namespace of their parent", () => {
+        const claimsByNamespace = buildClaimsByNamespace([
+            {
+                path: ["place_of_birth"],
+                type: "object",
+                namespace: "eu.europa.ec.eudi.pid.1",
+                children: [
+                    {
+                        path: ["locality"],
+                        type: "string",
+                        defaultValue: "BERLIN",
+                    },
+                ],
+            },
+        ]);
+
+        expect(claimsByNamespace).toEqual({
+            "eu.europa.ec.eudi.pid.1": {
+                place_of_birth: { locality: "BERLIN" },
+            },
+        });
+    });
+});
+
+describe("child namespace inheritance", () => {
+    const fields: ClaimFieldDefinition[] = [
+        {
+            namespace: "eu.europa.ec.eudi.pid.1",
+            path: ["residence"],
+            type: "object",
+            children: [
+                {
+                    path: ["address"],
+                    type: "object",
+                    children: [
+                        {
+                            path: ["street"],
+                            type: "string",
+                            defaultValue: "MAIN ST",
+                        },
+                    ],
+                },
+            ],
+        },
+    ];
+
+    it("passes the namespace on to grandchildren", () => {
+        expect(buildClaimsByNamespace(fields)).toEqual({
+            "eu.europa.ec.eudi.pid.1": {
+                residence: { address: { street: "MAIN ST" } },
+            },
+        });
+        expect(buildClaimsMetadata(fields).map((claim) => claim.path)).toEqual([
+            ["eu.europa.ec.eudi.pid.1", "residence"],
+            ["eu.europa.ec.eudi.pid.1", "residence", "address"],
+            ["eu.europa.ec.eudi.pid.1", "residence", "address", "street"],
+        ]);
     });
 });
 
@@ -286,6 +368,27 @@ describe("buildJsonSchema", () => {
 });
 
 describe("buildClaimsMetadata", () => {
+    it("names the namespace once when the path already starts with it", () => {
+        const fields = [
+            {
+                namespace: "eu.europa.ec.eudi.pid.1",
+                path: ["eu.europa.ec.eudi.pid.1", "address"],
+                type: "object",
+                children: [{ path: ["street"], type: "string" }],
+            },
+            {
+                namespace: "eu.europa.ec.eudi.pid.1",
+                path: ["eu.europa.ec.eudi.pid.1"],
+                type: "string",
+            },
+        ] as any;
+
+        expect(buildClaimsMetadata(fields).map((claim) => claim.path)).toEqual([
+            ["eu.europa.ec.eudi.pid.1", "address"],
+            ["eu.europa.ec.eudi.pid.1", "address", "street"],
+        ]);
+    });
+
     it("publishes array element steps as claims path pointers", () => {
         expect(
             buildClaimsMetadata([
@@ -313,6 +416,157 @@ describe("buildClaimsMetadata", () => {
             ["odd", "-1"],
             ["odd", "1.5"],
         ]);
+    });
+
+    it("prefixes child paths with the namespace of their mdoc parent", () => {
+        expect(
+            buildClaimsMetadata([
+                {
+                    namespace: "eu.europa.ec.eudi.pid.1",
+                    path: ["place_of_birth"],
+                    type: "object",
+                    children: [
+                        { path: ["locality"], type: "string" },
+                        { path: ["country"], type: "string" },
+                    ],
+                },
+                {
+                    namespace: "eu.europa.ec.eudi.pid.1",
+                    path: ["nationality"],
+                    type: "array",
+                    children: [{ path: [null], type: "string" }],
+                },
+            ]).map((claim) => claim.path),
+        ).toEqual([
+            ["eu.europa.ec.eudi.pid.1", "place_of_birth"],
+            ["eu.europa.ec.eudi.pid.1", "place_of_birth", "locality"],
+            ["eu.europa.ec.eudi.pid.1", "place_of_birth", "country"],
+            ["eu.europa.ec.eudi.pid.1", "nationality"],
+            ["eu.europa.ec.eudi.pid.1", "nationality", null],
+        ]);
+    });
+});
+
+describe("buildClaimsMetadata with a default namespace", () => {
+    const fields = [
+        { path: ["given_name"], type: "string" },
+        {
+            path: ["address"],
+            type: "object",
+            children: [{ path: ["street"], type: "string" }],
+        },
+        {
+            path: ["nationalities"],
+            type: "array",
+            children: [{ path: [null], type: "string" }],
+        },
+        // A namespace of its own or from the path wins over the default
+        { namespace: "org.example.1", path: ["level"], type: "string" },
+        { path: ["org.example.2", "rank"], type: "string" },
+    ] as any;
+
+    it("puts the default namespace in front of fields that name none", () => {
+        expect(
+            buildClaimsMetadata(fields, "org.iso.18013.5.1").map(
+                (claim) => claim.path,
+            ),
+        ).toEqual([
+            ["org.iso.18013.5.1", "given_name"],
+            ["org.iso.18013.5.1", "address"],
+            ["org.iso.18013.5.1", "address", "street"],
+            ["org.iso.18013.5.1", "nationalities"],
+            ["org.iso.18013.5.1", "nationalities", null],
+            ["org.example.1", "level"],
+            ["org.example.2", "rank"],
+        ]);
+    });
+
+    it("leaves paths as they are without a default namespace", () => {
+        expect(buildClaimsMetadata(fields).map((claim) => claim.path)).toEqual([
+            ["given_name"],
+            ["address"],
+            ["address", "street"],
+            ["nationalities"],
+            ["nationalities", null],
+            ["org.example.1", "level"],
+            ["org.example.2", "rank"],
+        ]);
+    });
+});
+
+describe("default namespace of mdoc fields that name none", () => {
+    const NS = "org.iso.18013.5.1";
+    const fields = [
+        { path: ["given_name"], type: "string", defaultValue: "Erika" },
+        {
+            path: ["address"],
+            type: "object",
+            children: [
+                { path: ["street"], type: "string", defaultValue: "Main" },
+                {
+                    path: ["since"],
+                    type: "string",
+                    format: "date",
+                    defaultValue: "2000-01-01",
+                },
+            ],
+        },
+    ] as any;
+
+    it("puts their default values in the default namespace", () => {
+        expect(buildClaimsByNamespace(fields, NS)).toEqual({
+            [NS]: {
+                given_name: "Erika",
+                address: { street: "Main", since: "2000-01-01" },
+            },
+        });
+    });
+
+    it("finds their date claims in the default namespace", () => {
+        expect(formattedClaimFields(fields, NS)).toEqual([
+            {
+                format: "date",
+                path: ["address", "since"],
+                namespace: NS,
+                namespacePath: ["address", "since"],
+            },
+        ]);
+    });
+
+    it("treats a one-segment parent as an element of the default namespace", () => {
+        const parent = (path: string) =>
+            [
+                {
+                    path: [path],
+                    type: "object",
+                    children: [{ path: ["given_name"], type: "string" }],
+                },
+            ] as any;
+
+        // Named like the default namespace: only the child is a claim
+        expect(
+            buildClaimsMetadata(parent(NS), NS).map((claim) => claim.path),
+        ).toEqual([[NS, "given_name"]]);
+        // Named like another namespace: an element of the default one
+        expect(
+            buildClaimsMetadata(parent("eu.europa.ec.eudi.pid.1"), NS).map(
+                (claim) => claim.path,
+            ),
+        ).toEqual([
+            [NS, "eu.europa.ec.eudi.pid.1"],
+            [NS, "eu.europa.ec.eudi.pid.1", "given_name"],
+        ]);
+    });
+});
+
+describe("mdocDefaultNamespace", () => {
+    it("is org.iso.18013.5.1 for the mDL and the docType otherwise", () => {
+        expect(mdocDefaultNamespace("org.iso.18013.5.1.mDL")).toBe(
+            "org.iso.18013.5.1",
+        );
+        expect(mdocDefaultNamespace("eu.europa.ec.eudi.pid.1")).toBe(
+            "eu.europa.ec.eudi.pid.1",
+        );
     });
 });
 
@@ -755,6 +1009,28 @@ describe("claim field format", () => {
                 path: ["history", null, "at"],
                 namespace: "history",
                 namespacePath: [null, "at"],
+            },
+        ]);
+    });
+
+    it("gives a formatted child the namespace of its mdoc parent", () => {
+        expect(
+            formattedClaimFields([
+                {
+                    namespace: "eu.europa.ec.eudi.pid.1",
+                    path: ["place_of_birth"],
+                    type: "object",
+                    children: [
+                        { path: ["date"], type: "string", format: "date" },
+                    ],
+                },
+            ]),
+        ).toEqual([
+            {
+                format: "date",
+                path: ["place_of_birth", "date"],
+                namespace: "eu.europa.ec.eudi.pid.1",
+                namespacePath: ["place_of_birth", "date"],
             },
         ]);
     });

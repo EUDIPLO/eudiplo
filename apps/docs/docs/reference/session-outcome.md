@@ -135,4 +135,4 @@ An OpenID4VP response that fails verification is answered with `400` and an erro
 
 ## Session logs
 
-`GET /api/session/{id}/logs` returns the log entries stored for a session (`timestamp`, `level` (`info`, `warn` or `error`), `stage`, `message`, `detail`). Entries are only stored when `LOG_SESSION_STORE` is `errors` (warnings and errors), `all` or `verbose` (also request and response bodies); the default `off` stores nothing. See [Environment Variables](environment-variables.md#logging).
+`GET /api/session/{id}/logs` returns the log entries stored for a session (`timestamp`, `level` (`info`, `warn` or `error`), `stage`, `message`, `detail`). Entries are only stored when `LOG_SESSION_STORE` is `errors` (warnings and errors), `all` or `verbose` (also the stack trace of each error, in `detail.errorStack`); the default `off` stores nothing. See [Environment Variables](environment-variables.md#logging).

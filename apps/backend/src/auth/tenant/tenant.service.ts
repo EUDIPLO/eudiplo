@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { readConfigFileValues } from "@eudiplo/config-format/config-values.js";
 import {
     Inject,
     Injectable,
@@ -249,7 +250,12 @@ export class TenantService implements OnApplicationBootstrap {
         spec: Record<string, unknown>;
         document: import("../../platform/config-portability/config-resource.types.js").ConfigDocument;
     } {
-        const payload = JSON.parse(raw) as Record<string, unknown>;
+        // info.json resolves no variable, but it is a configuration file: an
+        // export writes the text `${` of a tenant's name or description in
+        // its escaped form `$${`, which is read back here.
+        const payload = readConfigFileValues(
+            JSON.parse(raw) as Record<string, unknown>,
+        ).value;
         const document = this.configMigrationService.isDocument(payload)
             ? payload
             : this.configMigrationService.wrapLegacy(

@@ -86,7 +86,7 @@ import {
   trustSummary,
 } from '../dcql-query-editor/simple-dcql';
 import { schemaFormValidator } from '../../../utils/schema-form-validator';
-import { getApiErrorMessage } from '../../../utils/error-message';
+import { getApiErrorMessage, hasHttpStatus } from '../../../utils/error-message';
 import { openErrorSnackBar } from '../../../utils/error-snackbar';
 import { LoadErrorComponent } from '../../../common/load-error.component';
 import { jsonViewUnavailableReason } from '../../../common/json-view';
@@ -165,6 +165,10 @@ export class PresentationCreateComponent implements OnInit, PageWithUnsavedChang
   public form: FormGroup;
   public create = true;
   public copyMode = false;
+  /** IDs of the existing configs; the backend refuses to create one with a taken ID. */
+  private readonly takenIds = new Set<string>();
+  /** The existing configs could not be listed, so a taken ID shows only when saving. */
+  takenIdsUnknown = false;
 
   /** Where the back link and Cancel lead: the config being edited, or the list. */
   get backLink(): string[] {
@@ -233,7 +237,11 @@ export class PresentationCreateComponent implements OnInit, PageWithUnsavedChang
     private readonly dialog: MatDialog
   ) {
     this.form = new FormGroup({
-      id: new FormControl(undefined, [Validators.required]),
+      id: new FormControl(undefined, [
+        Validators.required,
+        (control: AbstractControl): ValidationErrors | null =>
+          this.takenIds.has(control.value) ? { taken: true } : null,
+      ]),
       description: new FormControl(undefined, [Validators.required]),
       redirectUri: new FormControl(undefined),
       allowedOrigins: new FormControl('', [allowedOriginsValidator]),
@@ -296,8 +304,8 @@ export class PresentationCreateComponent implements OnInit, PageWithUnsavedChang
     );
 
     if (this.route.snapshot.params['id']) {
-      // Check if this is a copy operation
-      this.copyMode = this.route.snapshot.url.some((segment) => segment.path === 'copy');
+      // From the route's data, not its URL: a config may be called "copy".
+      this.copyMode = this.route.snapshot.data?.['copy'] === true;
       // An edit page stays one while it loads, also when the load fails.
       this.create = this.copyMode;
       this.loadConfigForEdit();
@@ -316,7 +324,7 @@ export class PresentationCreateComponent implements OnInit, PageWithUnsavedChang
     this.presentationService
       .getPresentationById(this.route.snapshot.params['id'])
       .then(
-        (config) => {
+        async (config) => {
           if (!config) {
             this.snackBar.open('Verification config not found', 'Close', {
               duration: 3000,
@@ -351,9 +359,9 @@ export class PresentationCreateComponent implements OnInit, PageWithUnsavedChang
           delete formData.webhook;
 
           if (this.copyMode) {
-            // Copy mode: clear ID and keep it editable, set create mode
-            formData.id = `${config.id}-copy`;
+            // The copy gets its own ID, which stays editable; the rest of the form is the source's.
             this.form.patchValue(formData);
+            await this.applyCopyId(config.id);
             this.create = true;
           } else {
             // Edit mode: disable ID field
@@ -372,6 +380,41 @@ export class PresentationCreateComponent implements OnInit, PageWithUnsavedChang
         }
       )
       .finally(() => (this.loadingConfig = false));
+  }
+
+  /**
+   * Sets the copy's ID to `<source>-copy`, or `<source>-copy-2` and so on when that is taken:
+   * the backend refuses to create a config with an existing ID. Without the list of configs
+   * the first suggestion stays, and saving tells whether it is taken.
+   */
+  private async applyCopyId(sourceId: string): Promise<void> {
+    try {
+      const configs = await this.presentationService.loadConfigurations();
+      for (const config of configs ?? []) this.takenIds.add(config.id);
+    } catch (error) {
+      console.error('Error loading verification configs for the copy ID:', error);
+      this.takenIdsUnknown = true;
+    }
+    let id = `${sourceId}-copy`;
+    let n = 2;
+    while (this.takenIds.has(id)) {
+      id = `${sourceId}-copy-${n}`;
+      n++;
+    }
+    this.form.get('id')?.setValue(id);
+  }
+
+  /**
+   * Marks the ID the backend refused as taken (409) and shows the field with its error, as a
+   * refused local check does.
+   */
+  private markIdTaken(id: string): void {
+    this.takenIds.add(id);
+    const control = this.form.get('id');
+    control?.updateValueAndValidity();
+    control?.markAsTouched();
+    this.activeStep = 0;
+    this.focusStepFieldToFix(0, () => undefined);
   }
 
   get queryControl(): FormControl {
@@ -728,11 +771,20 @@ export class PresentationCreateComponent implements OnInit, PageWithUnsavedChang
               duration: 3000,
             });
           },
-          (err: unknown) =>
+          (err: unknown) => {
+            if (hasHttpStatus(err, 409)) {
+              this.markIdTaken(formValue.id);
+              openErrorSnackBar(
+                this.snackBar,
+                `A verification config with ID '${formValue.id}' already exists. Choose another ID.`
+              );
+              return;
+            }
             openErrorSnackBar(
               this.snackBar,
               getApiErrorMessage(err, 'Failed to create verification config', { allIssues: true })
-            )
+            );
+          }
         )
         .finally(() => (this.saving = false));
     } else {

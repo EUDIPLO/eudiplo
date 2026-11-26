@@ -19,10 +19,11 @@ import {
     StatusListCwt,
     signStatusListJwt,
 } from "@owf/token-status-list";
-import { X509Certificate } from "@peculiar/x509";
 import {
     DataSource,
     EntityManager,
+    type FindOptionsSelect,
+    type FindOptionsWhere,
     In,
     IsNull,
     type QueryRunner,
@@ -39,6 +40,7 @@ import {
     ImportPhase,
 } from "../../platform/config-import/config-import-orchestrator.service.js";
 import type { SessionData as Session } from "../../session/domain/session-data.js";
+import { parseX509Certificate } from "../../shared/utils/x509-certificate-cache.js";
 import type { AttestationKind } from "../../trust/domain/attestation-status-claims.js";
 import type { CredentialConfiguration } from "../configuration/credentials/domain/credential-configuration.js";
 import {
@@ -59,6 +61,7 @@ import { ActiveCredentialSlot } from "./entities/active-credential-slot.entity.j
 import { CredentialWalletUnit } from "./entities/credential-wallet-unit.entity.js";
 import { StatusListEntity } from "./entities/status-list.entity.js";
 import { StatusMapping } from "./entities/status-mapping.entity.js";
+import { assertStatusListCapacity } from "./status-list-capacity.js";
 import { StatusListConfigService } from "./status-list-config.service.js";
 import {
     STATUS_LIST_SETTINGS,
@@ -107,9 +110,6 @@ export interface OutOfRangeStatusEntries {
 
 /** Indexes per query when resolving out-of-range entries to their sessions. */
 const MAPPING_LOOKUP_CHUNK_SIZE = 500;
-
-/** Upper bound for status list capacity; each list is held in memory while it is created. */
-export const MAX_STATUS_LIST_CAPACITY = 1_000_000;
 
 @Injectable()
 export class StatusListService implements OnApplicationBootstrap {
@@ -239,17 +239,7 @@ export class StatusListService implements OnApplicationBootstrap {
     ): Promise<StatusListEntity> {
         const size =
             options?.capacity ?? (await this.getEffectiveCapacity(tenantId));
-        // The capacity comes from API input or tenant configuration and sizes
-        // in-memory arrays, so it must be bounded.
-        if (
-            !Number.isSafeInteger(size) ||
-            size < 1 ||
-            size > MAX_STATUS_LIST_CAPACITY
-        ) {
-            throw new BadRequestException(
-                `Status list capacity must be an integer between 1 and ${MAX_STATUS_LIST_CAPACITY}`,
-            );
-        }
+        assertStatusListCapacity(size);
         // create an empty array with the size
         const elements = new Array(size).fill(0).map(() => 0);
         // create a list of indexes and shuffle them using crypto-secure randomness
@@ -458,7 +448,7 @@ export class StatusListService implements OnApplicationBootstrap {
         },
     ): Promise<Uint8Array> {
         const x5chain = certChainPem.map(
-            (pem) => new Uint8Array(new X509Certificate(pem).rawData),
+            (pem) => new Uint8Array(parseX509Certificate(pem).rawData.slice(0)),
         );
         const algorithm =
             SignatureAlgorithm[
@@ -519,7 +509,13 @@ export class StatusListService implements OnApplicationBootstrap {
      * @returns Array of status list URIs.
      */
     async getStatusListUris(tenantId: string): Promise<string[]> {
-        const lists = await this.getLists(tenantId);
+        // Only the IDs: a full row carries `elements` and `stack`, one number
+        // per entry, and this endpoint is polled by relying parties.
+        const lists = await this.statusListRepository.find({
+            select: { id: true },
+            where: { tenantId },
+            order: { createdAt: "ASC" },
+        });
         return lists.map((list) => this.buildStatusListUri(tenantId, list.id));
     }
 
@@ -533,14 +529,46 @@ export class StatusListService implements OnApplicationBootstrap {
         tenantId: string,
         listId: string,
     ): Promise<StatusListEntity> {
-        const list = await this.statusListRepository.findOneBy({
-            id: listId,
-            tenantId,
+        return this.findListOrThrow(tenantId, listId);
+    }
+
+    /**
+     * Load a status list of the tenant, optionally only some of its columns.
+     * @throws NotFoundException when the tenant has no list with this ID.
+     */
+    private async findListOrThrow(
+        tenantId: string,
+        listId: string,
+        select?: FindOptionsSelect<StatusListEntity>,
+    ): Promise<StatusListEntity> {
+        const list = await this.statusListRepository.findOne({
+            select,
+            where: { id: listId, tenantId },
         });
         if (!list) {
             throw new NotFoundException(`Status list ${listId} not found`);
         }
         return list;
+    }
+
+    /**
+     * Load only the cached tokens of a status list and their expiry.
+     *
+     * Serving a status list token does not need `elements` or `stack`, which
+     * hold one number per entry (10,000 by default) and would otherwise be
+     * transferred from the database and parsed on every request. The full row
+     * is loaded only when the tokens have to be regenerated.
+     */
+    private async getCachedListTokens(
+        tenantId: string,
+        listId: string,
+    ): Promise<Pick<StatusListEntity, "jwt" | "cwt" | "expiresAt">> {
+        return this.findListOrThrow(tenantId, listId, {
+            id: true,
+            jwt: true,
+            cwt: true,
+            expiresAt: true,
+        });
     }
 
     /**
@@ -550,7 +578,7 @@ export class StatusListService implements OnApplicationBootstrap {
      * @returns The JWT for the status list.
      */
     async getListJwt(tenantId: string, listId: string): Promise<string> {
-        let list = await this.getListById(tenantId, listId);
+        let list = await this.getCachedListTokens(tenantId, listId);
 
         // Check if JWT needs regeneration (expired or missing)
         const needsRegeneration =
@@ -568,7 +596,7 @@ export class StatusListService implements OnApplicationBootstrap {
      * The CWT follows the same caching/freshness policy as JWT status list tokens.
      */
     async getListCwt(tenantId: string, listId: string): Promise<Uint8Array> {
-        let list = await this.getListById(tenantId, listId);
+        let list = await this.getCachedListTokens(tenantId, listId);
 
         const needsRegeneration =
             !list.jwt ||
@@ -1020,7 +1048,8 @@ export class StatusListService implements OnApplicationBootstrap {
             } else {
                 const entries = await this.allocateFromList(
                     manager,
-                    list,
+                    list.list,
+                    list.where,
                     options,
                 );
                 await queryRunner.commitTransaction();
@@ -1043,37 +1072,83 @@ export class StatusListService implements OnApplicationBootstrap {
         return { shouldCreateList };
     }
 
+    /**
+     * Find a list with enough free indexes for the allocation and, where the
+     * driver supports it, lock its row until the transaction ends.
+     *
+     * Allocation pops indexes off one list's `stack`, so concurrent issuances
+     * all compete for the same row. With the row locked (`SELECT ... FOR
+     * UPDATE` on PostgreSQL) they wait for each other and each one reads the
+     * stack the previous one committed, instead of failing a version check
+     * and running out of retries under load. Lists are tried in creation
+     * order (then by ID), dedicated before shared, so two transactions never
+     * lock rows in opposite order.
+     *
+     * SQLite has no row locks. There, allocations are serialised within the
+     * process ({@link runSerialized}), and SQLite itself refuses the write of
+     * a transaction whose read was overtaken by another connection.
+     *
+     * The returned `where` includes the list's binding, so the stack write
+     * fails (and the allocation is retried) when the list was bound to
+     * another credential configuration in the meantime.
+     */
     private async findAvailableListForAllocation(
         manager: EntityManager,
         options: EntryAllocationOptions,
-    ): Promise<StatusListEntity | undefined> {
-        const findFirstAvailable = (lists: StatusListEntity[]) =>
-            lists.find((list) => list.stack.length >= options.count);
-        const dedicatedLists = await manager.find(StatusListEntity, {
-            where: {
-                tenantId: options.tenantId,
-                credentialConfigurationId: options.credentialConfigurationId,
-            },
-            order: { createdAt: "ASC" },
-        });
-        const dedicatedList = findFirstAvailable(dedicatedLists);
-        if (dedicatedList) {
-            return dedicatedList;
-        }
+    ): Promise<
+        | {
+              list: StatusListEntity;
+              where: FindOptionsWhere<StatusListEntity>;
+          }
+        | undefined
+    > {
+        // Allocation reads and writes `stack` only, so `elements` and the
+        // cached tokens are not transferred and parsed on every issuance.
+        const select = { id: true, stack: true } as const;
+        const lockRows = this.supportsConcurrentTransactions();
+        const fits = (list: StatusListEntity) =>
+            list.stack.length >= options.count;
 
-        const sharedLists = await manager.find(StatusListEntity, {
-            where: {
-                tenantId: options.tenantId,
-                credentialConfigurationId: IsNull(),
-            },
-            order: { createdAt: "ASC" },
-        });
-        return findFirstAvailable(sharedLists);
+        const candidateFilters = [
+            { credentialConfigurationId: options.credentialConfigurationId },
+            { credentialConfigurationId: IsNull() },
+        ];
+        for (const filter of candidateFilters) {
+            const lists = await manager.find(StatusListEntity, {
+                select,
+                where: { tenantId: options.tenantId, ...filter },
+                // `id` breaks ties, so every transaction locks in one order.
+                order: { createdAt: "ASC", id: "ASC" },
+            });
+            for (const list of lists.filter(fits)) {
+                const where = {
+                    id: list.id,
+                    tenantId: options.tenantId,
+                    ...filter,
+                };
+                if (!lockRows) {
+                    return { list, where };
+                }
+                // Read again under the lock: another allocation may have
+                // taken the last free indexes, or the list may have been
+                // bound elsewhere, since the read above.
+                const locked = await manager.findOne(StatusListEntity, {
+                    select,
+                    where,
+                    lock: { mode: "pessimistic_write" },
+                });
+                if (locked && fits(locked)) {
+                    return { list: locked, where };
+                }
+            }
+        }
+        return undefined;
     }
 
     private async allocateFromList(
         manager: EntityManager,
         list: StatusListEntity,
+        where: FindOptionsWhere<StatusListEntity>,
         options: EntryAllocationOptions,
     ): Promise<AllocatedStatusEntry[]> {
         const allocatedIndices = Array.from({ length: options.count }, () => {
@@ -1085,21 +1160,21 @@ export class StatusListService implements OnApplicationBootstrap {
             }
             return index;
         });
-        const updateResult = await manager.update(
-            StatusListEntity,
-            {
-                id: list.id,
-                tenantId: options.tenantId,
-                version: list.version,
-            },
-            {
-                stack: list.stack,
-                version: () => "version + 1",
-            },
-        );
+        // Only `stack` is written, and `version` is kept as it is: the version
+        // guards the values and the cached tokens built from them, which an
+        // allocation does not change. Bumping it made every issuance fail
+        // concurrent revocations and discard freshly signed tokens. TypeORM
+        // increments a version column on every update unless the update sets
+        // it, hence the explicit no-op.
+        const updateResult = await manager.update(StatusListEntity, where, {
+            stack: list.stack,
+            version: () => "version",
+        });
         if (updateResult.affected === 0) {
+            // Deleted or bound to another configuration since it was read;
+            // the retry picks another list.
             throw new ConflictException(
-                "Status list was modified concurrently",
+                "Status list changed during allocation",
             );
         }
 
@@ -1191,8 +1266,10 @@ export class StatusListService implements OnApplicationBootstrap {
      * connection can actually support.
      *
      * This is deliberately not the integrity mechanism: correctness across
-     * processes and instances still rests on the version checks and the unique
-     * `(tenantId, statusListId, index)` constraint. Serialising only prevents a
+     * processes and instances rests on the version checks of value and token
+     * writes, on SQLite refusing a write whose read was overtaken (allocation
+     * has no version check, see {@link findAvailableListForAllocation}) and on
+     * the unique `(tenantId, statusListId, index)` constraint. Serialising only prevents a
      * single process from attempting something the driver cannot do.
      */
     private runSerialized<T>(operation: () => Promise<T>): Promise<T> {
@@ -2055,13 +2132,8 @@ export class StatusListService implements OnApplicationBootstrap {
         // Get effective size and bits (from config, tenant defaults, or global defaults)
         const size =
             config.capacity ?? (await this.getEffectiveCapacity(tenantId));
+        assertStatusListCapacity(size);
         const bits = config.bits ?? (await this.getEffectiveBits(tenantId));
-
-        // Create the shuffled stack
-        const elements = new Array(size).fill(0).map(() => 0);
-        const stack = this.shuffleArray(
-            new Array(size).fill(0).map((_, i) => i),
-        );
 
         // Validate keyChainId if provided
         if (config.keyChainId) {
@@ -2077,6 +2149,12 @@ export class StatusListService implements OnApplicationBootstrap {
                 );
             }
         }
+
+        // Create the shuffled stack only after the input has been checked
+        const elements = new Array(size).fill(0).map(() => 0);
+        const stack = this.shuffleArray(
+            new Array(size).fill(0).map((_, i) => i),
+        );
 
         // Save with the provided ID
         await this.statusListRepository.insert({

@@ -85,7 +85,9 @@ export class ClientController {
      * Rotate (regenerate) a client's secret.
      * Returns the new secret for one-time display - save it immediately!
      *
-     * Users with `tenants:manage` role can rotate secrets for any client.
+     * Users with `tenants:manage` role can rotate secrets for any tenant's client.
+     * With Keycloak, only clients EUDIPLO manages for a tenant: other clients
+     * of the realm, including `OIDC_CLIENT_ID` and `AUTH_CLIENT_ID`, answer 404.
      * A file-managed client answers 409 until a token of its tenant detaches it.
      * Users with `clients:manage` role can only rotate secrets for clients in
      * their tenant whose roles they hold or may grant.

@@ -68,12 +68,16 @@ with care when you
 - A change may keep roles the caller cannot grant, but not add them. A
   `tenant:admin` caller can, for example, change a client that has
   `tenant:admin` without removing that role.
-- `tenants:manage` can rotate the secret of any client. A `file-managed`
-  client answers `409` until a token of the client's tenant
+- `tenants:manage` can rotate the secret of any client (with Keycloak,
+  see [below](#with-keycloak)). A `file-managed` client answers `409` until a token of the client's tenant
   [detaches](../operate/configuration-as-code.md#configuration-model) it.
 - The same rules apply to the clients that an imported
   [configuration bundle](config-bundle-format.md) creates, changes or deletes,
   and its plan already reports a refusal.
+- Only roles count: the caller's own `allowedIssuanceConfigs` and
+  `allowedPresentationConfigs` do not limit the lists it sets on a client, so a
+  caller with `clients:manage` is not bound by its own lists
+  ([API clients with least privilege](../operate/tenants-and-access.md#api-clients-with-least-privilege)).
 
 ### With Keycloak
 
@@ -86,6 +90,9 @@ with care when you
   needs both: the caller must be able to manage that client, and grant each
   requested role, since none counts as one the client already has
   ([Keycloak SSO](../operate/keycloak.md#4-give-people-access)).
+- Only clients EUDIPLO manages for a tenant have their secret rotated: other
+  clients of the realm, including EUDIPLO's own `OIDC_CLIENT_ID` and
+  `AUTH_CLIENT_ID` clients, answer `404`.
 
 ## All roles
 

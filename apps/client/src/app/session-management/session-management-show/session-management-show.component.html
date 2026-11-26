@@ -679,7 +679,9 @@
                 </div>
               }
               <div class="log-entries">
-                @for (log of sessionLogs; track log.id) {
+                @for (item of sessionLogs; track item.log.id) {
+                  @let log = item.log;
+                  @let view = item.view;
                   <div class="log-entry" [class]="getLogLevelClass(log.level)">
                     <div class="log-header">
                       <span class="badge log-level" [class]="getLogLevelClass(log.level)">
@@ -687,6 +689,9 @@
                       </span>
                       @if (log.stage) {
                         <span class="log-stage">{{ log.stage }}</span>
+                      }
+                      @if (view.errorName) {
+                        <span class="log-error-name">{{ view.errorName }}</span>
                       }
                       <span class="log-timestamp">{{ formatDate(log.timestamp) }}</span>
                       @if (grafanaEnabled && getTraceIdFromDetail(log.detail)) {
@@ -702,8 +707,53 @@
                       }
                     </div>
                     <div class="log-message">{{ log.message }}</div>
-                    @if (log.detail) {
-                      <pre class="json-display log-detail">{{ formatJson(log.detail) }}</pre>
+                    @if (view.fields.length) {
+                      <dl class="log-fields">
+                        @for (field of view.fields; track field.key) {
+                          <dt>{{ field.key }}</dt>
+                          <dd>{{ field.value }}</dd>
+                        }
+                      </dl>
+                    }
+                    @if (view.extra) {
+                      <details class="log-disclosure">
+                        <summary>
+                          <mat-icon class="chevron" aria-hidden="true">chevron_right</mat-icon>
+                          Details
+                        </summary>
+                        <button
+                          matButton
+                          type="button"
+                          (click)="copyValue(view.extra)"
+                          [attr.aria-label]="
+                            'Copy details of the entry at ' + formatDate(log.timestamp)
+                          "
+                        >
+                          <mat-icon>content_copy</mat-icon>
+                          Copy
+                        </button>
+                        <pre class="json-display">{{ view.extra }}</pre>
+                      </details>
+                    }
+                    @if (view.stack) {
+                      <details class="log-disclosure">
+                        <summary>
+                          <mat-icon class="chevron" aria-hidden="true">chevron_right</mat-icon>
+                          Stack trace
+                        </summary>
+                        <button
+                          matButton
+                          type="button"
+                          (click)="copyValue(view.stack)"
+                          [attr.aria-label]="
+                            'Copy stack trace of the entry at ' + formatDate(log.timestamp)
+                          "
+                        >
+                          <mat-icon>content_copy</mat-icon>
+                          Copy
+                        </button>
+                        <pre class="json-display">{{ view.stack }}</pre>
+                      </details>
                     }
                   </div>
                 }

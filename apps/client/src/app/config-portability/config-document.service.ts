@@ -79,13 +79,11 @@ export class ConfigDocumentService {
     this.running.update((running) => new Set(running).add(key));
     try {
       const placeholders = await this.download(kind, id);
-      // Secrets are `${…}` placeholders that an import needs as environment variables.
+      // Secrets are `${…}` placeholders: variables for a config folder, values for an upload.
       if (placeholders.length) {
-        this.snackBar.open(
-          `Configuration downloaded. Its secrets are placeholders: set ${placeholders.join(', ')} before importing it.`,
-          'Close',
-          { duration: 8000 }
-        );
+        const message = `Configuration downloaded. Its secrets are placeholders (${placeholders.join(', ')}): set them in the backend's environment for a config folder, or replace them with the values before importing the file under Config Portability.`;
+        // Open until closed, whatever its length: this is the only place that names the variables.
+        this.snackBar.open(message, 'Close', { duration: 0 });
       } else {
         this.snackBar.open('Configuration downloaded', 'Close', { duration: 3000 });
       }
@@ -118,9 +116,10 @@ export class ConfigDocumentService {
       path: { kind, id },
     });
     downloadJsonFile(result.data, `${id}.json`);
+    // `$${` is the escaped form of stored text that contains `${`, no placeholder.
     return [
       ...new Set(
-        Array.from(JSON.stringify(result.data).matchAll(/\$\{(\w+)\}/g), ([, name]) => name)
+        Array.from(JSON.stringify(result.data).matchAll(/(?<!\$)\$\{(\w+)\}/g), ([, name]) => name)
       ),
     ];
   }

@@ -8,11 +8,12 @@ All TypeScript packages test with [Vitest](https://vitest.dev). Run the unit tes
 
 | Suite | Location | Command | CI job |
 | --- | --- | --- | --- |
-| Backend unit and architecture | `apps/backend/src/**/*.spec.ts`, `apps/backend/test/architecture/` | `pnpm --filter @eudiplo/backend test` | Backend Unit Tests |
+| Backend unit and architecture | `apps/backend/src/**/*.spec.ts`, `apps/backend/test/**/*.spec.ts` (including the SDK parity check `test/issuer/configuration/credentials/utils/derive-parity.spec.ts`) | `pnpm --filter @eudiplo/backend test` | Backend Unit Tests |
 | Backend E2E | `apps/backend/test/**/*.e2e-spec.ts` | `pnpm --filter @eudiplo/backend test:e2e:local` | E2E Tests (non-OIDF) |
 | OIDF conformance | `apps/backend/test/oidf/` | `pnpm --filter @eudiplo/backend test:oidf` | E2E Tests (OIDF) |
 | CLI | `apps/cli/test/**/*.test.ts`, `apps/cli/src/**/*.spec.ts` | `pnpm --filter @eudiplo/cli test` | Build CLI |
-| Config format, SDK | `packages/*/src/**/*.spec.ts`, `packages/eudiplo-sdk-core/test/` | `pnpm --filter @eudiplo/config-format test`, `pnpm --filter @eudiplo/sdk-core test` | — |
+| Config format | `packages/eudiplo-config-format/src/**/*.spec.ts` | `pnpm --filter @eudiplo/config-format test` | — |
+| SDK | `packages/eudiplo-sdk-core/test/` | `pnpm --filter @eudiplo/sdk-core test` | Build SDK Core |
 | Client unit | `apps/client/src/**/*.spec.ts` | `pnpm --filter @eudiplo/client test` | Build Client |
 | Client browser (Playwright) | `apps/client/e2e/` | `E2E_USE_BUILD=true pnpm --filter @eudiplo/client e2e` | E2E Tests (Client) |
 | Documentation tooling | `apps/docs/scripts/`, `apps/docs/src/components/WalletQaResults/` | `pnpm --filter @eudiplo/docs test` | Build Documentation |
@@ -67,6 +68,18 @@ pnpm --filter @eudiplo/backend test:e2e         # with coverage, as in CI
 `test:e2e` does not build `@eudiplo/config-format` (CI builds it in a separate step); run `pnpm --filter @eudiplo/config-format build` first.
 
 CI splits the suites across four runners (**E2E Tests (non-OIDF, shard n/4)**), because they share port 3000 and cannot run in parallel on one machine. The **E2E Tests (non-OIDF)** job passes only when every shard passed. Each shard also writes a Vitest blob report, which the **Backend E2E Coverage** job merges with its coverage. The shard jobs also add the `host.testcontainers.internal` hosts entry; locally it is not required.
+
+## Container image
+
+`apps/backend/test/docker/image-user.sh <image>` checks which user the backend
+image runs as and how its entrypoint (`apps/backend/docker-entrypoint.sh`)
+hands data folders to that user. It needs Docker and runs in CI after the image
+build. Run it locally after a change to the entrypoint or the `eudiplo` stage of
+the `Dockerfile`:
+
+```bash
+docker build --target eudiplo -t eudiplo:local . && apps/backend/test/docker/image-user.sh eudiplo:local
+```
 
 ## OIDF conformance testing
 

@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+    isStatusListCapacity,
+    STATUS_LIST_CAPACITY_MESSAGE,
+} from "../../../shared/domain/status-list-capacity.js";
 
 export const StatusListConfigSchema = z
     .strictObject({
@@ -6,6 +10,7 @@ export const StatusListConfigSchema = z
             .number()
             .int()
             .min(100)
+            .refine(isStatusListCapacity, STATUS_LIST_CAPACITY_MESSAGE)
             .optional()
             .describe("Default status list capacity."),
         bits: z

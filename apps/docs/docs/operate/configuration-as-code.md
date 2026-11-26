@@ -182,9 +182,14 @@ such as the check of a presentation configuration's registration certificate,
 so an import can still fail on a folder that passed validation. Like the
 backend, the validator resolves `${VAR}` placeholders from its environment and
 fails on one without a value or default, so give the CI job a dummy value for
-each; the real secrets stay on the instance. The validator does not check
-[which variables a file can use](../reference/config-bundle-format.md#variables-a-file-can-use);
-the backend refuses the others on import. A file the backend skips does not
+each; the real secrets stay on the instance. Of the rules on
+[which variables a file can use](../reference/config-bundle-format.md#variables-a-file-can-use),
+the validator checks only those it can know without the instance: it fails on
+the AWS and Azure credential variables in a file other than `kms.json`, and
+warns for every variable a tenant `kms.json` names other than `PUBLIC_URL`, because the backend
+resolves it only if the instance lists it in `KMS_TENANT_VARIABLES`. It does
+not know the variables that configure EUDIPLO itself; the backend refuses
+those on import. A file the backend skips does not
 fail validation: a `registrar.json` left from the removed sandbox registrar
 integration prints `warning registrar.json: …` under its tenant, and the JSON
 report lists it in the tenant's `warnings[]` (`file`, `message`).
@@ -207,7 +212,10 @@ jobs:
       - run: npx @eudiplo/cli@10 config upgrade ./config --check
 ```
 
-Use the CLI major version that matches your backend. For completion and inline
+Use the CLI major version that matches your backend, and for `config plan` and
+`config import` a CLI on the same side as the backend of the fix that writes
+placeholder text as `$${`
+([Exports](../upgrade/10.x-fixes.md#exports-placeholder-text-is-written-in-an-escaped-form)). For completion and inline
 validation in VS Code, run `eudiplo config editor setup` in the repository; it
 copies the schemas of the installed CLI to `.vscode/eudiplo-schemas/` and adds
 the file associations to `.vscode/settings.json`.
@@ -247,9 +255,11 @@ for the config folder. The API is
 `GET /api/config-bundles/resources/<kind>/<id>/document`
 ([single resources](../reference/config-bundle-format.md#single-resources)).
 Secrets are `${…}` placeholders, as in a bundle export; the Web Client names
-the environment variables to set before the import. **Choose bundle or
-document** under **Settings > Config Portability** also takes the file and
-plans it like a bundle with that one resource. A key chain document
+the environment variables to set when the file goes into the config folder.
+**Choose bundle or document** under **Settings > Config Portability** also
+takes the file and plans it like a bundle with that one resource; there,
+replace each placeholder with its value first
+([placeholders and the API](../reference/config-bundle-format.md#placeholders-and-the-api)). A key chain document
 contains the private keys of a `db` key chain and needs `tenant:admin` or
 `tenants:manage`.
 

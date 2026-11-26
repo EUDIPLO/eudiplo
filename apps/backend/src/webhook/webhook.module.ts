@@ -1,6 +1,7 @@
 import { HttpModule } from "@nestjs/axios";
 import { Module } from "@nestjs/common";
 import { WebhookEndpointModule } from "../issuer/configuration/webhook-endpoint/webhook-endpoint.module.js";
+import { SecretsModule } from "../platform/secrets/secrets.module.js";
 import { SessionModule } from "../session/session.module.js";
 import { OutboundUrlPolicyModule } from "./outbound-url-policy.module.js";
 import { PRESENTATION_RESULT_PUBLISHER } from "./ports/presentation-result-publisher.js";
@@ -19,6 +20,7 @@ import { WebhookPresentationResultPublisher } from "./webhook-presentation-resul
         SessionModule,
         OutboundUrlPolicyModule,
         WebhookEndpointModule,
+        SecretsModule,
     ],
     providers: [
         WebhookService,

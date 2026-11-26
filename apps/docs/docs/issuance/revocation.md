@@ -108,7 +108,7 @@ EUDIPLO allocates entries automatically: first from lists bound to the credentia
 | `POST /api/status-lists` | Create a list: `credentialConfigurationId` (bind it to one type; omit for a shared list), `keyChainId` (signing key: a `statusList` or `attestation` key chain; default: the tenant's status list key, else its attestation key), `bits` (1, 2, 4 or 8), `capacity` (1000 to 1,000,000). |
 | `PATCH /api/status-lists/{listId}` | Change `credentialConfigurationId` or `keyChainId` (`null` resets to shared or default). `bits` and `capacity` are fixed. |
 | `DELETE /api/status-lists/{listId}` | Delete an unused list. Lists with entries answer `409`. |
-| `GET`, `PUT`, `DELETE /api/status-list-config` | Tenant defaults: `capacity` (minimum 100), `bits`, `ttl` (minimum 60 seconds), `immediateUpdate`, `enableAggregation`. `PUT` replaces the whole object; omitted fields fall back to the environment defaults. `DELETE` resets to them. |
+| `GET`, `PUT`, `DELETE /api/status-list-config` | Tenant defaults: `capacity` (100 to 1,000,000), `bits`, `ttl` (minimum 60 seconds), `immediateUpdate`, `enableAggregation`. `PUT` replaces the whole object; omitted fields fall back to the environment defaults. `DELETE` resets to them. |
 
 The environment defaults are `STATUS_CAPACITY` (10000), `STATUS_BITS` (1), `STATUS_TTL` (3600), `STATUS_IMMEDIATE_UPDATE` (`false`) and `STATUS_ENABLE_AGGREGATION` (`true`); see [Environment variables](../reference/environment-variables.md#status). `capacity` and `bits` apply to lists created afterwards. Status lists can also be managed as files; see [Configuration as code](../operate/configuration-as-code.md). In the web client, open **Status Lists**.
 

@@ -18,6 +18,7 @@ import {
     ConfigImportOrchestratorService,
     ImportPhase,
 } from "../../../platform/config-import/config-import-orchestrator.service.js";
+import { ResourceIdTaken } from "../../../shared/domain/conflict-error.js";
 import { loadJsonFile } from "../../../shared/utils/config-file-loader.util.js";
 import { unregisteredTrustAnchorsMessage } from "../../../trust/federation-trust-anchor/domain/federation-trust-anchor-errors.js";
 import { FederationTrustAnchorService } from "../../../trust/federation-trust-anchor/federation-trust-anchor.service.js";
@@ -146,7 +147,35 @@ export class PresentationConfigService {
     }
 
     /**
-     * Stores a new presentation configuration.
+     * Creates a presentation configuration. Refuses an ID the tenant already
+     * uses: changes go through {@link updatePresentationConfig}.
+     * @throws ResourceIdTaken when the tenant has a configuration with this ID.
+     */
+    async createPresentationConfig(
+        tenantId: string,
+        vprequest: PresentationConfigCreateDto,
+        actorToken?: TokenPayload,
+        requestMeta?: AuditLogRequestMeta,
+    ) {
+        if (await this.repository.existsBy({ id: vprequest.id, tenantId })) {
+            throw new ResourceIdTaken(
+                "Presentation configuration",
+                vprequest.id,
+            );
+        }
+        return this.storePresentationConfig(
+            tenantId,
+            vprequest,
+            actorToken,
+            requestMeta,
+        );
+    }
+
+    /**
+     * Stores a presentation configuration. If the configuration already
+     * exists, it will be overwritten: only configuration imports (config
+     * folder, bundles) replace stored configurations, the API creates with
+     * {@link createPresentationConfig}.
      * @param tenantId - The ID of the tenant for which to store the configuration.
      * @param vprequest - The PresentationConfig entity to store.
      * @returns A promise that resolves to the stored PresentationConfig entity.

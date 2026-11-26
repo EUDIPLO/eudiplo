@@ -1,4 +1,5 @@
 import { X509Certificate } from "node:crypto";
+import { escapeConfigPlaceholders } from "@eudiplo/config-format/config-values.js";
 import {
     BadRequestException,
     Injectable,
@@ -15,6 +16,7 @@ import { type FindOptionsSelect, In, Repository } from "typeorm";
 import { v4 } from "uuid";
 import type { DefaultKeyChains } from "../../auth/tenant/domain/tenant-data.js";
 import { TenantEntity } from "../../auth/tenant/entities/tenant.entity.js";
+import { parseX509Certificate } from "../../shared/utils/x509-certificate-cache.js";
 import { KeyChainReferences } from "./application/key-chain-references.js";
 import {
     CertificateBuilderService,
@@ -398,6 +400,10 @@ export class KeyChainService {
         return this.toResponseDto(await this.getEntity(tenantId, id));
     }
 
+    /**
+     * The key chain as a configuration file, in the escaped form of such
+     * files: every `${` of a stored value reads `$${`.
+     */
     async export(tenantId: string, id: string): Promise<KeyChainExportDto> {
         const keyChain = await this.getManageable(tenantId, id);
         const storedKey = keyChain.hasInternalCa()
@@ -447,7 +453,10 @@ export class KeyChainService {
             };
         }
 
-        return exportDto;
+        // The export is a configuration file, and a tenant folder resolves
+        // `${VAR}` in it: stored text, the ID included, keeps its `${` only
+        // in the escaped form `$${`.
+        return escapeConfigPlaceholders(exportDto);
     }
 
     /**
@@ -1400,7 +1409,7 @@ export class KeyChainService {
             "-----END CERTIFICATE-----";
 
         try {
-            const cert = new x509.X509Certificate(firstCertPem);
+            const cert = parseX509Certificate(firstCertPem);
             return {
                 pem,
                 subject: cert.subject,

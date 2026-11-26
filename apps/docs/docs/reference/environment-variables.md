@@ -60,6 +60,12 @@ Connection to the German EUDI Hub ([EUDI Hub](../trust/eudi-hub.md)).
 
 <ConfigTable group="registrar" />
 
+## Secret references
+
+See [Secret references](../operate/secret-references.md).
+
+<ConfigTable group="secrets" />
+
 ## Session
 
 <ConfigTable group="session" />
@@ -92,3 +98,12 @@ off. Use them only for development and interoperability tests.
 ## Webhook
 
 <ConfigTable group="webhook" />
+
+## Container image
+
+The entrypoint of the `ghcr.io/eudiplo/eudiplo` image reads this variable
+before the backend starts; the backend itself ignores it.
+
+| Variable      | Default | Description                                                                                                                                                 |
+| ------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `EUDIPLO_RUN_AS_ROOT` | `false` | `true` keeps the backend running as root instead of the owner of `FOLDER` or `node` (`1000:1000`). See [Non-root user](../operate/docker-compose.md#non-root-user). |

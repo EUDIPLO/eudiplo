@@ -62,7 +62,7 @@ curl -X POST "$EUDIPLO_URL/api/verifier/config" \
   --data @membership-check.json
 ```
 
-The schema is strict: unknown fields, such as an inline `webhook` or `registrationCert`, are rejected with `400`. The response contains the stored configuration plus the read-only fields `createdAt` and `updatedAt`; remove them before sending a configuration back.
+The schema is strict: unknown fields, such as an inline `webhook` or `registrationCert`, are rejected with `400`. The response contains the stored configuration plus the read-only fields `createdAt` and `updatedAt`; remove them before sending a configuration back. A `POST` with the `id` of an existing configuration answers `409 Conflict` and leaves the stored one as it is; change it with `PATCH`.
 
 | Task                  | Endpoint                                                                                       |
 | --------------------- | ---------------------------------------------------------------------------------------------- |

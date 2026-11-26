@@ -15,7 +15,6 @@ import {
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import type { ItemsRequest, ReaderAuth } from "@owf/mdoc";
-import { X509Certificate } from "@peculiar/x509";
 import { exportJWK } from "jose";
 import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
 import { Repository } from "typeorm";
@@ -42,11 +41,13 @@ import {
     SessionNotUsable,
 } from "../../session/domain/session-usability.js";
 import { SessionAuditService } from "../../session/logging/session-audit.service.js";
+import { parseX509Certificate } from "../../shared/utils/x509-certificate-cache.js";
 import {
     DEFAULT_VERIFIER_SKEW_SECONDS,
     RevocationCheckMode,
     VerifierOptions,
 } from "../../trust/types.js";
+import { storedWebhook } from "../../webhook/domain/webhook-configuration.js";
 import {
     PRESENTATION_RESULT_PUBLISHER,
     type PresentationResult,
@@ -195,7 +196,7 @@ export class Iso18013Service {
             return undefined;
         }
 
-        return { url: endpoint.url, auth: endpoint.auth };
+        return storedWebhook("WebhookEndpoint", endpoint);
     }
 
     /**
@@ -312,12 +313,6 @@ export class Iso18013Service {
         const expiresAt = new Date(
             Date.now() + (config.lifeTime ?? 300) * 1000,
         );
-        const endpointWebhook = await this.resolveWebhookFromEndpoint(
-            config.webhookEndpointId,
-            tenantId,
-        );
-        const resolvedWebhook = webhook ?? endpointWebhook;
-
         await this.createSession.execute({
             id: sessionId,
             tenantId,
@@ -329,7 +324,9 @@ export class Iso18013Service {
             browserOrigin: origin,
             vp_nonce: nonce.toString("hex"),
             webhookEndpointId: config.webhookEndpointId ?? undefined,
-            parsedWebhook: resolvedWebhook,
+            // Only a webhook of the request is kept with the session; a
+            // configured endpoint is read when the result is sent.
+            parsedWebhook: webhook,
             redirectUri: config.redirectUri ?? undefined,
             skewSeconds:
                 skewSeconds ??
@@ -397,7 +394,7 @@ export class Iso18013Service {
         )) as Record<string, unknown>;
 
         const certificateChain = cert.crt.map(
-            (pem) => new Uint8Array(new X509Certificate(pem).rawData),
+            (pem) => new Uint8Array(parseX509Certificate(pem).rawData.slice(0)),
         );
 
         return buildReaderAuth(

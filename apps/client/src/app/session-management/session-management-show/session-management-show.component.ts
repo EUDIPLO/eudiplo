@@ -36,6 +36,7 @@ import {
   SessionManagementService,
   type SessionLogEntry,
 } from '../session-management.service';
+import { sessionLogView, type SessionLogView } from './session-log-view';
 import { GrafanaLinkService } from '../../services/grafana-link.service';
 import { JwtService } from '../../services/jwt.service';
 import {
@@ -94,7 +95,8 @@ export class SessionManagementShowComponent implements OnInit, OnDestroy {
   loading = false;
   /** Why the session could not be loaded; shown with a Retry instead of the page. */
   loadError = '';
-  sessionLogs: SessionLogEntry[] = [];
+  /** Stored log entries, each with the display form of its detail. */
+  sessionLogs: { log: SessionLogEntry; view: SessionLogView }[] = [];
   grafanaEnabled = false;
 
   // QR Code functionality
@@ -665,7 +667,8 @@ export class SessionManagementShowComponent implements OnInit, OnDestroy {
 
   async loadSessionLogs(sessionId: string): Promise<void> {
     try {
-      this.sessionLogs = await this.sessionManagementService.getSessionLogs(sessionId);
+      const logs = await this.sessionManagementService.getSessionLogs(sessionId);
+      this.sessionLogs = logs.map((log) => ({ log, view: sessionLogView(log) }));
     } catch {
       // Logs may not be available if LOG_SESSION_STORE is off
       this.sessionLogs = [];

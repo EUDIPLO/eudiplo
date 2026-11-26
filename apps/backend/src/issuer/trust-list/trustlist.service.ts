@@ -1,3 +1,4 @@
+import { escapeConfigPlaceholders } from "@eudiplo/config-format/config-values.js";
 import {
     trustListMailtoUri,
     trustListTelUri,
@@ -35,6 +36,7 @@ import {
     ConfigImportOrchestratorService,
     ImportPhase,
 } from "../../platform/config-import/config-import-orchestrator.service.js";
+import { ResourceIdTaken } from "../../shared/domain/conflict-error.js";
 import { loadConfigDto } from "../../shared/utils/config-file-loader.util.js";
 import { LoteTypes } from "../../trust/domain/lote-profiles.js";
 import { TrustListReferences } from "./application/trust-list-references.js";
@@ -165,10 +167,19 @@ export class TrustListService {
      * @param tenant
      * @returns
      */
-    create(
+    async create(
         values: TrustListCreateDto,
         tenant: Pick<TenantEntity, "id" | "name">,
     ): Promise<TrustList> {
+        if (
+            values.id &&
+            (await this.trustListRepo.existsBy({
+                tenantId: tenant.id,
+                id: values.id,
+            }))
+        ) {
+            throw new ResourceIdTaken("Trust list", values.id);
+        }
         return this.buildAndSaveTrustList(values, tenant);
     }
 
@@ -206,12 +217,22 @@ export class TrustListService {
         return trustList;
     }
 
-    /** @throws NotFoundException when the tenant has no trust list with this ID */
+    /**
+     * The trust list as a configuration file, in the escaped form of such
+     * files: every `${` of a stored value reads `$${`.
+     *
+     * @throws NotFoundException when the tenant has no trust list with this ID
+     */
     async exportTrustList(
         tenantId: string,
         id: string,
     ): Promise<TrustListCreateDto> {
-        return trustListConfig(await this.get(tenantId, id));
+        // The export is a configuration file, and a tenant folder resolves
+        // `${VAR}` in it: stored text, the ID included, keeps its `${` only
+        // in the escaped form `$${`.
+        return escapeConfigPlaceholders(
+            trustListConfig(await this.get(tenantId, id)),
+        );
     }
 
     /**

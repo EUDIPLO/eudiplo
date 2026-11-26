@@ -3,6 +3,7 @@ import * as x509 from "@peculiar/x509";
 import { assertCertificateChainLength } from "../shared/utils/certificate-chain-length.util.js";
 import { CertificatePathBuilder } from "../shared/utils/certificate-path.util.js";
 import { certificateValidityAt } from "../shared/utils/certificate-validity.util.js";
+import { parseX509Certificate } from "../shared/utils/x509-certificate-cache.js";
 import { assertAttestationPathValidAt } from "./domain/attestation-certificate-validity.js";
 import {
     getRevocationCert,
@@ -47,19 +48,6 @@ function arrayBufferToHex(buffer: ArrayBuffer): string {
 }
 
 /**
- * Parse a certificate from a Base64-encoded DER string (as used in LoTE trust lists).
- * Converts to PEM format which is more reliably parsed by @peculiar/x509.
- */
-function certFromBase64Der(val: string): x509.X509Certificate {
-    // Convert to PEM format - this is more reliably parsed
-    const pem =
-        "-----BEGIN CERTIFICATE-----\n" +
-        val.match(/.{1,64}/g)!.join("\n") +
-        "\n-----END CERTIFICATE-----";
-    return new x509.X509Certificate(pem);
-}
-
-/**
  * Information about a matched TrustedEntity from certificate chain validation.
  * Includes the matched issuance certificate and the associated revocation certificate
  * from the same entity.
@@ -101,7 +89,7 @@ export class X509ValidationService {
         const certs: x509.X509Certificate[] = [];
         for (const { certValue } of values) {
             try {
-                const cert = certFromBase64Der(certValue);
+                const cert = parseX509Certificate(certValue);
                 this.logger.debug(
                     `Parsed trust anchor: subject="${cert.subject}", issuer="${cert.issuer}"`,
                 );
@@ -386,7 +374,7 @@ export class X509ValidationService {
                     );
                     const revocationThumbprint = revocationSvc
                         ? arrayBufferToHex(
-                              await certFromBase64Der(
+                              await parseX509Certificate(
                                   revocationSvc.certValue,
                               ).getThumbprint("SHA-256"),
                           )
@@ -554,7 +542,7 @@ export class X509ValidationService {
         endThumb: string,
         pinnedMode: "leaf" | "pathEnd",
     ): Promise<ServiceCertMatch | null> {
-        const cert = certFromBase64Der(svc.certValue);
+        const cert = parseX509Certificate(svc.certValue);
         const thumbprint = arrayBufferToHex(
             await cert.getThumbprint("SHA-256"),
         );

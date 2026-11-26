@@ -9,6 +9,7 @@ import {
     schemaUrl,
     serializeDocument,
 } from "@eudiplo/config-format/config-format.js";
+import { readConfigFileValues } from "@eudiplo/config-format/config-values.js";
 import {
     compareCodePoints,
     imageContentType,
@@ -241,7 +242,8 @@ export class ConfigFolderBundleService {
         const index = full.documents.findIndex(
             (document) =>
                 normalizeDocument(document).kind === kind &&
-                resourceId(document) === id,
+                // The document is a file; the request names the stored ID.
+                readConfigFileValues(resourceId(document)).value === id,
         );
         if (index === -1) {
             throw new NotFoundException(
@@ -353,9 +355,12 @@ export class ConfigFolderBundleService {
         filePath: string,
     ): { document: ConfigDocument; issues: ConfigMigrationIssue[] } {
         const rawPayload = parseJsonFile(filePath);
+        // Filled in, but still a file: the plan reads the escaped form and
+        // tells a placeholder left unresolved from stored text.
         const resolvedPayload = this.configImportService.replacePlaceholders(
             rawPayload,
             resource.kind === "KmsConfig" ? "tenant-kms" : "tenant",
+            "keep",
         );
         // A tenant kms.json keeps its placeholders, as the API stores and
         // shows it: KmsConfigService resolves them when the file is loaded.
@@ -393,7 +398,7 @@ export class ConfigFolderBundleService {
         const input = this.migrationService.isDocument(payload)
             ? payload
             : this.migrationService.wrapLegacy(resource.kind, payload, id);
-        const result = this.migrationService.upgrade(input);
+        const result = this.migrationService.upgradeFile(input);
         if (result.document.kind !== resource.kind) {
             throw new Error(
                 `contains ${result.document.kind}, expected ${resource.kind}`,

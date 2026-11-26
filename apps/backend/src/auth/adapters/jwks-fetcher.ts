@@ -5,7 +5,7 @@ const TIMEOUT_MS = 10_000;
 const MAX_BYTES = 1024 * 1024;
 
 /**
- * Fetches the identity provider's key set for jwks-rsa through the outbound
+ * Fetches the identity provider's key set through the outbound
  * URL policy, bounded in time and size and without following redirects. The
  * origins the operator configured skip the policy, as for the discovery
  * document; a key set elsewhere, which only the discovery document names, is

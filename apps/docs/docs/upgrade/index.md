@@ -12,6 +12,7 @@ Upgrade one major version at a time and read every guide on the way.
 
 | From | To | Guide |
 | --- | --- | --- |
+| 10.x | 11.0 (next major, not released yet) | [10.x to 11.0](./10.x-to-11.0.md): creates of credential and presentation configurations, webhook endpoints, attribute providers and trust lists refuse an ID the tenant already uses |
 | 9.x | 10.0 | [9.x to 10.0](./9.x-to-10.0.md): callers grant only their own roles to clients and people, `credentials:status` instead of `issuance:offer` for credential status changes, unique client IDs, webhook time and size limits, checked webhook redirects, stricter inline webhook validation, sandbox registrar integration removed, new configuration file formats, key chain imports remove an omitted description and rotation settings, key chain rotation needs `intervalDays`, unchanged key chain documents are not applied again, unchanged `!generate` clients keep their secret |
 | 8.x | 9.0 | [8.x to 9.0](./8.x-to-9.0.md): object storage, outbound URL and schema synchronization defaults, TLS fails closed, stricter OAuth and OID4VP, role-scoped sessions, key export and KMS configuration, session expiry, presentation webhooks, new configuration file formats |
 | 7.x | 8.0 | [7.x to 8.0](./7.x-to-8.0.md): canonical `$schema` envelopes for configuration files |
@@ -55,7 +56,7 @@ EUDIPLO follows [Semantic Versioning](https://semver.org/):
 - **Deprecation before removal** where feasible: a minor release deprecates, the next major removes.
 - **Database migrations are automatic.** No manual SQL is needed.
 - **Configuration files are versioned per resource.** A release imports files of its own and older format versions and upgrades them; it rejects files with a newer version. Files exported from a new major can therefore not be imported into the previous one.
-- **Client and backend** of the same release work together; releases that differ only in the patch version are compatible.
+- **Web Client, CLI and backend** of the same release work together; releases that differ only in the patch version are compatible. The exception is the CLI and the backend of a release on either side of the fix that writes placeholder text as `$${`: they read `$${` differently, so upgrade them together ([Exports: placeholder text is written in an escaped form](./10.x-fixes.md#exports-placeholder-text-is-written-in-an-escaped-form)).
 
 ## Verifying release artifacts
 

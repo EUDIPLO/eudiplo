@@ -57,6 +57,8 @@ export function flattenFields(fields: ClaimFieldDefinition[]): ClaimFieldDefinit
     if (children && children.length > 0) {
       const resolvedChildren: ClaimFieldDefinition[] = children.map((child) => ({
         ...child,
+        // An mdoc child lives in the namespace of its parent unless it names its own.
+        namespace: child.namespace ?? field.namespace,
         path: resolveChildPath(field.path, field.type, child.path),
       }));
       result.push(...flattenFields(resolvedChildren));
@@ -296,13 +298,83 @@ export function buildDisclosureFrame(
   return hasDisclosure ? frame : undefined;
 }
 
-export function buildClaimsMetadata(fields: ClaimFieldDefinition[]): ClaimMetadata[] {
-  return flattenFields(fields)
-    .filter((field) => field.path.length > 0)
-    .map((field) => {
+/**
+ * The namespace an mdoc issuer puts claims in that name none of their own:
+ * `org.iso.18013.5.1` for the mDL, the docType itself for any other.
+ */
+export function mdocDefaultNamespace(docType: string): string {
+  return docType === "org.iso.18013.5.1.mDL" ? "org.iso.18013.5.1" : docType;
+}
+
+/**
+ * The fields with `defaultNamespace` given to each top-level field that names
+ * no namespace and whose path does not start with one (a one-segment path),
+ * so its claims path pointers, and those of its children, have the two
+ * components OID4VCI 1.0 Appendix C.2 requires. Metadata and default values
+ * resolve namespaces this way, as in the backend.
+ */
+function withDefaultNamespace(
+  fields: ClaimFieldDefinition[],
+  defaultNamespace: string | undefined,
+): ClaimFieldDefinition[] {
+  if (!defaultNamespace) {
+    return fields;
+  }
+  return fields.map((field) =>
+    getFieldNamespace(field) === undefined
+      ? { ...field, namespace: defaultNamespace }
+      : field,
+  );
+}
+
+/**
+ * The path a field's claims metadata names, before the namespace is put in
+ * front: a path that already starts with the field's namespace loses that
+ * segment, so the namespace is not named twice. Empty when there is no
+ * claim to describe.
+ */
+function claimMetadataPath(field: ClaimFieldDefinition): Segment[] {
+  return field.namespace
+    ? namespaceRelativePath(field, field.namespace)
+    : field.path;
+}
+
+function isElementIndex(segment: Segment): segment is number {
+  return (
+    typeof segment === "number" &&
+    Number.isSafeInteger(segment) &&
+    segment >= 0
+  );
+}
+
+/**
+ * The `claims` entries of a credential configuration's metadata.
+ * @param defaultNamespace for `mso_mdoc`, the namespace of the docType
+ *   ({@link mdocDefaultNamespace}): put in front of fields that name no
+ *   namespace, where the issuer puts their values.
+ */
+export function buildClaimsMetadata(
+  fields: ClaimFieldDefinition[],
+  defaultNamespace?: string,
+): ClaimMetadata[] {
+  return flattenFields(withDefaultNamespace(fields, defaultNamespace))
+    .map((field) => ({ field, path: claimMetadataPath(field) }))
+    .filter(({ path }) => path.length > 0)
+    .map(({ field, path }) => {
+      // A claims path pointer (OID4VCI 1.0 Appendix C): `null` selects every
+      // array element and a non-negative integer one element. Other numbers
+      // are no valid index and become strings, as in the backend.
       const metadata: ClaimMetadata = {
-        path: field.path,
+        path: path.map((segment) =>
+          segment === null || isElementIndex(segment)
+            ? segment
+            : segmentToKey(segment),
+        ),
       };
+      // mdoc claims path pointers start with the namespace (OID4VCI 1.0 Appendix C.2).
+      if (field.namespace) {
+        metadata.path = [field.namespace, ...metadata.path];
+      }
 
       if (typeof field.mandatory === "boolean") {
         metadata.mandatory = field.mandatory;
@@ -398,29 +470,58 @@ export function buildJsonSchema(fields: ClaimFieldDefinition[]): JsonSchema {
   return root;
 }
 
+/**
+ * The mdoc namespace of a field: its own, else the first segment of a nested
+ * path, as in the backend.
+ */
+function getFieldNamespace(field: ClaimFieldDefinition): string | undefined {
+  if (field.namespace) {
+    return field.namespace;
+  }
+
+  const firstPathSegment = field.path.at(0);
+  return typeof firstPathSegment === "string" && field.path.length > 1
+    ? firstPathSegment
+    : undefined;
+}
+
+/** The path of a field's value within its namespace: without a leading namespace segment. */
+function namespaceRelativePath(
+  field: ClaimFieldDefinition,
+  namespace: string,
+): Segment[] {
+  return field.path.length > 0 && segmentToKey(field.path[0] ?? "") === namespace
+    ? field.path.slice(1)
+    : field.path;
+}
+
+/**
+ * The default values of the fields per mdoc namespace.
+ * @param defaultNamespace the namespace of fields that name none, as in
+ *   {@link buildClaimsMetadata}; without it their defaults are left out.
+ */
 export function buildClaimsByNamespace(
   fields: ClaimFieldDefinition[],
+  defaultNamespace?: string,
 ): Record<string, Record<string, unknown>> {
   const byNamespace: Record<string, Record<string, unknown>> = {};
 
-  for (const field of flattenFields(fields)) {
-    if (!field.namespace || !Object.prototype.hasOwnProperty.call(field, "defaultValue")) {
+  for (const field of flattenFields(withDefaultNamespace(fields, defaultNamespace))) {
+    const namespace = getFieldNamespace(field);
+    if (!namespace || !Object.prototype.hasOwnProperty.call(field, "defaultValue")) {
       continue;
     }
 
-    let namespaceTarget = getOwn<Record<string, unknown>>(
-      byNamespace,
-      field.namespace,
-    );
+    let namespaceTarget = getOwn<Record<string, unknown>>(byNamespace, namespace);
     if (!namespaceTarget) {
       namespaceTarget = {};
-      setOwn(byNamespace, field.namespace, namespaceTarget);
+      setOwn(byNamespace, namespace, namespaceTarget);
     }
 
-    const normalizedPath =
-      field.path.length > 0 && segmentToKey(field.path[0] ?? "") === field.namespace
-        ? field.path.slice(1)
-        : field.path;
+    const normalizedPath = namespaceRelativePath(field, namespace);
+    if (normalizedPath.length === 0) {
+      continue;
+    }
 
     setValueAtPath(namespaceTarget, normalizedPath, field.defaultValue);
   }
@@ -428,7 +529,16 @@ export function buildClaimsByNamespace(
   return byNamespace;
 }
 
-export function deriveRuntimeArtifacts(fields: ClaimFieldDefinition[]): {
+/**
+ * Everything derived from the fields.
+ * @param defaultNamespace for `mso_mdoc`, the namespace of the docType
+ *   ({@link mdocDefaultNamespace}), so `claimsMetadata` and
+ *   `claimsByNamespace` match what the backend publishes and issues.
+ */
+export function deriveRuntimeArtifacts(
+  fields: ClaimFieldDefinition[],
+  defaultNamespace?: string,
+): {
   claims: Record<string, unknown>;
   disclosureFrame?: Record<string, unknown>;
   claimsMetadata: ClaimMetadata[];
@@ -438,8 +548,8 @@ export function deriveRuntimeArtifacts(fields: ClaimFieldDefinition[]): {
   return {
     claims: buildClaims(fields),
     disclosureFrame: buildDisclosureFrame(fields),
-    claimsMetadata: buildClaimsMetadata(fields),
+    claimsMetadata: buildClaimsMetadata(fields, defaultNamespace),
     schema: buildJsonSchema(fields),
-    claimsByNamespace: buildClaimsByNamespace(fields),
+    claimsByNamespace: buildClaimsByNamespace(fields, defaultNamespace),
   };
 }

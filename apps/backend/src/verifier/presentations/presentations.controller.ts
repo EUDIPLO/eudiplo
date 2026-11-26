@@ -134,7 +134,8 @@ export class PresentationManagementController {
     }
 
     /**
-     * Store a presentation request configuration. If it already exists, it will be updated.
+     * Create a presentation request configuration. An ID the tenant already
+     * uses is refused with 409; change a stored configuration with PATCH.
      * @param config
      * @returns
      */
@@ -142,12 +143,17 @@ export class PresentationManagementController {
     @Post()
     @ApiResponse({ status: 201, type: PresentationConfig })
     @ApiResponse({ status: 400, description: INVALID_CONFIGURATION })
+    @ApiResponse({
+        status: 409,
+        description:
+            "The tenant already has a presentation configuration with this ID. Change it with PATCH.",
+    })
     storePresentationConfig(
         @Body() config: PresentationConfigCreateDto,
         @Token() user: TokenPayload,
         @AuditMeta() requestMeta: AuditLogRequestMeta,
     ) {
-        return this.presentationConfigService.storePresentationConfig(
+        return this.presentationConfigService.createPresentationConfig(
             user.entity!.id,
             config,
             user,

@@ -56,13 +56,15 @@ export const LOG_VALIDATION_SCHEMA = Joi.object({
         .description(
             "Controls whether session log entries are persisted to the database. " +
                 "'off' disables storage, 'errors' stores only warn/error entries, " +
-                "'all' stores everything, 'verbose' stores everything including full request/response bodies and error stacks.",
+                "'all' stores everything, 'verbose' stores everything plus the stack trace of each error.",
         )
         .meta({ group: "log", order: 35 }),
     LOG_TO_FILE: Joi.boolean()
         .default(false)
         .description("Enable logging to file in addition to console")
         .meta({ group: "log", order: 60 }),
+    // apps/backend/docker-entrypoint.sh repeats this default to hand the
+    // log folder to the backend's user; change it there too.
     LOG_FILE_PATH: Joi.string()
         .default("./logs/session.log")
         .description("File path for log output when LOG_TO_FILE is enabled")

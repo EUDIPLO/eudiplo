@@ -56,6 +56,14 @@ export class KeycloakClientsProvider
         return undefined;
     }
 
+    /** The admin-API client (`OIDC_CLIENT_ID`) or the bootstrap client (`AUTH_CLIENT_ID`). */
+    private isInstanceClient(clientId: string): boolean {
+        return (
+            clientId === this.configService.get<string>("OIDC_CLIENT_ID") ||
+            clientId === this.configService.get<string>("AUTH_CLIENT_ID")
+        );
+    }
+
     private ensureTenantOwnership(
         tenantId: string,
         kcClient: any,
@@ -412,21 +420,40 @@ export class KeycloakClientsProvider
     /**
      * Rotate (regenerate) a client's secret in Keycloak.
      * Returns the new plain secret for one-time display.
-     * @param _tenantId - Ignored for Keycloak (clients are global)
+     * Only clients EUDIPLO manages for a tenant can be rotated; with a null
+     * tenant (tenant managers) any tenant's client, never one of the
+     * instance's own clients or a client of another application in the realm.
+     * @param tenantId - The caller's tenant, or null for tenant managers
      * @param clientId - The client ID to rotate the secret for
      */
     async rotateClientSecret(
         tenantId: string | null,
         clientId: string,
     ): Promise<string> {
+        // Only clients EUDIPLO manages for a tenant: the realm also holds
+        // clients of other applications and EUDIPLO's own admin-API and
+        // bootstrap clients, which a lookup by clientId alone would reach.
+        // All of them answer as unknown, so that the answer does not reveal
+        // which IDs the instance uses.
+        const mirror = await this.clientRepo.findOneBy({ clientId });
+        if (
+            !mirror?.tenantId ||
+            (tenantId && mirror.tenantId !== tenantId) ||
+            this.isInstanceClient(clientId)
+        ) {
+            throw new NotFoundException(`Client '${clientId}' not found`);
+        }
+
         const kcClient = (await this.kc.clients.find({ clientId }))[0];
         if (!kcClient?.id) {
             throw new NotFoundException(`Client '${clientId}' not found`);
         }
 
-        if (tenantId) {
-            this.ensureTenantOwnership(tenantId, kcClient, "rotated (secret)");
-        }
+        this.ensureTenantOwnership(
+            mirror.tenantId,
+            kcClient,
+            "rotated (secret)",
+        );
 
         const secret = await this.kc.clients.generateNewClientSecret({
             id: kcClient.id,

@@ -131,6 +131,11 @@ service of the project. Options that `up`, `down`, `ps`, `logs`, `restart` and
 `docker compose`, for example `eudiplo down --volumes --remove-orphans`. Write
 `--volumes` in full: `-v` prints the CLI version.
 
+The backend runs as the owner of the project's `config/` folder, or as UID
+`1000` when root owns it, not as root; with rootless Podman it can stay root.
+Files it only reads, such as a PKCS#11 library or mTLS keys, must be readable
+by that user ([Non-root user](docker-compose.md#non-root-user)).
+
 ### Upgrade the application
 
 `eudiplo upgrade` changes the backend and client images of a Compose instance,
@@ -225,7 +230,10 @@ certificate expiry (warning within 30 days), authentication, CLI/backend
 version compatibility, KMS provider health and web client reachability, plus
 the driver: the container runtime, Compose files and container health for
 Compose; `kubectl`, namespace, permissions, workloads and service endpoints for
-Kubernetes.
+Kubernetes. The version check fails on a different major version and warns on
+a different minor version. Within one minor version, it also warns for a
+backend of 10.1.0 or older with a later CLI, which read the escaped form `$${`
+of configuration files differently.
 
 Each check reports `PASS`, `WARN`, `FAIL` or `SKIP`. The exit code is 1 if a
 check failed; `--strict` also fails on warnings, `SKIP` never fails. `--all`

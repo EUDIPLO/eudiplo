@@ -17,6 +17,7 @@ import {
   CredentialConfig,
   deriveRuntimeArtifacts,
   flattenFields,
+  mdocDefaultNamespace,
 } from '@eudiplo/sdk-core';
 import { CredentialConfigService } from '../credential-config.service';
 import { KEY_ATTESTATION_LEVELS } from '../credential-config.types';
@@ -181,7 +182,11 @@ export class CredentialConfigShowComponent implements OnInit {
     schema: Record<string, unknown>;
     claimsByNamespace: Record<string, Record<string, unknown>>;
   } {
-    return deriveRuntimeArtifacts(this.fields as any) as any;
+    // mDOC fields that name no namespace are issued in the docType's one.
+    return deriveRuntimeArtifacts(
+      this.fields as any,
+      this.defaultNamespaceValue ?? undefined
+    ) as any;
   }
 
   /**
@@ -217,12 +222,10 @@ export class CredentialConfigShowComponent implements OnInit {
     return value && typeof value === 'object' ? value : null;
   }
 
+  /** The namespace the issuer puts fields in that name none. */
   get defaultNamespaceValue(): string | null {
-    const namespaces = this.claimsByNamespaceValue ? Object.keys(this.claimsByNamespaceValue) : [];
-    if (namespaces.length === 1) {
-      return namespaces[0];
-    }
-    return null;
+    const docType = this.isMdocFormat ? this.config?.config?.docType : undefined;
+    return docType ? mdocDefaultNamespace(docType) : null;
   }
 
   get showJsonSchemaSection(): boolean {

@@ -39,15 +39,15 @@ A webhook endpoint is a reusable, tenant-scoped target, managed under `/api/issu
 
 | Field         | Required | Description                                       |
 | ------------- | -------- | ------------------------------------------------- |
-| `id`          | yes      | Identifier within the tenant                      |
+| `id`          | yes      | Identifier within the tenant; a create with an `id` in use answers `409`, change the endpoint with `PATCH` |
 | `name`        | yes      | Display name                                      |
 | `description` | no       | Free text                                         |
 | `url`         | yes      | Target of the `POST` requests                     |
 | `auth`        | yes      | `{ "type": "none" }` or the `apiKey` object above |
 
-With `apiKey`, EUDIPLO sends `value` in the header named `headerName`. Webhook requests are not signed, so use HTTPS and check the header. In configuration files, use a `${VAR}` placeholder for `value` ([Configuration as code](../operate/configuration-as-code.md)).
+With `apiKey`, EUDIPLO sends `value` in the header named `headerName`. Webhook requests are not signed, so use HTTPS and check the header. In configuration files, use a `${VAR}` placeholder for `value` ([Configuration as code](../operate/configuration-as-code.md)). When the operator sets a secret policy, `value` of a webhook endpoint can also be a secret reference such as `${vault:kv/eudiplo/acme/shop#token}`, read when the webhook is sent ([Secret references](../operate/secret-references.md)); a webhook in a session request cannot use one.
 
-The API never returns `value`: webhook endpoint and attribute provider responses and session details show `<redacted>` instead. Send `<redacted>` back in a `PATCH` to keep the stored key. It is rejected with `400` when no key is stored, and when the same `PATCH` changes `url`: send the key again then, so that it never goes to a new address without you supplying it.
+The API never returns a literal `value`: webhook endpoint and attribute provider responses and session details show `<redacted>` instead. A secret reference is shown as written. Send `<redacted>` back in a `PATCH` to keep the stored key. It is rejected with `400` when no key is stored, and when the same `PATCH` changes `url`: send the key again then, so that it never goes to a new address without you supplying it.
 
 ### Where webhooks are referenced
 
@@ -58,7 +58,7 @@ The API never returns `value`: webhook endpoint and attribute provider responses
 | Credential offer (`POST /api/issuer/offer`) | `webhookEndpointId` | Target for the notifications of this issuance session and, without one on the credential configuration, for its wallet unit revocation webhook                                                 |
 | Credential configuration                | `webhookEndpointId` | Target of the wallet unit revocation webhook; notifications only go to the endpoint named in the offer    |
 
-The presentation target is resolved when the request is created; later changes to the endpoint do not affect running sessions. A `webhookEndpointId` that does not exist is logged as a warning and no webhook is sent; only the wallet unit revocation webhook then tries the next target.
+A presentation request keeps the ID of the endpoint; its URL and API key are read when the result is sent, so changes to the endpoint apply to running sessions, as for notification and cancellation webhooks. A `webhookEndpointId` that does not exist is logged as a warning and no webhook is sent; only the wallet unit revocation webhook then tries the next target.
 
 ## Presentation webhook
 

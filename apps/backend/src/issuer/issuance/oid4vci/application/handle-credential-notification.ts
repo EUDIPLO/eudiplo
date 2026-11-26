@@ -4,6 +4,7 @@ import type {
     SessionData,
 } from "../../../../session/domain/session-data.js";
 import { SessionStatus } from "../../../../session/domain/session-state.js";
+import { storedWebhook } from "../../../../webhook/domain/webhook-configuration.js";
 import type { WebhookEndpointRepository } from "../../../configuration/webhook-endpoint/ports/webhook-endpoint.repository.js";
 import { credentialNotificationResult } from "../domain/credential-notification-result.js";
 import type { CredentialNotificationPublisher } from "../ports/credential-notification-publisher.js";
@@ -58,7 +59,7 @@ export class HandleCredentialNotification {
         if (!endpoint) return { publicationFailed: false };
         try {
             await this.publisher.publish(
-                { url: endpoint.url, auth: endpoint.auth },
+                storedWebhook("WebhookEndpoint", endpoint),
                 session,
                 notification,
             );

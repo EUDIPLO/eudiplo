@@ -55,6 +55,7 @@ export const presentationConfigRoutes: Routes = [
       import('./presentation-config/presentation-create/presentation-create.component').then(
         (m) => m.PresentationCreateComponent
       ),
+    data: { copy: true },
     canDeactivate: [unsavedChangesGuard],
   },
 ];

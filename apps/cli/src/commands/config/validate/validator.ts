@@ -3,6 +3,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import {
     CONFIG_SINGLETON_IDS,
+    type ConfigResourceKind,
     isConfigDocument,
     migrateDocument,
     normalizeDocument,
@@ -36,6 +37,7 @@ export async function validateTenantsRoot(
     rootPath: string,
     schemas: Map<string, Record<string, unknown>>,
     env: NodeJS.ProcessEnv,
+    options: TenantValidationOptions = {},
 ): Promise<TenantValidationResult[]> {
     if (!existsSync(rootPath)) {
         throw new Error(`Configuration root not found: ${rootPath}`);
@@ -50,6 +52,7 @@ export async function validateTenantsRoot(
                 tenantId,
                 schemas,
                 env,
+                options,
             ),
         );
     }
@@ -64,6 +67,13 @@ export interface TenantValidationOptions {
      * SECRET_REQUIRED, so a freshly exported folder can still be planned.
      */
     allowUnresolvedPlaceholders?: boolean;
+    /**
+     * Check the variables the placeholders name as the backend does when it
+     * loads the folder from CONFIG_FOLDER ({@link checkFolderVariable}).
+     * `config tenant validate` uses this; `config plan`/`import` do not,
+     * because the CLI fills a folder sent to the API from `--allow-env`.
+     */
+    folderVariablePolicy?: boolean;
 }
 
 export async function validateTenantDirectory(
@@ -82,7 +92,9 @@ export async function validateTenantDirectory(
         env,
         errors: [],
         unresolved: [],
+        warnings: [],
         allowUnresolvedPlaceholders: options.allowUnresolvedPlaceholders,
+        folderVariablePolicy: options.folderVariablePolicy,
         resourceCounts: {},
         files: 0,
     };
@@ -95,9 +107,12 @@ export async function validateTenantDirectory(
         }
     }
     // Files of retired kinds are skipped on import, with this warning.
-    const warnings: ValidationIssue[] = RETIRED_TENANT_FOLDER_FILES.filter(
-        ({ file }) => existsSync(join(tenantPath, file)),
-    ).map(({ file, issue }) => ({ file, message: issue.message }));
+    const warnings: ValidationIssue[] = [
+        ...RETIRED_TENANT_FOLDER_FILES.filter(({ file }) =>
+            existsSync(join(tenantPath, file)),
+        ).map(({ file, issue }) => ({ file, message: issue.message })),
+        ...state.warnings,
+    ];
 
     return {
         id: tenantId,
@@ -117,7 +132,9 @@ interface TenantValidationState {
     env: NodeJS.ProcessEnv;
     errors: ValidationIssue[];
     unresolved: ValidationIssue[];
+    warnings: ValidationIssue[];
     allowUnresolvedPlaceholders?: boolean;
+    folderVariablePolicy?: boolean;
     resourceCounts: Record<string, number>;
     files: number;
 }
@@ -219,10 +236,7 @@ async function recordValidationOutcome(
         filePath,
         relativeFile,
         schemaFile,
-        state.getValidator,
-        state.env,
-        state.errors,
-        state.allowUnresolvedPlaceholders ? state.unresolved : state.errors,
+        state,
     );
     if (isValid) {
         state.resourceCounts[resourceType] =
@@ -234,11 +248,10 @@ async function validateResourceFile(
     filePath: string,
     relativeFile: string,
     schemaFile: string,
-    getValidator: (schemaFile: string) => ValidateFunction,
-    env: NodeJS.ProcessEnv,
-    errors: ValidationIssue[],
-    placeholderIssues: ValidationIssue[],
+    state: TenantValidationState,
 ): Promise<boolean> {
+    const { errors, getValidator } = state;
+    const kind = kindForSchemaFile(schemaFile);
     let raw: string;
     try {
         raw = await readFile(filePath, "utf8");
@@ -260,12 +273,7 @@ async function validateResourceFile(
     }
 
     const errorsBefore = errors.length;
-    let resolved = resolvePlaceholders(
-        payload,
-        env,
-        relativeFile,
-        placeholderIssues,
-    );
+    let resolved = resolvePlaceholders(payload, relativeFile, kind, state);
     if (errors.length > errorsBefore) {
         return false;
     }
@@ -294,7 +302,6 @@ async function validateResourceFile(
             return false;
         }
     } else {
-        const kind = kindForSchemaFile(schemaFile);
         if (
             kind &&
             resolved &&
@@ -374,17 +381,96 @@ function formatErrorPath(issue: ErrorObject): string | undefined {
  */
 function resolvePlaceholders(
     value: unknown,
-    env: NodeJS.ProcessEnv,
     file: string,
-    errors: ValidationIssue[],
+    kind: ConfigResourceKind | undefined,
+    state: TenantValidationState,
 ): unknown {
-    const result = resolveConfigVariables(value, env);
+    const kms = kind === "KmsConfig";
+    // The resolver reads a variable only for a placeholder it found, also one
+    // with a default, so the check sees exactly the names the file uses.
+    const named = new Set<string>();
+    const env = new Proxy(state.env, {
+        get: (target, name) => {
+            if (typeof name !== "string") return undefined;
+            named.add(name);
+            return target[name];
+        },
+    });
+    // A kms.json has no escaped form; the backend reads it the same way.
+    const result = resolveConfigVariables(value, env, kms ? "none" : "resolve");
+    const refused = new Set<string>();
+    if (state.folderVariablePolicy)
+        for (const variable of [...named].sort(compareCodePoints)) {
+            const check = checkFolderVariable(variable, kms);
+            if (check?.refused) {
+                refused.add(variable);
+                state.errors.push({ file, message: check.message, variable });
+            } else if (check)
+                state.warnings.push({ file, message: check.message, variable });
+        }
+    const placeholderIssues = state.allowUnresolvedPlaceholders
+        ? state.unresolved
+        : state.errors;
+    // As in the backend, a refused variable is not also a missing one.
     for (const issue of result.issues)
-        errors.push({
-            file,
-            path: issue.path,
-            message: issue.message,
-            variable: issue.variable,
-        });
+        if (!refused.has(issue.variable))
+            placeholderIssues.push({
+                file,
+                path: issue.path,
+                message: issue.message,
+                variable: issue.variable,
+            });
     return result.value;
+}
+
+/**
+ * Credentials the AWS SDK and the Azure identity library read from the
+ * environment for the identity of the instance. The backend refuses them in
+ * every file of a tenant folder other than `kms.json`
+ * (`CLOUD_CREDENTIAL_VARIABLES` in
+ * apps/backend/src/platform/config/config-variable-scope.ts; keep the two
+ * lists equal).
+ */
+export const CLOUD_CREDENTIAL_VARIABLES: ReadonlyMap<string, string> = new Map([
+    ["AWS_ACCESS_KEY_ID", "AWS"],
+    ["AWS_SECRET_ACCESS_KEY", "AWS"],
+    ["AWS_SESSION_TOKEN", "AWS"],
+    ["AWS_CONTAINER_AUTHORIZATION_TOKEN", "AWS"],
+    ["AZURE_CLIENT_SECRET", "Azure"],
+    ["AZURE_CLIENT_CERTIFICATE_PASSWORD", "Azure"],
+    ["AZURE_PASSWORD", "Azure"],
+]);
+
+/**
+ * What the backend's variable policy says about `${variable}` in a file of a
+ * tenant folder, as far as the CLI can tell without the instance:
+ *
+ * - The cloud credentials above are refused in every file but `kms.json`,
+ *   with the backend's reason.
+ * - A tenant `kms.json` resolves only the variables the instance lists in
+ *   `KMS_TENANT_VARIABLES`, which the CLI cannot read: a warning names the
+ *   rule for each variable, except `PUBLIC_URL`, which every file can use.
+ *
+ * The backend also refuses the variables that configure EUDIPLO itself
+ * (its environment schema); the CLI does not have that list and does not
+ * report them.
+ */
+function checkFolderVariable(
+    variable: string,
+    kms: boolean,
+): { refused: boolean; message: string } | undefined {
+    // `placeholder: "any"` in apps/backend/src/issuer/issuer-validation.schema.ts.
+    if (variable === "PUBLIC_URL") return undefined;
+    if (kms)
+        return {
+            refused: false,
+            message: `\${${variable}} is resolved only if the instance lists ${variable} in KMS_TENANT_VARIABLES, which cannot name a setting of EUDIPLO itself`,
+        };
+    const provider = CLOUD_CREDENTIAL_VARIABLES.get(variable);
+    if (provider)
+        return {
+            refused: true,
+            message: `\${${variable}} holds the ${provider} credentials of the instance, which a file of a tenant folder cannot use`,
+        };
+    return undefined;
 }

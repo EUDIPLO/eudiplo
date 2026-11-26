@@ -6,7 +6,7 @@ import {
 import { privateJwkProblem } from "../../crypto/key/domain/private-jwk.js";
 import type { KeyChainEntity } from "../../crypto/key/entities/key-chain.entity.js";
 import { importedRotationIntervals } from "../../crypto/key/key-chain-import-rotation.js";
-import { holdsUnresolvedPlaceholder } from "./unresolved-placeholder.js";
+import { holdsUnresolvedPlaceholderAt } from "./document-file.js";
 
 type Spec = Record<string, any>;
 
@@ -186,13 +186,23 @@ function activeCertificateProblem(
  * What the key chain importer would refuse in a private key without
  * `activeJwk`, so the plan names it before anything is applied. A key that is
  * or holds an unresolved `${VAR}` is SECRET_REQUIRED, not a broken key.
+ *
+ * @param wholePlaceholders the paths of the spec's values that are a
+ * placeholder (wholePlaceholderPaths), or undefined to go by the value.
  */
-export function importedKeyProblems(spec: Spec): InternalChainProblem[] {
+export function importedKeyProblems(
+    spec: Spec,
+    wholePlaceholders: ReadonlySet<string> | undefined,
+): InternalChainProblem[] {
     const source = spec.keySource;
     if (
         source?.type !== "private-jwk" ||
         isInternalChainWithPrivateKeys(spec) ||
-        holdsUnresolvedPlaceholder(source.jwk)
+        holdsUnresolvedPlaceholderAt(
+            wholePlaceholders,
+            "/keySource/jwk",
+            source.jwk,
+        )
     ) {
         return [];
     }

@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import {
+    clientCredentialsGrantIdentifier,
     type GenerateRandomCallback,
     Oauth2AuthorizationServer,
     preAuthorizedCodeGrantIdentifier,
@@ -319,6 +320,29 @@ describe("ExchangeAccessToken", () => {
             clientAuthenticationFailed: true,
             logDetail: `Client attestation validation failed for the token endpoint of tenant tenant-1: Wallet provider trust lists could not be loaded: ${reason}`,
         });
+    });
+
+    it("refuses grants it does not serve, such as client_credentials with a stolen authorization code", async () => {
+        const { execute, server, sessions } = exchange(
+            {},
+            {
+                grant: { grantType: clientCredentialsGrantIdentifier },
+                accessTokenRequest: {
+                    grant_type: clientCredentialsGrantIdentifier,
+                    code: "code",
+                },
+            },
+            issuanceSession({
+                credentialPayload: { flow: "authorization_code" },
+            } as Partial<SessionData>),
+        );
+
+        await expect(execute()).rejects.toMatchObject({
+            code: "unsupported_grant_type",
+        });
+        expect(sessions.getByAuthorizationCode).not.toHaveBeenCalled();
+        expect(sessions.updateIfUnconsumed).not.toHaveBeenCalled();
+        expect(server.createAccessTokenResponse).not.toHaveBeenCalled();
     });
 
     it("rejects refresh grants when refresh tokens are disabled", async () => {

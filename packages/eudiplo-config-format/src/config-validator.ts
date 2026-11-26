@@ -7,6 +7,7 @@ import {
     serializeDocument,
 } from "./config-format.js";
 import { CONFIG_SCHEMAS } from "./config-schemas.generated.js";
+import { readConfigFileValues } from "./config-values.js";
 import {
     DISPLAY_COLOR_MESSAGE,
     duplicateDisplayLocaleMessage,
@@ -58,6 +59,23 @@ export function validateConfigDocument(
         });
     issues.push(...configRuleIssues(document));
     return issues;
+}
+
+/**
+ * {@link validateConfigDocument} for a document of a configuration file: the
+ * schema checks the values the file holds, not their escaped form. A stored
+ * `${` is written as `$${`, which must not count one character more for
+ * `maxLength` or a `pattern`. A `kms.json` has no escaped form and is checked
+ * as it is.
+ */
+export function validateConfigFile(
+    document: ConfigDocument,
+): ConfigMigrationIssue[] {
+    return validateConfigDocument(
+        document.kind === "KmsConfig"
+            ? document
+            : { ...document, spec: readConfigFileValues(document.spec).value },
+    );
 }
 
 /**

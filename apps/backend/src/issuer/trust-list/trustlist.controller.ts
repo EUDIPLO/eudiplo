@@ -85,7 +85,7 @@ export class TrustListController {
     @ApiResponse({
         status: 409,
         description:
-            "The body sets no keyChainId, and the tenant has no trustList key chain or the one EUDIPLO picks has no valid certificate",
+            "The tenant already has a trust list with the ID in the body (change it with PUT), or the body sets no keyChainId, and the tenant has no trustList key chain or the one EUDIPLO picks has no valid certificate",
     })
     createTrustList(
         @Body(createConfigBodyPipe(TrustListCreateSchema, { readOnly }))
@@ -120,7 +120,7 @@ export class TrustListController {
     }
 
     /**
-     * Exports the trust list in the format accepted by create and config import
+     * Exports the trust list in the format of configuration files: a `${` in a stored value is written as `$${`, which a create request stores as sent
      * @param token
      * @param id
      * @returns

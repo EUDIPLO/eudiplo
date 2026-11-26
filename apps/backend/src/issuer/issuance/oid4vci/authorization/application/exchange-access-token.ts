@@ -51,6 +51,13 @@ import type { OAuthAuthorizationServerFactory } from "../ports/oauth-authorizati
 import { dpopProofVerification } from "../shared/dpop.util.js";
 import type { BuildBuiltInAuthorizationServerMetadata } from "./build-built-in-authorization-server-metadata.js";
 
+/** The grants the built-in token endpoint serves. */
+const SUPPORTED_GRANT_TYPES: ReadonlySet<string> = new Set([
+    authorizationCodeGrantIdentifier,
+    preAuthorizedCodeGrantIdentifier,
+    refreshTokenGrantIdentifier,
+]);
+
 interface AuthorizationCodeGrant {
     grantType: AuthorizationCodeGrantIdentifier;
     code: string;
@@ -139,6 +146,15 @@ export class ExchangeAccessToken {
             );
         }
         const grantType = parsed.grant.grantType;
+        // The library parses more grants than this endpoint serves, such as
+        // client_credentials. Only these three run their grant checks below
+        // (PKCE, client binding, tx_code, DPoP), so any other is refused.
+        if (!SUPPORTED_GRANT_TYPES.has(grantType)) {
+            throw new OAuthError(
+                "unsupported_grant_type",
+                `The grant_type '${grantType}' is not supported`,
+            );
+        }
         const isRefreshGrant = grantType === refreshTokenGrantIdentifier;
 
         const session = await this.findSession(tenantId, parsed);

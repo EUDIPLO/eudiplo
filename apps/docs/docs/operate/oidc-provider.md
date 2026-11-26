@@ -71,6 +71,15 @@ setting `OIDC_JWKS_URI` skips that last check. `OIDC_CLIENT_ID`, `OIDC_CLIENT_SE
 `AUTH_CLIENT_ID` and `AUTH_CLIENT_SECRET` are not used. All variables are listed
 in the [environment variable reference](../reference/environment-variables.md#authentication).
 
+EUDIPLO fetches the key set for the first token, again for the first token
+after 10 minutes, and at most once every 30 seconds whatever tokens ask for. A token
+whose `kid` is not in the key set triggers a new fetch only when the last one
+is 30 seconds old; otherwise it gets `401`. A key the provider adds, for example
+when it rotates its keys, is therefore accepted at the latest 30 seconds after
+its first token. When a fetch fails, EUDIPLO keeps using the keys it fetched
+last and logs a warning; one hour after the last successful fetch it refuses
+every token until the key set can be read again.
+
 **Checkpoint:** the backend log shows `External OIDC (generic)` as the mode, and
 `GET /.well-known/oauth-authorization-server` names the provider's
 `token_endpoint`.

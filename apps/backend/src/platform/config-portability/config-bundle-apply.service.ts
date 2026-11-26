@@ -60,6 +60,7 @@ import {
     documentAppliedAsIs,
     documentSourceHash,
 } from "./config-source-hash.js";
+import { readDocumentFile } from "./document-file.js";
 import type { ConfigImportRunEntity } from "./entities/config-import-run.entity.js";
 import { clientsManagedByIdentityProvider } from "./idp-managed-clients.js";
 import {
@@ -336,7 +337,9 @@ export class ConfigBundleApplyService {
                 (left, right) => this.order(left.kind) - this.order(right.kind),
             );
         for (const input of ordered) {
-            const { document } = this.migrationService.upgrade(input);
+            const { document } = this.migrationService.upgradeFile(input);
+            // The values the plan compared.
+            readDocumentFile(document);
             const item = items.get(`${document.kind}/${resourceId(document)}`);
             const write =
                 item?.action === "create" || item?.action === "update";

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { Logger, NotImplementedException } from "@nestjs/common";
 import type { JWK } from "jose";
+import { fileAccessHint } from "../../../../shared/utils/file-access-hint.util.js";
 import {
     assertKmsSigningAlg,
     externalAlgorithmPolicy,
@@ -341,7 +342,16 @@ export class Pkcs11KmsAdapter implements KmsAdapter {
         const mod = await loadPkcs11();
         const c = toConstants(mod);
         const p11 = new mod.PKCS11();
-        p11.load(this.config.library);
+        try {
+            p11.load(this.config.library);
+        } catch (error) {
+            const hint = fileAccessHint(error, this.config.library);
+            if (!hint) throw error;
+            throw new Error(
+                `Pkcs11KmsAdapter[${this.providerId}]: library ${this.config.library} cannot be loaded: ${(error as Error).message}.${hint}`,
+                { cause: error },
+            );
+        }
         p11.C_Initialize();
 
         const slots = p11.C_GetSlotList(true);

@@ -21,6 +21,7 @@ import {
 } from "../../../../platform/config-import/config-import-orchestrator.service.js";
 import { loadConfigDto } from "../../../../shared/utils/config-file-loader.util.js";
 import { FilesService } from "../../../../storage/files.service.js";
+import { ResourceIdTaken } from "../../../../shared/domain/conflict-error.js";
 import { PresentationConfigService } from "../../../../verifier/presentations/configuration/presentation-config.service.js";
 import {
     ACTIVE_CREDENTIALS_REQUIRE_STATUS_MANAGEMENT,
@@ -281,8 +282,33 @@ export class CredentialConfigService {
     }
 
     /**
+     * Creates a credential configuration for a given tenant.
+     * Refuses an ID the tenant already uses: changes go through
+     * {@link update}.
+     * @throws ResourceIdTaken when the tenant has a configuration with this ID.
+     */
+    async create(
+        tenantId: string,
+        config: CredentialConfigCreate,
+        actorToken?: TokenPayload,
+        requestMeta?: AuditLogRequestMeta,
+    ) {
+        await this.assertIdFree(tenantId, config.id);
+        return this.store(tenantId, config, false, actorToken, requestMeta);
+    }
+
+    /** @throws ResourceIdTaken when the tenant has a configuration with this ID. */
+    private async assertIdFree(tenantId: string, id: string): Promise<void> {
+        if (await this.credentialConfigRepository.findForTenant(tenantId, id)) {
+            throw new ResourceIdTaken("Credential configuration", id);
+        }
+    }
+
+    /**
      * Stores a credential configuration for a given tenant.
-     * If the configuration already exists, it will be overwritten.
+     * If the configuration already exists, it will be overwritten: only
+     * configuration imports (config folder, bundles) replace stored
+     * configurations, the API creates with {@link create}.
      * Automatically replaces image references with public URLs.
      * Validates IAE action references.
      * @param tenantId - The ID of the tenant.

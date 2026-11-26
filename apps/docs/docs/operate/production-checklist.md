@@ -19,9 +19,11 @@ again after major upgrades. Each item links to the guide that explains it.
       environment. The bundled Vault of the `full` preset runs in development
       mode and loses the key on every restart
       ([presets](index.md#presets-and-profiles)).
-- [ ] `AUTH_CLIENT_SECRET` is random. Changing it in the environment later has
-      no effect; rotate it with `POST /api/client/<id>/rotate-secret`
+- [ ] `AUTH_CLIENT_SECRET` is random. With the built-in server, changing it in
+      the environment later has no effect; rotate it with
+      `POST /api/client/<id>/rotate-secret`
       ([Tenants and access](tenants-and-access.md#built-in-oauth2-server)).
+      With Keycloak, change it in the environment and restart.
 - [ ] No default or example credentials remain: database password, RustFS/S3
       keys, Vault token `root`, Grafana `admin`/`admin`, the demo client
       `root`/`root`.
@@ -76,7 +78,8 @@ again after major upgrades. Each item links to the guide that explains it.
 
 - [ ] Each application has its own API client with only the roles it needs,
       usually `issuance:offer` and `presentation:request`, limited with
-      `allowedIssuanceConfigs` and `allowedPresentationConfigs`
+      `allowedIssuanceConfigs` and `allowedPresentationConfigs`, and without
+      `clients:manage`, which lifts these limits
       ([Tenants and access](tenants-and-access.md#api-clients-with-least-privilege)).
 - [ ] `tenants:manage` and `tenant:admin` are held only by operators and the
       configuration pipeline ([Roles](../reference/roles.md)).
@@ -110,8 +113,10 @@ again after major upgrades. Each item links to the guide that explains it.
       match your data protection rules ([Database](database.md#session-retention),
       [Logging](logging.md#audit-log)).
 - [ ] Logs do not capture personal data: `LOG_REDACT_SENSITIVE_DATA=true`,
-      `LOG_HTTP_RESPONSE_BODY=false`, `LOG_OID4VP_DECRYPTED_RESPONSE=false`,
-      `LOG_SESSION_STORE` not `verbose` ([Logging](logging.md)).
+      `LOG_HTTP_RESPONSE_BODY=false`, `LOG_OID4VP_DECRYPTED_RESPONSE=false`
+      ([Logging](logging.md)).
+- [ ] `LOG_SESSION_STORE` is not `verbose`, so session logs do not show
+      server stack traces ([Logging](logging.md#session-logs)).
 
 ## Backups
 

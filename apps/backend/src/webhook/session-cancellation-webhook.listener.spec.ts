@@ -16,6 +16,7 @@ function setup(session: Partial<SessionData>) {
     };
     const endpoints = {
         findForTenant: vi.fn().mockResolvedValue({
+            tenantId: "tenant-1",
             url: "https://endpoint.example/hook",
             auth: { type: "none" },
         }),
@@ -63,7 +64,11 @@ describe("SessionCancellationWebhookListener", () => {
             "endpoint-1",
         );
         expect(webhooks.sendSessionCancelledWebhook).toHaveBeenCalledWith(
-            { url: "https://endpoint.example/hook", auth: { type: "none" } },
+            {
+                url: "https://endpoint.example/hook",
+                auth: { type: "none" },
+                storedAs: { kind: "WebhookEndpoint", tenantId: "tenant-1" },
+            },
             expect.objectContaining({ id: "session-1" }),
             "sent to wrong recipient",
         );

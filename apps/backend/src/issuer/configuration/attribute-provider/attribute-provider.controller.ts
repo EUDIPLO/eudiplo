@@ -5,6 +5,7 @@ import {
     Delete,
     Get,
     HttpCode,
+    Inject,
     Param,
     Patch,
     Post,
@@ -15,6 +16,10 @@ import { AuditMeta } from "../../../audit-log/audit-log-context.util.js";
 import { Role } from "../../../auth/roles/role.enum.js";
 import { Secured } from "../../../auth/secure.decorator.js";
 import { Token, TokenPayload } from "../../../auth/token.decorator.js";
+import {
+    SECRET_REFERENCES,
+    type SecretReferences,
+} from "../../../platform/secrets/application/secret-references.js";
 import {
     redactApiKey,
     restoreApiKey,
@@ -30,7 +35,16 @@ import { AttributeProviderEntity } from "./entities/attribute-provider.entity.js
 @Secured([Role.Issuances])
 @Controller("issuer/attribute-providers")
 export class AttributeProviderController {
-    constructor(private readonly service: AttributeProviderService) {}
+    constructor(
+        private readonly service: AttributeProviderService,
+        @Inject(SECRET_REFERENCES)
+        private readonly secrets: SecretReferences,
+    ) {}
+
+    /** The entry for a response: a literal API key redacted, a reference shown. */
+    private redact<T>(entry: T): T {
+        return redactApiKey(entry, (value) => this.secrets.isShown(value));
+    }
 
     @Get()
     @ApiOperation({ summary: "List all attribute providers" })
@@ -40,7 +54,9 @@ export class AttributeProviderController {
         type: [AttributeProviderEntity],
     })
     async getAll(@Token() user: TokenPayload) {
-        return (await this.service.getAll(user.entity!.id)).map(redactApiKey);
+        return (await this.service.getAll(user.entity!.id)).map((entry) =>
+            this.redact(entry),
+        );
     }
 
     @Get(":id")
@@ -52,7 +68,7 @@ export class AttributeProviderController {
     })
     @ApiResponse({ status: 404, description: "Attribute provider not found" })
     async getById(@Param("id") id: string, @Token() user: TokenPayload) {
-        return redactApiKey(await this.service.getById(user.entity!.id, id));
+        return this.redact(await this.service.getById(user.entity!.id, id));
     }
 
     @Post()
@@ -62,13 +78,18 @@ export class AttributeProviderController {
         description: "Attribute provider created",
         type: AttributeProviderEntity,
     })
+    @ApiResponse({
+        status: 409,
+        description:
+            "The tenant already has an attribute provider with this ID. Change it with PATCH.",
+    })
     @ApiBody({ type: CreateAttributeProviderDto })
     async create(
         @Body() dto: CreateAttributeProviderDto,
         @Token() user: TokenPayload,
         @AuditMeta() requestMeta: AuditLogRequestMeta,
     ) {
-        return redactApiKey(
+        return this.redact(
             await this.service.create(
                 user.entity!.id,
                 restoreApiKey(dto),
@@ -95,7 +116,7 @@ export class AttributeProviderController {
     ) {
         const provider = await this.service.getById(user.entity!.id, id);
         const providerUpdate = restoreApiKey(dto, provider);
-        return redactApiKey(
+        return this.redact(
             await this.service.update(
                 user.entity!.id,
                 id,
