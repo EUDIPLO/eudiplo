@@ -19,20 +19,22 @@ table {
   color: var(--mat-sys-on-surface-variant);
 }
 
-// The registration certificate's state, in the tone of its urgency
+// The registration certificate's state and the issuer trust, in the tone of their urgency
 .badge {
   &[data-status='active'] {
     --tone: var(--eudiplo-success);
   }
 
   &[data-status='expiring'],
-  &[data-status='missing'] {
+  &[data-status='missing'],
+  &[data-status='untrusted'] {
     --tone: var(--eudiplo-warning);
   }
 
   &[data-status='expired'],
   &[data-status='invalid'],
-  &[data-status='notYetValid'] {
+  &[data-status='notYetValid'],
+  &[data-status='refused'] {
     --tone: var(--eudiplo-danger);
   }
 }

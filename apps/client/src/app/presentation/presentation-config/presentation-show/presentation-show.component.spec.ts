@@ -76,6 +76,23 @@ describe('PresentationShowComponent issuer trust', () => {
     expect(refused?.textContent).toContain('pid, mdl have');
   });
 
+  it('shows no opt-in warning when the config opts in but every query has issuer trust', async () => {
+    const element = await render({
+      id: 'opted-in',
+      allowUntrustedIssuers: true,
+      dcql_query: {
+        credentials: [
+          {
+            ...untrusted,
+            trusted_authorities: [{ type: 'etsi_tl', values: ['https://tl.example'] }],
+          },
+        ],
+      },
+    });
+    expect(element.textContent).not.toContain('Untrusted issuers accepted');
+    expect(element.querySelector('.untrusted-warning')).toBeNull();
+  });
+
   it('shows no warning when every query has issuer trust', async () => {
     const element = await render({
       id: 'trusted',

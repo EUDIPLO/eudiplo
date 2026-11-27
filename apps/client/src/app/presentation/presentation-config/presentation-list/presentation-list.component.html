@@ -79,6 +79,24 @@
             </td>
           </ng-container>
 
+          <ng-container matColumnDef="issuerTrust">
+            <th mat-header-cell *matHeaderCellDef>Issuer trust</th>
+            <td mat-cell *matCellDef="let config">
+              @let trust = issuerTrustStatus(config);
+              @if (trust === 'required') {
+                <span class="muted">{{ issuerTrustLabels.required }}</span>
+              } @else {
+                <span
+                  class="badge"
+                  [attr.data-status]="trust"
+                  [matTooltip]="issuerTrustTooltip(config)"
+                  >{{ issuerTrustLabels[trust] }}</span
+                >
+                <span class="visually-hidden">: {{ issuerTrustTooltip(config) }}</span>
+              }
+            </td>
+          </ng-container>
+
           <ng-container matColumnDef="registrationCert">
             <th mat-header-cell *matHeaderCellDef>Registration certificate</th>
             <td mat-cell *matCellDef="let config">

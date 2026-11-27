@@ -61,6 +61,18 @@ describe('PresentationRequestComponent', () => {
     service.loadConfigurations.mockResolvedValue([
       { id: 'stale', dcql_query: { credentials: [credential] } },
       { id: 'open', allowUntrustedIssuers: true, dcql_query: { credentials: [credential] } },
+      {
+        id: 'opted-in-with-trust',
+        allowUntrustedIssuers: true,
+        dcql_query: {
+          credentials: [
+            {
+              ...credential,
+              trusted_authorities: [{ type: 'etsi_tl', values: ['https://tl.example'] }],
+            },
+          ],
+        },
+      },
     ]);
     fixture.detectChanges();
     await fixture.whenStable();
@@ -75,6 +87,12 @@ describe('PresentationRequestComponent', () => {
     fixture.detectChanges();
     expect(component.queriesWithoutTrust).toEqual([]);
     expect(element.textContent).toContain("the issuer's authority is not validated");
+
+    // The opt-in only matters for a query without issuer trust
+    component.form.patchValue({ requestId: 'opted-in-with-trust' });
+    fixture.detectChanges();
+    expect(element.textContent).not.toContain("the issuer's authority is not validated");
+    expect(element.textContent).not.toContain('Every presentation against this config is refused');
   });
 
   describe('Generate Request', () => {

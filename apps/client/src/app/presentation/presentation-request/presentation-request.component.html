@@ -80,7 +80,7 @@
                     Add issuer trust to the config, or accept credentials without it.
                   </span>
                 </div>
-              } @else if (selectedConfig?.allowUntrustedIssuers) {
+              } @else if (acceptsAnyIssuer) {
                 <div class="readiness-hint" role="note">
                   <mat-icon aria-hidden="true">warning</mat-icon>
                   <span>
