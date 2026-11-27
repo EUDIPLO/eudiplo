@@ -46,6 +46,7 @@ describe("config export --output <dir>/", () => {
         bundle = exportedBundle();
         context = {
             cwd,
+            installationMethod: "npm",
             env: { EUDIPLO_TOKEN: "test-token" },
             stdout: {
                 write: (chunk: string) => {

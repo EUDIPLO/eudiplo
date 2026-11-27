@@ -82,6 +82,7 @@ describe("config plan / import outcomes", () => {
         output = { stdout: "", stderr: "" };
         context = {
             cwd,
+            installationMethod: "npm",
             env: { EUDIPLO_TOKEN: "test-token", PORTAL_SECRET: "s3cr3t-value" },
             stdout: {
                 write: (chunk: string) => {

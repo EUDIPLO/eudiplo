@@ -420,6 +420,70 @@ describe("EUDIPLO CLI", () => {
         );
     });
 
+    it("does not fail version output when the GitHub tag_name is not a string", async () => {
+        const { context, output } = await createContext({
+            fetch: async () => Response.json({ tag_name: 10 }),
+            installationMethod: "standalone",
+        });
+
+        const code = await runCli(["version"], context);
+
+        expect(code).toBe(0);
+        expect(output.stdout).toContain(
+            "latest unavailable: GitHub release response did not include a tag_name",
+        );
+    });
+
+    it("does not fail version output when GitHub returns no JSON", async () => {
+        const { context, output } = await createContext({
+            fetch: async () =>
+                new Response("<html>proxy</html>", { status: 200 }),
+            installationMethod: "standalone",
+        });
+
+        const code = await runCli(["version"], context);
+
+        expect(code).toBe(0);
+        expect(output.stdout).toContain("latest unavailable:");
+        expect(output.stdout).not.toContain("update available");
+    });
+
+    it("does not fail version output for an unknown installation method", async () => {
+        const { context, output } = await createContext({
+            fetch: async () => Response.json({ version: "99.0.0" }),
+            installationMethod: "bogus" as CommandContext["installationMethod"],
+        });
+
+        const code = await runCli(["version"], context);
+
+        expect(code).toBe(0);
+        expect(output.stdout).toContain(
+            'latest unavailable: unknown installation method "bogus"',
+        );
+    });
+
+    it("points the Windows archive at the GitHub releases page", async () => {
+        const requested: string[] = [];
+        const { context, output } = await createContext({
+            fetch: async (input) => {
+                requested.push(String(input));
+                return Response.json({ tag_name: "v99.0.0" });
+            },
+            installationMethod: "windows-archive",
+        });
+
+        const code = await runCli(["version"], context);
+
+        expect(code).toBe(0);
+        expect(requested).toEqual([
+            "https://api.github.com/repos/EUDIPLO/eudiplo/releases/latest",
+        ]);
+        expect(output.stdout).toContain(
+            "update available: download the Windows archive from https://github.com/EUDIPLO/eudiplo/releases/latest",
+        );
+        expect(output.stdout).not.toContain("install.sh");
+    });
+
     it("does not fail version output when the GitHub lookup throws", async () => {
         const { context, output } = await createContext({
             fetch: async () => {

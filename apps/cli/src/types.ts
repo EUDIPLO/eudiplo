@@ -1,6 +1,10 @@
 import type { CertificateReader } from "./services/tls-expiry.js";
 export type DeploymentTarget = "compose" | "external" | "kubernetes";
-export type CliInstallationMethod = "npm" | "npx" | "standalone";
+export type CliInstallationMethod =
+    | "npm"
+    | "npx"
+    | "standalone"
+    | "windows-archive";
 
 export interface InstanceConfig {
     target: DeploymentTarget;

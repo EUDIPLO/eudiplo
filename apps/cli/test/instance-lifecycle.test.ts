@@ -984,6 +984,7 @@ async function createContext(
     const output = { stdout: "", stderr: "" };
     const context: CommandContext = {
         cwd: home,
+        installationMethod: "npm",
         env: {
             EUDIPLO_CLI_CONFIG: configPath,
             PATH: process.env.PATH,

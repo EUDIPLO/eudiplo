@@ -17,6 +17,7 @@ describe("reviewed CLI import plans", () => {
         cwd = await mkdtemp(join(tmpdir(), "config-plan-"));
         context = {
             cwd,
+            installationMethod: "npm",
             env: { EUDIPLO_TOKEN: "test-token" },
             stdout: { write: () => true },
             stderr: { write: () => true },

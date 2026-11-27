@@ -10,8 +10,32 @@ describe("detectInstallationMethod", () => {
                 env: { npm_command: "exec" },
                 scriptPath: npmScript,
                 isSea: true,
+                platform: "linux",
             }),
         ).toBe("standalone");
+    });
+
+    it("reports the Windows archive for the standalone binary on Windows", () => {
+        expect(
+            detectInstallationMethod({
+                env: {},
+                scriptPath: undefined,
+                isSea: true,
+                platform: "win32",
+            }),
+        ).toBe("windows-archive");
+    });
+
+    it("ignores the platform outside the standalone binary", () => {
+        expect(
+            detectInstallationMethod({
+                env: {},
+                scriptPath:
+                    "C:\\Users\\me\\AppData\\Roaming\\npm\\node_modules\\@eudiplo\\cli\\dist\\index.js",
+                isSea: false,
+                platform: "win32",
+            }),
+        ).toBe("npm");
     });
 
     it("detects npx through npm_command=exec", () => {
@@ -20,6 +44,7 @@ describe("detectInstallationMethod", () => {
                 env: { npm_command: "exec" },
                 scriptPath: npmScript,
                 isSea: false,
+                platform: "linux",
             }),
         ).toBe("npx");
     });
@@ -29,7 +54,12 @@ describe("detectInstallationMethod", () => {
         "C:\\Users\\me\\AppData\\Local\\npm-cache\\_npx\\6f3a\\node_modules\\@eudiplo\\cli\\dist\\index.js",
     ])("detects npx through the _npx cache path %s", (scriptPath) => {
         expect(
-            detectInstallationMethod({ env: {}, scriptPath, isSea: false }),
+            detectInstallationMethod({
+                env: {},
+                scriptPath,
+                isSea: false,
+                platform: "linux",
+            }),
         ).toBe("npx");
     });
 
@@ -41,6 +71,7 @@ describe("detectInstallationMethod", () => {
                     env,
                     scriptPath: npmScript,
                     isSea: false,
+                    platform: "linux",
                 }),
             ).toBe("npm");
         },
@@ -52,6 +83,7 @@ describe("detectInstallationMethod", () => {
                 env: {},
                 scriptPath: "/home/me/npx-tools/cli/index.js",
                 isSea: false,
+                platform: "linux",
             }),
         ).toBe("npm");
     });
@@ -62,6 +94,7 @@ describe("detectInstallationMethod", () => {
                 env: {},
                 scriptPath: undefined,
                 isSea: false,
+                platform: "linux",
             }),
         ).toBe("npm");
     });

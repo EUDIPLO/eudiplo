@@ -107,6 +107,7 @@ function defaultContext(): CommandContext {
             env: process.env,
             scriptPath: process.argv[1],
             isSea: isSea(),
+            platform: process.platform,
         }),
         interactive:
             process.stdin.isTTY === true && process.stdout.isTTY === true,
