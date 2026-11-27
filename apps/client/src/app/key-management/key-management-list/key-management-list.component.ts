@@ -11,7 +11,7 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { RouterModule } from '@angular/router';
 import { type DefaultAccessKeyChainDto, KeyChainResponseDto } from '@eudiplo/sdk-core';
-import { KeyChainService } from '../key-chain.service';
+import { KEY_ADMIN_ROLE, KeyChainService } from '../key-chain.service';
 import { ConfigOwnershipDirective } from '../../config-portability/config-ownership.directive';
 import { LoadErrorComponent } from '../../common/load-error.component';
 import { getApiErrorMessage } from '../../utils/error-message';
@@ -32,7 +32,6 @@ import { keyUsages, type KeyUsageType } from '../key-usage';
 import { ItemRoutePipe } from '../../common/item-route.pipe';
 import { RoleLockDirective } from '../../common/role-lock.directive';
 import { JwtService } from '../../services/jwt.service';
-import { KEY_ADMIN_ROLE } from '../key-chain.service';
 
 /**
  * Display item for key chains.

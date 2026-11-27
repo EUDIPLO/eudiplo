@@ -98,23 +98,33 @@ describe("Role model (e2e)", () => {
             "/key-chain/access/default",
             "/session-config",
         ])("reads %s", async (path) => {
-            await as(reader).get(path).expect(200);
+            expect((await as(reader).get(path)).status).toBe(200);
         });
 
         test("reads single resources and their history", async () => {
             const credentials = await as(reader)
                 .get("/issuer/credentials")
                 .expect(200);
-            await as(reader)
-                .get(`/issuer/credentials/${credentials.body[0].id}`)
-                .expect(200);
+            expect(
+                (
+                    await as(reader).get(
+                        `/issuer/credentials/${credentials.body[0].id}`,
+                    )
+                ).status,
+            ).toBe(200);
             const lists = await as(adminToken).get("/trust-list").expect(200);
             if (lists.body.length > 0) {
                 const id = lists.body[0].id;
-                await as(reader).get(`/trust-list/${id}`).expect(200);
-                await as(reader).get(`/trust-list/${id}/versions`).expect(200);
+                expect((await as(reader).get(`/trust-list/${id}`)).status).toBe(
+                    200,
+                );
+                expect(
+                    (await as(reader).get(`/trust-list/${id}/versions`)).status,
+                ).toBe(200);
             }
-            await as(reader).get(`/key-chain/${keyChainId}`).expect(200);
+            expect(
+                (await as(reader).get(`/key-chain/${keyChainId}`)).status,
+            ).toBe(200);
         });
 
         test("gets the default issuer settings of a tenant without stored ones, and nothing is stored", async () => {
@@ -148,21 +158,27 @@ describe("Role model (e2e)", () => {
         });
 
         test("changes nothing and creates no offer", async () => {
-            await as(reader).post("/issuer/credentials", {}).expect(403);
-            await as(reader).post("/key-chain", {}).expect(403);
-            await as(reader)
-                .put("/key-chain/access/default", {
-                    defaultAccessKeyChainId: null,
-                })
-                .expect(403);
-            await as(reader)
-                .post("/issuer/offer", {
-                    response_type: "uri",
-                    credentialConfigurationIds: ["pid-no-key"],
-                    flow: "pre_authorized_code",
-                })
-                .expect(403);
-            await as(reader).get("/verifier/config").expect(403);
+            expect(
+                (await as(reader).post("/issuer/credentials", {})).status,
+            ).toBe(403);
+            expect((await as(reader).post("/key-chain", {})).status).toBe(403);
+            expect(
+                (
+                    await as(reader).put("/key-chain/access/default", {
+                        defaultAccessKeyChainId: null,
+                    })
+                ).status,
+            ).toBe(403);
+            expect(
+                (
+                    await as(reader).post("/issuer/offer", {
+                        response_type: "uri",
+                        credentialConfigurationIds: ["pid-no-key"],
+                        flow: "pre_authorized_code",
+                    })
+                ).status,
+            ).toBe(403);
+            expect((await as(reader).get("/verifier/config")).status).toBe(403);
         });
     });
 
@@ -176,7 +192,9 @@ describe("Role model (e2e)", () => {
         });
 
         test("reads a single presentation configuration", async () => {
-            await as(reader).get("/verifier/config/pid").expect(200);
+            expect((await as(reader).get("/verifier/config/pid")).status).toBe(
+                200,
+            );
         });
 
         test.each([
@@ -185,18 +203,24 @@ describe("Role model (e2e)", () => {
             "/trust-list",
             "/key-chain",
         ])("reads %s", async (path) => {
-            await as(reader).get(path).expect(200);
+            expect((await as(reader).get(path)).status).toBe(200);
         });
 
         test("changes nothing and creates no request", async () => {
-            await as(reader).post("/verifier/config", {}).expect(403);
-            await as(reader)
-                .post("/verifier/offer", {
-                    response_type: ResponseType.URI,
-                    requestId: "pid",
-                })
-                .expect(403);
-            await as(reader).get("/issuer/credentials").expect(403);
+            expect((await as(reader).post("/verifier/config", {})).status).toBe(
+                403,
+            );
+            expect(
+                (
+                    await as(reader).post("/verifier/offer", {
+                        response_type: ResponseType.URI,
+                        requestId: "pid",
+                    })
+                ).status,
+            ).toBe(403);
+            expect((await as(reader).get("/issuer/credentials")).status).toBe(
+                403,
+            );
         });
     });
 
@@ -205,31 +229,39 @@ describe("Role model (e2e)", () => {
             const exporter = await token("role-model-key-exporter", [
                 Role.KeysExport,
             ]);
-            await as(exporter)
-                .get(`/key-chain/${keyChainId}/export`)
-                .expect(200);
-            await as(exporter).get("/key-chain/providers/config").expect(200);
-            await as(exporter)
-                .get(
-                    `/config-bundles/resources/KeyChain/${keyChainId}/document`,
-                )
-                .expect(200);
+            expect(
+                (await as(exporter).get(`/key-chain/${keyChainId}/export`))
+                    .status,
+            ).toBe(200);
+            expect(
+                (await as(exporter).get("/key-chain/providers/config")).status,
+            ).toBe(200);
+            expect(
+                (
+                    await as(exporter).get(
+                        `/config-bundles/resources/KeyChain/${keyChainId}/document`,
+                    )
+                ).status,
+            ).toBe(200);
             // keys:export includes keys:manage.
-            await as(exporter).get("/key-chain").expect(200);
+            expect((await as(exporter).get("/key-chain")).status).toBe(200);
         });
 
         test("is not part of keys:manage", async () => {
             const custodian = await token("role-model-key-custodian", [
                 Role.Keys,
             ]);
-            await as(custodian)
-                .get(`/key-chain/${keyChainId}/export`)
-                .expect(403);
-            await as(custodian)
-                .get(
-                    `/config-bundles/resources/KeyChain/${keyChainId}/document`,
-                )
-                .expect(403);
+            expect(
+                (await as(custodian).get(`/key-chain/${keyChainId}/export`))
+                    .status,
+            ).toBe(403);
+            expect(
+                (
+                    await as(custodian).get(
+                        `/config-bundles/resources/KeyChain/${keyChainId}/document`,
+                    )
+                ).status,
+            ).toBe(403);
         });
     });
 
@@ -238,20 +270,26 @@ describe("Role model (e2e)", () => {
             const issuer = await token("role-model-issuance-manager", [
                 Role.Issuances,
             ]);
-            await as(issuer).get(`/session/${openIssuance}`).expect(200);
+            expect(
+                (await as(issuer).get(`/session/${openIssuance}`)).status,
+            ).toBe(200);
             // Answered like a session that does not exist.
             const unknown = await as(issuer).get(`/session/${UNKNOWN_SESSION}`);
             expect(unknown.status).not.toBe(200);
             const other = await as(issuer).get(`/session/${openPresentation}`);
             expect(other.status).toBe(unknown.status);
-            await as(issuer).delete(`/session/${openIssuance}`).expect(204);
+            expect(
+                (await as(issuer).delete(`/session/${openIssuance}`)).status,
+            ).toBe(204);
         });
 
         test("presentation:manage reads presentation sessions but not issuance sessions", async () => {
             const verifier = await token("role-model-presentation-manager", [
                 Role.Presentations,
             ]);
-            await as(verifier).get(`/session/${openPresentation}`).expect(200);
+            expect(
+                (await as(verifier).get(`/session/${openPresentation}`)).status,
+            ).toBe(200);
             const issuance = (
                 await as(adminToken)
                     .post("/issuer/offer", {
@@ -275,18 +313,22 @@ describe("Role model (e2e)", () => {
                 Role.Clients,
                 Role.Issuances,
             ]);
-            await as(manager)
-                .post("/client", {
-                    clientId: "role-model-granted-reader",
-                    roles: [Role.IssuanceRead, Role.CredentialStatus],
-                })
-                .expect(201);
-            await as(manager)
-                .post("/client", {
-                    clientId: "role-model-refused-custodian",
-                    roles: [Role.Keys],
-                })
-                .expect(403);
+            expect(
+                (
+                    await as(manager).post("/client", {
+                        clientId: "role-model-granted-reader",
+                        roles: [Role.IssuanceRead, Role.CredentialStatus],
+                    })
+                ).status,
+            ).toBe(201);
+            expect(
+                (
+                    await as(manager).post("/client", {
+                        clientId: "role-model-refused-custodian",
+                        roles: [Role.Keys],
+                    })
+                ).status,
+            ).toBe(403);
         });
     });
 });
