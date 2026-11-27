@@ -2,14 +2,16 @@ import Joi from "joi";
 
 /**
  * Settings of secret references (`${env:…}`, `${vault:…}`) in the secret
- * fields of webhook endpoints and attribute providers.
+ * fields (webhook endpoints, attribute providers, upstream client secrets
+ * and KMS provider credentials), and of the allow-list for placeholders of
+ * tenant folders.
  */
 export const SECRETS_VALIDATION_SCHEMA = Joi.object({
     SECRET_POLICY_FILE: Joi.string()
         .optional()
         .allow("")
         .description(
-            "Path to the secret policy file, which lists the secret sources and what the instance and each tenant may name. When unset, secret references are not read: values such as ${vault:…} are stored and sent as text, as before.",
+            "Path to the secret policy file, which lists the secret sources, what the instance and each tenant may name, and optionally which variables ${VAR} placeholders of tenant folders may use (templates.tenant). When unset, secret references are not read: values such as ${vault:…} are stored and sent as text, and placeholders follow the default rules, as before.",
         )
         .meta({ group: "secrets", order: 10 }),
     SECRET_VAULT_TOKEN: Joi.string()

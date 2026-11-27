@@ -1,4 +1,6 @@
 import { type DeepPartial, In, type Repository } from "typeorm";
+import { insertNew } from "../../../../database/insert-new.js";
+import { ResourceIdTaken } from "../../../../shared/domain/conflict-error.js";
 import {
     type CredentialConfiguration,
     CredentialConfigurationNotFound,
@@ -43,6 +45,27 @@ export class TypeOrmCredentialConfigurationRepository
         const row = await this.findForTenant(tenantId, id);
         if (!row) throw new CredentialConfigurationNotFound(tenantId, id);
         return row;
+    }
+
+    existsForTenant(tenantId: string, id: string) {
+        return this.repository.existsBy({ tenantId, id });
+    }
+
+    async create(
+        config: Partial<CredentialConfiguration> & {
+            id: string;
+            tenantId: string;
+        },
+    ) {
+        return toCredentialConfiguration(
+            await insertNew(
+                this.repository,
+                config as DeepPartial<CredentialConfig>,
+                { tenantId: config.tenantId, id: config.id },
+                () =>
+                    new ResourceIdTaken("Credential configuration", config.id),
+            ),
+        );
     }
 
     async save(

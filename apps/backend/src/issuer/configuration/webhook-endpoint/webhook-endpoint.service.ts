@@ -105,7 +105,9 @@ export class WebhookEndpointService {
         actorToken?: TokenPayload,
         requestMeta?: AuditLogRequestMeta,
     ) {
-        if (await this.repo.findForTenant(tenantId, dto.id)) {
+        // Checked before the outbound URL check for a clear answer; the
+        // insert below decides between concurrent creates.
+        if (await this.repo.existsForTenant(tenantId, dto.id)) {
             throw new ResourceIdTaken("Webhook endpoint", dto.id);
         }
         await this.outboundUrlPolicyService.assertSafeUrl(dto.url);
@@ -116,7 +118,7 @@ export class WebhookEndpointService {
             dto,
         );
 
-        const saved = await this.repo.save({
+        const saved = await this.repo.create({
             ...dto,
             tenantId,
         });

@@ -8,8 +8,8 @@ export abstract class ConflictError extends Error {}
 /**
  * A create names an ID the tenant already uses for a resource of this kind.
  * Creates never replace a stored resource; it is changed with its update
- * request instead. The services check before they save, so two concurrent
- * creates of the same new ID can still both succeed, the later one winning.
+ * request instead. Creates insert (`insertNew`), so of two concurrent creates
+ * of the same new ID one is stored and the other gets this error.
  */
 export class ResourceIdTaken extends ConflictError {
     /**

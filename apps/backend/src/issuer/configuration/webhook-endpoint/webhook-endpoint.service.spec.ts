@@ -32,6 +32,10 @@ describe.each([
                 findForTenant: vi.fn(async (_tenantId: string, id: string) =>
                     id === existing.id ? existing : null,
                 ),
+                existsForTenant: vi.fn(
+                    async (_tenantId: string, id: string) => id === existing.id,
+                ),
+                create: vi.fn(async (value) => value),
                 save: vi.fn(async (value) => value),
                 deleteForTenant: vi.fn(),
             },
@@ -96,9 +100,11 @@ describe.each([
             await expect(
                 instance.update("t", "e", { auth: foreign }),
             ).rejects.toThrow(/no grant of tenant 't'/);
-            expect(
-                (instance as unknown as { repo: { save: unknown } }).repo.save,
-            ).not.toHaveBeenCalled();
+            const { repo } = instance as unknown as {
+                repo: { save: unknown; create: unknown };
+            };
+            expect(repo.create).not.toHaveBeenCalled();
+            expect(repo.save).not.toHaveBeenCalled();
         });
 
         it("keeps the stored entry when a folder file names a refused reference", async () => {

@@ -11,6 +11,7 @@ import {
     credentialRepositoryContract,
 } from "./credential-repository.contract.js";
 import { endpointRepositoryContract } from "./endpoint-repository.contract.js";
+import { insertNewContract, insertNewEntities } from "./insert-new.contract.js";
 import { issuanceRepositoryContract } from "./issuance-repository.contract.js";
 import { tenantRepositoryContract } from "./tenant-repository.contract.js";
 import { initializeTestEncryption } from "./test-encryption.js";
@@ -24,7 +25,11 @@ describeWithContainers("PostgreSQL configuration endpoint repositories", () => {
         db = await new DataSource({
             type: "postgres",
             url: container.getConnectionUri(),
-            entities: [...credentialEntities, IssuanceConfig],
+            entities: [
+                ...credentialEntities,
+                ...insertNewEntities,
+                IssuanceConfig,
+            ],
             synchronize: true,
         }).initialize();
     }, 60_000);
@@ -37,4 +42,5 @@ describeWithContainers("PostgreSQL configuration endpoint repositories", () => {
     tenantRepositoryContract(() => db);
     endpointRepositoryContract(() => db, "attribute-provider");
     endpointRepositoryContract(() => db, "webhook-endpoint");
+    insertNewContract(() => db);
 });

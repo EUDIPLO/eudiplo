@@ -6,9 +6,13 @@ import {
     type PlaceholderEscapes,
     resolveConfigVariables,
 } from "@eudiplo/config-format/config-values.js";
-import { Injectable, Logger, Optional } from "@nestjs/common";
+import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { tenantConfigFolder } from "../../shared/utils/tenant-config-folder.util.js";
+import {
+    CONFIG_TEMPLATE_POLICY,
+    type ConfigTemplatePolicy,
+} from "../config/config-template-policy.js";
 import {
     type ConfigFileScope,
     KMS_TENANT_VARIABLES,
@@ -52,6 +56,10 @@ export class ConfigImportService {
         private readonly ownershipService?: ConfigOwnershipService,
         @Optional()
         private readonly resourceRegistry?: ConfigResourceRegistry,
+        // Provided by SecretsModule, which ConfigImportModule imports, so a
+        // missing allow-list fails the startup instead of falling back.
+        @Inject(CONFIG_TEMPLATE_POLICY)
+        private readonly templatePolicy: ConfigTemplatePolicy = {},
     ) {}
 
     /**
@@ -310,6 +318,7 @@ export class ConfigImportService {
                     name,
                     scope,
                     tenantKmsVariables,
+                    this.templatePolicy?.tenant,
                 );
                 if (reason === undefined) return target[name];
                 refused.add(reason);

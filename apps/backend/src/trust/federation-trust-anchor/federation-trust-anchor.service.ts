@@ -6,6 +6,7 @@ import {
     resolveAuditActor,
 } from "../../audit-log/audit-log-context.util.js";
 import type { TokenPayload } from "../../auth/token.decorator.js";
+import { ResourceIdTaken } from "../../shared/domain/conflict-error.js";
 import { FederationTrustAnchorReferences } from "./application/federation-trust-anchor-references.js";
 import type { FederationTrustAnchorData } from "./domain/federation-trust-anchor-data.js";
 import {
@@ -89,13 +90,21 @@ export class FederationTrustAnchorService {
         actorToken?: TokenPayload,
         requestMeta?: AuditLogRequestMeta,
     ) {
-        if (await this.repo.findForTenant(tenantId, dto.id)) {
-            throw new FederationTrustAnchorConflict(
-                `Federation trust anchor '${dto.id}' already exists`,
-            );
+        if (await this.repo.existsForTenant(tenantId, dto.id)) {
+            throw new ResourceIdTaken("Federation trust anchor", dto.id);
         }
         await this.assertEntityIdFree(tenantId, dto.entityId, dto.id);
-        const saved = await this.repo.save({ ...dto, tenantId });
+        let saved: FederationTrustAnchorData;
+        try {
+            saved = await this.repo.create({ ...dto, tenantId });
+        } catch (error) {
+            // A concurrent create registered the entity ID first: its unique
+            // index refused this insert.
+            if (!(error instanceof ResourceIdTaken)) {
+                await this.assertEntityIdFree(tenantId, dto.entityId, dto.id);
+            }
+            throw error;
+        }
         if (actorToken) {
             await this.auditLog.record({
                 tenantId,

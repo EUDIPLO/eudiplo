@@ -111,6 +111,8 @@ function createService(
             store.delete(id);
         }),
         create: vi.fn((value: object) => value),
+        // New lists are inserted, updates go through the manager.
+        insert: vi.fn(async (_value: object) => ({})),
         save: vi.fn(async (value: object) => value),
         manager: {
             transaction: vi.fn(
@@ -311,7 +313,7 @@ describe("TrustListService", () => {
                 { id: "tenant", name: "Tenant" },
             );
 
-            const saved = trustListRepo.save.mock.calls[0][0] as TrustList;
+            const saved = trustListRepo.insert.mock.calls[0][0] as TrustList;
             const nextUpdate = Date.parse(
                 (saved.data as LoteDocument).LoTE.ListAndSchemeInformation
                     .NextUpdate,
@@ -348,7 +350,7 @@ describe("TrustListService", () => {
                 { id: "tenant", name: "Tenant" },
             );
 
-            const saved = trustListRepo.save.mock.calls[0][0] as TrustList;
+            const saved = trustListRepo.insert.mock.calls[0][0] as TrustList;
             const addresses = (
                 saved.data as LoteDocument
             ).LoTE.TrustedEntitiesList?.map(
@@ -381,7 +383,7 @@ describe("TrustListService", () => {
                 { id: "tenant", name: "Tenant" },
             );
 
-            const saved = trustListRepo.save.mock.calls[0][0] as TrustList;
+            const saved = trustListRepo.insert.mock.calls[0][0] as TrustList;
             expect(
                 (saved.data as LoteDocument).LoTE.TrustedEntitiesList?.[0]
                     .TrustedEntityInformation.TEAddress?.TEElectronicAddress,
@@ -418,7 +420,8 @@ describe("TrustListService", () => {
                     { id: "tenant", name: "Tenant" },
                 );
 
-                const saved = trustListRepo.save.mock.calls[0][0] as TrustList;
+                const saved = trustListRepo.insert.mock
+                    .calls[0][0] as TrustList;
                 const { entities } = new LoteParserService().parse(
                     (saved.data as LoteDocument).LoTE as unknown as LoTE,
                     "managed",
@@ -454,7 +457,8 @@ describe("TrustListService", () => {
                     },
                     { id: "tenant", name: "Tenant" },
                 );
-                const saved = trustListRepo.save.mock.calls[0][0] as TrustList;
+                const saved = trustListRepo.insert.mock
+                    .calls[0][0] as TrustList;
                 return (saved.data as LoteDocument).LoTE
                     .TrustedEntitiesList[0] as Record<string, any>;
             };
@@ -580,7 +584,7 @@ describe("TrustListService", () => {
                 { id: "tenant", name: "Tenant" },
             );
 
-            const saved = trustListRepo.save.mock.calls[0][0] as TrustList;
+            const saved = trustListRepo.insert.mock.calls[0][0] as TrustList;
             expect(JSON.stringify(saved.data)).toContain(der);
         });
 
@@ -608,7 +612,7 @@ describe("TrustListService", () => {
             );
 
             const published = JSON.stringify(
-                (trustListRepo.save.mock.calls[0][0] as TrustList).data,
+                (trustListRepo.insert.mock.calls[0][0] as TrustList).data,
             );
             expect(published).toContain(der);
         });
@@ -649,7 +653,7 @@ describe("TrustListService", () => {
             );
 
             const services = (
-                (trustListRepo.save.mock.calls[0][0] as TrustList)
+                (trustListRepo.insert.mock.calls[0][0] as TrustList)
                     .data as LoteDocument
             ).LoTE.TrustedEntitiesList![0].TrustedEntityServices.map(
                 (service) =>
@@ -698,7 +702,7 @@ describe("TrustListService", () => {
                 },
             ]);
             expect(certService.find).not.toHaveBeenCalled();
-            expect(trustListRepo.save).not.toHaveBeenCalled();
+            expect(trustListRepo.insert).not.toHaveBeenCalled();
         });
 
         it("refuses other entity info the LoTE builder rejects at the entity's info, before it picks a trust list key chain", async () => {
@@ -738,7 +742,7 @@ describe("TrustListService", () => {
                 }),
             ]);
             expect(certService.find).not.toHaveBeenCalled();
-            expect(trustListRepo.save).not.toHaveBeenCalled();
+            expect(trustListRepo.insert).not.toHaveBeenCalled();
         });
 
         it("passes on other failures to pick a trust list key chain", async () => {
@@ -844,7 +848,7 @@ describe("TrustListService", () => {
                 });
                 expect(certService.getCertificateById).not.toHaveBeenCalled();
                 expect(
-                    (trustListRepo.save.mock.calls[0][0] as TrustList)
+                    (trustListRepo.insert.mock.calls[0][0] as TrustList)
                         .keyChainId,
                 ).toBe("tenant-trust-list-key");
             });
@@ -1031,7 +1035,7 @@ describe("TrustListService", () => {
             // trust list key chain and is not saved.
             expect(certService.getCertificatesByIds).toHaveBeenCalledTimes(1);
             expect(certService.find).not.toHaveBeenCalled();
-            expect(trustListRepo.save).not.toHaveBeenCalled();
+            expect(trustListRepo.insert).not.toHaveBeenCalled();
         });
 
         it("refuses a missing key chain at each field before it picks a trust list key chain", async () => {
