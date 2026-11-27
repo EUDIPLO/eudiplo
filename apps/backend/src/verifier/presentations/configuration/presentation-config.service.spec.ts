@@ -159,7 +159,7 @@ describe("PresentationConfigService trusted authorities", () => {
 
 describe("PresentationConfigService imported registration certificate", () => {
     const overasking = () =>
-        vi.fn(() => {
+        vi.fn(async () => {
             throw new BadRequestException(
                 "Registration certificate does not authorize the requested DCQL credentials",
             );
@@ -198,6 +198,30 @@ describe("PresentationConfigService imported registration certificate", () => {
                 registration_cert: { jwt: "imported" },
             } as any),
         ).rejects.toThrow(BadRequestException);
+        expect(repository.save).not.toHaveBeenCalled();
+    });
+
+    it("checks the stored certificate against a changed access key chain", async () => {
+        const validate = overasking();
+        const { service, repository } = setup({ validate });
+        repository.findOneBy.mockResolvedValue({
+            id: "pid",
+            tenantId: "tenant",
+            dcql_query: { credentials: [trustedPid] },
+            registration_cert: { jwt: "stored" },
+        });
+
+        await expect(
+            service.updatePresentationConfig("pid", "tenant", {
+                accessKeyChainId: "other",
+            } as any),
+        ).rejects.toThrow(BadRequestException);
+        expect(validate).toHaveBeenCalledWith(
+            expect.objectContaining({
+                accessKeyChainId: "other",
+                registration_cert: { jwt: "stored" },
+            }),
+        );
         expect(repository.save).not.toHaveBeenCalled();
     });
 

@@ -108,7 +108,7 @@ If the wallet ecosystem requires a registration certificate, request one from th
 }
 ```
 
-A certificate from another registrar goes into `registration_cert.jwt` the same way. It must be valid and cover the DCQL query exactly; request a new one after you change the query. The checks are described in [Registration Certificates](../trust/registration-certificates.md).
+A certificate from another registrar goes into `registration_cert.jwt` the same way. It must be valid, be issued to the relying party of the access key chain the configuration signs with, and cover the DCQL query exactly; request a new one after you change the query or the access key chain. The checks are described in [Registration Certificates](../trust/registration-certificates.md).
 
 ## Allowed origins (Digital Credentials API)
 

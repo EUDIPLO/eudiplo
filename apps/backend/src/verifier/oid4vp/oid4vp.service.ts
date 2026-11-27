@@ -316,11 +316,19 @@ export class Oid4vpService {
                     undefined,
             });
 
+            const clientId =
+                session.clientId ?? createClientId(cert, this.certService);
+            const federation = isFederationClientId(clientId);
+
+            // A federation request carries no x5c: the wallet sees no access
+            // certificate to link the registration certificate with.
             regCert = this.registrationCertificateService.forRequest(
                 presentationConfig,
                 dcql_query,
+                federation ? undefined : cert.crt[0],
                 session.requestId!,
             );
+
             const nonce = randomUUID();
             await this.sessionStore.updateForTenant(
                 session.tenantId,
@@ -331,10 +339,6 @@ export class Oid4vpService {
             );
 
             const lifeTime = 60 * 60;
-
-            const clientId =
-                session.clientId ?? createClientId(cert, this.certService);
-            const federation = isFederationClientId(clientId);
 
             const trustChain = federation
                 ? await this.federationTrustChain(session.tenantId, clientId)

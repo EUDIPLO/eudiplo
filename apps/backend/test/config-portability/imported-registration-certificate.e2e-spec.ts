@@ -11,6 +11,7 @@ import type { Repository } from "typeorm";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { AppModule } from "../../src/app.module.js";
 import { Role } from "../../src/auth/roles/role.enum.js";
+import { KeyUsageType } from "../../src/crypto/key/types/key-usage-type.js";
 import type {
     ConfigBundle,
     ConfigImportPlan,
@@ -18,6 +19,7 @@ import type {
 import { createAppValidationPipe } from "../../src/shared/common/zod/zod-schema.util.js";
 import { PresentationConfig } from "../../src/verifier/presentations/entities/presentation-config.entity.js";
 import { getTenantAdminToken } from "../utils.js";
+import { createKeyChain } from "../utils-ec.js";
 
 /** Unique per run: the E2E database outlives a run. */
 const tenant = `imported-registration-certificate-${Date.now().toString(36)}`;
@@ -108,8 +110,10 @@ describe("config bundle plan with an imported registration certificate (e2e)", (
     const certificate = (
         claims: string[][],
         exp = Math.floor(Date.now() / 1000) + 3600,
+        extra: object = {},
     ) =>
         unsignedJwt({
+            ...extra,
             iat: Math.floor(Date.now() / 1000),
             exp,
             credentials: [
@@ -216,8 +220,13 @@ describe("config bundle plan with an imported registration certificate (e2e)", (
             config.getOrThrow<string>("AUTH_CLIENT_ID"),
             config.getOrThrow<string>("AUTH_CLIENT_SECRET"),
             tenant,
-            [Role.Presentations],
+            [Role.Presentations, Role.Keys],
         )}`;
+        // An access key chain whose generated certificate carries no
+        // organizationIdentifier, for the access certificate match.
+        await createKeyChain(app, auth.slice("Bearer ".length), {
+            usageType: KeyUsageType.Access,
+        });
         vct = `${config.getOrThrow<string>("PUBLIC_URL")}/issuers/${tenant}/credentials/pid`;
     });
 
@@ -266,6 +275,18 @@ describe("config bundle plan with an imported registration certificate (e2e)", (
         await expectRefused(
             certificate([["given_name"]]),
             "Registration certificate does not authorize the requested DCQL credentials",
+        );
+    });
+
+    test("blocks a certificate issued to another relying party than the stored access certificate's", async () => {
+        // The tenant's generated access certificate has no organizationIdentifier.
+        await expectRefused(
+            certificate(
+                [["given_name"], ["family_name"]],
+                Math.floor(Date.now() / 1000) + 3600,
+                { sub: { id: "VATDE-999999999" } },
+            ),
+            "The registration certificate does not belong to the access certificate: its sub.id is 'VATDE-999999999', but the access certificate subject has no organizationIdentifier or serialNumber",
         );
     });
 

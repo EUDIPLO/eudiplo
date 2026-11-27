@@ -56,6 +56,7 @@ import {
 import { KmsKeyOwnershipService } from "../../crypto/key/kms/kms-key-ownership.service.js";
 import { KmsTenantConfigService } from "../../crypto/key/kms/kms-tenant-config.service.js";
 import type { KmsConfig } from "../../crypto/key/schemas/kms-config.schema.js";
+import { KeyUsageType } from "../../crypto/key/types/key-usage-type.js";
 import { withoutRemovedChainedVp } from "../../issuer/configuration/issuance/domain/removed-authorization-servers.js";
 import {
     type ConfigurationChange,
@@ -87,6 +88,7 @@ import {
     federationTrustAnchorReferenceId,
     isFederationTrustAnchorReferenceKind,
 } from "../../trust/federation-trust-anchor/domain/federation-trust-anchor-reference.js";
+import { PresentationRegistrationCertificateService } from "../../verifier/presentations/configuration/presentation-registration-certificate.service.js";
 import { ConfigBundleRepositories } from "./config-bundle-repositories.service.js";
 import { ConfigDocumentValidationService } from "./config-document-validation.service.js";
 import { ConfigKmsReferenceService } from "./config-kms-reference.service.js";
@@ -258,7 +260,29 @@ export class ConfigBundleService {
         private readonly keyChainReferences: KeyChainReferences,
         @Inject(AUTH_SETTINGS)
         private readonly authSettings: AuthSettings,
+        private readonly registrationCertificates: PresentationRegistrationCertificateService,
     ) {}
+
+    /**
+     * Leaf certificate of the stored access key chain a presentation config
+     * document signs with (its `accessKeyChainId`, or the tenant's default),
+     * or `undefined` for other documents and when there is none.
+     */
+    private async storedAccessCertificate(
+        tenantId: string,
+        document: ConfigDocument,
+    ): Promise<string | undefined> {
+        if (document.kind !== "PresentationConfig") return undefined;
+        const jwt = (document.spec as { registration_cert?: { jwt?: unknown } })
+            .registration_cert?.jwt;
+        if (typeof jwt !== "string" || jwt.length === 0) return undefined;
+        const keyId = (document.spec as { accessKeyChainId?: unknown })
+            .accessKeyChainId;
+        return this.registrationCertificates.accessCertificate(
+            tenantId,
+            typeof keyId === "string" ? keyId : undefined,
+        );
+    }
 
     /** With `OIDC_PROVIDER=generic`, bundles neither carry nor change clients. */
     private get clientsManagedByIdentityProvider(): boolean {
@@ -596,6 +620,17 @@ export class ConfigBundleService {
             (file) =>
                 this.migrationService.normalize(file).kind === "KmsConfig",
         );
+        // These documents can change which access certificate a presentation
+        // config signs with, so the stored one says nothing; apply checks it.
+        const changesAccessCertificates = bundle.documents.some((file) => {
+            const document = this.migrationService.normalize(file);
+            return (
+                document.kind === "KeyChainDefaults" ||
+                (document.kind === "KeyChain" &&
+                    (document.spec as { usageType?: unknown }).usageType ===
+                        KeyUsageType.Access)
+            );
+        });
         for (const file of bundle.documents) {
             const input = this.migrationService.normalize(file);
             const sourceVersion = input.$schema!;
@@ -845,6 +880,12 @@ export class ConfigBundleService {
                         result.document,
                         tenantId,
                         wholePlaceholders,
+                        changesAccessCertificates
+                            ? undefined
+                            : await this.storedAccessCertificate(
+                                  tenantId,
+                                  result.document,
+                              ),
                     );
                 if (certificateIssues.length > 0) {
                     itemIssues.push(...certificateIssues);

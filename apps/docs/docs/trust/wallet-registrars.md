@@ -55,7 +55,8 @@ If Paradym rejects the certificate, check the wallet version and test environmen
 
 1. Register and verify your organization in the [EUDI Hub portal](https://portal.eudi-hub.gov.de/). The tenant that owns the issuer and verifier settings needs the `registrar:manage` role.
 2. Create a standalone access key chain with **Access Certificate → Self-Signed Certificate**, then select **Request from EUDI Hub** on its **Active Certificate** card ([EUDI Hub](eudi-hub.md#request-an-access-certificate)).
-3. Request a registration certificate for each presentation configuration that needs one, and for the issuer ([EUDI Hub](eudi-hub.md#request-a-registration-certificate)). Request new ones before they expire.
-4. Repeat the health, issuance and presentation checks with the target wallet. A successful health check only proves HTTPS connectivity, not that the wallet accepts your certificates.
+3. If the tenant has more than one access key chain, make this key chain the tenant's [default access key chain](keys-and-certificates.md#default-access-key-chain) or select it as `accessKeyChainId` in the presentation configuration: a verifier registration certificate must belong to the access certificate that signs the requests ([Access certificate match](registration-certificates.md#access-certificate-match)).
+4. Request a registration certificate for each presentation configuration that needs one, and for the issuer ([EUDI Hub](eudi-hub.md#request-a-registration-certificate)). Request new ones before they expire.
+5. Repeat the health, issuance and presentation checks with the target wallet. A successful health check only proves HTTPS connectivity, not that the wallet accepts your certificates.
 
 **Next: [Issue Your First Credential](../cookbooks/first-credential.md).**

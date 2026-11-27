@@ -1,5 +1,6 @@
-import { generateKeyPairSync } from "node:crypto";
+import { generateKeyPairSync, webcrypto } from "node:crypto";
 import { schemaUrl } from "@eudiplo/config-format/config-format.js";
+import * as x509 from "@peculiar/x509";
 import { afterEach, describe, expect, it } from "vitest";
 import { ConfigDocumentValidationService } from "./config-document-validation.service.js";
 import { ConfigMigrationService } from "./config-migration.service.js";
@@ -466,6 +467,68 @@ describe("ConfigDocumentValidationService", () => {
                             "Registration certificate does not authorize the requested DCQL credentials",
                         resource: { kind: "PresentationConfig", id: "pid" },
                     },
+                ]);
+            });
+
+            it("reports a certificate issued to another relying party than the access certificate's", async () => {
+                const crypto = webcrypto as Crypto;
+                const algorithm = {
+                    name: "ECDSA",
+                    namedCurve: "P-256",
+                    hash: "SHA-256",
+                };
+                const keys = (await crypto.subtle.generateKey(algorithm, true, [
+                    "sign",
+                    "verify",
+                ])) as CryptoKeyPair;
+                const accessCertificate = (
+                    await x509.X509CertificateGenerator.createSelfSigned(
+                        {
+                            serialNumber: "01",
+                            name: "CN=Acme, 2.5.4.97=VATDE-123456789",
+                            notBefore: new Date(Date.now() - 60_000),
+                            notAfter: new Date(Date.now() + 3_600_000),
+                            signingAlgorithm: algorithm,
+                            keys,
+                        },
+                        crypto,
+                    )
+                ).toString("pem");
+                const issuedTo = (id: string) =>
+                    withCertificate({
+                        jwt: unsignedJwt({
+                            sub: { id },
+                            credentials: [
+                                {
+                                    format: "dc+sd-jwt",
+                                    meta: { vct_values: [tenantVct] },
+                                },
+                            ],
+                        }),
+                    });
+
+                expect(
+                    service.validateRegistrationCertificate(
+                        issuedTo("VATDE-123456789"),
+                        "acme",
+                        undefined,
+                        accessCertificate,
+                    ),
+                ).toEqual([]);
+                expect(
+                    service.validateRegistrationCertificate(
+                        issuedTo("VATDE-999"),
+                        "acme",
+                        undefined,
+                        accessCertificate,
+                    ),
+                ).toEqual([
+                    expect.objectContaining({
+                        code: "REGISTRATION_CERTIFICATE_REFUSED",
+                        message: expect.stringContaining(
+                            "does not belong to the access certificate",
+                        ),
+                    }),
                 ]);
             });
 
