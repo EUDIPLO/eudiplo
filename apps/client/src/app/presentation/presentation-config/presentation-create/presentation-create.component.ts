@@ -609,24 +609,7 @@ export class PresentationCreateComponent implements OnInit, PageWithUnsavedChang
       .map((credential: any) => ({
         id: credential.id,
         format: credential.format,
-        trust:
-          Array.isArray(credential.trusted_authorities) &&
-          credential.trusted_authorities.every(
-            (authority: any) =>
-              ['etsi_tl', 'openid_federation'].includes(authority?.type) &&
-              Array.isArray(authority?.values) &&
-              authority.values.every((value: any) =>
-                authority.type === 'openid_federation'
-                  ? typeof value === 'string'
-                  : value && typeof value === 'object'
-              )
-          )
-            ? trustSummary(credential.trusted_authorities)
-            : credential.trusted_authorities
-              ? 'Review issuer trust in DCQL JSON'
-              : this.allowsUntrustedIssuers
-                ? 'No issuer trust: any issuer is accepted'
-                : 'No issuer trust: saving is refused',
+        trust: this.trustText(credential.trusted_authorities),
         type: Array.isArray(credential.meta?.vct_values)
           ? credential.meta.vct_values.join(', ')
           : typeof credential.meta?.doctype_value === 'string'
@@ -634,6 +617,27 @@ export class PresentationCreateComponent implements OnInit, PageWithUnsavedChang
             : '',
         claims: this.claimsSummary(credential.claims),
       }));
+  }
+
+  /** Review text for one credential query's issuer trust. */
+  private trustText(authorities: unknown): string {
+    const readable =
+      Array.isArray(authorities) &&
+      authorities.every(
+        (authority: any) =>
+          ['etsi_tl', 'openid_federation'].includes(authority?.type) &&
+          Array.isArray(authority?.values) &&
+          authority.values.every((value: any) =>
+            authority.type === 'openid_federation'
+              ? typeof value === 'string'
+              : value && typeof value === 'object'
+          )
+      );
+    if (readable) return trustSummary(authorities);
+    if (authorities) return 'Review issuer trust in DCQL JSON';
+    return this.allowsUntrustedIssuers
+      ? 'No issuer trust: any issuer is accepted'
+      : 'No issuer trust: saving is refused';
   }
 
   /** Omitted claims summarise as none requested; `[]` and non-arrays are invalid. */
