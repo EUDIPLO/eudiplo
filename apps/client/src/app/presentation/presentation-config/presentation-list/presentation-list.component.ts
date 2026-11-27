@@ -24,6 +24,11 @@ import { LoadErrorComponent } from '../../../common/load-error.component';
 import { ItemRoutePipe } from '../../../common/item-route.pipe';
 import { RoleLockDirective } from '../../../common/role-lock.directive';
 import { PRESENTATION_WRITE_ROLES } from '../../../services/resource-roles';
+import {
+  ISSUER_TRUST_LABELS,
+  issuerTrust,
+  type IssuerTrustStatus,
+} from '../dcql-query-editor/simple-dcql';
 
 @Component({
   selector: 'app-presentation-list',
@@ -52,13 +57,8 @@ export class PresentationListComponent extends BaseAsyncListComponent<Presentati
 
   protected readonly loadFailedMessage = 'Failed to load verification configs';
 
-  displayedColumns: (keyof PresentationConfig | 'actions' | 'registrationCert')[] = [
-    'id',
-    'description',
-    'registrationCert',
-    'createdAt',
-    'actions',
-  ];
+  displayedColumns: (keyof PresentationConfig | 'actions' | 'registrationCert' | 'issuerTrust')[] =
+    ['id', 'description', 'issuerTrust', 'registrationCert', 'createdAt', 'actions'];
 
   /** Short label of each registration certificate status, for its badge. */
   readonly registrationCertLabels = REGISTRATION_CERT_STATUS_LABELS;
@@ -103,5 +103,23 @@ export class PresentationListComponent extends BaseAsyncListComponent<Presentati
         formatRegistrationCertExpiresIn(getRegistrationCertTimes(config))
       ) ?? 'No registration certificate configured'
     );
+  }
+
+  /** Short label of each issuer trust status, for its badge. */
+  readonly issuerTrustLabels = ISSUER_TRUST_LABELS;
+
+  issuerTrustStatus(config: PresentationConfig): IssuerTrustStatus {
+    return issuerTrust(config).status;
+  }
+
+  /** Why the badge is shown, naming the queries without issuer trust. */
+  issuerTrustTooltip(config: PresentationConfig): string {
+    const { status, queries } = issuerTrust(config);
+    const ids = queries.join(', ');
+    if (status === 'untrusted')
+      return `Any issuer is accepted for ${ids}. The issuer's authority is not validated.`;
+    if (status === 'refused')
+      return `No issuer trust for ${ids}. Every presentation against this config is refused.`;
+    return 'Every credential query names issuer trust';
   }
 }

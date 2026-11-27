@@ -46,7 +46,11 @@ import type { EudiHubRegistrationCertificate } from '../../../registrar/eudi-hub
 import { formatLifetime } from '../../../utils/duration';
 import { RoleLockDirective } from '../../../common/role-lock.directive';
 import { PRESENTATION_WRITE_ROLES } from '../../../services/resource-roles';
-import { credentialsWithoutTrust } from '../dcql-query-editor/simple-dcql';
+import {
+  credentialsWithoutTrust,
+  ISSUER_TRUST_LABELS,
+  issuerTrust,
+} from '../dcql-query-editor/simple-dcql';
 
 @Component({
   selector: 'app-presentation-show',
@@ -197,6 +201,13 @@ export class PresentationShowComponent implements OnInit {
   get queriesWithoutTrust(): string[] {
     return credentialsWithoutTrust(this.config?.dcql_query);
   }
+
+  /** The opt-in only matters for a query without issuer trust. */
+  get acceptsAnyIssuer(): boolean {
+    return !!this.config && issuerTrust(this.config).status === 'untrusted';
+  }
+
+  readonly issuerTrustLabels = ISSUER_TRUST_LABELS;
 
   get statusCheckMode(): 'strict' | 'best_effort' | 'disabled' {
     const configured = (this.config as any)?.statusCheckMode;

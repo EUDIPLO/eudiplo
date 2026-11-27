@@ -39,7 +39,7 @@ import { showFieldsToFix } from '../../common/field-to-fix.util';
 import { LoadErrorComponent } from '../../common/load-error.component';
 import { focusAfterRenderIfLost } from '../../common/focus-if-lost.util';
 import { SHARED_READ_ROLES } from '../../services/resource-roles';
-import { credentialsWithoutTrust } from '../presentation-config/dcql-query-editor/simple-dcql';
+import { issuerTrust } from '../presentation-config/dcql-query-editor/simple-dcql';
 
 type ClientIdScheme = 'x509_hash' | 'x509_san_dns' | 'openid_federation';
 
@@ -183,11 +183,15 @@ export class PresentationRequestComponent implements OnInit {
    * Credential queries of the selected config without issuer trust; while the config does not
    * opt in, the backend refuses every presentation against it.
    */
+  /** Queries without issuer trust in a config that refuses them. */
   get queriesWithoutTrust(): string[] {
-    const config = this.selectedConfig;
-    return config && !config.allowUntrustedIssuers
-      ? credentialsWithoutTrust(config.dcql_query)
-      : [];
+    const trust = this.selectedConfig ? issuerTrust(this.selectedConfig) : undefined;
+    return trust?.status === 'refused' ? trust.queries : [];
+  }
+
+  /** The opt-in only matters for a query without issuer trust. */
+  get acceptsAnyIssuer(): boolean {
+    return !!this.selectedConfig && issuerTrust(this.selectedConfig).status === 'untrusted';
   }
 
   get selectedConfig(): PresentationConfig | undefined {

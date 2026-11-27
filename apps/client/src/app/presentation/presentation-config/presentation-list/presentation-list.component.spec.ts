@@ -177,4 +177,52 @@ describe('PresentationListComponent', () => {
     expect(confirmSpy).toHaveBeenCalled();
     expect(deleteConfiguration).not.toHaveBeenCalled();
   });
+
+  it('marks configs that accept any issuer and configs that refuse every presentation', async () => {
+    const credential = (trusted: boolean) => ({
+      id: 'pid',
+      format: 'dc+sd-jwt',
+      ...(trusted
+        ? { trusted_authorities: [{ type: 'etsi_tl', values: ['https://tl.example'] }] }
+        : {}),
+    });
+    const { page } = await render({
+      loadConfigurations: async () =>
+        [
+          { id: 'checked', dcql_query: { credentials: [credential(true)] } },
+          {
+            id: 'open',
+            allowUntrustedIssuers: true,
+            dcql_query: { credentials: [credential(false)] },
+          },
+          {
+            id: 'opted-in-with-trust',
+            allowUntrustedIssuers: true,
+            dcql_query: { credentials: [credential(true)] },
+          },
+          {
+            id: 'refused',
+            dcql_query: { credentials: [credential(false), { ...credential(false), id: 'mdl' }] },
+          },
+        ] as unknown as PresentationConfig[],
+    });
+
+    const trust = Object.fromEntries(
+      [...page.querySelectorAll('tr.mat-mdc-row')].map((row) => [
+        row.querySelector('a.item-link')?.textContent?.trim(),
+        row.querySelector('.mat-column-issuerTrust')?.textContent?.replace(/\s+/g, ' ').trim(),
+      ])
+    );
+    expect(trust['checked']).toBe('Required');
+    // The opt-in only matters for a query without issuer trust
+    expect(trust['opted-in-with-trust']).toBe('Required');
+    expect(trust['open']).toBe(
+      "Untrusted issuers accepted: Any issuer is accepted for pid. The issuer's authority is not validated."
+    );
+    expect(trust['refused']).toBe(
+      'Refuses all: No issuer trust for pid, mdl. Every presentation against this config is refused.'
+    );
+    expect(page.querySelector('.badge[data-status="untrusted"]')).not.toBeNull();
+    expect(page.querySelector('.badge[data-status="refused"]')).not.toBeNull();
+  });
 });

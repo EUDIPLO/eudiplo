@@ -7,6 +7,7 @@ import {
   trustError,
   onlyEmptyClaimsUnsupported,
   credentialsWithoutTrust,
+  issuerTrust,
 } from './simple-dcql';
 
 const credential = {
@@ -208,5 +209,34 @@ describe('credentialsWithoutTrust', () => {
   it('returns nothing for a query it cannot read', () => {
     expect(credentialsWithoutTrust('{ not json')).toEqual([]);
     expect(credentialsWithoutTrust(undefined)).toEqual([]);
+  });
+});
+
+describe('issuerTrust', () => {
+  const trusted = {
+    id: 'pid',
+    format: 'dc+sd-jwt',
+    trusted_authorities: [{ type: 'etsi_tl', values: ['https://tl.example'] }],
+  };
+  const untrusted = { id: 'mdl', format: 'mso_mdoc' };
+
+  it('requires issuer trust when every query names it, opted in or not', () => {
+    for (const allowUntrustedIssuers of [true, false, null, undefined]) {
+      expect(
+        issuerTrust({ allowUntrustedIssuers, dcql_query: { credentials: [trusted] } })
+      ).toEqual({ status: 'required', queries: [] });
+    }
+  });
+
+  it('accepts any issuer for queries without trust only when the config opts in', () => {
+    const dcql_query = { credentials: [trusted, untrusted] };
+    expect(issuerTrust({ allowUntrustedIssuers: true, dcql_query })).toEqual({
+      status: 'untrusted',
+      queries: ['mdl'],
+    });
+    expect(issuerTrust({ allowUntrustedIssuers: null, dcql_query })).toEqual({
+      status: 'refused',
+      queries: ['mdl'],
+    });
   });
 });

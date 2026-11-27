@@ -721,7 +721,7 @@
                       </ul>
                     </div>
                   }
-                  @if (allowsUntrustedIssuers) {
+                  @if (allowsUntrustedIssuers && queriesWithoutTrust.length) {
                     <p class="untrusted-warning" role="note">
                       <mat-icon aria-hidden="true">warning</mat-icon>
                       <span>

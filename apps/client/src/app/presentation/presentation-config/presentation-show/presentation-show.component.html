@@ -23,11 +23,11 @@
             </span>
           }
           <span class="badge">Status checks: {{ statusCheckModeLabels[statusCheckMode] }}</span>
-          @if (config.allowUntrustedIssuers) {
-            <span class="badge status-warning">Untrusted issuers accepted</span>
+          @if (acceptsAnyIssuer) {
+            <span class="badge status-warning">{{ issuerTrustLabels.untrusted }}</span>
           }
         </div>
-        @if (config.allowUntrustedIssuers) {
+        @if (acceptsAnyIssuer) {
           <p class="untrusted-warning" role="note">
             <mat-icon aria-hidden="true">warning</mat-icon>
             <span>

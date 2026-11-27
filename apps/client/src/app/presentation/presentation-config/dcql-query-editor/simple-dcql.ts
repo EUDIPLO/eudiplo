@@ -351,6 +351,30 @@ export function credentialsWithoutTrust(value: unknown): string[] {
     .map((credential) => String(credential['id'] ?? ''));
 }
 
+/**
+ * How a verification config treats the issuer of a presented credential.
+ * `allowUntrustedIssuers` only matters for queries without issuer trust:
+ * with one, an opted-in config accepts any issuer and any other config
+ * refuses every presentation.
+ */
+export type IssuerTrustStatus = 'required' | 'untrusted' | 'refused';
+
+/** Badge label of each issuer trust status, shared by the list and show pages. */
+export const ISSUER_TRUST_LABELS: Record<IssuerTrustStatus, string> = {
+  required: 'Required',
+  untrusted: 'Untrusted issuers accepted',
+  refused: 'Refuses all',
+};
+
+export function issuerTrust(config: {
+  allowUntrustedIssuers?: boolean | null;
+  dcql_query?: unknown;
+}): { status: IssuerTrustStatus; queries: string[] } {
+  const queries = credentialsWithoutTrust(config.dcql_query);
+  if (!queries.length) return { status: 'required', queries };
+  return { status: config.allowUntrustedIssuers ? 'untrusted' : 'refused', queries };
+}
+
 export function trustSummary(authorities: TrustedAuthority[] | undefined): string {
   if (!authorities?.length) return 'No issuer trust constraint configured';
   return authorities
