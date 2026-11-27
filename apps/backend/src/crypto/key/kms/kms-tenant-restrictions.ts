@@ -44,13 +44,18 @@ export function usesAwsDefaultCredentials(
  */
 export const HOLDS_ENV_PLACEHOLDER = /\$\{[A-Z0-9_]+[:}]/;
 
+/** Matches a value that holds a secret reference such as `${vault:…}`. */
+const HOLDS_SECRET_REFERENCE = /\$\{[a-z][a-z0-9-]*:/;
+
 /**
  * Whether the tenant's own `kms.json` (`config`) gives the tenant a provider
  * with this ID that only it can act as: the file defines the provider and
  * holds its credentials. A provider of the global file is shared by every
  * tenant. So is a provider of a tenant file that acts with something of the
  * instance: the AWS identity of the backend's environment, the client
- * certificate of mTLS files, or a value of a `${VAR}` placeholder.
+ * certificate of mTLS files, a value of a `${VAR}` placeholder, or a secret
+ * reference, which may name an operator secret that other tenants are
+ * granted too.
  *
  * What a tenant does with its own provider concerns its own keys only. On a
  * shared provider, a key name or key ID chosen by the tenant can be a key of
@@ -70,7 +75,10 @@ export function tenantOwnsKmsProvider(
     if (provider.type === "http" && provider.auth?.type === "mtls") {
         return false;
     }
-    return !HOLDS_ENV_PLACEHOLDER.test(JSON.stringify(provider));
+    const text = JSON.stringify(provider);
+    return (
+        !HOLDS_ENV_PLACEHOLDER.test(text) && !HOLDS_SECRET_REFERENCE.test(text)
+    );
 }
 
 /** What the operator allows tenant `kms.json` files to use of the instance. */
