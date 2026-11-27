@@ -60,15 +60,17 @@ test('opens a session from its row, selects rows without opening them, and goes 
   await expect(page.getByRole('heading', { name: 'Sessions', level: 1 })).toBeVisible();
 });
 
-test.describe('verifier admin', () => {
+test.describe('verifier config reader', () => {
   test.use({ storageState: { cookies: [], origins: [] } });
+  // presentation:manage includes presentation:request, which reads sessions; presentation:read
+  // reads the configuration only.
   const { clientId, clientSecret } = useTenantClient(
     'session-settings',
-    ['presentation:manage'],
-    'E2E verifier admin without issuance or session roles'
+    ['presentation:read'],
+    'E2E verifier config reader without session roles'
   );
 
-  test('opens Session Settings without issuance roles', async ({ page }) => {
+  test('opens Session Settings read-only', async ({ page }) => {
     await loginWithClientCredentials(page, clientId, clientSecret);
 
     const config = page.waitForResponse(
@@ -79,6 +81,11 @@ test.describe('verifier admin', () => {
     await expect(page).toHaveURL(/\/session-management\/config$/);
     expect((await config).ok(), 'GET /api/session-config').toBe(true);
     await expect(page.getByRole('heading', { name: 'Session Settings', level: 1 })).toBeVisible();
+    const save = page.getByRole('button', { name: 'Save Configuration' });
+    await expect(save).toHaveAttribute('aria-disabled', 'true');
+    await expect(save).toHaveAccessibleDescription(
+      /Needs the issuance:manage or presentation:manage role/
+    );
   });
 
   test('is turned away from the session list', async ({ page }) => {

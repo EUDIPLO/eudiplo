@@ -32,6 +32,7 @@
         <button
           matButton="tonal"
           [routerLink]="deleting ? null : ['edit']"
+          [appRequiresRole]="writeRoles"
           [disabled]="deleting"
           disabledInteractive
           [matTooltip]="deleting ? 'Deleting the OIDC client…' : ''"
@@ -44,6 +45,7 @@
           matButton="outlined"
           class="danger"
           (click)="deleteClient()"
+          [appRequiresRole]="writeRoles"
           [disabled]="deleting"
           disabledInteractive
           [matTooltip]="deleting ? 'Deleting the OIDC client…' : ''"
@@ -196,6 +198,9 @@
         </mat-card-subtitle>
       </mat-card-header>
       <mat-card-content class="secret-list">
+        @if (readOnly) {
+          <app-read-only-notice subject="the secrets" [roles]="writeRoles" />
+        }
         @for (secret of client.secrets; track secret.id; let i = $index) {
           <section class="secret" [attr.aria-labelledby]="'secret-' + secret.id">
             <h3 #secretHeading tabindex="-1" [id]="'secret-' + secret.id">
@@ -222,6 +227,8 @@
                 matButton="outlined"
                 type="button"
                 (click)="saveExpiry(secret)"
+                [appRequiresRole]="writeRoles"
+                matTooltip=""
                 [disabled]="busySecrets.has(secret.id)"
                 disabledInteractive
                 [attr.aria-label]="'Save expiry of secret ' + (i + 1)"
@@ -233,6 +240,8 @@
                   matButton
                   type="button"
                   (click)="clearExpiry(secret)"
+                  [appRequiresRole]="writeRoles"
+                  matTooltip=""
                   [disabled]="busySecrets.has(secret.id)"
                   disabledInteractive
                   [attr.aria-label]="'Remove expiry of secret ' + (i + 1)"
@@ -245,6 +254,7 @@
                 type="button"
                 class="delete-action"
                 (click)="deleteSecret(secret, i)"
+                [appRequiresRole]="writeRoles"
                 [disabled]="client.secrets.length <= 1 || busySecrets.has(secret.id)"
                 disabledInteractive
                 [matTooltip]="deleteSecretTooltip()"
@@ -261,6 +271,7 @@
             matButton="outlined"
             type="button"
             (click)="addSecret()"
+            [appRequiresRole]="writeRoles"
             [disabled]="!canAddSecret || addingSecret"
             disabledInteractive
             [matTooltip]="addSecretTooltip"

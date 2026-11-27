@@ -35,6 +35,9 @@ import {
 import { MAX_SECRETS, PROFILE_LABELS } from '../oidc-client-create/oidc-client-form';
 import { OidcClientService } from '../oidc-client.service';
 import { oidcClientDeleteConfirmation } from '../oidc-client-delete-confirmation';
+import { ReadOnlyNoticeComponent } from '../../common/read-only-notice.component';
+import { RoleLockDirective } from '../../common/role-lock.directive';
+import { PRESENTATION_WRITE_ROLES } from '../../services/resource-roles';
 
 /** The value of a `datetime-local` input for an ISO timestamp, in local time. */
 export function toLocalDateTime(iso: string | null | undefined): string {
@@ -48,6 +51,8 @@ export function toLocalDateTime(iso: string | null | undefined): string {
 @Component({
   selector: 'app-oidc-client-show',
   imports: [
+    RoleLockDirective,
+    ReadOnlyNoticeComponent,
     DatePipe,
     ReactiveFormsModule,
     MatIconModule,
@@ -65,6 +70,9 @@ export function toLocalDateTime(iso: string | null | undefined): string {
   styleUrl: './oidc-client-show.component.scss',
 })
 export class OidcClientShowComponent implements OnInit {
+  /** Creating, changing and deleting it needs presentation:manage; reading needs less. */
+  readonly writeRoles = PRESENTATION_WRITE_ROLES;
+
   readonly profileLabels = PROFILE_LABELS;
   client: OidcClientResponseDto | undefined;
   /** Set when the client could not be loaded, so the page is not left blank. */
@@ -93,6 +101,11 @@ export class OidcClientShowComponent implements OnInit {
   private readonly dialog = inject(MatDialog);
   private readonly injector = inject(Injector);
   private readonly jwtService = inject(JwtService);
+
+  /** A caller without presentation:manage reads the secrets with their expiry fields disabled. */
+  get readOnly(): boolean {
+    return !this.jwtService.hasRole(this.writeRoles);
+  }
 
   ngOnInit(): void {
     this.load();
@@ -281,7 +294,10 @@ export class OidcClientShowComponent implements OnInit {
     for (const secret of client.secrets) {
       this.expiry.set(
         secret.id,
-        new FormControl(toLocalDateTime(secret.expiresAt), { nonNullable: true })
+        new FormControl(
+          { value: toLocalDateTime(secret.expiresAt), disabled: this.readOnly },
+          { nonNullable: true }
+        )
       );
     }
   }

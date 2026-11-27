@@ -24,7 +24,8 @@ import {
   isConfiguredDefaultAccess,
   loadDefaultAccess,
 } from '../default-access-key-chain';
-import { KeyChainService } from '../key-chain.service';
+import { KEY_ADMIN_ROLE, KeyChainService } from '../key-chain.service';
+import { RoleLockDirective } from '../../common/role-lock.directive';
 import { Subscription } from 'rxjs';
 import { JsonViewDialogComponent } from '../../issuance/credential-config/credential-config-create/json-view-dialog/json-view-dialog.component';
 import { ConfigDocumentService } from '../../config-portability/config-document.service';
@@ -54,6 +55,7 @@ import { keyUsages, type KeyUsageType } from '../key-usage';
     MatTooltipModule,
     RouterModule,
     ConfigOwnershipDirective,
+    RoleLockDirective,
     ConfigOwnershipNoticeComponent,
     LoadErrorComponent,
     KeyCertificateRequestComponent,
@@ -146,7 +148,8 @@ export class KeyManagementShowComponent implements OnInit, OnDestroy {
 
   /** Makes this key chain the tenant's default access key chain, or removes it as default. */
   async toggleDefaultAccess(): Promise<void> {
-    if (!this.keyChain || this.updatingDefault || !this.defaultAccess) return;
+    if (!this.canManageKeyChains || !this.keyChain || this.updatingDefault || !this.defaultAccess)
+      return;
     const id = this.keyChain.id;
 
     this.updatingDefault = true;
@@ -183,10 +186,11 @@ export class KeyManagementShowComponent implements OnInit, OnDestroy {
    * The tenant's encryption key chain is listed as standalone but signs
    * nothing, an internal chain's root CA issues its certificates, and
    * federation and authorization server keys are published as JWKs without their
-   * certificate.
+   * certificate. Requesting and storing it needs `keys:manage`.
    */
   get offersCertificateRequest(): boolean {
     return (
+      this.canManageKeyChains &&
       this.keyChain?.type === 'standalone' &&
       this.keyChain.usageType !== 'encrypt' &&
       !this.publishesJwk
@@ -351,7 +355,7 @@ export class KeyManagementShowComponent implements OnInit, OnDestroy {
 
   async deleteKey(): Promise<void> {
     const keyChain = this.keyChain;
-    if (!keyChain || this.deleting) return;
+    if (!this.canManageKeyChains || !keyChain || this.deleting) return;
     // The backend refuses it; say so instead of asking first.
     const refusal = defaultAccessDeleteRefusal(this.defaultAccess, keyChain.id);
     if (refusal) {
@@ -378,7 +382,7 @@ export class KeyManagementShowComponent implements OnInit, OnDestroy {
   }
 
   async rotateKey(): Promise<void> {
-    if (!this.keyChain || this.rotating) return;
+    if (!this.canManageKeyChains || !this.keyChain || this.rotating) return;
 
     if (!confirm(keyChainRotateQuestion(this.keyChain))) return;
 
@@ -393,6 +397,14 @@ export class KeyManagementShowComponent implements OnInit, OnDestroy {
     } finally {
       this.rotating = false;
     }
+  }
+
+  /** Creating, changing, rotating and deleting key chains and the default need it. */
+  readonly keyAdminRole = KEY_ADMIN_ROLE;
+
+  /** Whether the caller may change, rotate and delete the key chain. */
+  get canManageKeyChains(): boolean {
+    return this.jwtService.hasRole(KEY_ADMIN_ROLE);
   }
 
   /** Requesting a certificate from a registrar such as the EUDI Hub needs registrar:manage. */

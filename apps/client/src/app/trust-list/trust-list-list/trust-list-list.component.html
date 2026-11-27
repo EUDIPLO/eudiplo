@@ -8,6 +8,7 @@
     <!-- The cookbook and its E2E test name this button by its tooltip. -->
     <button
       matButton="filled"
+      [appRequiresRole]="writeRoles"
       [routerLink]="['create']"
       matTooltip="Create new Trust List"
       aria-label="Create new Trust List"
@@ -27,7 +28,7 @@
     <div class="list-state empty">
       <span class="empty-icon"><mat-icon>shield</mat-icon></span>
       <p>No trust lists yet.</p>
-      <a matButton="filled" [routerLink]="['create']">
+      <a matButton="filled" [routerLink]="['create']" [appRequiresRole]="writeRoles" matTooltip="">
         <mat-icon>add</mat-icon>
         Create Trust List
       </a>
@@ -78,6 +79,7 @@
                 </a>
                 <a
                   matIconButton
+                  [appRequiresRole]="writeRoles"
                   [routerLink]="list.id | itemRoute: 'edit'"
                   matTooltip="Edit"
                   appConfigManaged

@@ -12,7 +12,11 @@ import {
   attributeProviderRoutes,
 } from './issuance/issuance.routes';
 import { webhookEndpointRoutes } from './webhook-endpoint/webhook-endpoint.routes';
-import { WEBHOOK_ENDPOINT_ROLES } from './webhook-endpoint/webhook-endpoint-roles';
+import {
+  ISSUANCE_READ_ROLES,
+  PRESENTATION_READ_ROLES,
+  SHARED_READ_ROLES,
+} from './services/resource-roles';
 import { oidcClientRoutes } from './oidc-client/oidc-client.routes';
 import { keyManagementRoutes } from './key-management/key-management.routes';
 import { KEY_CHAIN_ROLES } from './key-management/key-chain.service';
@@ -86,7 +90,7 @@ export const routes: Routes = [
   {
     path: 'admin/activity-logs',
     canActivate: [AuthGuard, RoleGuard],
-    data: { role: [getRole('clients:manage'), getRole('audit:read')] },
+    data: { role: getRole('audit:read') },
     loadComponent: () =>
       import('./admin/admin-activity-logs/admin-activity-logs.component').then(
         (m) => m.AdminActivityLogsComponent
@@ -117,25 +121,25 @@ export const routes: Routes = [
   {
     path: 'issuance-config',
     canActivate: [AuthGuard, RoleGuard],
-    data: { role: getRole('issuance:manage') },
+    data: { role: ISSUANCE_READ_ROLES },
     children: issuanceConfigRoutes,
   },
   {
     path: 'credential-config',
     canActivate: [AuthGuard, RoleGuard],
-    data: { role: getRole('issuance:manage') },
+    data: { role: ISSUANCE_READ_ROLES },
     children: credentialConfigRoutes,
   },
   {
     path: 'attribute-providers',
     canActivate: [AuthGuard, RoleGuard],
-    data: { role: getRole('issuance:manage') },
+    data: { role: ISSUANCE_READ_ROLES },
     children: attributeProviderRoutes,
   },
   {
     path: 'webhook-endpoints',
     canActivate: [AuthGuard, RoleGuard],
-    data: { role: WEBHOOK_ENDPOINT_ROLES },
+    data: { role: SHARED_READ_ROLES },
     children: webhookEndpointRoutes,
   },
 
@@ -160,13 +164,13 @@ export const routes: Routes = [
   {
     path: 'status-lists',
     canActivate: [AuthGuard, RoleGuard],
-    data: { role: getRole('issuance:manage') },
+    data: { role: ISSUANCE_READ_ROLES },
     children: statusListRoutes,
   },
   {
     path: 'status-list-config',
     canActivate: [AuthGuard, RoleGuard],
-    data: { role: getRole('issuance:manage') },
+    data: { role: ISSUANCE_READ_ROLES },
     loadComponent: () =>
       import('./status-list-config/status-list-config.component').then(
         (m) => m.StatusListConfigComponent
@@ -185,7 +189,7 @@ export const routes: Routes = [
   {
     path: 'presentation-config',
     canActivate: [AuthGuard, RoleGuard],
-    data: { role: getRole('presentation:manage') },
+    data: { role: PRESENTATION_READ_ROLES },
     children: presentationConfigRoutes,
   },
 
@@ -193,7 +197,7 @@ export const routes: Routes = [
   {
     path: 'oidc-clients',
     canActivate: [AuthGuard, RoleGuard],
-    data: { role: getRole('presentation:manage') },
+    data: { role: PRESENTATION_READ_ROLES },
     children: oidcClientRoutes,
   },
 
@@ -201,7 +205,7 @@ export const routes: Routes = [
   {
     path: 'trust-list',
     canActivate: [AuthGuard, RoleGuard],
-    data: { role: [getRole('issuance:manage'), getRole('presentation:manage')] },
+    data: { role: SHARED_READ_ROLES },
     children: trustListRoutes,
   },
 
@@ -209,7 +213,7 @@ export const routes: Routes = [
   {
     path: 'federation-trust-anchor',
     canActivate: [AuthGuard, RoleGuard],
-    data: { role: [getRole('issuance:manage'), getRole('presentation:manage')] },
+    data: { role: SHARED_READ_ROLES },
     children: federationTrustAnchorRoutes,
   },
 

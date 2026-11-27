@@ -34,14 +34,14 @@ export class FederationTrustAnchorReferences {
     found: [],
   };
 
-  /** The issuance configuration, and so its trust anchors, needs `issuance:manage`. */
+  /** The issuance configuration, and so its trust anchors, needs `issuance:read`. */
   get canReadIssuanceConfig(): boolean {
-    return this.jwtService.hasRole('issuance:manage');
+    return this.jwtService.hasRole('issuance:read');
   }
 
-  /** Presentation configurations need `presentation:manage` here, as on their own page. */
+  /** Presentation configurations need `presentation:read`, as on their own page. */
   get canReadPresentationConfigs(): boolean {
-    return this.jwtService.hasRole('presentation:manage');
+    return this.jwtService.hasRole('presentation:read');
   }
 
   /** True while a lookup runs, so a question about the references would be incomplete. */

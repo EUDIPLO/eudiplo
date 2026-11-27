@@ -1353,7 +1353,7 @@ describe("Trust List e2e Tests", () => {
                 .expect(409);
 
             expect(response.body.message).toBe(
-                `Trust list "${listId}" is still referenced by 2 presentation configs (presentation:manage or presentation:request shows which), 1 credential config ("${credentialConfigId}") and the issuance configuration (wallet provider trust lists). Remove these references before deleting the trust list.`,
+                `Trust list "${listId}" is still referenced by 2 presentation configs (presentation:read shows which), 1 credential config ("${credentialConfigId}") and the issuance configuration (wallet provider trust lists). Remove these references before deleting the trust list.`,
             );
             expect(JSON.stringify(response.body)).not.toContain('"by-id"');
             expect(JSON.stringify(response.body)).not.toContain('"by-url"');
@@ -1371,7 +1371,7 @@ describe("Trust List e2e Tests", () => {
                 .expect(409);
 
             expect(response.body.message).toBe(
-                `Trust list "${listId}" is still referenced by 2 presentation configs ("by-id" and "by-url"), 1 credential config (issuance:manage shows which) and the issuance configuration (wallet provider trust lists). Remove these references before deleting the trust list.`,
+                `Trust list "${listId}" is still referenced by 2 presentation configs ("by-id" and "by-url"), 1 credential config (issuance:read shows which) and the issuance configuration (wallet provider trust lists). Remove these references before deleting the trust list.`,
             );
             expect(response.body.references).toEqual(
                 expect.arrayContaining([

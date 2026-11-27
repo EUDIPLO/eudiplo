@@ -32,8 +32,11 @@ test('creates a tenant with the default admin client roles and signs in as that 
   page,
 }) => {
   const id = await startTenant(page, 'default-roles', 'Default Roles');
-  // tenant:admin lets the admin client set the tenant up; clients:manage is always added.
-  await expect(page.getByRole('combobox', { name: 'Client Roles' })).toContainText('tenant:admin');
+  // tenant:admin lets the admin client set the tenant up. It includes clients:manage, which
+  // the backend adds anyway, so that is not preselected.
+  const clientRoles = page.getByRole('combobox', { name: 'Client Roles' });
+  await expect(clientRoles).toContainText('tenant:admin');
+  await expect(clientRoles).not.toContainText('clients:manage');
   await page.getByRole('button', { name: 'Create tenant' }).click();
 
   const dialog = page.getByRole('dialog', { name: 'Client Secret Generated' });

@@ -15,6 +15,9 @@ test.describe('deleted client', () => {
 
   test('ends the session with a notice', async ({ page, request }) => {
     await loginWithClientCredentials(page, clientId, clientSecret);
+    // Let the dashboard finish its requests first: one refused while it loads would end the
+    // session before the click, and the menu entry would be gone.
+    await page.waitForLoadState('networkidle');
 
     await deleteTenantClient(request, clientId);
     await page.locator('mat-sidenav').getByText('Session Settings', { exact: true }).click();

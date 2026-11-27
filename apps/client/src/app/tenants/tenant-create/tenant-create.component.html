@@ -140,16 +140,31 @@
                 @if (tenantForm.get('createAdminClient')?.value) {
                   <p id="admin-client-hint" class="section-hint">
                     An admin client is created for this tenant with clients:manage and the roles
-                    selected here. With tenant:admin it can grant itself and other clients every
-                    role except tenants:manage and tenant:admin. Without tenant:admin it can grant
-                    only the roles selected here, so select every role the tenant will need.
+                    selected here. A client grants the roles it has and those they include.
+                    tenant:admin includes every tenant role, so with it the client can grant itself
+                    and other clients every role except tenants:manage and tenant:admin. Without it,
+                    the client can grant only the roles selected here and those they include, so
+                    select every role the tenant will need.
                   </p>
                   <mat-form-field appearance="outline" subscriptSizing="dynamic">
                     <mat-label>Client Roles</mat-label>
                     <mat-select formControlName="roles" multiple>
+                      <!-- Only the role names, without what they include -->
+                      <mat-select-trigger>{{
+                        tenantForm.get('roles')?.value?.join(', ')
+                      }}</mat-select-trigger>
                       @for (role of roles; track role) {
-                        <mat-option [value]="role">
-                          {{ role }}
+                        <mat-option
+                          [value]="role"
+                          [attr.aria-label]="role"
+                          [attr.aria-description]="(role | roleIncludes) || null"
+                        >
+                          <span class="role-option">
+                            <span>{{ role }}</span>
+                            @if (role | roleIncludes; as includes) {
+                              <small class="role-includes" aria-hidden="true">{{ includes }}</small>
+                            }
+                          </span>
                         </mat-option>
                       }
                     </mat-select>

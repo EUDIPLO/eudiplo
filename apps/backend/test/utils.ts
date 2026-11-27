@@ -532,6 +532,8 @@ export async function getToken(
                 Role.Issuances,
                 Role.PresentationRequest,
                 Role.Presentations,
+                // Key chains are changed with keys:manage only.
+                Role.Keys,
                 ...extraRoles,
             ],
         })

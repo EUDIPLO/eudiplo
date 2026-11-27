@@ -7,7 +7,7 @@
         from the user's wallet.
       </p>
     </div>
-    <a matButton="filled" [routerLink]="['create']">
+    <a matButton="filled" [routerLink]="['create']" [appRequiresRole]="writeRoles" matTooltip="">
       <mat-icon>add</mat-icon>
       Create OIDC client
     </a>
@@ -24,7 +24,7 @@
       <span class="empty-icon"><mat-icon>login</mat-icon></span>
       <strong>No OIDC clients yet.</strong>
       <p>Create a client for each application that signs users in with their wallet.</p>
-      <a matButton="filled" [routerLink]="['create']">
+      <a matButton="filled" [routerLink]="['create']" [appRequiresRole]="writeRoles" matTooltip="">
         <mat-icon>add</mat-icon>
         Create OIDC client
       </a>
@@ -112,6 +112,7 @@
               <span class="row-actions">
                 <button
                   matIconButton
+                  [appRequiresRole]="writeRoles"
                   [routerLink]="client.id | itemRoute: 'edit'"
                   matTooltip="Edit OIDC client"
                   [attr.aria-label]="'Edit OIDC client ' + client.name"
@@ -122,6 +123,7 @@
                   matIconButton
                   class="delete-action"
                   (click)="deleteClient(client)"
+                  [appRequiresRole]="writeRoles"
                   [disabled]="deletingId !== undefined"
                   disabledInteractive
                   [matTooltip]="

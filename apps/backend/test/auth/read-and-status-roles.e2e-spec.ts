@@ -126,7 +126,7 @@ describe("Read and status roles (e2e)", () => {
         ]);
         issuerReader = await token("roles-issuer-reader", [
             Role.SessionsRead,
-            Role.Issuances,
+            Role.IssuanceRead,
         ]);
         support = await token("roles-support", [
             Role.SessionsRead,
@@ -188,8 +188,8 @@ describe("Read and status roles (e2e)", () => {
                 }
             }
 
-            // issuance:manage counts toward a side only with a role that
-            // cancels sessions, so it opens no pending offer either.
+            // issuance:read counts toward no side, since it cancels no
+            // sessions, so it opens no pending offer either.
             const asIssuer = await as(issuerReader).get(
                 `/session/${openIssuance}`,
             );

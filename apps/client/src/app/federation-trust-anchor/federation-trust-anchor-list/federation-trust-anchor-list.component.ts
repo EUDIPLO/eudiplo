@@ -15,6 +15,8 @@ import {
   FederationTrustAnchorService,
 } from '../federation-trust-anchor.service';
 import { ItemRoutePipe } from '../../common/item-route.pipe';
+import { RoleLockDirective } from '../../common/role-lock.directive';
+import { SHARED_WRITE_ROLES } from '../../services/resource-roles';
 
 @Component({
   selector: 'app-federation-trust-anchor-list',
@@ -28,6 +30,7 @@ import { ItemRoutePipe } from '../../common/item-route.pipe';
     RouterModule,
     MatCardModule,
     ConfigOwnershipDirective,
+    RoleLockDirective,
     LoadErrorComponent,
   ],
   templateUrl: './federation-trust-anchor-list.component.html',
@@ -35,6 +38,9 @@ import { ItemRoutePipe } from '../../common/item-route.pipe';
   changeDetection: ChangeDetectionStrategy.Eager,
 })
 export class FederationTrustAnchorListComponent extends BaseAsyncListComponent<FederationTrustAnchor> {
+  /** Creating, changing and deleting it needs issuance:manage or presentation:manage; reading needs less. */
+  readonly writeRoles = SHARED_WRITE_ROLES;
+
   protected readonly loadFailedMessage = 'Failed to load federation trust anchors';
 
   readonly displayedColumns = ['id', 'entityId', 'description', 'keys', 'actions'];

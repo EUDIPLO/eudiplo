@@ -37,6 +37,9 @@
       (retry)="loadConfig()"
     />
   } @else {
+    @if (readOnly) {
+      <app-read-only-notice subject="these settings" [roles]="writeRoles" />
+    }
     <form #formElement [formGroup]="configForm" (ngSubmit)="onSave()">
       <!-- Each section: what it is for on the left, its field on the right -->
       <section class="form-section" aria-labelledby="capacity-heading">
@@ -77,6 +80,7 @@
                   "
                   type="button"
                   [attr.aria-pressed]="configForm.get('capacity')?.value === preset.value"
+                  [disabled]="readOnly"
                   (click)="choosePreset('capacity', preset.value)"
                 >
                   {{ preset.label }}
@@ -177,6 +181,7 @@
                   [matButton]="configForm.get('ttl')?.value === preset.value ? 'tonal' : 'outlined'"
                   type="button"
                   [attr.aria-pressed]="configForm.get('ttl')?.value === preset.value"
+                  [disabled]="readOnly"
                   (click)="choosePreset('ttl', preset.value)"
                 >
                   {{ preset.label }}
@@ -339,6 +344,7 @@
             (click)="onReset()"
             [disabled]="isSaving || !hasStoredOverride"
             disabledInteractive
+            [appRequiresRole]="writeRoles"
             appConfigManaged
             managedKind="Tenant"
             managedResourceId="tenant"
@@ -363,6 +369,7 @@
           [disabled]="isSaving"
           disabledInteractive
           [matTooltip]="saveTooltip"
+          [appRequiresRole]="writeRoles"
           appConfigManaged
           managedKind="Tenant"
           managedResourceId="tenant"

@@ -16,7 +16,6 @@ import {
     restoreSecrets,
 } from "../../../shared/utils/write-only-secrets.util.js";
 import type { IssuanceConfiguration } from "./domain/issuance-configuration.js";
-import { IssuanceDto } from "./dto/issuance.dto.js";
 import { UpdateIssuanceDto } from "./dto/update-issuance.dto.js";
 import { IssuanceConfig } from "./entities/issuance-config.entity.js";
 import { IssuanceService } from "./issuance.service.js";
@@ -62,24 +61,27 @@ export class IssuanceConfigController {
     }
 
     /**
-     * Returns the issuance configurations for this tenant. Creates a default one if it does not exist.
+     * Returns the issuance configuration of this tenant. Without a stored one,
+     * `issuance:manage` stores and returns the default; a caller that only
+     * reads gets the default without storing it.
      * @returns
      */
+    @Secured([Role.IssuanceRead])
     @Get()
-    @ApiOperation({ summary: "Get issuance configuration" })
+    @ApiOperation({
+        summary: "Get issuance configuration",
+        description:
+            "Without a stored configuration, a caller with `issuance:manage` stores the default and gets it; a caller that only reads (`issuance:read`) gets the default without storing it.",
+    })
     @ApiResponse({ status: 200, type: IssuanceConfig })
     async getIssuanceConfigurations(
         @Token() user: TokenPayload,
     ): Promise<IssuanceConfiguration> {
         return this.redact(
-            await this.issuanceService
-                .getIssuanceConfiguration(user.entity!.id)
-                .catch(() =>
-                    this.issuanceService.storeIssuanceConfiguration(
-                        user.entity!.id,
-                        {} as IssuanceDto,
-                    ),
-                ),
+            await this.issuanceService.getIssuanceConfigurationOrDefault(
+                user.entity!.id,
+                { store: user.roles?.includes(Role.Issuances) ?? false },
+            ),
         );
     }
 

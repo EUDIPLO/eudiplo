@@ -13,6 +13,11 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { JwtService } from '../../services/jwt.service';
 import { ConfigOwnershipService } from '../../config-portability/config-ownership.service';
 import { expectAvailable, expectUnavailable } from '../../common/unavailable-action.testing';
+import { grantEveryRole } from '../../common/role-lock.testing';
+import { effectiveRoles } from '../../services/role-grants';
+
+// The tests are about what the actions do; role locks have their own tests.
+beforeEach(() => grantEveryRole());
 
 describe('KeyManagementShowComponent', () => {
   let component: KeyManagementShowComponent;
@@ -374,7 +379,10 @@ describe('KeyManagementShowComponent EUDI Hub', () => {
       snackBar as never,
       { navigate: vi.fn() } as never,
       dialog as never,
-      { hasRole: (role: string) => roles.includes(role) } as never,
+      {
+        hasRole: (role: string | string[]) =>
+          [role].flat().some((r) => effectiveRoles(roles).includes(r)),
+      } as never,
       {} as never
     );
     component.ngOnInit();
@@ -484,7 +492,7 @@ describe('KeyManagementShowComponent delete', () => {
       snackBar as never,
       router as never,
       {} as never,
-      {} as never,
+      { hasRole: () => true } as never,
       {} as never
     );
     component.keyChain = keyChain;
@@ -590,7 +598,10 @@ describe('KeyManagementShowComponent delete', () => {
         },
         {
           provide: JwtService,
-          useValue: { hasRole: () => false, canUseConfigPortability: () => false },
+          useValue: {
+            hasRole: (role: unknown) => [role].flat().includes('keys:manage'),
+            canUseConfigPortability: () => false,
+          },
         },
         { provide: MatSnackBar, useValue: snackBar },
         { provide: ConfigOwnershipService, useValue: { get: async () => undefined } },
@@ -641,7 +652,7 @@ describe('KeyManagementShowComponent rotate', () => {
       { open: vi.fn() } as never,
       {} as never,
       {} as never,
-      {} as never,
+      { hasRole: () => true } as never,
       {} as never
     );
     component.keyChain = keyChain;
@@ -707,7 +718,7 @@ describe('KeyManagementShowComponent default access key chain', () => {
       snackBar as never,
       { navigate: vi.fn() } as never,
       {} as never,
-      { hasRole: () => false } as never,
+      { hasRole: (role: unknown) => [role].flat().includes('keys:manage') } as never,
       {} as never
     );
     component.ngOnInit();
@@ -817,7 +828,7 @@ describe('KeyManagementShowComponent certificate request', () => {
       {} as never,
       {} as never,
       {} as never,
-      { hasRole: () => false } as never,
+      { hasRole: (role: unknown) => [role].flat().includes('keys:manage') } as never,
       {} as never
     );
     component.keyChain = keyChain as KeyChainResponseDto;
@@ -846,7 +857,7 @@ describe('KeyManagementShowComponent certificate request', () => {
       {} as never,
       { navigate } as never,
       {} as never,
-      { hasRole: () => false } as never,
+      { hasRole: (role: unknown) => [role].flat().includes('keys:manage') } as never,
       {} as never
     );
 

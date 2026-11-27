@@ -1,6 +1,7 @@
 import {
   ChangeDetectorRef,
   Directive,
+  DoCheck,
   ElementRef,
   HostBinding,
   Input,
@@ -13,6 +14,7 @@ import {
 } from '@angular/core';
 import { MatButton, MatIconButton } from '@angular/material/button';
 import { MatTooltip } from '@angular/material/tooltip';
+import { RoleLockDirective } from '../common/role-lock.directive';
 import { ConfigOwnershipService, ConfigResourceKind } from './config-ownership.service';
 
 /** A middle click or the context menu would open a locked link in a new tab. */
@@ -22,13 +24,14 @@ const BLOCKED_EVENTS = ['click', 'auxclick', 'contextmenu'] as const;
  * Locks an action of a file-managed resource. The action stays focusable and
  * hoverable so that its tooltip and description can say why it is locked.
  * Use it on Material buttons and links: the locked look comes from their
- * classes.
+ * classes. On a host that `appRequiresRole` locks for a caller without the
+ * role, that lock takes its place.
  */
 @Directive({
   selector: '[appConfigManaged]',
   standalone: true,
 })
-export class ConfigOwnershipDirective implements OnInit, OnChanges, OnDestroy {
+export class ConfigOwnershipDirective implements OnInit, OnChanges, DoCheck, OnDestroy {
   @Input({ required: true }) managedKind!: ConfigResourceKind;
   @Input({ required: true }) managedResourceId = '';
   /** The host's own tooltip, which names the action. The lock reason is added to it. */
@@ -100,9 +103,15 @@ export class ConfigOwnershipDirective implements OnInit, OnChanges, OnDestroy {
     private readonly host: ElementRef<HTMLElement>,
     @Optional() @Self() private readonly tooltip: MatTooltip | null,
     @Optional() @Self() matButton: MatButton | null,
-    @Optional() @Self() matIconButton: MatIconButton | null
+    @Optional() @Self() matIconButton: MatIconButton | null,
+    @Optional() @Self() private readonly roleLock: RoleLockDirective | null
   ) {
     this.button = matButton ?? matIconButton;
+  }
+
+  /** The caller lacks the role for the action; `appRequiresRole` locks it and says why. */
+  private get roleLocked(): boolean {
+    return this.roleLock?.locked ?? false;
   }
 
   ngOnInit(): void {
@@ -125,6 +134,16 @@ export class ConfigOwnershipDirective implements OnInit, OnChanges, OnDestroy {
     }
   }
 
+  /** A role lock that comes or goes with the caller's roles hands the lock over or back. */
+  ngDoCheck(): void {
+    if (this.checkedRoleLocked !== undefined && this.roleLocked !== this.checkedRoleLocked) {
+      void this.refresh();
+    }
+  }
+
+  /** Whether `appRequiresRole` locked the host at the last lookup. */
+  private checkedRoleLocked?: boolean;
+
   /**
    * Runs in the capture phase, before the host's own (click) and RouterLink
    * handlers. Enter and Space on a focused button arrive here as a click too.
@@ -136,6 +155,7 @@ export class ConfigOwnershipDirective implements OnInit, OnChanges, OnDestroy {
   };
 
   private syncAriaDisabled(): void {
+    if (this.roleLocked) return;
     if (this.button) {
       this.button.ariaDisabled = this.managed || undefined;
     } else if (this.managed) {
@@ -146,7 +166,7 @@ export class ConfigOwnershipDirective implements OnInit, OnChanges, OnDestroy {
   }
 
   private syncTooltip(): void {
-    if (!this.tooltip) return;
+    if (!this.tooltip || this.roleLocked) return;
     if (!this.managed) {
       this.tooltip.message = this.matTooltip;
       return;
@@ -157,7 +177,8 @@ export class ConfigOwnershipDirective implements OnInit, OnChanges, OnDestroy {
 
   private async refresh(): Promise<void> {
     const request = ++this.request;
-    if (!this.managedKind || !this.managedResourceId) {
+    this.checkedRoleLocked = this.roleLocked;
+    if (!this.managedKind || !this.managedResourceId || this.roleLocked) {
       this.managed = false;
       this.pending = false;
       this.syncAriaDisabled();

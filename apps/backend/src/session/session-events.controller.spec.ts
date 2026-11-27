@@ -34,7 +34,9 @@ describe("SessionEventsController", () => {
         expect(allows([Role.IssuanceOffer])).toBe(true);
         expect(allows([Role.PresentationRequest])).toBe(true);
         expect(allows([Role.SessionsRead])).toBe(true);
-        expect(allows([Role.Issuances])).toBe(false);
+        // issuance:manage implies issuance:offer.
+        expect(allows([Role.Issuances])).toBe(true);
+        expect(allows([Role.IssuanceRead])).toBe(false);
         expect(allows([Role.CredentialStatus])).toBe(false);
         expect(allows([Role.Clients])).toBe(false);
         expect(allows([])).toBe(false);

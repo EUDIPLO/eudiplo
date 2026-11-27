@@ -34,8 +34,8 @@ import { FederationTrustAnchorService } from "./federation-trust-anchor.service.
 
 /** Roles that read each kind of configuration that can name a trust anchor. */
 const readRoles: Record<FederationTrustAnchorReferenceKind, Role[]> = {
-    PresentationConfig: [Role.Presentations, Role.PresentationRequest],
-    IssuanceConfig: [Role.Issuances],
+    PresentationConfig: [Role.PresentationRead],
+    IssuanceConfig: [Role.IssuanceRead],
 };
 
 /**
@@ -82,6 +82,7 @@ function httpError(error: unknown, token: TokenPayload): never {
 export class FederationTrustAnchorController {
     constructor(private readonly service: FederationTrustAnchorService) {}
 
+    @Secured([Role.IssuanceRead, Role.PresentationRead])
     @Get()
     @ApiOperation({ summary: "List the tenant's federation trust anchors" })
     @ApiResponse({
@@ -93,6 +94,7 @@ export class FederationTrustAnchorController {
         return this.service.getAll(user.entity!.id);
     }
 
+    @Secured([Role.IssuanceRead, Role.PresentationRead])
     @Get(":id")
     @ApiOperation({ summary: "Get a federation trust anchor by ID" })
     @ApiResponse({

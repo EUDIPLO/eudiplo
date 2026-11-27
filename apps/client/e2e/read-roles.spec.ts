@@ -1,8 +1,9 @@
 import { randomBytes } from 'node:crypto';
-import type { APIRequestContext, APIResponse } from '@playwright/test';
+import type { APIRequestContext, APIResponse, Locator } from '@playwright/test';
 import { expect, test } from './support/test';
-import { hasAuthCredentials, resolvedE2EConfig } from './support/e2e-config';
+import { hasAuthCredentials, hasRootCredentials, resolvedE2EConfig } from './support/e2e-config';
 import { loginWithClientCredentials } from './support/login';
+import { createTenant } from './support/tenants';
 
 /** Access token of the tenant client the other specs sign in with. */
 async function tenantToken(request: APIRequestContext): Promise<string> {
@@ -45,6 +46,9 @@ test.describe('read and status roles', () => {
     auditor: { roles: ['audit:read'] },
     keys: { roles: ['keys:manage'] },
     offer: { roles: ['issuance:offer'] },
+    reader: { roles: ['issuance:read'] },
+    issuer: { roles: ['issuance:manage'] },
+    verifierReader: { roles: ['presentation:read'] },
   };
   const credentials = Object.fromEntries(
     Object.keys(clients).map((name) => [
@@ -156,51 +160,211 @@ test.describe('read and status roles', () => {
     await expect(page).toHaveURL(/\/session-management$/);
   });
 
-  // New Issuance reads the credential configs and issuer settings, which need issuance:manage.
-  test('issuance:offer alone is told why New Issuance cannot be used', async ({ page }) => {
-    const credentialConfigRequests: string[] = [];
-    page.on('request', (request) => {
-      if (new URL(request.url()).pathname.startsWith('/api/issuer/credentials')) {
-        credentialConfigRequests.push(request.url());
-      }
-    });
+  // New Issuance needs only issuance:offer, which includes issuance:read for the form's data.
+  test('issuance:offer alone opens New Issuance and recreates an offer', async ({ page }) => {
     const { clientId, clientSecret } = credentials.offer;
     await loginWithClientCredentials(page, clientId, clientSecret);
     const nav = page.locator('mat-sidenav');
-    await expect(nav.getByText('All Sessions', { exact: true })).toBeVisible();
-    await expect(nav.getByText('New Issuance')).toHaveCount(0);
-    await expect(nav.getByRole('button', { name: 'Credential Issuance' })).toHaveCount(0);
+    await expect(nav.getByText('New Issuance')).toBeVisible();
+    await expect(nav.getByText('Credential Configs')).toBeVisible();
 
     await nav.getByText('All Sessions', { exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Sessions', exact: true })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Issuance Offer' })).toHaveCount(0);
-    const locked = page.locator('.header-actions').getByRole('button', { name: 'Issuance Offer' });
-    await expect(locked).toHaveAttribute('aria-disabled', 'true');
-    // The tooltip is the button's description, as for other locked buttons.
-    await expect(locked).toHaveAccessibleDescription(/also needs the issuance:manage role/);
     await expect(
-      page.getByText(
-        'Not listed, as your roles cannot read them: credential configs need issuance:manage.'
-      )
+      page.locator('.header-actions').getByRole('link', { name: 'Issuance Offer' })
     ).toBeVisible();
+    await expect(page.getByText(/credential configs need/)).toHaveCount(0);
 
     await page.goto(`/session-management/${issuanceSessionId}`);
     await expect(page.getByRole('heading', { name: 'Issuance Session' })).toBeVisible();
     const recreate = page.getByRole('button', { name: 'Recreate Offer' });
-    await expect(recreate).toHaveAttribute('aria-disabled', 'true');
-    await expect(recreate).toHaveAccessibleDescription(/also needs the issuance:manage role/);
-    await recreate.click({ force: true });
-    await expect(page).toHaveURL(new RegExp(`/session-management/${issuanceSessionId}$`));
+    await expect(recreate).not.toHaveAttribute('aria-disabled', 'true');
+    await recreate.click();
+    await expect(page).toHaveURL(/\/offer\/issuance$/);
+    await expect(page.getByRole('heading', { name: 'Generate Issuance Offer' })).toBeVisible();
+    await expect(page.locator('mat-stepper')).toBeVisible();
+    await expect(page.locator('app-load-error')).toHaveCount(0);
+  });
 
-    // A deep link says why instead of offering a Retry that cannot succeed.
-    await page.goto('/offer/issuance');
-    await expect(page.getByRole('status')).toContainText(
-      'Creating offers in the Web Client also needs the issuance:manage role'
+  test('issuance:read sees the credential configs with their changes locked', async ({ page }) => {
+    const { clientId, clientSecret } = credentials.reader;
+    await loginWithClientCredentials(page, clientId, clientSecret);
+    const nav = page.locator('mat-sidenav');
+    await expect(nav.getByText('New Issuance')).toHaveCount(0);
+
+    await nav.getByText('Credential Configs', { exact: true }).click();
+    await expect(
+      page.getByRole('heading', { name: 'Credential Configs', exact: true })
+    ).toBeVisible();
+    const reason = 'Needs the issuance:manage role';
+    const create = page.getByRole('link', { name: 'Create credential config' }).first();
+    await expect(create).toHaveAttribute('aria-disabled', 'true');
+    await expect(create).toHaveAccessibleDescription(reason);
+    const edit = page.getByRole('button', { name: 'Edit credential config pid', exact: true });
+    await expect(edit).toHaveAttribute('aria-disabled', 'true');
+    await expect(edit).toHaveAccessibleDescription(new RegExp(reason));
+    const remove = page.getByRole('button', {
+      name: 'Delete credential config pid',
+      exact: true,
+    });
+    await expect(remove).toHaveAttribute('aria-disabled', 'true');
+    await edit.click({ force: true });
+    await expect(page).toHaveURL(/\/credential-config$/);
+
+    // The configuration itself opens, Edit stays locked.
+    await page.getByRole('link', { name: 'pid', exact: true }).click();
+    await expect(page).toHaveURL(/\/credential-config\/pid$/);
+    await expect(page.getByRole('button', { name: 'Edit', exact: true })).toHaveAttribute(
+      'aria-disabled',
+      'true'
     );
-    await expect(page.getByRole('button', { name: 'Retry' })).toHaveCount(0);
-    expect(credentialConfigRequests).toEqual([]);
-    await page.getByRole('link', { name: 'Back to Sessions' }).click();
-    await expect(page).toHaveURL(/\/session-management$/);
+
+    // The form refuses a caller without the write role.
+    await page.goto('/credential-config/pid/edit');
+    await expect(page.getByText(/Access denied to \/credential-config\/pid\/edit/)).toBeVisible();
+    await expect(page).not.toHaveURL(/\/edit$/);
+  });
+
+  test('issuance:manage without keys:manage reads key chains but cannot change them', async ({
+    page,
+  }) => {
+    const { clientId, clientSecret } = credentials.issuer;
+    await loginWithClientCredentials(page, clientId, clientSecret);
+    await page.locator('mat-sidenav').getByText('Keys', { exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Keys', exact: true })).toBeVisible();
+
+    const reason = 'Needs the keys:manage role';
+    const create = page.locator('.header-actions').getByRole('link', { name: 'Create key' });
+    await expect(create).toHaveAttribute('aria-disabled', 'true');
+    await expect(create).toHaveAccessibleDescription(new RegExp(reason));
+    const edit = page.getByRole('link', { name: /^Edit key chain / }).first();
+    await expect(edit).toHaveAttribute('aria-disabled', 'true');
+    await expect(edit).toHaveAccessibleDescription(new RegExp(reason));
+    const remove = page.getByRole('button', { name: /^Delete key chain / }).first();
+    await expect(remove).toHaveAttribute('aria-disabled', 'true');
+    await create.click({ force: true });
+    await expect(page).toHaveURL(/\/keys$/);
+
+    await page.goto('/keys/create');
+    await expect(page.getByText(/Access denied to \/keys\/create/)).toBeVisible();
+    await expect(page).not.toHaveURL(/\/keys\/create$/);
+
+    // The KMS providers do not offer to create a key either.
+    await page.goto('/kms');
+    await expect(page.getByRole('heading', { name: 'KMS Providers' })).toBeVisible();
+    await expect(page.getByRole('link', { name: /^Create key with provider/ })).toHaveCount(0);
+    await expect(
+      page.getByText('Creating key chains needs the keys:manage role.').first()
+    ).toBeVisible();
+  });
+
+  test('presentation:read sees the verification configuration with its changes locked', async ({
+    page,
+  }) => {
+    const { clientId, clientSecret } = credentials.verifierReader;
+    await loginWithClientCredentials(page, clientId, clientSecret);
+    const nav = page.locator('mat-sidenav');
+    await expect(nav.getByText('New Verification')).toHaveCount(0);
+    const locked = async (locator: Locator, reason: RegExp) => {
+      await expect(locator).toHaveAttribute('aria-disabled', 'true');
+      await expect(locator).toHaveAccessibleDescription(reason);
+    };
+    const presentationReason = /Needs the presentation:manage role/;
+
+    await nav.getByText('Verification Configs', { exact: true }).click();
+    await expect(page).toHaveURL(/\/presentation-config$/);
+    await locked(page.getByRole('link', { name: 'Create config' }).first(), presentationReason);
+    await locked(page.locator('[aria-label="Edit verification config pid"]'), presentationReason);
+    await locked(page.locator('[aria-label="Delete verification config pid"]'), presentationReason);
+    await page.goto('/presentation-config/pid');
+    await locked(
+      page.getByRole('button', { name: 'Copy verification config' }),
+      presentationReason
+    );
+    await locked(
+      page.getByRole('button', { name: 'Delete verification config' }),
+      presentationReason
+    );
+
+    await nav.getByText('OIDC Clients', { exact: true }).click();
+    await expect(page).toHaveURL(/\/oidc-clients$/);
+    await locked(
+      page.getByRole('link', { name: 'Create OIDC client' }).first(),
+      presentationReason
+    );
+
+    // Trust lists are shared: either manage role changes them.
+    const sharedReason = /Needs the issuance:manage or presentation:manage role/;
+    await nav.getByText('Trust Lists', { exact: true }).click();
+    await expect(page).toHaveURL(/\/trust-list$/);
+    await locked(page.getByRole('button', { name: 'Create new Trust List' }), sharedReason);
+    await locked(page.getByRole('link', { name: /^Edit trust list / }).first(), sharedReason);
+
+    for (const form of ['/presentation-config/create', '/oidc-clients/create']) {
+      await page.goto(form);
+      await expect(page.getByText(`Access denied to ${form}`)).toBeVisible();
+      await expect(page).not.toHaveURL(new RegExp(`${form}$`));
+    }
+  });
+
+  test('issuance:read reads Session Settings and a status list without unsaved changes', async ({
+    page,
+  }) => {
+    const { clientId, clientSecret } = credentials.reader;
+    await loginWithClientCredentials(page, clientId, clientSecret);
+    const nav = page.locator('mat-sidenav');
+
+    await nav.getByText('Session Settings', { exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Session Settings', level: 1 })).toBeVisible();
+    await expect(page.getByRole('note')).toContainText(
+      'Read-only: changing these settings needs the issuance:manage or presentation:manage role.'
+    );
+    await expect(page.getByRole('spinbutton', { name: 'TTL in seconds' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: '1 hour' })).toBeDisabled();
+    // Leaving asks nothing: a reader has no changes to lose.
+    page.on('dialog', (dialog) => {
+      throw new Error(`Unexpected dialog: ${dialog.message()}`);
+    });
+    await nav.getByText('Status Lists', { exact: true }).click();
+    await expect(page).toHaveURL(/\/status-lists$/);
+
+    await page.locator('a.item-link').first().click();
+    await expect(page.getByRole('heading', { name: 'Edit Status List' })).toBeVisible();
+    await expect(page.getByRole('note')).toContainText(
+      'Read-only: changing this status list needs the issuance:manage role.'
+    );
+    for (const select of await page.locator('form mat-select').all()) {
+      await expect(select).toHaveAttribute('aria-disabled', 'true');
+    }
+    await expect(page.getByRole('button', { name: 'Save Changes' })).toHaveAttribute(
+      'aria-disabled',
+      'true'
+    );
+    await nav.getByText('Credential Configs', { exact: true }).click();
+    await expect(page).toHaveURL(/\/credential-config$/);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+  });
+
+  test('keys:export shows the tenant KMS configuration', async ({ page }) => {
+    // The demo test-client does not hold keys:export, so it cannot grant it; root can.
+    test.skip(
+      !hasRootCredentials,
+      'Set AUTH_CLIENT_ID and AUTH_CLIENT_SECRET of the backend to create a tenant.'
+    );
+    const tenant = await createTenant('kms-export', 'KMS Export', ['keys:export']);
+    await loginWithClientCredentials(page, tenant.clientId, tenant.clientSecret);
+    await page.goto('/kms');
+    await expect(page.getByRole('heading', { name: 'KMS Providers' })).toBeVisible();
+    await expect(page.getByText('Tenant KMS Configuration', { exact: true })).toBeVisible();
+  });
+
+  test('keys:manage alone does not show the tenant KMS configuration', async ({ page }) => {
+    const { clientId, clientSecret } = credentials.keys;
+    await loginWithClientCredentials(page, clientId, clientSecret);
+    await page.goto('/kms');
+    await expect(page.getByRole('heading', { name: 'KMS Providers' })).toBeVisible();
+    await expect(page.locator('ul[aria-label="KMS providers"]')).toBeVisible();
+    await expect(page.getByText('Tenant KMS Configuration', { exact: true })).toHaveCount(0);
   });
 
   test('audit:read opens the activity log and nothing else of the administration', async ({

@@ -1,3 +1,4 @@
+import { effectiveRoles } from '../services/role-grants';
 import { TestBed } from '@angular/core/testing';
 import { client } from '@eudiplo/sdk-core';
 import { vi } from 'vitest';
@@ -34,6 +35,15 @@ const issuanceSetUp = {
   '/api/issuer/config': { id: 'config' },
 };
 
+/**
+ * Answers of a tenant without sessions, for the manage roles, which include
+ * issuance:offer or presentation:request and so read sessions.
+ */
+const noSessions = {
+  '/api/session/stats': {},
+  '/api/session': { items: [], total: 0, page: 1, pageSize: 5, totalPages: 0 },
+};
+
 /** Sessions kept long enough for a full week of activity. */
 const twoWeeks = { ttlSeconds: 14 * 86_400, cleanupMode: 'full' };
 
@@ -52,8 +62,13 @@ describe('DashboardService', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(now);
     roles = [];
-    // Every key chain manager also loads the KMS health; answer it unless a test overrides it.
-    responses = { '/api/key-chain/providers/health': [] };
+    // Every key chain reader also loads the KMS health, and every issuance:read caller the
+    // credential configs and issuer settings; answer them unless a test overrides them.
+    responses = {
+      '/api/key-chain/providers/health': [],
+      '/api/issuer/credentials': [],
+      '/api/issuer/config': { id: 'config' },
+    };
     failures = {};
     requests = [];
     client.setConfig({
@@ -78,7 +93,8 @@ describe('DashboardService', () => {
         {
           provide: JwtService,
           useValue: {
-            hasRole: (role: string | string[]) => [role].flat().some((r) => roles.includes(r)),
+            hasRole: (role: string | string[]) =>
+              [role].flat().some((r) => effectiveRoles(roles).includes(r)),
           },
         },
       ],
@@ -94,6 +110,8 @@ describe('DashboardService', () => {
 
   it('counts sessions of every status and page from the stats endpoint', async () => {
     roles = ['issuance:offer', 'presentation:request'];
+    // issuance:read and presentation:read, which these roles include, read the key chains.
+    responses['/api/key-chain'] = [accessKeyChain(365)];
     responses['/api/verifier/config'] = [];
     responses['/api/session/stats'] = {
       issuance: {
@@ -131,8 +149,22 @@ describe('DashboardService', () => {
     expect(service.lastUpdatedAt).toBeInstanceOf(Date);
   });
 
-  it('raises no access certificate warning for users who cannot read key chains', async () => {
+  it('loads the key chains for issuance:offer, which includes issuance:read', async () => {
     roles = ['issuance:offer'];
+    Object.assign(responses, noSessions, { '/api/key-chain': [accessKeyChain(365)] });
+
+    await service.getCounters();
+
+    expect(service.canReadKeyChains).toBe(true);
+    // Creating key chains needs keys:manage.
+    expect(service.canManageKeyChains).toBe(false);
+    expect(requests).toContain('/api/key-chain');
+    expect(requests).toContain('/api/key-chain/providers/health');
+    expect(service.warnings).toEqual([]);
+  });
+
+  it('raises no access certificate warning for users who cannot read key chains', async () => {
+    roles = ['sessions:read'];
     responses['/api/session/stats'] = {
       issuance: {
         total: 1,
@@ -152,7 +184,7 @@ describe('DashboardService', () => {
   });
 
   it('reports each failed request with a retry instead of showing it as empty', async () => {
-    roles = ['issuance:offer'];
+    roles = ['sessions:read'];
     failures['/api/session/stats'] = 500;
     failures['/api/session'] = 503;
 
@@ -171,7 +203,7 @@ describe('DashboardService', () => {
   });
 
   it('gives one warning for all requests the backend did not answer', async () => {
-    roles = ['issuance:offer'];
+    roles = ['sessions:read'];
     client.setConfig({
       fetch: async () => {
         throw new TypeError('Failed to fetch');
@@ -191,7 +223,7 @@ describe('DashboardService', () => {
   });
 
   it('puts the unreachable warning first, before the warnings of requests the backend answered', async () => {
-    roles = ['issuance:offer'];
+    roles = ['sessions:read'];
     client.setConfig({
       fetch: async (input: RequestInfo | URL) => {
         const url = new URL(input instanceof Request ? input.url : String(input));
@@ -217,7 +249,7 @@ describe('DashboardService', () => {
   });
 
   it('keeps the warnings of requests the backend answered apart from the unreachable ones', async () => {
-    roles = ['issuance:offer'];
+    roles = ['sessions:read'];
     client.setConfig({
       fetch: async (input: RequestInfo | URL) => {
         const url = new URL(input instanceof Request ? input.url : String(input));
@@ -243,7 +275,7 @@ describe('DashboardService', () => {
   });
 
   it("gives the backend's reason and no retry when a retry cannot help", async () => {
-    roles = ['issuance:offer'];
+    roles = ['sessions:read'];
     responses['/api/session'] = { items: [], total: 0, page: 1, pageSize: 5, totalPages: 0 };
     client.setConfig({
       fetch: async (input: RequestInfo | URL) => {
@@ -268,6 +300,7 @@ describe('DashboardService', () => {
 
   it('does not show a setup guide built from failed requests', async () => {
     roles = ['issuance:manage'];
+    Object.assign(responses, noSessions);
     failures['/api/key-chain'] = 500;
     responses['/api/issuer/credentials'] = [];
     responses['/api/issuer/config'] = { id: 'config' };
@@ -410,6 +443,7 @@ describe('DashboardService', () => {
 
   it('links a missing trust list to the trust list form', async () => {
     roles = ['presentation:manage'];
+    Object.assign(responses, noSessions);
     responses['/api/key-chain'] = [accessKeyChain(365)];
     responses['/api/verifier/config'] = [{ id: 'pid' }];
     responses['/api/trust-list'] = [];
@@ -502,7 +536,8 @@ describe('DashboardService', () => {
   });
 
   it('sends key chain managers without an access key chain to create one', async () => {
-    roles = ['issuance:manage'];
+    roles = ['issuance:manage', 'keys:manage'];
+    Object.assign(responses, noSessions);
     responses['/api/key-chain'] = [];
     responses['/api/issuer/credentials'] = [];
     responses['/api/issuer/config'] = { id: 'config' };
@@ -514,13 +549,25 @@ describe('DashboardService', () => {
     expect(service.showSetupGuide).toBe(true);
     expect(service.warnings).toEqual([]);
     expect(service.accessCertificateRoute).toEqual(['/keys/create']);
-    expect(service.verifyReadinessReason).toBe(
-      'Read-only: missing presentation:manage or presentation:request role'
+    expect(service.verifyReadinessReason).toBe('Read-only: missing presentation:read role');
+  });
+
+  it('sends callers without keys:manage to the key list instead of the key wizard', async () => {
+    roles = ['issuance:manage'];
+    Object.assign(responses, noSessions);
+    responses['/api/key-chain'] = [];
+
+    await service.getCounters();
+
+    // Creating the access key chain needs keys:manage, so there is no link.
+    expect(service.accessCertificateRoute).toBeNull();
+    expect(service.issueReadinessReason).toBe(
+      'No key chain configured; creating one needs the keys:manage role'
     );
   });
 
   it('names the missing key chain to presentation managers', async () => {
-    roles = ['presentation:manage'];
+    roles = ['presentation:manage', 'keys:manage'];
     responses['/api/key-chain'] = [];
     responses['/api/verifier/config'] = [{ id: 'pid' }];
     responses['/api/trust-list'] = [{ id: 'list' }];
@@ -532,7 +579,7 @@ describe('DashboardService', () => {
 
   it('links an expiring access certificate to the key chain that expires first', async () => {
     roles = ['issuance:manage'];
-    Object.assign(responses, issuanceSetUp, {
+    Object.assign(responses, noSessions, issuanceSetUp, {
       '/api/key-chain': [accessKeyChain(400, 'healthy-later'), accessKeyChain(10, 'due')],
     });
 
@@ -552,7 +599,7 @@ describe('DashboardService', () => {
     ['no certificate', [{ id: 'due', usageType: 'access' }]],
   ])('sends the setup guide to the access key chain with %s', async (_, keyChains) => {
     roles = ['issuance:manage'];
-    Object.assign(responses, issuanceSetUp, { '/api/key-chain': keyChains });
+    Object.assign(responses, noSessions, issuanceSetUp, { '/api/key-chain': keyChains });
 
     await service.getCounters();
 
@@ -583,6 +630,8 @@ describe('DashboardService', () => {
 
   it('names failed verification configs to presentation:request users', async () => {
     roles = ['presentation:request'];
+    // presentation:request includes presentation:read, which reads the key chains.
+    responses['/api/key-chain'] = [accessKeyChain(365)];
     failures['/api/verifier/config'] = 500;
 
     await service.getCounters();
@@ -593,6 +642,7 @@ describe('DashboardService', () => {
 
   it('does not report a missing trust list when the trust lists failed to load', async () => {
     roles = ['presentation:manage'];
+    Object.assign(responses, noSessions);
     responses['/api/key-chain'] = [accessKeyChain(365)];
     responses['/api/verifier/config'] = [{ id: 'pid' }];
     failures['/api/trust-list'] = 500;
@@ -602,16 +652,62 @@ describe('DashboardService', () => {
     expect(messages()).toEqual(['Could not load trust lists.']);
   });
 
-  it('explains why an issuance:offer-only user cannot start an issuance here', async () => {
+  // New Issuance needs only issuance:offer, which includes issuance:read for its data.
+  it('computes the issuance readiness of issuance:offer users like for managers', async () => {
     roles = ['issuance:offer'];
+    Object.assign(responses, noSessions, issuanceSetUp);
 
     await service.getCounters();
 
-    expect(service.issueReadinessReason).toBe('The issuance form needs the issuance:manage role');
+    expect(requests).toContain('/api/issuer/credentials');
+    expect(requests).toContain('/api/issuer/config');
+    expect(service.isReadyToIssue).toBe(true);
+    expect(service.issueReadinessReason).toBeNull();
+    // Offering is not a setup the user completed, so the setup guide stays hidden.
+    expect(service.isSetupComplete).toBe(false);
+    expect(service.showSetupGuide).toBe(false);
+  });
+
+  it('names the missing role to presentation managers without issuance:offer', async () => {
+    roles = ['presentation:manage'];
+    responses['/api/key-chain'] = [accessKeyChain(365)];
+    responses['/api/verifier/config'] = [];
+    responses['/api/trust-list'] = [];
+
+    await service.getCounters();
+
+    expect(service.isReadyToIssue).toBe(false);
+    expect(service.issueReadinessReason).toBe('Read-only: missing issuance:offer role');
+    expect(requests.some((path) => path.startsWith('/api/issuer'))).toBe(false);
+  });
+
+  it('tells issuance:offer users whom to ask for missing issuer settings', async () => {
+    roles = ['issuance:offer'];
+    Object.assign(responses, noSessions, issuanceSetUp);
+    // The backend answers no issuer settings with an empty body.
+    responses['/api/issuer/config'] = null;
+
+    await service.getCounters();
+
+    expect(service.issueReadinessReason).toBe(
+      'No issuer settings; ask a user with issuance:manage to configure them'
+    );
+  });
+
+  it('tells issuance:offer users whom to ask for a missing credential config', async () => {
+    roles = ['issuance:offer'];
+    Object.assign(responses, noSessions, issuanceSetUp, { '/api/issuer/credentials': [] });
+
+    await service.getCounters();
+
+    expect(service.issueReadinessReason).toBe(
+      'No credential config; ask a user with issuance:manage to create one'
+    );
   });
 
   it('lets presentation:request users start a presentation once a config exists', async () => {
     roles = ['presentation:request'];
+    responses['/api/key-chain'] = [accessKeyChain(365)];
     responses['/api/verifier/config'] = [{ id: 'pid' }];
 
     await service.getCounters();
@@ -624,6 +720,7 @@ describe('DashboardService', () => {
 
   it('names the missing verification config to presentation:request users', async () => {
     roles = ['presentation:request'];
+    responses['/api/key-chain'] = [accessKeyChain(365)];
     responses['/api/verifier/config'] = [];
 
     await service.getCounters();
@@ -776,6 +873,7 @@ describe('DashboardService', () => {
 
     beforeEach(() => {
       roles = ['issuance:offer', 'presentation:request'];
+      responses['/api/key-chain'] = [accessKeyChain(365)];
       responses['/api/verifier/config'] = [];
       responses['/api/session'] = { items: [], total: 0, page: 1, pageSize: 5, totalPages: 0 };
       ranges = [];
@@ -905,7 +1003,7 @@ describe('DashboardService', () => {
 
   it('warns about an unreachable KMS provider', async () => {
     roles = ['issuance:manage'];
-    Object.assign(responses, issuanceSetUp, {
+    Object.assign(responses, noSessions, issuanceSetUp, {
       '/api/key-chain/providers/health': [
         { providerId: 'db', type: 'db', ok: true },
         { providerId: 'vault', type: 'vault', ok: false, error: 'connection refused' },

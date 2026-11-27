@@ -1,3 +1,4 @@
+import { effectiveRoles } from '../services/role-grants';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { client } from '@eudiplo/sdk-core';
@@ -111,7 +112,8 @@ describe('DashboardComponent', () => {
         {
           provide: JwtService,
           useValue: {
-            hasRole: (role: string | string[]) => [role].flat().some((r) => roles.includes(r)),
+            hasRole: (role: string | string[]) =>
+              [role].flat().some((r) => effectiveRoles(roles).includes(r)),
             callerChanged$: callerChanged,
             getCaller: () =>
               callerLoaded ? { subject: 'shop', tenantId: 'acme', roles } : undefined,
@@ -137,7 +139,8 @@ describe('DashboardComponent', () => {
   });
 
   it('shows failed session counts as unavailable and retries on request', async () => {
-    roles = ['issuance:offer'];
+    // sessions:read reads no key chains, which would add health signals.
+    roles = ['sessions:read'];
     responses['/api/session'] = { items: [], total: 0, page: 1, pageSize: 5, totalPages: 0 };
 
     const page = await render();
@@ -300,11 +303,28 @@ describe('DashboardComponent', () => {
     expect(text(page.querySelector('.health-card'))).toContain('KMS: 1 of 2 unreachable');
   });
 
-  it('shows configuration counts to managers who cannot read sessions', async () => {
+  it('shows configuration counts to callers who cannot read sessions', async () => {
+    roles = ['keys:manage'];
+    responses['/api/key-chain'] = [];
+
+    const page = await render();
+
+    expect(
+      Array.from(page.querySelectorAll('.stat-card-link'), (link) => [
+        text(link.querySelector('.stat-label')),
+        text(link.querySelector('.stat-value')),
+      ])
+    ).toEqual([['Key Chains', '0']]);
+  });
+
+  it('shows session figures instead of configuration counts to issuance managers', async () => {
+    // issuance:manage includes issuance:offer, which reads sessions.
     roles = ['issuance:manage'];
     responses['/api/key-chain'] = [];
     responses['/api/issuer/credentials'] = [{ id: 'pid' }, { id: 'mdl' }];
     responses['/api/issuer/config'] = { id: 'config' };
+    responses['/api/session/stats'] = {};
+    responses['/api/session'] = { items: [], total: 0, page: 1, pageSize: 5, totalPages: 0 };
 
     const page = await render();
 
@@ -314,13 +334,24 @@ describe('DashboardComponent', () => {
         text(link.querySelector('.stat-value')),
       ])
     ).toEqual([
-      ['Credential Configs', '2'],
-      ['Key Chains', '0'],
+      ['Sessions · 7 days', '0'],
+      ['Success rate · 7 days', '–'],
+      ['Failed · 7 days', '0'],
+      ['Pending sessions', '0'],
     ]);
   });
 
   it('loads its figures and sections again once the roles are loaded, for example by a Retry', async () => {
     responses['/api/key-chain'] = [];
+    responses['/api/session/stats'] = {
+      issuance: {
+        total: 2,
+        byStatus: statusCounts({ active: 2 }),
+        failureCodes: [],
+        lastCompletedAt: null,
+      },
+    };
+    responses['/api/session'] = { items: [], total: 2, page: 1, pageSize: 5, totalPages: 1 };
     responses['/api/issuer/credentials'] = [{ id: 'pid' }, { id: 'mdl' }];
     responses['/api/issuer/config'] = { id: 'config' };
     const saved = { ...DEFAULT_DASHBOARD_SECTIONS, quickActions: false };
@@ -353,7 +384,7 @@ describe('DashboardComponent', () => {
       Array.from(page.querySelectorAll('.stat-card-link'), (link) =>
         text(link.querySelector('.stat-value'))
       )
-    ).toEqual(['2', '0']);
+    ).toEqual(['2', '–', '0', '2']);
     expect(page.querySelector('.roles-missing-card')).toBeNull();
   });
 
@@ -414,7 +445,7 @@ describe('DashboardComponent', () => {
   });
 
   it('tells monitoring users what their roles allow', async () => {
-    roles = ['issuance:offer'];
+    roles = ['sessions:read'];
     responses['/api/session/stats'] = {
       issuance: {
         total: 1,
@@ -433,7 +464,7 @@ describe('DashboardComponent', () => {
   });
 
   it('opens the existing access key chain from the setup guide', async () => {
-    roles = ['issuance:manage'];
+    roles = ['issuance:manage', 'keys:manage'];
     responses['/api/key-chain'] = [{ id: 'kc', usageType: 'access' }];
     responses['/api/issuer/credentials'] = [];
     responses['/api/issuer/config'] = { id: 'config' };
@@ -459,18 +490,57 @@ describe('DashboardComponent', () => {
     expect(text(page.querySelector('.setup-progress'))).toBe('1 of 2 steps done');
   });
 
-  it('tells issuance:offer users why they cannot issue from here', async () => {
+  it('tells issuance:offer users whom to ask for what blocks issuance', async () => {
     roles = ['issuance:offer'];
     responses['/api/session/stats'] = {
       issuance: { total: 0, byStatus: statusCounts(), failureCodes: [], lastCompletedAt: null },
     };
     responses['/api/session'] = { items: [], total: 0, page: 1, pageSize: 5, totalPages: 0 };
+    responses['/api/key-chain'] = [
+      {
+        id: 'access',
+        usageType: 'access',
+        activeCertificate: { pem: 'pem', notAfter: '2999-01-01T00:00:00.000Z' },
+      },
+    ];
+    responses['/api/issuer/credentials'] = [];
+    responses['/api/issuer/config'] = { id: 'config' };
 
     const page = await render();
 
     expect(text(page.querySelector('.actions-hint'))).toBe(
-      'info Issuance is blocked: The issuance form needs the issuance:manage role.'
+      'info Issuance is blocked: No credential config; ask a user with issuance:manage to create one.'
     );
+  });
+
+  it('offers to create a key chain only to keys:manage, and says so to others', async () => {
+    roles = ['issuance:manage'];
+    responses['/api/key-chain'] = [];
+    responses['/api/issuer/credentials'] = [];
+    responses['/api/issuer/config'] = { id: 'config' };
+
+    const page = await render();
+
+    const setup = page.querySelector('.setup-card')!;
+    expect(setup.querySelector('a[href="/keys/create"]')).toBeNull();
+    expect(text(setup)).toContain('Creating key chains needs the keys:manage role.');
+    expect(text(setup)).toContain('Creating an access key chain needs the keys:manage role.');
+  });
+
+  // Readers can open the key chain, and registrar:manage can request a certificate there.
+  it('links readers to the existing access key chain to view it', async () => {
+    roles = ['issuance:manage', 'registrar:manage'];
+    responses['/api/key-chain'] = [{ id: 'kc', usageType: 'access' }];
+    responses['/api/issuer/credentials'] = [];
+    responses['/api/issuer/config'] = { id: 'config' };
+
+    const page = await render();
+
+    const view = Array.from(page.querySelectorAll('.setup-card a')).find(
+      (link) => text(link) === 'verified View key chain'
+    );
+    expect(view?.getAttribute('href')).toBe('/keys/kc');
+    expect(text(page.querySelector('.setup-card'))).not.toContain('needs the keys:manage role');
   });
 
   describe('for users who read sessions', () => {

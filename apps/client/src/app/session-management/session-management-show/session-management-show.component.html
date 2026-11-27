@@ -71,13 +71,7 @@
       @if (grafanaEnabled || canCancel() || canRecreateOffer()) {
         <div class="hero-actions">
           @if (canRecreateOffer()) {
-            <button
-              matButton="tonal"
-              (click)="recreateOffer()"
-              [disabled]="!!recreateLockedReason()"
-              disabledInteractive
-              [matTooltip]="recreateTooltip()"
-            >
+            <button matButton="tonal" (click)="recreateOffer()" [matTooltip]="recreateTooltip()">
               <mat-icon>replay</mat-icon>
               {{ isIssuanceSession() ? 'Recreate Offer' : 'Recreate Request' }}
             </button>

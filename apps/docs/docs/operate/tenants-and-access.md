@@ -43,7 +43,8 @@ name tenant folders by it as well.
 If you pass `roles`, EUDIPLO also creates the client `acme-admin` with
 `clients:manage` plus these roles, and returns its secret once in the response.
 Use that client to set up the tenant and to create narrower clients. It can
-hand out only `clients:manage` and these roles, unless they include
+hand out only `clients:manage`, these roles and the roles they include, or
+every role but `tenants:manage` and `tenant:admin` when they include
 `tenant:admin` ([granting roles](../reference/roles.md#granting-roles)), so
 choose them with that in mind. The root client has no tenant and cannot change
 a tenant's clients, but sending `POST /api/tenant` again for the existing
@@ -161,10 +162,9 @@ and are not deleted. `sessions:read` reads the sessions of both sides, with
 their logs, events, counts and credential status, including issued claims and
 presented credentials, but creates, cancels and deletes none; together with
 `issuance:offer` or `presentation:request`, a client still cancels and deletes
-only the sessions of that side. Of the session types a client with
-`sessions:read` cannot cancel, which also holds for `issuance:manage` or
-`presentation:manage` without `issuance:offer` or `presentation:request`, it
-sees only the sessions a wallet can no longer use: redeemed, answered or in a
+only the sessions of that side (`issuance:manage` and `presentation:manage`
+include `issuance:offer` and `presentation:request`). Of the session types a
+client with `sessions:read` cannot cancel, it sees only the sessions a wallet can no longer use: redeemed, answered or in a
 final status. The others are left out of the list and answer `404`,
 because the session ID of an ISO 18013-7 request, or of an offer created
 before 10.0, alone lets a wallet answer or redeem it; the counts include them.
@@ -173,16 +173,13 @@ a wallet redeems or answers them with, such as the offer and request URIs and
 the transaction code. Changing credential status
 (`POST /api/session/revoke`) needs `credentials:status` or `issuance:manage`.
 
-In the web client, **New Issuance** needs `issuance:manage` besides
-`issuance:offer`: its form reads the credential configurations, the issuer
-settings and the attribute providers. With `issuance:offer` alone, the
-navigation leaves out the **Credential Issuance** section, Issuance Offer on the
-session list and Recreate Offer on a session are locked with that reason, and the page itself says so instead of
-loading. Create offers through the API in that case. **New Verification** needs
-only `presentation:request`. The Configuration filter of the session list offers
-credential configurations only with `issuance:manage` and presentation
-configurations only with `presentation:manage` or `presentation:request`, and
-says which it leaves out.
+In the web client, **New Issuance** needs `issuance:offer`, which also reads
+the credential configurations, the issuer settings and the attribute providers
+its form uses. **New Verification** needs `presentation:request`. The
+Configuration filter of the session list offers credential configurations with
+`issuance:read` and presentation configurations with `presentation:read`, which
+`issuance:offer` and `presentation:request` include, and says which it leaves
+out.
 
 Typical role sets:
 
@@ -190,20 +187,26 @@ Typical role sets:
 | ---------------------------------------- | ------------------------------------------------------------- |
 | Your application backend                 | `issuance:offer`, `presentation:request`; also `credentials:status` if it revokes or suspends credentials |
 | Support staff who look up sessions and revoke credentials | `sessions:read`, `credentials:status`        |
-| Auditor                                  | `audit:read`, `sessions:read`                                 |
-| Key custodian                            | `keys:manage`                                                 |
+| Auditor                                  | `audit:read`, `sessions:read`, and `issuance:read` or `presentation:read` to see the configurations |
+| Key custodian                            | `keys:manage`; `keys:export` to also export private keys and change the KMS settings |
 | CI pipeline that imports configuration   | `tenant:admin`                                                |
-| Person who configures a tenant           | `issuance:manage`, `presentation:manage`, `clients:manage`, `users:manage`, and the roles they hand out; `tenant:admin` instead also allows key export and KMS settings |
+| Person who configures a tenant           | `issuance:manage`, `presentation:manage`, `keys:manage`, `clients:manage`, `users:manage`, and the roles they hand out; or `tenant:admin`, which includes every role of the tenant |
 | Platform operator                        | `tenants:manage`, on a client without a tenant                |
 
-`issuance:manage`, `presentation:manage` and `keys:manage` create, import,
-rotate and delete key chains, but exporting a key chain with its private key
-(`GET /api/key-chain/{id}/export` or its configuration document) and the tenant KMS provider configuration
+Roles include narrower ones: `issuance:manage` includes `issuance:offer`,
+which includes `issuance:read`, and so on
+([how roles include each other](../reference/roles.md#how-roles-include-each-other)).
+`keys:manage` creates, imports, rotates and deletes key chains;
+`issuance:manage` and `presentation:manage` only read and select them.
+Exporting a key chain with its private key (`GET /api/key-chain/{id}/export`
+or its configuration document) and the tenant KMS provider configuration
 (`/api/key-chain/providers/config`), which contains provider credentials, need
-`tenant:admin` or `tenants:manage`, like configuration bundles.
+`keys:export`, which `tenant:admin` includes. Configuration bundles need
+`tenant:admin`.
 
-A caller hands out only roles it holds, or with `tenant:admin` every role
-except `tenants:manage` and `tenant:admin`, and cannot change or take over a
+A caller hands out only roles it has, including those its roles include, so
+`tenant:admin` hands out every role except `tenants:manage` and
+`tenant:admin`. It cannot change or take over a
 client or user with more rights than its own
 ([granting roles](../reference/roles.md#granting-roles)).
 

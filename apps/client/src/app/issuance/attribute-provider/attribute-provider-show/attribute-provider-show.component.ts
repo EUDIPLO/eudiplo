@@ -16,6 +16,8 @@ import { ConfigOwnershipNoticeComponent } from '../../../config-portability/conf
 import { getApiErrorMessage } from '../../../utils/error-message';
 import { LoadErrorComponent } from '../../../common/load-error.component';
 import { confirmAndDelete } from '../../../common/confirm-delete';
+import { RoleLockDirective } from '../../../common/role-lock.directive';
+import { ISSUANCE_WRITE_ROLES } from '../../../services/resource-roles';
 
 @Component({
   selector: 'app-attribute-provider-show',
@@ -28,6 +30,7 @@ import { confirmAndDelete } from '../../../common/confirm-delete';
     MatProgressSpinnerModule,
     RouterModule,
     ConfigOwnershipDirective,
+    RoleLockDirective,
     ConfigOwnershipNoticeComponent,
     LoadErrorComponent,
   ],
@@ -36,6 +39,9 @@ import { confirmAndDelete } from '../../../common/confirm-delete';
   styleUrl: './attribute-provider-show.component.scss',
 })
 export class AttributeProviderShowComponent implements OnInit {
+  /** Creating, changing and deleting it needs issuance:manage; reading needs less. */
+  readonly writeRoles = ISSUANCE_WRITE_ROLES;
+
   provider: AttributeProviderEntity | undefined;
   /** Set when the page's data could not be loaded, so the page is not left blank. */
   loadError = '';

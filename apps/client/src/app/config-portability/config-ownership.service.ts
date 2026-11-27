@@ -9,12 +9,34 @@ import {
   type ConfigResourceOwnershipDto,
 } from '@eudiplo/sdk-core';
 import { ApiService } from '../core';
+import { JwtService, type Role } from '../services/jwt.service';
 
 export type ConfigResourceKind = ConfigResourceOwnershipDto['kind'];
 
 export type ConfigResourceOwnership = ConfigResourceOwnershipDto;
 
 const LOOKUP_TIMEOUT_MS = 10_000;
+
+/**
+ * Roles that may read the ownership of each kind, as `mayReadConfigOwnership`
+ * in the backend checks them: `tenant:admin` and the roles that change the
+ * kind. A reader gets 403, which the Web Client would take for lost roles.
+ */
+const OWNERSHIP_READ_ROLES: Record<ConfigResourceKind, Role[]> = {
+  Tenant: ['tenant:admin', 'issuance:manage', 'presentation:manage'],
+  Client: ['tenant:admin', 'clients:manage'],
+  KmsConfig: ['tenant:admin', 'keys:export'],
+  KeyChain: ['tenant:admin', 'keys:manage'],
+  KeyChainDefaults: ['tenant:admin', 'keys:manage'],
+  IssuanceConfig: ['tenant:admin', 'issuance:manage'],
+  CredentialConfig: ['tenant:admin', 'issuance:manage'],
+  PresentationConfig: ['tenant:admin', 'presentation:manage'],
+  AttributeProvider: ['tenant:admin', 'issuance:manage'],
+  WebhookEndpoint: ['tenant:admin', 'issuance:manage', 'presentation:manage'],
+  TrustList: ['tenant:admin', 'issuance:manage', 'presentation:manage'],
+  FederationTrustAnchor: ['tenant:admin', 'issuance:manage', 'presentation:manage'],
+  StatusList: ['tenant:admin', 'issuance:manage'],
+};
 
 export interface ConfigResourceMetadata extends ConfigResourceOwnership {
   tenantId: string;
@@ -56,7 +78,10 @@ export class ConfigOwnershipService {
   /** Lookups still in flight, so the lock notice and buttons of one screen share a request. */
   private readonly pending = new Map<ConfigResourceKind, Promise<ConfigResourceOwnership[]>>();
 
-  constructor(private readonly api: ApiService) {}
+  constructor(
+    private readonly api: ApiService,
+    private readonly jwt: JwtService
+  ) {}
 
   /** Every resource of the tenant. Needs `tenant:admin` or `tenants:manage`. */
   async list(): Promise<ConfigResourceMetadata[]> {
@@ -84,10 +109,15 @@ export class ConfigOwnershipService {
     return request;
   }
 
+  /**
+   * The ownership of one resource; undefined without a role that changes the
+   * kind, since such a caller cannot change the resource either way.
+   */
   async get(
     kind: ConfigResourceKind,
     resourceId: string
   ): Promise<ConfigResourceOwnership | undefined> {
+    if (!this.jwt.hasRole(OWNERSHIP_READ_ROLES[kind])) return undefined;
     return (await this.listKind(kind)).find((resource) => resource.resourceId === resourceId);
   }
 

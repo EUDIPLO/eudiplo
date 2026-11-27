@@ -10,7 +10,12 @@
         KMS Providers
       </a>
       <!-- The cookbook and its E2E test name this link by its tooltip. -->
-      <a matButton="filled" [routerLink]="['create']" matTooltip="Create Key">
+      <a
+        matButton="filled"
+        [routerLink]="['create']"
+        matTooltip="Create Key"
+        [appRequiresRole]="keyAdminRole"
+      >
         <mat-icon>add</mat-icon>
         Create key
       </a>
@@ -27,6 +32,8 @@
         [disabled]="updatingDefault"
         [attr.aria-busy]="updatingDefault"
         disabledInteractive
+        [appRequiresRole]="keyAdminRole"
+        matTooltip=""
         appConfigManaged
         managedKind="KeyChainDefaults"
         managedResourceId="defaults"
@@ -47,7 +54,12 @@
       <span class="empty-icon"><mat-icon>vpn_key</mat-icon></span>
       <h2>No keys configured</h2>
       <p>Create your first key to get started with credential issuance.</p>
-      <a matButton="filled" [routerLink]="['create']">
+      <a
+        matButton="filled"
+        [routerLink]="['create']"
+        [appRequiresRole]="keyAdminRole"
+        matTooltip=""
+      >
         <mat-icon>add</mat-icon>
         Create Key
       </a>
@@ -208,6 +220,7 @@
                     [routerLink]="item.id | itemRoute: 'edit'"
                     matTooltip="Edit"
                     [attr.aria-label]="'Edit key chain ' + getDisplayName(item)"
+                    [appRequiresRole]="keyAdminRole"
                     appConfigManaged
                     managedKind="KeyChain"
                     [managedResourceId]="item.id"
@@ -225,6 +238,7 @@
                       disabledInteractive
                       [matTooltip]="defaultToggleTooltip(item)"
                       [attr.aria-label]="defaultToggleLabel(item)"
+                      [appRequiresRole]="keyAdminRole"
                       appConfigManaged
                       managedKind="KeyChainDefaults"
                       managedResourceId="defaults"
@@ -241,6 +255,7 @@
                       disabledInteractive
                       matTooltip="Rotate key now"
                       [attr.aria-label]="'Rotate key chain ' + getDisplayName(item) + ' now'"
+                      [appRequiresRole]="keyAdminRole"
                       appConfigManaged
                       managedKind="KeyChain"
                       [managedResourceId]="item.id"
@@ -256,6 +271,7 @@
                     disabledInteractive
                     matTooltip="Delete"
                     [attr.aria-label]="'Delete key chain ' + getDisplayName(item)"
+                    [appRequiresRole]="keyAdminRole"
                     appConfigManaged
                     managedKind="KeyChain"
                     [managedResourceId]="item.id"

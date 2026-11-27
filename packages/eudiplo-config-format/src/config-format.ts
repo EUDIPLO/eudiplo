@@ -23,9 +23,14 @@ import {
     trustListLanguageTag,
 } from "./trust-list-entity-info.js";
 
+import {
+    rolesBeforeRoleModel11,
+    upgradeRolesToRoleModel11,
+} from "./client-roles.js";
+
 export const CONFIG_FORMATS = {
     Tenant: { slug: "tenant", file: "TenantConfigFile", version: 4 },
-    Client: { slug: "client", file: "ClientConfigFile", version: 2 },
+    Client: { slug: "client", file: "ClientConfigFile", version: 3 },
     KmsConfig: { slug: "kms-config", file: "KmsConfigFile", version: 2 },
     KeyChain: { slug: "key-chain", file: "KeyChainConfigFile", version: 4 },
     KeyChainDefaults: {
@@ -226,6 +231,12 @@ export interface ConfigMigration {
         metadata?: ConfigMetadata;
         issues?: ConfigMigrationIssue[];
     };
+    /**
+     * For a step that rewrites `spec`: the specs other than `spec` that it
+     * turns into `spec`, so a document applied under the earlier version is
+     * still recognized (see `earlierSpecs`). Steps that keep `spec` need none.
+     */
+    earlierSpecs?(spec: Record<string, unknown>): Record<string, unknown>[];
 }
 /**
  * IssuanceConfig v5 adds optional fields to `federation` for the published
@@ -862,6 +873,38 @@ const CONFIG_MIGRATIONS: readonly ConfigMigration[] = [
         migrate: (spec) => ({ spec }),
     },
     {
+        id: "client-v3-role-model",
+        kind: "Client",
+        from: 2,
+        to: 3,
+        // 11.0 narrowed clients:manage and the issuance and presentation
+        // manage roles; the client gets the roles that now hold their rights.
+        migrate: (spec) => {
+            if (!Array.isArray(spec.roles)) return { spec };
+            const before = spec.roles as string[];
+            const roles = upgradeRolesToRoleModel11(before);
+            const added = roles.slice(before.length);
+            if (added.length === 0) return { spec };
+            return {
+                spec: { ...spec, roles },
+                issues: [
+                    {
+                        severity: "warning",
+                        code: "CLIENT_ROLES_ADDED",
+                        path: "/spec/roles",
+                        message: `Added ${added.join(" and ")} so the client keeps its access: clients:manage no longer reads the audit log, and issuance:manage and presentation:manage no longer change key chains. Remove them if the client does not need them.`,
+                    },
+                ],
+            };
+        },
+        earlierSpecs: (spec) =>
+            Array.isArray(spec.roles)
+                ? rolesBeforeRoleModel11(spec.roles as string[]).map(
+                      (roles) => ({ ...spec, roles }),
+                  )
+                : [],
+    },
+    {
         id: "kms-config-v2-algorithms",
         kind: "KmsConfig",
         from: 1,
@@ -1145,6 +1188,32 @@ export function serializeDocument<T>(
             : {}),
         spec: document.spec as T,
     };
+}
+/**
+ * The specs a document of `kind` may have had under each format version, from
+ * the current one down to v1, given its current `spec`: the same spec for steps
+ * that keep it, and the specs a rewriting step lists as its earlier specs.
+ */
+export function earlierSpecs(
+    kind: ConfigResourceKind,
+    spec: Record<string, unknown>,
+): Array<{ version: number; specs: Record<string, unknown>[] }> {
+    const result: Array<{ version: number; specs: Record<string, unknown>[] }> =
+        [];
+    let specs = [spec];
+    for (let version = CONFIG_FORMATS[kind].version; version >= 1; version--) {
+        result.push({ version, specs });
+        const step = CONFIG_MIGRATIONS.find(
+            (candidate) => candidate.kind === kind && candidate.to === version,
+        );
+        if (step?.earlierSpecs) {
+            specs = specs.flatMap((current) => [
+                current,
+                ...step.earlierSpecs!(current),
+            ]);
+        }
+    }
+    return result;
 }
 export type ConfigValidator = (
     document: ConfigDocument,

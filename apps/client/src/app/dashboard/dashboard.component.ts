@@ -24,6 +24,7 @@ import {
   DashboardSections,
 } from './dashboard-preferences.service';
 import { formatDuration } from '../utils/duration';
+import { KEY_CREATE_LOCKED_MESSAGE } from '../key-management/key-chain.service';
 
 /** Colour role of a status: the stylesheet maps each to a theme colour. */
 type Tone = 'tone-success' | 'tone-warning' | 'tone-danger' | 'tone-neutral';
@@ -79,6 +80,9 @@ interface Sparkline {
   styleUrls: ['./dashboard.component.scss'],
 })
 export class DashboardComponent implements OnInit {
+  /** Shown instead of Create Key Chain to callers without keys:manage. */
+  readonly keyCreateLockedMessage = KEY_CREATE_LOCKED_MESSAGE;
+
   grafanaEnabled = false;
   customizePanelOpen = false;
   sections: DashboardSections;
@@ -180,7 +184,7 @@ export class DashboardComponent implements OnInit {
   private get configCards(): StatCard[] {
     const service = this.dashboardService;
     const cards: StatCard[] = [];
-    if (service.canManageIssuance) {
+    if (service.canReadIssuance) {
       cards.push({
         source: 'credentials',
         value: String(service.credentialConfigs),
@@ -190,7 +194,7 @@ export class DashboardComponent implements OnInit {
         route: '/credential-config',
       });
     }
-    if (service.canManagePresentation) {
+    if (service.canReadPresentationConfigs) {
       cards.push({
         source: 'presentations',
         value: String(service.presentationConfigs),
@@ -200,7 +204,7 @@ export class DashboardComponent implements OnInit {
         route: '/presentation-config',
       });
     }
-    if (service.canManageKeyChains) {
+    if (service.canReadKeyChains) {
       cards.push({
         source: 'keyChains',
         value: String(service.totalKeyChains),
@@ -247,7 +251,7 @@ export class DashboardComponent implements OnInit {
   get setupProgress(): { done: number; total: number } | null {
     const service = this.dashboardService;
     const steps: boolean[] = [];
-    if (service.canManageKeyChains) {
+    if (service.canReadKeyChains) {
       steps.push(service.totalKeyChains > 0, service.hasUsableAccessCertificate);
     }
     if (service.hasPrerequisites && service.canManageIssuance) {

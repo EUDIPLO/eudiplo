@@ -47,6 +47,7 @@ const readOnly = [
 export class CredentialConfigController {
     constructor(private readonly credentialsService: CredentialConfigService) {}
 
+    @Secured([Role.IssuanceRead])
     @Get()
     @ApiOperation({ summary: "List credential configurations" })
     @ApiResponse({ status: 200, type: [CredentialConfig] })
@@ -54,6 +55,7 @@ export class CredentialConfigController {
         return this.credentialsService.get(user.entity!.id);
     }
 
+    @Secured([Role.IssuanceRead])
     @Get(":id")
     @ApiOperation({ summary: "Get a credential configuration by ID" })
     @ApiResponse({ status: 200, type: CredentialConfig })

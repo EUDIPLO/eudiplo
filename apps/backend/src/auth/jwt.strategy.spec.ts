@@ -5,7 +5,7 @@ import { IdpManagedClientsProvider } from "./client/adapters/idp-managed-clients
 import type { ClientData } from "./client/domain/client-data.js";
 import { externalTokenChecks, JwtStrategy } from "./jwt.strategy.js";
 import type { OidcIssuerMetadata } from "./ports/oidc-issuer-metadata.js";
-import { Role } from "./roles/role.enum.js";
+import { effectiveRoles, Role } from "./roles/role.enum.js";
 import { TenantNotFound } from "./tenant/domain/tenant-data.js";
 import type { InternalTokenPayload } from "./token.decorator.js";
 
@@ -86,7 +86,9 @@ describe("JwtStrategy", () => {
                 token({ roles: [Role.IssuanceOffer, Role.Clients] }),
             );
 
-            expect(user.roles).toEqual([Role.PresentationRequest]);
+            expect([...user.roles].sort()).toEqual(
+                effectiveRoles([Role.PresentationRequest]).sort(),
+            );
             expect(user.client?.allowedPresentationConfigs).toEqual(["age"]);
             expect(user.entity?.id).toBe("acme");
             expect(user.subject).toBe("shop");
@@ -167,7 +169,9 @@ describe("JwtStrategy", () => {
                 token({ sub: "root", tenant_id: null as never }),
             );
 
-            expect(user.roles).toEqual([Role.Tenants]);
+            expect([...user.roles].sort()).toEqual(
+                effectiveRoles([Role.Tenants]).sort(),
+            );
             expect(user.entity).toBeUndefined();
             expect(tenantService.getTenant).not.toHaveBeenCalled();
         });
@@ -266,7 +270,9 @@ describe("JwtStrategy", () => {
                 realm_access: { roles: [Role.Issuances] },
             } as never);
 
-            expect(user.roles).toEqual([Role.Issuances]);
+            expect([...user.roles].sort()).toEqual(
+                effectiveRoles([Role.Issuances]).sort(),
+            );
             expect(user.client).toBeUndefined();
             expect(user.entity?.id).toBe("acme");
         });
@@ -281,7 +287,9 @@ describe("JwtStrategy", () => {
                 realm_access: { roles: [Role.Issuances] },
             } as never);
 
-            expect(user.roles).toEqual([Role.Issuances]);
+            expect([...user.roles].sort()).toEqual(
+                effectiveRoles([Role.Issuances]).sort(),
+            );
         });
 
         test("refuses an ID token, which any client of the realm gets", async () => {
@@ -339,7 +347,9 @@ describe("JwtStrategy", () => {
                 roles: [Role.IssuanceOffer],
             } as never);
 
-            expect(user.roles).toEqual([Role.IssuanceOffer]);
+            expect([...user.roles].sort()).toEqual(
+                effectiveRoles([Role.IssuanceOffer]).sort(),
+            );
             expect(user.client?.allowedIssuanceConfigs).toEqual(["pid"]);
         });
 
@@ -394,7 +404,9 @@ describe("JwtStrategy", () => {
                 resource_access: { eudiplo: { roles: [Role.Issuances] } },
             } as never);
 
-            expect(user.roles).toEqual([Role.Issuances]);
+            expect([...user.roles].sort()).toEqual(
+                effectiveRoles([Role.Issuances]).sort(),
+            );
         });
 
         test("checks the realm's issuer and keys, and no audience unless it is set", () => {
@@ -548,7 +560,9 @@ describe("JwtStrategy", () => {
                     accessTokenOf("eudiplo-ui"),
                 );
 
-                expect(user.roles).toEqual([Role.Tenants]);
+                expect([...user.roles].sort()).toEqual(
+                    effectiveRoles([Role.Tenants]).sort(),
+                );
                 expect(user.client).toBeUndefined();
                 expect(user.authorizedParty).toBe("eudiplo-ui");
             });
@@ -581,7 +595,9 @@ describe("JwtStrategy", () => {
                     accessTokenOf("root", { tenant_id: undefined }),
                 );
 
-                expect(user.roles).toEqual([Role.Tenants]);
+                expect([...user.roles].sort()).toEqual(
+                    effectiveRoles([Role.Tenants]).sort(),
+                );
                 expect(user.entity).toBeUndefined();
                 await expect(
                     strategy.validate(accessTokenOf("root")),
@@ -631,7 +647,9 @@ describe("JwtStrategy", () => {
                     accessTokenOf("other-app", { aud: ["eudiplo", "account"] }),
                 );
 
-                expect(user.roles).toEqual([Role.Tenants]);
+                expect([...user.roles].sort()).toEqual(
+                    effectiveRoles([Role.Tenants]).sort(),
+                );
                 expect(user.authorizedParty).toBe("other-app");
             });
         });
@@ -689,7 +707,9 @@ describe("JwtStrategy", () => {
                 },
             } as never);
 
-            expect(user.roles).toEqual([Role.Issuances]);
+            expect([...user.roles].sort()).toEqual(
+                effectiveRoles([Role.Issuances]).sort(),
+            );
             expect(user.entity?.id).toBe("acme");
             expect(user.subject).toBe("person");
             expect(user.client).toBeUndefined();
@@ -761,7 +781,9 @@ describe("JwtStrategy", () => {
                     "loyalty-card",
                 ]);
                 // The roles still come from the token.
-                expect(user.roles).toEqual([Role.IssuanceOffer]);
+                expect([...user.roles].sort()).toEqual(
+                    effectiveRoles([Role.IssuanceOffer]).sort(),
+                );
             });
 
             test("refuse the client's tokens for another tenant", async () => {

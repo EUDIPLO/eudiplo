@@ -26,6 +26,8 @@
         <a
           matButton="tonal"
           routerLink="edit"
+          [appRequiresRole]="writeRoles"
+          matTooltip=""
           appConfigManaged
           managedKind="WebhookEndpoint"
           [managedResourceId]="endpoint.id"
@@ -53,6 +55,7 @@
           [disabled]="deleting"
           disabledInteractive
           [matTooltip]="deleting ? 'Deleting the webhook endpoint…' : ''"
+          [appRequiresRole]="writeRoles"
           appConfigManaged
           managedKind="WebhookEndpoint"
           [managedResourceId]="endpoint.id"

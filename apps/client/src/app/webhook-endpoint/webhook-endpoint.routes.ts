@@ -1,5 +1,6 @@
 import type { Routes } from '@angular/router';
 import { unsavedChangesGuard } from '../guards/unsaved-changes.guard';
+import { requireRole, SHARED_WRITE_ROLES } from '../services/resource-roles';
 
 export const webhookEndpointRoutes: Routes = [
   {
@@ -11,6 +12,7 @@ export const webhookEndpointRoutes: Routes = [
   },
   {
     path: 'create',
+    ...requireRole(SHARED_WRITE_ROLES),
     loadComponent: () =>
       import('./webhook-endpoint-create/webhook-endpoint-create.component').then(
         (m) => m.WebhookEndpointCreateComponent
@@ -26,6 +28,7 @@ export const webhookEndpointRoutes: Routes = [
   },
   {
     path: ':id/edit',
+    ...requireRole(SHARED_WRITE_ROLES),
     loadComponent: () =>
       import('./webhook-endpoint-create/webhook-endpoint-create.component').then(
         (m) => m.WebhookEndpointCreateComponent

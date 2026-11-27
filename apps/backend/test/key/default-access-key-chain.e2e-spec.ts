@@ -18,7 +18,7 @@ import type {
     ConfigResourceKind,
 } from "../../src/platform/config-portability/config-resource.types.js";
 import { createAppValidationPipe } from "../../src/shared/common/zod/zod-schema.util.js";
-import { getTenantAdminToken } from "../utils.js";
+import { clientToken, getTenantAdminToken } from "../utils.js";
 import { createKeyChain } from "../utils-ec.js";
 
 const fixtures = resolve(__dirname, "../fixtures/haip");
@@ -745,17 +745,46 @@ describe("default access key chain roles", () => {
         await app?.close();
     });
 
-    test("refuses callers without a key chain management role", async () => {
-        const auth = `Bearer ${await tenantToken(
+    test("refuses callers that can neither read nor manage key chains", async () => {
+        const admin = await tenantToken(app, "default-access-key-chain-roles", [
+            Role.Clients,
+            Role.SessionsRead,
+        ]);
+        const auth = `Bearer ${await clientToken(
             app,
-            "default-access-key-chain-roles",
-            [Role.PresentationRequest, Role.Clients],
+            admin,
+            "default-access-key-chain-no-keys",
+            [Role.SessionsRead, Role.Clients],
         )}`;
 
         await request(app.getHttpServer())
             .get("/key-chain/access/default")
             .set("Authorization", auth)
             .expect(403);
+        await request(app.getHttpServer())
+            .put("/key-chain/access/default")
+            .set("Authorization", auth)
+            .send({ defaultAccessKeyChainId: null })
+            .expect(403);
+    });
+
+    test("lets the read roles read the setting but only keys:manage change it", async () => {
+        const admin = await tenantToken(
+            app,
+            "default-access-key-chain-readers",
+            [Role.Clients, Role.PresentationRequest],
+        );
+        const auth = `Bearer ${await clientToken(
+            app,
+            admin,
+            "default-access-key-chain-reader",
+            [Role.PresentationRequest],
+        )}`;
+
+        await request(app.getHttpServer())
+            .get("/key-chain/access/default")
+            .set("Authorization", auth)
+            .expect(200);
         await request(app.getHttpServer())
             .put("/key-chain/access/default")
             .set("Authorization", auth)

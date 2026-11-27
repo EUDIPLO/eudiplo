@@ -128,7 +128,14 @@ h4 {
 .key-chain-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
+}
+
+// Instead of a create link for a caller without keys:manage
+.key-chain-locked {
+  font: var(--mat-sys-body-medium);
+  color: var(--mat-sys-on-surface-variant);
 }
 
 // Paired entity fields side by side, the language field narrow

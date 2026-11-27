@@ -16,9 +16,11 @@ test.beforeAll(async () => {
     !hasRootCredentials,
     'Set AUTH_CLIENT_ID and AUTH_CLIENT_SECRET of the backend to create a tenant.'
   );
+  // The activity log needs audit:read; the webhook endpoint below needs issuance:manage.
   tenant = await createTenant('activity-filter', 'Activity Filter', [
     'clients:manage',
     'issuance:manage',
+    'audit:read',
   ]);
   const created = await tenantRequest(tenant, 'POST', '/issuer/webhook-endpoints', {
     id: 'audit-events',

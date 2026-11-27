@@ -32,7 +32,18 @@ describe("grantableRoles", () => {
                 Role.IssuanceOffer,
                 "offline_access",
             ]),
-        ]).toEqual([Role.IssuanceOffer, Role.Clients]);
+        ]).toEqual([Role.IssuanceOffer, Role.IssuanceRead, Role.Clients]);
+    });
+
+    it("allows the roles that held roles imply", () => {
+        expect([...grantableRoles([Role.Issuances])].sort()).toEqual(
+            [
+                Role.Issuances,
+                Role.IssuanceOffer,
+                Role.IssuanceRead,
+                Role.CredentialStatus,
+            ].sort(),
+        );
     });
 });
 

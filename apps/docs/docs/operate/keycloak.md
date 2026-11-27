@@ -37,8 +37,10 @@ EUDIPLO uses two Keycloak clients:
    **Standard flow** and **Direct access grants**.
 3. Under **Service account roles**, assign the `realm-management` role
    `realm-admin`. EUDIPLO creates realm roles and manages users, clients, client
-   secrets and service-account role mappings. To use a narrower role set, check
-   that it covers all of these.
+   secrets and service-account role mappings, and on the first start of 11.0
+   reads the users and their role mappings to
+   [upgrade them](../upgrade/10.x-to-11.0.md#operators-role-model). To use a
+   narrower role set, check that it covers all of these.
 4. In the client's **Advanced** settings, enable
    **Use refresh tokens for client credentials grant**. Without it, startup can
    fail with `Cannot read properties of undefined (reading 'split')`.
@@ -117,7 +119,10 @@ not call EUDIPLO.
 
 On every start, EUDIPLO:
 
-- creates the missing realm roles (the [EUDIPLO roles](../reference/roles.md)),
+- creates the missing realm roles (the [EUDIPLO roles](../reference/roles.md));
+  while `keys:export` is missing, it first gives the users and service accounts
+  with a narrowed role the role that now holds its right
+  ([role model upgrade](../upgrade/10.x-to-11.0.md#operators-role-model)),
 - creates or updates the public client `eudiplo-ui` (see below) and sets its
   valid post-logout redirect URIs to `+` (the redirect URIs), so logging out in
   the web client also ends the Keycloak session and returns to the web client
@@ -177,12 +182,13 @@ Realm roles are in `realm_access.roles` by default.
   the client credentials grant.
 
 Choose the roles from the [roles reference](../reference/roles.md), for example
-`issuance:manage` and `presentation:manage` for people who configure a tenant,
+`issuance:manage`, `presentation:manage` and `keys:manage` for people who configure a tenant,
 or `sessions:read` and `credentials:status` for support staff who look up
 sessions and revoke credentials.
 Tenant administrators need `clients:manage` and `users:manage` plus every role
 they hand out ([granting roles](../reference/roles.md#granting-roles)), or
-`tenant:admin`, which also allows key export and KMS settings. Roles you assign
+`tenant:admin`, which includes every role of the tenant, key export and KMS
+settings among them. Roles you assign
 in Keycloak, also through groups, count for that check. When an update of a
 user or client (`PATCH /api/user/{id}`, `PATCH /api/client/{id}` or a
 configuration bundle) sets `roles`, EUDIPLO replaces only the EUDIPLO realm

@@ -25,6 +25,8 @@ import { copyToClipboard } from '../../utils/copy-to-clipboard';
 import { getApiErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { WebhookEndpointService } from '../webhook-endpoint.service';
+import { RoleLockDirective } from '../../common/role-lock.directive';
+import { SHARED_WRITE_ROLES } from '../../services/resource-roles';
 
 @Component({
   selector: 'app-webhook-endpoint-show',
@@ -36,6 +38,7 @@ import { WebhookEndpointService } from '../webhook-endpoint.service';
     MatProgressSpinnerModule,
     RouterModule,
     ConfigOwnershipDirective,
+    RoleLockDirective,
     ConfigOwnershipNoticeComponent,
     LoadErrorComponent,
   ],
@@ -44,6 +47,9 @@ import { WebhookEndpointService } from '../webhook-endpoint.service';
   styleUrl: './webhook-endpoint-show.component.scss',
 })
 export class WebhookEndpointShowComponent implements OnInit {
+  /** Creating, changing and deleting it needs issuance:manage or presentation:manage; reading needs less. */
+  readonly writeRoles = SHARED_WRITE_ROLES;
+
   endpoint: WebhookEndpointEntity | undefined;
   /** Set when the page's data could not be loaded, so the page is not left blank. */
   loadError = '';

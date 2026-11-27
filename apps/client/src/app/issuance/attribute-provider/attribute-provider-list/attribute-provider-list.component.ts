@@ -14,6 +14,8 @@ import { AttributeProviderService } from '../attribute-provider.service';
 import { ConfigOwnershipDirective } from '../../../config-portability/config-ownership.directive';
 import { LoadErrorComponent } from '../../../common/load-error.component';
 import { ItemRoutePipe } from '../../../common/item-route.pipe';
+import { RoleLockDirective } from '../../../common/role-lock.directive';
+import { ISSUANCE_WRITE_ROLES } from '../../../services/resource-roles';
 
 @Component({
   selector: 'app-attribute-provider-list',
@@ -27,6 +29,7 @@ import { ItemRoutePipe } from '../../../common/item-route.pipe';
     FormsModule,
     RouterModule,
     ConfigOwnershipDirective,
+    RoleLockDirective,
     LoadErrorComponent,
     MatProgressSpinnerModule,
   ],
@@ -35,6 +38,9 @@ import { ItemRoutePipe } from '../../../common/item-route.pipe';
   styleUrl: './attribute-provider-list.component.scss',
 })
 export class AttributeProviderListComponent extends BaseAsyncListComponent<AttributeProviderEntity> {
+  /** Creating, changing and deleting it needs issuance:manage; reading needs less. */
+  readonly writeRoles = ISSUANCE_WRITE_ROLES;
+
   protected readonly loadFailedMessage = 'Failed to load attribute providers';
 
   get providers(): AttributeProviderEntity[] {
