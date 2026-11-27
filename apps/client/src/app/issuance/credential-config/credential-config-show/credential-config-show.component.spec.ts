@@ -10,6 +10,7 @@ import { JwtService } from '../../../services/jwt.service';
 import { CredentialConfigShowComponent } from './credential-config-show.component';
 import { renderDownloadButton } from '../../../config-portability/config-document.testing';
 import { CredentialConfigService } from '../credential-config.service';
+import { effectiveRoles } from '../../../services/role-grants';
 
 describe('CredentialConfigShowComponent', () => {
   let component: CredentialConfigShowComponent;
@@ -40,7 +41,8 @@ describe('CredentialConfigShowComponent schema metadata', () => {
         {
           provide: JwtService,
           useValue: {
-            hasRole: (role: string) => roles.includes(role),
+            hasRole: (role: string | string[]) =>
+              [role].flat().some((r) => effectiveRoles(roles).includes(r)),
             // Read by the ownership notice the screen renders.
             canUseConfigPortability: () => false,
           },

@@ -14,10 +14,13 @@ import { PROFILE_LABELS } from '../oidc-client-create/oidc-client-form';
 import { oidcClientDeleteConfirmation } from '../oidc-client-delete-confirmation';
 import { OidcClientService } from '../oidc-client.service';
 import { ItemRoutePipe } from '../../common/item-route.pipe';
+import { RoleLockDirective } from '../../common/role-lock.directive';
+import { PRESENTATION_WRITE_ROLES } from '../../services/resource-roles';
 
 @Component({
   selector: 'app-oidc-client-list',
   imports: [
+    RoleLockDirective,
     ItemRoutePipe,
     MatTableModule,
     MatCardModule,
@@ -34,6 +37,9 @@ import { ItemRoutePipe } from '../../common/item-route.pipe';
   changeDetection: ChangeDetectionStrategy.Eager,
 })
 export class OidcClientListComponent extends BaseAsyncListComponent<OidcClientResponseDto> {
+  /** Creating, changing and deleting it needs presentation:manage; reading needs less. */
+  readonly writeRoles = PRESENTATION_WRITE_ROLES;
+
   protected readonly loadFailedMessage = 'Failed to load OIDC clients';
 
   readonly displayedColumns = ['name', 'id', 'profile', 'scopes', 'actions'];

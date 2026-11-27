@@ -15,6 +15,8 @@ import { LoadErrorComponent } from '../../common/load-error.component';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { TrustListService } from '../trust-list.service';
 import { ItemRoutePipe } from '../../common/item-route.pipe';
+import { RoleLockDirective } from '../../common/role-lock.directive';
+import { SHARED_WRITE_ROLES } from '../../services/resource-roles';
 
 @Component({
   selector: 'app-trust-list-list',
@@ -29,6 +31,7 @@ import { ItemRoutePipe } from '../../common/item-route.pipe';
     RouterModule,
     MatCardModule,
     ConfigOwnershipDirective,
+    RoleLockDirective,
     LoadErrorComponent,
     MatProgressSpinnerModule,
   ],
@@ -37,6 +40,9 @@ import { ItemRoutePipe } from '../../common/item-route.pipe';
   styleUrl: './trust-list-list.component.scss',
 })
 export class TrustListListComponent extends BaseAsyncListComponent<TrustList> {
+  /** Creating, changing and deleting it needs issuance:manage or presentation:manage; reading needs less. */
+  readonly writeRoles = SHARED_WRITE_ROLES;
+
   protected readonly loadFailedMessage = 'Failed to load trust lists';
 
   get lists(): TrustList[] {

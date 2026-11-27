@@ -2,6 +2,7 @@ import { BadRequestException } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
 import { stubSecretReferences } from "../../../../test/secrets/secret-test-sources.js";
 import { SecretReferences } from "../../../platform/secrets/application/secret-references.js";
+import { IssuanceConfigurationNotFound } from "./domain/issuance-configuration.js";
 import { IssuanceService } from "./issuance.service.js";
 
 describe("IssuanceService.storeIssuanceConfiguration", () => {
@@ -498,5 +499,59 @@ describe("IssuanceService audit log", () => {
             upstream("[REDACTED]"),
         );
         expect(JSON.stringify(entry)).not.toMatch(/old-secret|new-secret/);
+    });
+});
+
+describe("IssuanceService.getIssuanceConfigurationOrDefault", () => {
+    function service(getForTenant: () => Promise<unknown>) {
+        const issuance = Object.assign(
+            Object.create(IssuanceService.prototype),
+            { issuanceConfigRepo: { getForTenant: vi.fn(getForTenant) } },
+        ) as IssuanceService;
+        const store = vi
+            .spyOn(issuance, "storeIssuanceConfiguration")
+            .mockResolvedValue({ tenantId: "tenant-1" } as never);
+        return { issuance, store };
+    }
+
+    it("returns the default without storing it when the caller only reads", async () => {
+        const { issuance, store } = service(() =>
+            Promise.reject(new IssuanceConfigurationNotFound("tenant-1")),
+        );
+
+        const config = await issuance.getIssuanceConfigurationOrDefault(
+            "tenant-1",
+            { store: false },
+        );
+
+        expect(store).not.toHaveBeenCalled();
+        expect(config.authorizationServers).toEqual([
+            { type: "built-in", id: "issuer-built-in", enabled: true },
+        ]);
+    });
+
+    it("stores the default for a caller that may change it", async () => {
+        const { issuance, store } = service(() =>
+            Promise.reject(new IssuanceConfigurationNotFound("tenant-1")),
+        );
+
+        await issuance.getIssuanceConfigurationOrDefault("tenant-1", {
+            store: true,
+        });
+
+        expect(store).toHaveBeenCalledWith("tenant-1", {});
+    });
+
+    it("passes on other failures instead of answering with a default", async () => {
+        const { issuance, store } = service(() =>
+            Promise.reject(new Error("database down")),
+        );
+
+        await expect(
+            issuance.getIssuanceConfigurationOrDefault("tenant-1", {
+                store: false,
+            }),
+        ).rejects.toThrow("database down");
+        expect(store).not.toHaveBeenCalled();
     });
 });

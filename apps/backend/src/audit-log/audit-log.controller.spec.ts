@@ -15,10 +15,10 @@ const withoutTenant = { roles: [Role.AuditRead] } as unknown as TokenPayload;
 describe("AuditLogController", () => {
     it.each([
         [[Role.AuditRead], true],
-        [[Role.Clients], true],
+        [[Role.Clients], false],
         [[Role.Users], false],
         [[Role.SessionsRead], false],
-        [[Role.TenantAdmin], false],
+        [[Role.TenantAdmin], true],
     ])("lets a client with %j read the audit log: %s", (roles, allowed) => {
         for (const handler of [
             "getAuditLogs",

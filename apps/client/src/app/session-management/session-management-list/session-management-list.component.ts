@@ -58,10 +58,6 @@ import { getApiErrorMessage } from '../../utils/error-message';
 import { focusAfterRenderIfLost } from '../../common/focus-if-lost.util';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { ItemRoutePipe } from '../../common/item-route.pipe';
-import {
-  canUseIssuanceForm,
-  ISSUANCE_FORM_LOCKED_REASON,
-} from '../../issuance/issuance-offer/issuance-form-access';
 
 // Define the SessionStatus type
 export type SessionStatus = 'active' | 'fetched' | 'completed' | 'expired' | 'failed' | 'cancelled';
@@ -477,12 +473,9 @@ export class SessionManagementListComponent implements OnInit, AfterViewInit {
   }
 
   /** As the backend's credential config endpoints. */
-  private readonly canReadCredentialConfigs = this.jwtService.hasRole('issuance:manage');
+  private readonly canReadCredentialConfigs = this.jwtService.hasRole('issuance:read');
   /** As the backend's verification config endpoints. */
-  private readonly canReadPresentationConfigs = this.jwtService.hasRole([
-    'presentation:manage',
-    'presentation:request',
-  ]);
+  private readonly canReadPresentationConfigs = this.jwtService.hasRole('presentation:read');
 
   /**
    * Which configurations the Configuration filter leaves out, for session types the caller
@@ -494,13 +487,13 @@ export class SessionManagementListComponent implements OnInit, AfterViewInit {
       !this.canReadCredentialConfigs &&
       this.jwtService.hasRole(['issuance:offer', 'issuance:manage', 'sessions:read'])
     ) {
-      missing.push('credential configs need issuance:manage');
+      missing.push('credential configs need issuance:read');
     }
     if (
       !this.canReadPresentationConfigs &&
       this.jwtService.hasRole(['presentation:request', 'presentation:manage', 'sessions:read'])
     ) {
-      missing.push('verification configs need presentation:manage or presentation:request');
+      missing.push('verification configs need presentation:read');
     }
     return missing.length
       ? `Not listed, as your roles cannot read them: ${missing.join('; ')}.`
@@ -508,9 +501,7 @@ export class SessionManagementListComponent implements OnInit, AfterViewInit {
   })();
 
   readonly canOfferIssuance = this.jwtService.hasRole('issuance:offer');
-  /** Issuance Offer opens New Issuance, which also needs issuance:manage to load. */
-  readonly canUseIssuanceForm = canUseIssuanceForm((role) => this.jwtService.hasRole(role));
-  readonly issuanceFormLockedReason = ISSUANCE_FORM_LOCKED_REASON;
+  /** Issuance Offer opens New Issuance, which needs issuance:offer. */
   readonly canRequestPresentation = this.jwtService.hasRole('presentation:request');
   readonly readOnlyRowHint = 'Your roles let you read this session but not cancel or delete it';
   /**

@@ -30,6 +30,9 @@
       <a matButton routerLink="/status-lists">Back to the list</a>
     </app-load-error>
   } @else {
+    @if (isEditMode && readOnly) {
+      <app-read-only-notice subject="this status list" [roles]="writeRoles" />
+    }
     <form #formElement [formGroup]="form" (ngSubmit)="onSubmit()">
       <!-- Each section: what it is for on the left, its fields on the right -->
       @if (isEditMode && statusList) {
@@ -273,6 +276,7 @@
                         form.get('capacity')?.value === preset.value ? 'tonal' : 'outlined'
                       "
                       [attr.aria-pressed]="form.get('capacity')?.value === preset.value"
+                      [disabled]="readOnly"
                       (click)="setCapacity(preset.value)"
                     >
                       {{ preset.label }}
@@ -301,6 +305,7 @@
           [disabled]="isSaving"
           disabledInteractive
           [matTooltip]="saveTooltip"
+          [appRequiresRole]="writeRoles"
           appConfigManaged
           managedKind="StatusList"
           [managedResourceId]="listId || ''"

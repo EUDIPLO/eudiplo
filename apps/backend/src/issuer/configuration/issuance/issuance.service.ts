@@ -35,7 +35,10 @@ import {
     type RegistrationCertificateMaterial,
 } from "../../issuance/oid4vci/domain/issuer-registration-certificate.js";
 import { CredentialConfigService } from "../credentials/credential-config/credential-config.service.js";
-import type { IssuanceConfiguration as IssuanceConfig } from "./domain/issuance-configuration.js";
+import {
+    type IssuanceConfiguration as IssuanceConfig,
+    IssuanceConfigurationNotFound,
+} from "./domain/issuance-configuration.js";
 import { federationEntityIdProblem } from "./domain/own-federation-entity.js";
 import {
     REMOVED_CHAINED_VP_MESSAGE,
@@ -176,6 +179,46 @@ export class IssuanceService {
     }
 
     /**
+     * The tenant's issuance configuration, or the default when none is stored:
+     * stored first with `store` (a caller that may change it), else returned
+     * without storing it, so reading never writes.
+     */
+    async getIssuanceConfigurationOrDefault(
+        tenantId: string,
+        { store }: { store: boolean },
+    ): Promise<IssuanceConfig> {
+        try {
+            return await this.getIssuanceConfiguration(tenantId);
+        } catch (error) {
+            if (!(error instanceof IssuanceConfigurationNotFound)) throw error;
+            return store
+                ? this.storeIssuanceConfiguration(tenantId, {})
+                : (this.defaultIssuanceConfiguration(
+                      tenantId,
+                  ) as IssuanceConfig);
+        }
+    }
+
+    /**
+     * The issuance configuration of a tenant that has none stored yet: the
+     * built-in authorization server and the defaults of every other field.
+     */
+    public defaultIssuanceConfiguration(
+        tenantId: string,
+    ): Partial<IssuanceConfig> {
+        return {
+            tenantId,
+            authorizationServers: [
+                {
+                    type: "built-in",
+                    id: "issuer-built-in",
+                    enabled: true,
+                },
+            ],
+        };
+    }
+
+    /**
      * The credential types an issuer registration certificate of the tenant
      * must list: the `vct` of each SD-JWT VC and the `docType` of each mDOC
      * credential configuration.
@@ -214,16 +257,7 @@ export class IssuanceService {
             existingConfig = await this.getIssuanceConfiguration(tenantId);
         } catch {
             // No existing config, will create new
-            existingConfig = {
-                tenantId,
-                authorizationServers: [
-                    {
-                        type: "built-in",
-                        id: "issuer-built-in",
-                        enabled: true,
-                    },
-                ],
-            };
+            existingConfig = this.defaultIssuanceConfiguration(tenantId);
         }
 
         // Filter out undefined values from the incoming config.

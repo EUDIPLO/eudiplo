@@ -6,7 +6,7 @@
         Services that EUDIPLO asks for the claims of a credential while it issues the credential.
       </p>
     </div>
-    <a matButton="filled" [routerLink]="['create']">
+    <a matButton="filled" [routerLink]="['create']" [appRequiresRole]="writeRoles" matTooltip="">
       <mat-icon>add</mat-icon>
       Create attribute provider
     </a>
@@ -23,7 +23,7 @@
       <span class="empty-icon"><mat-icon>cloud_download</mat-icon></span>
       <strong>No attribute providers yet.</strong>
       <p>Add a service that returns the claims of a credential when a wallet asks for it.</p>
-      <a matButton="filled" [routerLink]="['create']">
+      <a matButton="filled" [routerLink]="['create']" [appRequiresRole]="writeRoles" matTooltip="">
         <mat-icon>add</mat-icon>
         Create attribute provider
       </a>
@@ -107,6 +107,7 @@
               <span class="row-actions">
                 <button
                   matIconButton
+                  [appRequiresRole]="writeRoles"
                   [routerLink]="provider.id | itemRoute: 'edit'"
                   appConfigManaged
                   managedKind="AttributeProvider"
@@ -122,6 +123,7 @@
                   (click)="deleteProvider(provider)"
                   [disabled]="deletingId !== undefined"
                   disabledInteractive
+                  [appRequiresRole]="writeRoles"
                   appConfigManaged
                   managedKind="AttributeProvider"
                   [managedResourceId]="provider.id"

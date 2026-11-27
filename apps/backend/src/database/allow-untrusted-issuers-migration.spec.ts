@@ -4,9 +4,9 @@ import { ClientEntity } from "../auth/client/entities/client.entity.js";
 import { TenantEntity } from "../auth/tenant/entities/tenant.entity.js";
 import { WebhookEndpointEntity } from "../issuer/configuration/webhook-endpoint/entities/webhook-endpoint.entity.js";
 import { PresentationConfig } from "../verifier/presentations/entities/presentation-config.entity.js";
-import { AddAllowUntrustedIssuersToPresentationConfig1786900000000 } from "./migrations/1786900000000-AddAllowUntrustedIssuersToPresentationConfig.js";
+import { AddAllowUntrustedIssuersToPresentationConfig1787000000000 } from "./migrations/1787000000000-AddAllowUntrustedIssuersToPresentationConfig.js";
 
-describe("AddAllowUntrustedIssuersToPresentationConfig1786900000000", () => {
+describe("AddAllowUntrustedIssuersToPresentationConfig1787000000000", () => {
     let dataSource: DataSource | undefined;
 
     afterEach(async () => {
@@ -29,7 +29,7 @@ describe("AddAllowUntrustedIssuersToPresentationConfig1786900000000", () => {
         await dataSource.synchronize();
         const queryRunner = dataSource.createQueryRunner();
         const migration =
-            new AddAllowUntrustedIssuersToPresentationConfig1786900000000();
+            new AddAllowUntrustedIssuersToPresentationConfig1787000000000();
         // The schema of 10.x, with a configuration written then.
         await migration.down(queryRunner);
         await queryRunner.query("PRAGMA foreign_keys = OFF");

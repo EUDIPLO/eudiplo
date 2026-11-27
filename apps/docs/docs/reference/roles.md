@@ -17,8 +17,9 @@ import RoleReference from "@site/src/components/RoleReference";
 - A caller passes the role check if it has **any** of an endpoint's roles;
   where the roles are joined with "and", it needs **all** of them.
 - With the built-in OAuth2 server these are the client's current roles
-  ([revoke access](../operate/tenants-and-access.md#revoke-access)), with
-  Keycloak the roles in the token.
+  ([revoke access](../operate/tenants-and-access.md#revoke-access)), with an
+  external provider the roles in the token. In both cases a role brings the
+  roles it includes ([below](#how-roles-include-each-other)).
 - Most endpoints also act on the tenant in the token and refuse a token without
   one, such as the root client's, with `403` "This endpoint requires a tenant
   context". A token whose tenant does not exist counts as one without.
@@ -39,6 +40,30 @@ that tenant ([which entries](../trust/trust-lists.md#caching)).
 `GET /api/config-bundles/resources/:kind/:id/document` also check the kind
 ([which roles](config-bundle-format.md#management-api)).
 
+## How roles include each other
+
+A role includes narrower roles, so a caller with it passes their checks too:
+
+| Role | Includes |
+| --- | --- |
+| `tenants:manage` | `tenant:admin`, and so every role |
+| `tenant:admin` | every role except `tenants:manage` |
+| `issuance:manage` | `issuance:offer` and `credentials:status` |
+| `issuance:offer` | `issuance:read` |
+| `presentation:manage` | `presentation:request` |
+| `presentation:request` | `presentation:read` |
+| `keys:export` | `keys:manage` |
+
+For example, `issuance:manage` changes credential configurations, creates
+offers and reads issuance configurations, and `tenant:admin` calls every
+endpoint of its tenant. `GET /api/auth/me` returns the roles with those they
+include. The endpoint tables below name only the narrowest role an endpoint
+accepts; the roles that include it pass as well.
+
+Changing key chains needs `keys:manage`: `issuance:manage` and
+`presentation:manage` read key chains and select them in their configurations,
+but do not create, import, rotate or delete them.
+
 ## Granting roles
 
 Creating or changing clients (`/api/client`) needs `clients:manage`, and people
@@ -48,13 +73,17 @@ on what else it has:
 | The caller has   | It can grant                                                       |
 | ---------------- | ------------------------------------------------------------------ |
 | `tenants:manage` | every role                                                         |
-| `tenant:admin`   | every role except `tenants:manage` and `tenant:admin`              |
-| neither          | only the roles it holds itself, except `tenants:manage` and `tenant:admin` |
+| anything else    | the roles it has and those they include, except `tenants:manage` and `tenant:admin` |
+
+Since `tenant:admin` includes every role except `tenants:manage`, it can grant
+every role except `tenants:manage` and `tenant:admin`.
 
 For example, a client with `clients:manage` and `presentation:request` can
-create clients with `clients:manage`, `presentation:request` or both. To create
-a client with `issuance:offer`, it needs `issuance:offer` itself,
-`tenant:admin` or `tenants:manage`. Other requests answer `403`.
+create clients with `clients:manage`, `presentation:request`,
+`presentation:read` or several of them. To create a client with
+`issuance:offer`, it needs `issuance:offer`, a role that includes it
+(`issuance:manage`, `tenant:admin`) or `tenants:manage`. Other requests answer
+`403`.
 
 The `<tenant>-admin` client is bound by the same rule, so choose its roles
 with care when you
@@ -63,7 +92,7 @@ with care when you
 ### Changing, deleting and taking over
 
 - A caller can change or delete a client or person, or rotate a client's
-  secret, only if it holds or can grant **each** of its roles. No caller can
+  secret, only if it has or can grant **each** of its roles. No caller can
   take over an account with more rights than its own.
 - A change may keep roles the caller cannot grant, but not add them. A
   `tenant:admin` caller can, for example, change a client that has

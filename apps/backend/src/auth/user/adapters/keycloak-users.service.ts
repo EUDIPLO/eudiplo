@@ -10,6 +10,7 @@ import { ConfigService } from "@nestjs/config";
 import { decodeJwt } from "jose";
 import { keycloakAuthorizationRoles } from "../../keycloak-authorization-roles.js";
 import { syncEudiploRealmRoles } from "../../keycloak-realm-roles.js";
+import { ROLE_MODEL_11_MARKER } from "../../keycloak-role-model-upgrade.js";
 import { allRoles, isRole, Role } from "../../roles/role.enum.js";
 import { ManagedUserDto } from "../dto/managed-user.dto.js";
 import type { CreateUser, UpdateUser } from "../schemas/create-user.schema.js";
@@ -332,8 +333,11 @@ export class KeycloakUsersProvider extends UsersProvider {
         const existingRoles = await this.kc.roles.find();
         const targetRoles =
             requestedRoles.length > 0 ? requestedRoles : allRoles;
+        // keys:export marks the realm as upgraded to the 11.0 role model:
+        // only the clients adapter creates it, after the upgrade.
         const missingRoles = targetRoles.filter(
             (role) =>
+                role !== ROLE_MODEL_11_MARKER &&
                 !existingRoles.some(
                     (existingRole) => existingRole.name === role,
                 ),

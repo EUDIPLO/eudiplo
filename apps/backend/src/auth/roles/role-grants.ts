@@ -1,5 +1,5 @@
 import { ForbiddenException } from "@nestjs/common";
-import { allRoles, Role } from "./role.enum.js";
+import { allRoles, effectiveRoles, Role } from "./role.enum.js";
 
 /** Roles that only a caller with `tenants:manage` can grant. */
 const reservedRoles: ReadonlySet<Role> = new Set([
@@ -22,16 +22,18 @@ export function manageDeniedDescription(target: "client" | "user"): string {
 
 /**
  * Roles a caller may grant to a client or user: every role with
- * `tenants:manage`; with `tenant:admin` every role except `tenants:manage`
- * and `tenant:admin`, as for a configuration bundle; otherwise only the roles
- * it holds itself, except those two.
+ * `tenants:manage`, otherwise the roles it has, including those its roles
+ * imply (so `tenant:admin` grants every tenant role), except `tenants:manage`
+ * and `tenant:admin`.
  */
 export function grantableRoles(callerRoles: readonly string[]): Set<Role> {
-    if (callerRoles.includes(Role.Tenants)) return new Set(allRoles);
-    const source = callerRoles.includes(Role.TenantAdmin)
-        ? allRoles
-        : allRoles.filter((role) => callerRoles.includes(role));
-    return new Set(source.filter((role) => !reservedRoles.has(role)));
+    const held = effectiveRoles(callerRoles);
+    if (held.includes(Role.Tenants)) return new Set(allRoles);
+    return new Set(
+        allRoles.filter(
+            (role) => held.includes(role) && !reservedRoles.has(role),
+        ),
+    );
 }
 
 /**
@@ -79,8 +81,9 @@ export function assertMayManageRoles(
     target: string,
 ): void {
     const grantable = grantableRoles(callerRoles);
+    const held = effectiveRoles(callerRoles);
     const denied = targetRoles.filter(
-        (role) => !grantable.has(role as Role) && !callerRoles.includes(role),
+        (role) => !grantable.has(role as Role) && !held.includes(role),
     );
     if (denied.length > 0) {
         throw new ForbiddenException(

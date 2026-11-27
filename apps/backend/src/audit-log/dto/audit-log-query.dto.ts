@@ -6,7 +6,6 @@ import {
     repeatable,
     timestamp,
 } from "../../shared/common/zod/query-params.js";
-import type { AuditLogFilter } from "../audit-log.service.js";
 import {
     AUDIT_ACTION_TYPES,
     AUDIT_ACTOR_TYPES,
@@ -15,6 +14,7 @@ import {
     type AuditActorType,
     type AuditObjectType,
 } from "../audit-action-types.js";
+import type { AuditLogFilter } from "../audit-log.service.js";
 
 const MAX_ID_LENGTH = 255;
 const DEFAULT_LIMIT = 100;

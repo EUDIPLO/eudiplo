@@ -1,5 +1,6 @@
 import type { Routes } from '@angular/router';
 import { unsavedChangesGuard } from '../guards/unsaved-changes.guard';
+import { requireRole, SHARED_WRITE_ROLES } from '../services/resource-roles';
 
 export const federationTrustAnchorRoutes: Routes = [
   {
@@ -11,6 +12,7 @@ export const federationTrustAnchorRoutes: Routes = [
   },
   {
     path: 'create',
+    ...requireRole(SHARED_WRITE_ROLES),
     loadComponent: () =>
       import('./federation-trust-anchor-edit/federation-trust-anchor-edit.component').then(
         (m) => m.FederationTrustAnchorEditComponent
@@ -26,6 +28,7 @@ export const federationTrustAnchorRoutes: Routes = [
   },
   {
     path: ':id/edit',
+    ...requireRole(SHARED_WRITE_ROLES),
     loadComponent: () =>
       import('./federation-trust-anchor-edit/federation-trust-anchor-edit.component').then(
         (m) => m.FederationTrustAnchorEditComponent

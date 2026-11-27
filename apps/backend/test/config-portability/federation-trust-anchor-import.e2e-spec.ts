@@ -467,7 +467,7 @@ describe("configuration imports and federation trust anchors", () => {
                 ]),
             );
             expect(response.body.message).toContain(
-                "2 presentation configs (presentation:manage or presentation:request shows which)",
+                "2 presentation configs (presentation:read shows which)",
             );
         });
 

@@ -195,7 +195,7 @@
               </a>
             }
 
-            @if (hasRole(['clients:manage', 'audit:read'])) {
+            @if (hasRole('audit:read')) {
               <a
                 mat-list-item
                 [routerLink]="['/admin/activity-logs']"
@@ -224,7 +224,7 @@
               <span matListItemTitle>Keys</span>
             </a>
 
-            @if (hasRole(['issuance:manage', 'presentation:manage'])) {
+            @if (hasRole(['issuance:read', 'presentation:read'])) {
               <a
                 mat-list-item
                 [routerLink]="['/trust-list']"
@@ -262,7 +262,7 @@
         }
 
         <!-- Integrations Section: webhook endpoints serve issuance and verification -->
-        @if (hasRole(['issuance:manage', 'presentation:manage'])) {
+        @if (hasRole(['issuance:read', 'presentation:read'])) {
           <app-nav-section
             section="integrations"
             icon="integration_instructions"
@@ -282,10 +282,10 @@
         }
 
         <!-- Credential Issuance Section -->
-        <!-- With issuance:offer alone nothing here can load; the dashboard says why. -->
-        @if (hasRole('issuance:manage')) {
+        <!-- New Issuance needs issuance:offer; the configuration pages open with issuance:read. -->
+        @if (hasRole('issuance:read')) {
           <app-nav-section section="issuance" icon="card_membership" label="Credential Issuance">
-            @if (canUseIssuanceForm) {
+            @if (hasRole('issuance:offer')) {
               <a
                 mat-list-item
                 [routerLink]="['/offer/issuance']"
@@ -298,7 +298,7 @@
               </a>
             }
 
-            @if (hasRole('issuance:manage')) {
+            @if (hasRole('issuance:read')) {
               <a
                 mat-list-item
                 [routerLink]="['/credential-config']"
@@ -347,7 +347,7 @@
         }
 
         <!-- Credential Verification Section -->
-        @if (hasRole(['presentation:manage', 'presentation:request'])) {
+        @if (hasRole('presentation:read')) {
           <app-nav-section section="verification" icon="verified" label="Credential Verification">
             @if (hasRole('presentation:request')) {
               <a
@@ -362,7 +362,7 @@
               </a>
             }
 
-            @if (hasRole('presentation:manage')) {
+            @if (hasRole('presentation:read')) {
               <a
                 mat-list-item
                 [routerLink]="['/presentation-config']"
@@ -389,15 +389,7 @@
         }
 
         <!-- Sessions Section -->
-        @if (
-          hasRole([
-            'presentation:request',
-            'issuance:offer',
-            'issuance:manage',
-            'presentation:manage',
-            'sessions:read',
-          ])
-        ) {
+        @if (hasRole(['issuance:read', 'presentation:read', 'sessions:read'])) {
           <app-nav-section section="sessions" icon="monitoring" label="Sessions">
             @if (hasRole(['presentation:request', 'issuance:offer', 'sessions:read'])) {
               <a
@@ -413,7 +405,7 @@
               </a>
             }
 
-            @if (hasRole(['issuance:manage', 'presentation:manage'])) {
+            @if (hasRole(['issuance:read', 'presentation:read'])) {
               <a
                 mat-list-item
                 [routerLink]="['/session-management/config']"

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { allRoles } from "../../roles/role.enum.js";
 import { KeycloakClientsProvider } from "./keycloak-clients.service.js";
 
 /** A provider whose Keycloak has the UI client `existing`, with `env` as configuration. */
@@ -13,7 +14,8 @@ function provider(
             update: vi.fn().mockResolvedValue(undefined),
         },
         roles: {
-            find: vi.fn().mockResolvedValue([]),
+            // The realm already has the 11.0 roles, so no role upgrade runs.
+            find: vi.fn().mockResolvedValue(allRoles.map((name) => ({ name }))),
             create: vi.fn().mockResolvedValue(undefined),
         },
     };

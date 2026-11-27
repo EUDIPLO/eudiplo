@@ -16,6 +16,18 @@ describe("tenantOwnsKmsProvider", () => {
     const file = (provider: Record<string, unknown>) =>
         ({ providers: [provider] }) as unknown as KmsConfig;
 
+    // A reference may name an operator secret that other tenants are
+    // granted too, so the key ownership checks must apply.
+    it("does not hold for a provider whose credential is a secret reference", () => {
+        for (const token of [
+            "${vault:kv/operator/kms#token}",
+            "${env:ACME_KMS_TOKEN}",
+        ])
+            expect(
+                tenantOwnsKmsProvider(file(vault("kms", token)), "kms"),
+            ).toBe(false);
+    });
+
     it("holds for a provider of the tenant file with credentials of its own", () => {
         expect(tenantOwnsKmsProvider(file(vault("kms")), "kms")).toBe(true);
         expect(

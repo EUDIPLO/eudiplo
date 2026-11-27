@@ -230,7 +230,10 @@ describe('TrustListEditComponent loading the trust list', () => {
           { path: 'trust-list/:id/edit', component: TrustListEditComponent },
         ]),
         { provide: ConfigOwnershipService, useValue: { get: async () => undefined } },
-        { provide: JwtService, useValue: { canUseConfigPortability: () => false } },
+        {
+          provide: JwtService,
+          useValue: { canUseConfigPortability: () => false, hasRole: () => true },
+        },
       ],
     })
       .overrideComponent(TrustListEditComponent, {

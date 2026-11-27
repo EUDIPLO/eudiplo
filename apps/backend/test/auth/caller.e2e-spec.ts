@@ -6,7 +6,7 @@ import request from "supertest";
 import { App } from "supertest/types";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { AppModule } from "../../src/app.module.js";
-import { Role } from "../../src/auth/roles/role.enum.js";
+import { effectiveRoles, Role } from "../../src/auth/roles/role.enum.js";
 import { createAppValidationPipe } from "../../src/shared/common/zod/zod-schema.util.js";
 import { clientToken, getToken } from "../utils.js";
 
@@ -59,7 +59,8 @@ describe("Caller (e2e)", () => {
         expect(response.body).toEqual({
             subject: rootClientId,
             tenantId: null,
-            roles: [Role.Tenants],
+            // tenants:manage includes every role.
+            roles: effectiveRoles([Role.Tenants]),
         });
     });
 

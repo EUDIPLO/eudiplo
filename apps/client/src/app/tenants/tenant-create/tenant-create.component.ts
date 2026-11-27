@@ -40,10 +40,12 @@ import { showFieldsToFix } from '../../common/field-to-fix.util';
 import { focusAfterRenderIfLost } from '../../common/focus-if-lost.util';
 import { LoadErrorComponent } from '../../common/load-error.component';
 import type { PageWithUnsavedChanges } from '../../services/unsaved-changes.service';
+import { RoleIncludesPipe } from '../../common/role-includes.pipe';
 
 @Component({
   selector: 'app-tenant-create',
   imports: [
+    RoleIncludesPipe,
     ReactiveFormsModule,
     MatCardModule,
     MatFormFieldModule,
@@ -99,9 +101,9 @@ export class TenantCreateComponent implements OnInit, PageWithUnsavedChanges {
       description: [''],
       // Off when the identity provider manages the clients (OIDC_PROVIDER=generic).
       createAdminClient: [true],
-      // tenant:admin lets the client grant itself and others the roles the tenant needs;
-      // with clients:manage alone it could grant nothing and the tenant could not be set up.
-      roles: new FormControl<Role[]>(['clients:manage', 'tenant:admin'], [Validators.required]),
+      // tenant:admin includes every tenant role, clients:manage among them, so the client can
+      // grant itself and others the roles the tenant needs.
+      roles: new FormControl<Role[]>(['tenant:admin'], [Validators.required]),
     });
     // A disabled control is not validated, so no roles are needed without the client.
     this.tenantForm.get('createAdminClient')!.valueChanges.subscribe((create: boolean) => {

@@ -27,7 +27,11 @@ test.beforeAll(async () => {
     !hasRootCredentials,
     'Set AUTH_CLIENT_ID and AUTH_CLIENT_SECRET of the backend to create a tenant.'
   );
-  tenant = await createTenant('wallet-trust', 'Wallet Trust Lists', ['issuance:manage']);
+  // Creating the trust list's key chain needs keys:manage.
+  tenant = await createTenant('wallet-trust', 'Wallet Trust Lists', [
+    'issuance:manage',
+    'keys:manage',
+  ]);
   await createTrustList(tenant.token, trustListId, 'Accepted wallet providers');
 });
 

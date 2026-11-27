@@ -5,7 +5,7 @@ sidebar_label: Revocation
 
 Revoke or suspend credentials you issued, using Token Status Lists ([draft-ietf-oauth-status-list](https://datatracker.ietf.org/doc/draft-ietf-oauth-status-list/)). EUDIPLO assigns every credential an entry in a signed status list that verifiers fetch; you change entries per issuance session. For an end-to-end walkthrough, see the [revocable credentials cookbook](../cookbooks/revocable-credentials.md).
 
-**Prerequisites:** a [credential configuration](credential-configuration.md) and a client with the `issuance:manage` role, which covers configuration and revocation, or `credentials:status` for revocation only. To open the session in the Web Client, the user also needs `issuance:offer` or `sessions:read`.
+**Prerequisites:** a [credential configuration](credential-configuration.md) and a client with the `issuance:manage` role, which covers configuration and revocation, or `credentials:status` for revocation only. To open the session in the Web Client, the user needs `issuance:offer` (which `issuance:manage` includes) or `sessions:read`.
 
 ## 1. Enable status management
 
@@ -54,7 +54,7 @@ curl -X POST "$EUDIPLO_URL/api/session/revoke" \
 - Revocation is final: setting `0` or `2` on a revoked credential is rejected with `409`, and nothing is changed. A suspension can be lifted (`0`) or turned into a revocation (`1`).
 - To revoke every credential of a credential configuration when you change its embedded disclosure policy, update the configuration with `revokeOnDisclosurePolicyChange=true` ([details](credential-configuration.md#revoke-credentials-when-the-policy-changes)).
 
-In the web client, open the session under **All Sessions**. The **Credential Status** card lists the credentials of the session per credential type and offers **Revoke**, **Suspend** and **Reinstate** where the change is allowed; Suspend only appears when every list of that type has at least 2 bits per entry. Opening the session needs `issuance:offer`, `presentation:request` or `sessions:read`, and changing the status on the card needs `credentials:status` or `issuance:manage`: `issuance:offer` alone shows the status without the buttons, and `issuance:manage` alone cannot open the session.
+In the web client, open the session under **All Sessions**. The **Credential Status** card lists the credentials of the session per credential type and offers **Revoke**, **Suspend** and **Reinstate** where the change is allowed; Suspend only appears when every list of that type has at least 2 bits per entry. Opening the session needs `issuance:offer`, `presentation:request` or `sessions:read`, and changing the status on the card needs `credentials:status` or `issuance:manage`: `issuance:offer` alone shows the status without the buttons.
 
 ## 3. Check the result
 

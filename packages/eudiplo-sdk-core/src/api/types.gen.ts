@@ -60,11 +60,45 @@ export type FrontendConfigResponseDto = {
     authMode: 'builtin' | 'keycloak' | 'generic';
 };
 
+export type TerminusHealthIndicatorResult = {
+    /**
+     * The status of this health indicator
+     */
+    status: 'up' | 'degraded' | 'down';
+    /**
+     * Time the health indicator took to respond, in ms
+     */
+    responseTime?: number;
+    /**
+     * Whether this result was served from the cache
+     */
+    cachedResponse?: boolean;
+};
+
+export type TerminusHealthCheckResult = {
+    status: 'error' | 'ok' | 'degraded' | 'shutting_down';
+    info?: {
+        [key: string]: TerminusHealthIndicatorResult & {
+            [key: string]: unknown;
+        };
+    } | null;
+    error?: {
+        [key: string]: TerminusHealthIndicatorResult & {
+            [key: string]: unknown;
+        };
+    } | null;
+    details: {
+        [key: string]: TerminusHealthIndicatorResult & {
+            [key: string]: unknown;
+        };
+    };
+};
+
 export type RoleDto = {
     /**
      * OAuth2 roles
      */
-    role: 'presentation:manage' | 'presentation:request' | 'issuance:manage' | 'issuance:offer' | 'clients:manage' | 'users:manage' | 'tenants:manage' | 'tenant:admin' | 'registrar:manage' | 'audit:read' | 'sessions:read' | 'credentials:status' | 'keys:manage';
+    role: 'presentation:manage' | 'presentation:request' | 'presentation:read' | 'issuance:manage' | 'issuance:offer' | 'issuance:read' | 'clients:manage' | 'users:manage' | 'tenants:manage' | 'tenant:admin' | 'registrar:manage' | 'audit:read' | 'sessions:read' | 'credentials:status' | 'keys:manage' | 'keys:export';
 };
 
 export type ClientCredentialsDto = {
@@ -244,7 +278,7 @@ export type ClientEntity = {
     /**
      * Roles assigned to the client
      */
-    roles: Array<'presentation:manage' | 'presentation:request' | 'issuance:manage' | 'issuance:offer' | 'clients:manage' | 'users:manage' | 'tenants:manage' | 'tenant:admin' | 'registrar:manage' | 'audit:read' | 'sessions:read' | 'credentials:status' | 'keys:manage'>;
+    roles: Array<'presentation:manage' | 'presentation:request' | 'presentation:read' | 'issuance:manage' | 'issuance:offer' | 'issuance:read' | 'clients:manage' | 'users:manage' | 'tenants:manage' | 'tenant:admin' | 'registrar:manage' | 'audit:read' | 'sessions:read' | 'credentials:status' | 'keys:manage' | 'keys:export'>;
     /**
      * List of presentation config IDs this client can use. If empty/null, all configs are allowed.
      */
@@ -309,7 +343,7 @@ export type CreateTenantDto = {
     /**
      * Roles of the tenant's admin client `<id>-admin`, which also gets clients:manage. They are all that client can grant, unless they include tenant:admin. Without roles, or with an empty list, no admin client is created.
      */
-    roles?: Array<'tenants:manage' | 'issuance:offer' | 'issuance:manage' | 'presentation:request' | 'presentation:manage' | 'clients:manage' | 'users:manage' | 'registrar:manage' | 'tenant:admin' | 'audit:read' | 'sessions:read' | 'credentials:status' | 'keys:manage'>;
+    roles?: Array<'tenants:manage' | 'tenant:admin' | 'issuance:offer' | 'issuance:manage' | 'issuance:read' | 'presentation:request' | 'presentation:manage' | 'presentation:read' | 'clients:manage' | 'users:manage' | 'registrar:manage' | 'audit:read' | 'sessions:read' | 'credentials:status' | 'keys:manage' | 'keys:export'>;
     /**
      * Optional tenant-specific session storage configuration.
      */
@@ -533,7 +567,7 @@ export type UpdateClientDto = {
     /**
      * Optional replacement roles for the client.
      */
-    roles?: Array<'presentation:manage' | 'presentation:request' | 'issuance:manage' | 'issuance:offer' | 'clients:manage' | 'users:manage' | 'tenants:manage' | 'tenant:admin' | 'registrar:manage' | 'audit:read' | 'sessions:read' | 'credentials:status' | 'keys:manage'>;
+    roles?: Array<'presentation:manage' | 'presentation:request' | 'presentation:read' | 'issuance:manage' | 'issuance:offer' | 'issuance:read' | 'clients:manage' | 'users:manage' | 'tenants:manage' | 'tenant:admin' | 'registrar:manage' | 'audit:read' | 'sessions:read' | 'credentials:status' | 'keys:manage' | 'keys:export'>;
     /**
      * Optional replacement allow-list of presentation config ids.
      */
@@ -560,7 +594,7 @@ export type CreateClientDto = {
     /**
      * Roles assigned to the client. At least one role is required.
      */
-    roles: Array<'presentation:manage' | 'presentation:request' | 'issuance:manage' | 'issuance:offer' | 'clients:manage' | 'users:manage' | 'tenants:manage' | 'tenant:admin' | 'registrar:manage' | 'audit:read' | 'sessions:read' | 'credentials:status' | 'keys:manage'>;
+    roles: Array<'presentation:manage' | 'presentation:request' | 'presentation:read' | 'issuance:manage' | 'issuance:offer' | 'issuance:read' | 'clients:manage' | 'users:manage' | 'tenants:manage' | 'tenant:admin' | 'registrar:manage' | 'audit:read' | 'sessions:read' | 'credentials:status' | 'keys:manage' | 'keys:export'>;
     /**
      * Optional allow-list of presentation config ids this client can use.
      */
@@ -576,7 +610,7 @@ export type ManagedUserDto = {
     username: string;
     email?: string;
     enabled: boolean;
-    roles: Array<'presentation:manage' | 'presentation:request' | 'issuance:manage' | 'issuance:offer' | 'clients:manage' | 'users:manage' | 'tenants:manage' | 'tenant:admin' | 'registrar:manage' | 'audit:read' | 'sessions:read' | 'credentials:status' | 'keys:manage'>;
+    roles: Array<'presentation:manage' | 'presentation:request' | 'presentation:read' | 'issuance:manage' | 'issuance:offer' | 'issuance:read' | 'clients:manage' | 'users:manage' | 'tenants:manage' | 'tenant:admin' | 'registrar:manage' | 'audit:read' | 'sessions:read' | 'credentials:status' | 'keys:manage' | 'keys:export'>;
     tenantId?: string;
     /**
      * One-time temporary password returned only on user creation.
@@ -587,14 +621,14 @@ export type ManagedUserDto = {
 export type CreateUserDto = {
     username: string;
     email?: string;
-    roles: Array<'tenants:manage' | 'issuance:offer' | 'issuance:manage' | 'presentation:request' | 'presentation:manage' | 'clients:manage' | 'users:manage' | 'registrar:manage' | 'tenant:admin' | 'audit:read' | 'sessions:read' | 'credentials:status' | 'keys:manage'>;
+    roles: Array<'tenants:manage' | 'tenant:admin' | 'issuance:offer' | 'issuance:manage' | 'issuance:read' | 'presentation:request' | 'presentation:manage' | 'presentation:read' | 'clients:manage' | 'users:manage' | 'registrar:manage' | 'audit:read' | 'sessions:read' | 'credentials:status' | 'keys:manage' | 'keys:export'>;
     enabled?: boolean;
 };
 
 export type UpdateUserDto = {
     username?: string;
     email?: string;
-    roles?: Array<'tenants:manage' | 'issuance:offer' | 'issuance:manage' | 'presentation:request' | 'presentation:manage' | 'clients:manage' | 'users:manage' | 'registrar:manage' | 'tenant:admin' | 'audit:read' | 'sessions:read' | 'credentials:status' | 'keys:manage'>;
+    roles?: Array<'tenants:manage' | 'tenant:admin' | 'issuance:offer' | 'issuance:manage' | 'issuance:read' | 'presentation:request' | 'presentation:manage' | 'presentation:read' | 'clients:manage' | 'users:manage' | 'registrar:manage' | 'audit:read' | 'sessions:read' | 'credentials:status' | 'keys:manage' | 'keys:export'>;
     enabled?: boolean;
     password?: string;
 };
@@ -7282,7 +7316,7 @@ export type KeyChainControllerDeleteTenantKmsConfigData = {
 
 export type KeyChainControllerDeleteTenantKmsConfigErrors = {
     /**
-     * The caller lacks the `tenant:admin` or `tenants:manage` role or a tenant context.
+     * The caller lacks the `keys:export` role or a tenant context.
      */
     403: unknown;
     /**
@@ -7313,7 +7347,7 @@ export type KeyChainControllerGetTenantKmsConfigErrors = {
      */
     400: unknown;
     /**
-     * The caller lacks the `tenant:admin` or `tenants:manage` role or a tenant context.
+     * The caller lacks the `keys:export` role or a tenant context.
      */
     403: unknown;
 };
@@ -7340,7 +7374,7 @@ export type KeyChainControllerUpdateTenantKmsConfigErrors = {
      */
     400: unknown;
     /**
-     * The caller lacks the `tenant:admin` or `tenants:manage` role or a tenant context.
+     * The caller lacks the `keys:export` role or a tenant context.
      */
     403: unknown;
     /**
@@ -7491,7 +7525,7 @@ export type KeyChainControllerExportData = {
 
 export type KeyChainControllerExportErrors = {
     /**
-     * The caller lacks the `tenant:admin` or `tenants:manage` role or a tenant context.
+     * The caller lacks the `keys:export` role or a tenant context.
      */
     403: unknown;
     /**

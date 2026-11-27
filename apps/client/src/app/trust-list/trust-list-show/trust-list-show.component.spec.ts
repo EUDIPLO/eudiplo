@@ -4,7 +4,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { client } from '@eudiplo/sdk-core';
-import { vi } from 'vitest';
+import { beforeEach, vi } from 'vitest';
 
 import { ApiService } from '../../core';
 import { CredentialConfigService } from '../../issuance/credential-config/credential-config.service';
@@ -14,6 +14,11 @@ import { JwtService, type Role } from '../../services/jwt.service';
 import { ConfigDocumentService } from '../../config-portability/config-document.service';
 import { TrustListShowComponent } from './trust-list-show.component';
 import { expectAvailable, expectUnavailable } from '../../common/unavailable-action.testing';
+import { grantEveryRole } from '../../common/role-lock.testing';
+import { effectiveRoles } from '../../services/role-grants';
+
+// The tests are about what the actions do; role locks have their own tests.
+beforeEach(() => grantEveryRole());
 
 /** Answers the trust list requests of the page with this body and status, and no versions. */
 function serveTrustList(trustList: object, status = 200): void {
@@ -211,7 +216,8 @@ describe('TrustListShowComponent references', () => {
         {
           provide: JwtService,
           useValue: {
-            hasRole: (role: Role | Role[]) => [role].flat().some((r) => roles.includes(r)),
+            hasRole: (role: Role | Role[]) =>
+              [role].flat().some((r) => effectiveRoles(roles).includes(r)),
             canUseConfigPortability: () => false,
           },
         },
@@ -267,13 +273,13 @@ describe('TrustListShowComponent references', () => {
     expect(link?.getAttribute('aria-label')).toBe('Open credential config Membership card');
   });
 
-  // GET /api/issuer/credentials needs issuance:manage; "none" would invite deleting a used list.
+  // GET /api/issuer/credentials needs issuance:read; "none" would invite deleting a used list.
   it('tells verifier admins that they cannot see the credential config references', async () => {
     const { fixture, load } = await render(['presentation:manage'], {
       credentialConfigs: async () => [referencing],
     });
 
-    const text = await referencesText(fixture, 'You need the issuance:manage role');
+    const text = await referencesText(fixture, 'You need the issuance:read role');
     expect(text).not.toContain('No credential configs');
     expect(load).not.toHaveBeenCalled();
   });
@@ -329,14 +335,11 @@ describe('TrustListShowComponent references', () => {
     expect(text).not.toContain('Legacy check');
   });
 
-  // GET /api/verifier/config also admits presentation:request.
-  it('reads the verification configs with presentation:request', async () => {
-    const { fixture, loadPresentations } = await render(
-      ['issuance:manage', 'presentation:request'],
-      {
-        presentationConfigs: async () => [checkById],
-      }
-    );
+  // GET /api/verifier/config admits presentation:read, which presentation:request includes.
+  it('reads the verification configs with presentation:read', async () => {
+    const { fixture, loadPresentations } = await render(['issuance:manage', 'presentation:read'], {
+      presentationConfigs: async () => [checkById],
+    });
 
     await referencesCard(fixture, 'Door check', presentationsTitle);
     expect(loadPresentations).toHaveBeenCalledOnce();
@@ -349,7 +352,7 @@ describe('TrustListShowComponent references', () => {
 
     const text = await referencesText(
       fixture,
-      'You need the presentation:manage or presentation:request role',
+      'You need the presentation:read role',
       presentationsTitle
     );
     expect(text).not.toContain('No verification configs');

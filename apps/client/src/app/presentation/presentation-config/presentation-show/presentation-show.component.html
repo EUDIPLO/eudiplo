@@ -68,6 +68,8 @@
         <button
           matButton="tonal"
           [routerLink]="['edit']"
+          [appRequiresRole]="writeRoles"
+          matTooltip=""
           appConfigManaged
           managedKind="PresentationConfig"
           [managedResourceId]="config.id"
@@ -79,6 +81,7 @@
         <span class="icon-actions">
           <button
             matIconButton
+            [appRequiresRole]="writeRoles"
             [routerLink]="['copy']"
             matTooltip="Copy verification config"
             aria-label="Copy verification config"
@@ -108,6 +111,7 @@
               deleting ? 'Deleting the verification config…' : 'Delete verification config'
             "
             aria-label="Delete verification config"
+            [appRequiresRole]="writeRoles"
             appConfigManaged
             managedKind="PresentationConfig"
             [managedResourceId]="config.id"
@@ -400,6 +404,7 @@
                 type="button"
                 (click)="requestFromEudiHub()"
                 matTooltip="Register this DCQL query at the German EUDI Hub and store the registration certificate it issues, with a token from its portal"
+                [appRequiresRole]="writeRoles"
                 appConfigManaged
                 managedKind="PresentationConfig"
                 [managedResourceId]="config.id"

@@ -271,12 +271,7 @@ export class SessionController {
      */
     @Get(":id/credential-status")
     // Credential status is issuer data, like changing it with POST /revoke.
-    @Secured([
-        Role.IssuanceOffer,
-        Role.Issuances,
-        Role.CredentialStatus,
-        Role.SessionsRead,
-    ])
+    @Secured([Role.IssuanceOffer, Role.CredentialStatus, Role.SessionsRead])
     @ApiParam({ name: "id", description: "The session ID", type: String })
     @ApiOperation({
         summary: "Get the status of the credentials issued in a session",
@@ -307,7 +302,7 @@ export class SessionController {
     @Post("revoke")
     // Changing credential status is an issuer action of its own; clients that
     // only create offers (issuance:offer) or requests may not call it.
-    @Secured([Role.CredentialStatus, Role.Issuances])
+    @Secured([Role.CredentialStatus])
     @ApiOperation({
         summary: "Change the status of the credentials issued in a session",
         description:

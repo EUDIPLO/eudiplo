@@ -22,6 +22,8 @@ import { ConfigOwnershipDirective } from '../../../config-portability/config-own
 import { BaseAsyncListComponent } from '../../../common/base-async-list.component';
 import { LoadErrorComponent } from '../../../common/load-error.component';
 import { ItemRoutePipe } from '../../../common/item-route.pipe';
+import { RoleLockDirective } from '../../../common/role-lock.directive';
+import { PRESENTATION_WRITE_ROLES } from '../../../services/resource-roles';
 
 @Component({
   selector: 'app-presentation-list',
@@ -36,6 +38,7 @@ import { ItemRoutePipe } from '../../../common/item-route.pipe';
     RouterModule,
     MatTooltipModule,
     ConfigOwnershipDirective,
+    RoleLockDirective,
     LoadErrorComponent,
     MatProgressSpinnerModule,
   ],
@@ -44,6 +47,9 @@ import { ItemRoutePipe } from '../../../common/item-route.pipe';
   styleUrl: './presentation-list.component.scss',
 })
 export class PresentationListComponent extends BaseAsyncListComponent<PresentationConfig> {
+  /** Creating, changing and deleting it needs presentation:manage; reading needs less. */
+  readonly writeRoles = PRESENTATION_WRITE_ROLES;
+
   protected readonly loadFailedMessage = 'Failed to load verification configs';
 
   displayedColumns: (keyof PresentationConfig | 'actions' | 'registrationCert')[] = [

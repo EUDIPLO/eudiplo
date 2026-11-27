@@ -220,8 +220,8 @@ several backend replicas, mount the same `CONFIG_FOLDER` volume into all of them
 only where it was written, and a replica that does not see it would use the
 global provider with the same `id` for the tenant's key chains.
 
-Manage it through the API (roles
-`tenant:admin` or `tenants:manage`, because the configuration contains provider
+Manage it through the API (role `keys:export`, which `tenant:admin` and
+`tenants:manage` include, because the configuration contains provider
 credentials):
 
 | Request                                     | Effect                                                                    |
@@ -234,7 +234,8 @@ The API never returns credentials (`vaultToken`, `secretAccessKey`, `pin`,
 `auth.token`, `auth.clientSecret`, `clientSecret`, `sad` and
 `authorizeAuthData[].value`); it returns `<redacted>` instead. In
 `tenantConfig`, a credential stored as a `${ENV_VAR}` placeholder is returned as
-the placeholder. In `effectiveConfig`, the tenant's providers appear as in
+the placeholder, and one stored as a
+[secret reference](#secret-references-in-a-tenant-kmsjson) as the reference. In `effectiveConfig`, the tenant's providers appear as in
 `tenantConfig`, so a placeholder of the tenant file is never returned as the
 variable's value; providers of the global file appear with their non-secret
 settings only.
@@ -301,6 +302,45 @@ instance's environment:
 The list is not per tenant: whoever can write a tenant's `kms.json` on disk,
 for example through a Git repository of tenant folders, can use every listed
 variable.
+
+### Secret references in a tenant `kms.json`
+
+With a [secret policy](secret-references.md), a credential of a provider
+(`vaultToken`; `auth.token` and `auth.clientSecret` of `http`; `clientSecret`,
+`sad` and `authorizeAuthData[].value` of `csc`; `secretAccessKey` of
+`aws-kms`; `pin` of `pkcs11`) can be a secret reference such
+as `${vault:kv/eudiplo/acme/kms#token}`. Unlike a `${VAR}` placeholder, the
+tenant may write one through the API, because the policy, not the tenant,
+decides what it may name:
+
+- The tenant chooses both the reference and the server the credential goes to,
+  so only references in its own namespace are accepted. Its own secrets may go
+  to any server the outbound URL policy allows. A secret of the instance or of
+  another tenant is outside its namespace and is refused with `400` (plan issue
+  `KMS_SETTING_REFUSED`). An operator secret it may use only for one server is
+  a `bound` grant, checked against the server the credential is sent to
+  (`vaultUrl`, `baseUrl`, `auth.tokenUrl`, `tokenUrl`; the region's endpoint
+  for `aws-kms`). A PKCS#11 `pin` goes to a library of the host, no server, so
+  it can only be a reference of the tenant's own namespace.
+- A provider with a reference counts as shared, like one with a `${VAR}`
+  placeholder, also without a secret policy (then the text is a literal
+  credential): EUDIPLO keeps the tenant to its own keys on it
+  ([shared providers](#keys-of-a-provider-that-tenants-share)).
+- The reference is checked again each time the credential is used, so one in a
+  file you wrote, or one the policy no longer grants, fails the key operation
+  and nothing is sent.
+- The value is read when the provider is used and cached for 5 minutes. When it
+  changes, EUDIPLO builds the provider anew with the new value; the old one is
+  closed 60 seconds later, so running operations can finish.
+- `GET /api/key-chain/providers/config` shows a reference of the tenant file
+  as written; a literal credential, and every credential of the global file,
+  stays `<redacted>`.
+- `KMS_TENANT_VARIABLES`, `KMS_TENANT_FILES`, the AWS default credentials and
+  the outbound URL policy keep their rules: a reference is no `${VAR}`
+  placeholder, no file of the host and no server address.
+
+The global `kms.json` can use references too, under the policy's `instance`
+grants.
 
 ### Files and AWS credentials in a tenant `kms.json`
 
@@ -412,8 +452,9 @@ the same credentials:
 - every provider of the global `kms.json`, except a `db` provider, whose keys
   are stored with their key chain;
 - a provider of a tenant `kms.json` that uses the instance's AWS identity
-  (`aws-kms` without credentials), the client certificate of mTLS files, or a
-  value from a `${VAR}` placeholder.
+  (`aws-kms` without credentials), the client certificate of mTLS files, a
+  value from a `${VAR}` placeholder, or a secret reference (which may name an
+  operator secret other tenants are granted too).
 
 Every other provider of a tenant `kms.json` is the tenant's own, also an
 `http` provider without authentication. EUDIPLO does not notice two tenant

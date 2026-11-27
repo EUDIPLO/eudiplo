@@ -18,6 +18,8 @@ import { LoadErrorComponent } from '../../common/load-error.component';
 import { copyToClipboard } from '../../utils/copy-to-clipboard';
 import { ItemRoutePipe } from '../../common/item-route.pipe';
 import { hasHttpStatus } from '../../utils/error-message';
+import { RoleLockDirective } from '../../common/role-lock.directive';
+import { ISSUANCE_WRITE_ROLES } from '../../services/resource-roles';
 
 @Component({
   selector: 'app-status-list-list',
@@ -34,6 +36,7 @@ import { hasHttpStatus } from '../../utils/error-message';
     MatProgressBarModule,
     MatProgressSpinnerModule,
     ConfigOwnershipDirective,
+    RoleLockDirective,
     LoadErrorComponent,
   ],
   templateUrl: './status-list-list.component.html',
@@ -41,6 +44,9 @@ import { hasHttpStatus } from '../../utils/error-message';
   styleUrl: './status-list-list.component.scss',
 })
 export class StatusListListComponent extends BaseAsyncListComponent<StatusListResponseDto> {
+  /** Creating, changing and deleting it needs issuance:manage; reading needs less. */
+  readonly writeRoles = ISSUANCE_WRITE_ROLES;
+
   protected readonly loadFailedMessage = 'Failed to load status lists';
 
   get lists(): StatusListResponseDto[] {

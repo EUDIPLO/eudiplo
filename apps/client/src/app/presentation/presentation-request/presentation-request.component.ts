@@ -38,7 +38,7 @@ import { JwtService } from '../../services/jwt.service';
 import { showFieldsToFix } from '../../common/field-to-fix.util';
 import { LoadErrorComponent } from '../../common/load-error.component';
 import { focusAfterRenderIfLost } from '../../common/focus-if-lost.util';
-import { WEBHOOK_ENDPOINT_ROLES } from '../../webhook-endpoint/webhook-endpoint-roles';
+import { SHARED_READ_ROLES } from '../../services/resource-roles';
 import { credentialsWithoutTrust } from '../presentation-config/dcql-query-editor/simple-dcql';
 
 type ClientIdScheme = 'x509_hash' | 'x509_san_dns' | 'openid_federation';
@@ -103,9 +103,9 @@ export class PresentationRequestComponent implements OnInit {
     return this.jwtService.hasRole('presentation:manage');
   }
 
-  /** Webhook endpoints can be opened with `issuance:manage` or `presentation:manage`. */
-  get canManageWebhookEndpoints(): boolean {
-    return this.jwtService.hasRole(WEBHOOK_ENDPOINT_ROLES);
+  /** Webhook endpoints can be opened with `issuance:read` or `presentation:read`. */
+  get canOpenWebhookEndpoints(): boolean {
+    return this.jwtService.hasRole(SHARED_READ_ROLES);
   }
 
   constructor(

@@ -125,6 +125,31 @@ describe('UserCreateComponent Save', () => {
     expect(changes).toEqual([]);
   });
 
+  it('names under each role option the roles it includes, and only the roles in the trigger', async () => {
+    const { harness, page } = await render('/users/create');
+    page
+      .querySelector<HTMLElement>('mat-select[formcontrolname="roles"] .mat-mdc-select-trigger')!
+      .click();
+    harness.detectChanges();
+    await harness.fixture.whenStable();
+
+    const option = (role: string) =>
+      [...document.querySelectorAll<HTMLElement>('mat-option')].find(
+        (candidate) => candidate.getAttribute('aria-label') === role
+      )!;
+    const offer = option('issuance:offer');
+    expect(offer.querySelector('.role-includes')?.textContent?.trim()).toBe(
+      'includes issuance:read'
+    );
+    expect(offer.getAttribute('aria-description')).toBe('includes issuance:read');
+    expect(option('audit:read').querySelector('.role-includes')).toBeNull();
+    expect(option('audit:read').getAttribute('aria-description')).toBeNull();
+
+    offer.click();
+    harness.detectChanges();
+    expect(page.querySelector('mat-select-trigger')?.textContent?.trim()).toBe('issuance:offer');
+  });
+
   it('keeps Save focusable and says why a user with roles the caller cannot grant stays as it is', async () => {
     const { harness, save } = await render('/users/locked');
     await vi.waitFor(() => {

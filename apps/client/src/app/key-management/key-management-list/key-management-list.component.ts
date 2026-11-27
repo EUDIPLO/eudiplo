@@ -11,7 +11,7 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { RouterModule } from '@angular/router';
 import { type DefaultAccessKeyChainDto, KeyChainResponseDto } from '@eudiplo/sdk-core';
-import { KeyChainService } from '../key-chain.service';
+import { KEY_ADMIN_ROLE, KeyChainService } from '../key-chain.service';
 import { ConfigOwnershipDirective } from '../../config-portability/config-ownership.directive';
 import { LoadErrorComponent } from '../../common/load-error.component';
 import { getApiErrorMessage } from '../../utils/error-message';
@@ -30,6 +30,8 @@ import {
 } from '../default-access-key-chain';
 import { keyUsages, type KeyUsageType } from '../key-usage';
 import { ItemRoutePipe } from '../../common/item-route.pipe';
+import { RoleLockDirective } from '../../common/role-lock.directive';
+import { JwtService } from '../../services/jwt.service';
 
 /**
  * Display item for key chains.
@@ -61,6 +63,7 @@ interface KeyDisplayItem {
     MatProgressSpinnerModule,
     RouterModule,
     ConfigOwnershipDirective,
+    RoleLockDirective,
     LoadErrorComponent,
   ],
   templateUrl: './key-management-list.component.html',
@@ -100,10 +103,19 @@ export class KeyManagementListComponent implements OnInit {
 
   private readonly usageConfig = keyUsages;
 
+  /** Creating, changing, rotating and deleting key chains and the default need it. */
+  readonly keyAdminRole = KEY_ADMIN_ROLE;
+
   constructor(
     private readonly keyChainService: KeyChainService,
-    private readonly snackBar: MatSnackBar
+    private readonly snackBar: MatSnackBar,
+    private readonly jwtService: JwtService
   ) {}
+
+  /** Whether the caller may create, change, rotate and delete key chains. */
+  get canManageKeyChains(): boolean {
+    return this.jwtService.hasRole(KEY_ADMIN_ROLE);
+  }
 
   ngOnInit(): void {
     void this.loadAllKeys();
@@ -232,7 +244,7 @@ export class KeyManagementListComponent implements OnInit {
 
   async deleteItem(item: KeyDisplayItem, event: Event): Promise<void> {
     event.stopPropagation();
-    if (this.deletingIds.has(item.id)) return;
+    if (!this.canManageKeyChains || this.deletingIds.has(item.id)) return;
 
     // The backend refuses it; say so instead of asking first.
     const refusal = defaultAccessDeleteRefusal(this.defaultAccess, item.id);
@@ -296,13 +308,13 @@ export class KeyManagementListComponent implements OnInit {
   /** Makes the key chain the tenant's default access key chain, or removes it as default. */
   async toggleDefault(item: KeyDisplayItem, event: Event): Promise<void> {
     event.stopPropagation();
-    if (!this.canToggleDefault(item)) return;
+    if (!this.canManageKeyChains || !this.canToggleDefault(item)) return;
     await this.setDefault(this.isDefault(item) ? null : item.id);
   }
 
   /** Sets the default access key chain, or with null removes it; keeps the state on failure. */
   async setDefault(keyChainId: string | null): Promise<void> {
-    if (this.updatingDefault) return;
+    if (!this.canManageKeyChains || this.updatingDefault) return;
     this.updatingDefault = true;
     try {
       this.defaultAccess =
@@ -315,7 +327,7 @@ export class KeyManagementListComponent implements OnInit {
 
   async rotateItem(item: KeyDisplayItem, event: Event): Promise<void> {
     event.stopPropagation();
-    if (this.rotatingIds.has(item.id)) return;
+    if (!this.canManageKeyChains || this.rotatingIds.has(item.id)) return;
 
     if (!item.rotationEnabled) {
       this.snackBar.open('Rotation not enabled for this key chain', 'Dismiss', { duration: 3000 });

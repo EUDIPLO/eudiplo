@@ -42,6 +42,7 @@ import {
 } from '../../../common/load-source';
 import { focusAfterRenderIfLost } from '../../../common/focus-if-lost.util';
 import type { PageWithUnsavedChanges } from '../../../services/unsaved-changes.service';
+import { RoleIncludesPipe } from '../../../common/role-includes.pipe';
 
 /** The config lists a client can be restricted to. */
 export type ConfigSource = 'presentationConfigs' | 'issuanceConfigs';
@@ -63,19 +64,20 @@ const configSources: Record<ConfigSource, ConfigSourceInfo> = {
     control: 'allowedPresentationConfigs',
     title: 'Allowed Verification Configs',
     label: 'verification configs',
-    roles: ['presentation:manage', 'presentation:request'],
+    roles: ['presentation:read'],
   },
   issuanceConfigs: {
     control: 'allowedIssuanceConfigs',
     title: 'Allowed Credential Configs',
     label: 'credential configs',
-    roles: ['issuance:manage'],
+    roles: ['issuance:read'],
   },
 };
 
 @Component({
   selector: 'app-client-create',
   imports: [
+    RoleIncludesPipe,
     ReactiveFormsModule,
     MatCardModule,
     MatFormFieldModule,

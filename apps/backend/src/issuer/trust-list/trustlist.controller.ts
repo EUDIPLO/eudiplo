@@ -44,9 +44,9 @@ const readOnly = [
 
 /** Roles that read each kind of configuration that can reference a trust list. */
 const readRoles: Record<TrustListReferenceKind, Role[]> = {
-    PresentationConfig: [Role.Presentations, Role.PresentationRequest],
-    CredentialConfig: [Role.Issuances],
-    IssuanceConfig: [Role.Issuances],
+    PresentationConfig: [Role.PresentationRead],
+    CredentialConfig: [Role.IssuanceRead],
+    IssuanceConfig: [Role.IssuanceRead],
 };
 
 /**
@@ -102,6 +102,7 @@ export class TrustListController {
      * @param token
      * @returns
      */
+    @Secured([Role.IssuanceRead, Role.PresentationRead])
     @Get()
     getAllTrustLists(@Token() token: TokenPayload) {
         return this.trustListService.findAll(token.entity!);
@@ -113,6 +114,7 @@ export class TrustListController {
      * @param id
      * @returns
      */
+    @Secured([Role.IssuanceRead, Role.PresentationRead])
     @Get(":id")
     @ApiResponse({ status: 404, description: LIST_NOT_FOUND })
     getTrustList(@Token() token: TokenPayload, @Param("id") id: string) {
@@ -125,6 +127,7 @@ export class TrustListController {
      * @param id
      * @returns
      */
+    @Secured([Role.IssuanceRead, Role.PresentationRead])
     @Get(":id/export")
     @ApiResponse({ status: 404, description: LIST_NOT_FOUND })
     exportTrustList(@Token() token: TokenPayload, @Param("id") id: string) {
@@ -137,6 +140,7 @@ export class TrustListController {
      * @param id
      * @returns
      */
+    @Secured([Role.IssuanceRead, Role.PresentationRead])
     @Get(":id/versions")
     @ApiResponse({ status: 404, description: LIST_NOT_FOUND })
     getTrustListVersions(
@@ -153,6 +157,7 @@ export class TrustListController {
      * @param versionId
      * @returns
      */
+    @Secured([Role.IssuanceRead, Role.PresentationRead])
     @Get(":id/versions/:versionId")
     @ApiResponse({
         status: 404,

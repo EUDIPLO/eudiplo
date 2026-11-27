@@ -46,6 +46,7 @@ export class AttributeProviderController {
         return redactApiKey(entry, (value) => this.secrets.isShown(value));
     }
 
+    @Secured([Role.IssuanceRead])
     @Get()
     @ApiOperation({ summary: "List all attribute providers" })
     @ApiResponse({
@@ -59,6 +60,7 @@ export class AttributeProviderController {
         );
     }
 
+    @Secured([Role.IssuanceRead])
     @Get(":id")
     @ApiOperation({ summary: "Get an attribute provider by ID" })
     @ApiResponse({

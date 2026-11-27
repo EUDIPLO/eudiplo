@@ -8,7 +8,7 @@ Configuration files name their format in `$schema`, for example `https://eudiplo
 
 ## Format versions
 
-Each resource type has its own format version in `CONFIG_FORMATS` (`packages/eudiplo-config-format/src/config-format.ts`); it is independent of the application version. EUDIPLO 9.0 introduced the first bumps; `IssuanceConfig` v3 followed in 9.1, `CredentialConfig` v2 to v4, `KeyChain` v2, `Client` v2, `KmsConfig` v2, `Tenant` v2 to v4, `IssuanceConfig` v4 to v7, `KeyChain` v3 and v4, `KeyChainDefaults` v2, `PresentationConfig` v4 and v5 and `TrustList` v2 in 10.0, which also retired `RegistrarConfig`, `CredentialConfig` v5 in 10.1, and `PresentationConfig` v6 in 11.0:
+Each resource type has its own format version in `CONFIG_FORMATS` (`packages/eudiplo-config-format/src/config-format.ts`); it is independent of the application version. EUDIPLO 9.0 introduced the first bumps; `IssuanceConfig` v3 followed in 9.1, `CredentialConfig` v2 to v4, `KeyChain` v2, `Client` v2, `KmsConfig` v2, `Tenant` v2 to v4, `IssuanceConfig` v4 to v7, `KeyChain` v3 and v4, `KeyChainDefaults` v2, `PresentationConfig` v4 and v5 and `TrustList` v2 in 10.0, which also retired `RegistrarConfig`, `CredentialConfig` v5 in 10.1, and `Client` v3 and `PresentationConfig` v6 in 11.0:
 
 | Resource | Version | Change |
 | --- | --- | --- |
@@ -27,6 +27,7 @@ Each resource type has its own format version in `CONFIG_FORMATS` (`packages/eud
 | `KeyChain` | v4 | Usage type `authorizationServer`. A v3 file is a valid v4 file; a bare key chain file with usage type `authorizationServer` is read as v4. |
 | `KeyChainDefaults` | v2 | Optional `authorizationServer` entry. A v1 file is a valid v2 file; a bare `key-chain-defaults.json` with the entry is read as v2 (`bareFileVersion`). |
 | `Client` | v2 | The roles `audit:read`, `sessions:read`, `credentials:status` and `keys:manage`. A v1 file is a valid v2 file. |
+| `Client` | v3 | The roles `issuance:read`, `presentation:read` and `keys:export`. Migrating a v2 file adds `audit:read` to `clients:manage` and `keys:manage` to `issuance:manage` or `presentation:manage`, unless `tenant:admin` or `tenants:manage` covers them. |
 | `KmsConfig` | v2 | Optional `algorithms` and `defaultAlgorithm` on providers. A v1 file is a valid v2 file; a bare `kms.json` with either field on a provider is read as v2 (`bareFileVersion`). |
 | `Tenant` | v2 | Optional `defaultAccessKeyChainId`. A v1 file is a valid v2 file; a bare `info.json` with the field is read as v2 (`bareFileVersion`). Only in development builds of 10.0. |
 | `Tenant` | v3 | `defaultKeyChains` map by usage type replaces `defaultAccessKeyChainId`; the v2 → v3 step moves it to `defaultKeyChains.access`. A bare `info.json` with `defaultKeyChains` is read as v3. Only in development builds of 10.0. |

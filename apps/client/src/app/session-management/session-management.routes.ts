@@ -1,7 +1,7 @@
 import type { Routes } from '@angular/router';
 import { unsavedChangesGuard } from '../guards/unsaved-changes.guard';
 import { RoleGuard } from '../guards/roles.guard';
-import { getRole } from '../services/jwt.service';
+import { SHARED_READ_ROLES } from '../services/resource-roles';
 import { SESSION_READER_ROLES } from './session-roles';
 
 export const sessionManagementRoutes: Routes = [
@@ -17,7 +17,7 @@ export const sessionManagementRoutes: Routes = [
   {
     path: 'config',
     canActivate: [RoleGuard],
-    data: { role: [getRole('issuance:manage'), getRole('presentation:manage')] },
+    data: { role: SHARED_READ_ROLES },
     loadComponent: () =>
       import('../session-config/session-config.component').then((m) => m.SessionConfigComponent),
     canDeactivate: [unsavedChangesGuard],
