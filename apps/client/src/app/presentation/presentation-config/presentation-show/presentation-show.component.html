@@ -23,7 +23,37 @@
             </span>
           }
           <span class="badge">Status checks: {{ statusCheckModeLabels[statusCheckMode] }}</span>
+          @if (config.allowUntrustedIssuers) {
+            <span class="badge status-warning">Untrusted issuers accepted</span>
+          }
         </div>
+        @if (config.allowUntrustedIssuers) {
+          <p class="untrusted-warning" role="note">
+            <mat-icon aria-hidden="true">warning</mat-icon>
+            <span>
+              <strong>The issuer's authority is not validated.</strong> This config accepts a
+              credential without an issuer trust entry from any issuer whose signature is valid,
+              including one that anybody can set up. Use it with caution, for development and
+              interoperability tests only.
+              <a
+                href="https://docs.eudiplo.dev/cookbooks/trusted-issuers"
+                target="_blank"
+                rel="noopener"
+                >Accept only trusted issuers (opens in a new tab)</a
+              >
+            </span>
+          </p>
+        } @else if (queriesWithoutTrust.length) {
+          <p class="untrusted-warning refused" role="note">
+            <mat-icon aria-hidden="true">error</mat-icon>
+            <span>
+              <strong>Every presentation against this config is refused.</strong>
+              {{ queriesWithoutTrust.join(', ') }}
+              {{ queriesWithoutTrust.length === 1 ? 'has' : 'have' }} no issuer trust entry. Edit
+              the config to add issuer trust, or accept credentials without it.
+            </span>
+          </p>
+        }
         @if (config.description) {
           <p class="hero-description">{{ config.description }}</p>
         }
@@ -135,6 +165,16 @@
                 <div>
                   <dt>Status List Check Mode</dt>
                   <dd>{{ statusCheckModeLabels[statusCheckMode] }}</dd>
+                </div>
+                <div>
+                  <dt>Credentials without issuer trust</dt>
+                  <dd>
+                    {{
+                      config.allowUntrustedIssuers
+                        ? 'Accepted from any issuer (issuer not validated)'
+                        : 'Refused'
+                    }}
+                  </dd>
                 </div>
                 @if (config.redirectUri) {
                   <div>
@@ -288,7 +328,7 @@
                           } @else {
                             <p>No claims requested: only proves a valid credential of this type.</p>
                           }
-                          @if (cred.trusted_authorities && cred.trusted_authorities.length > 0) {
+                          @if (!queriesWithoutTrust.includes(cred.id)) {
                             <div class="trusted-authorities">
                               <h5>
                                 <mat-icon>verified_user</mat-icon>
@@ -319,6 +359,15 @@
                                 </div>
                               }
                             </div>
+                          } @else {
+                            <p class="no-trust">
+                              <mat-icon aria-hidden="true">gpp_maybe</mat-icon>
+                              @if (config.allowUntrustedIssuers) {
+                                No issuer trust: any issuer whose signature is valid is accepted.
+                              } @else {
+                                No issuer trust: every presentation against this config is refused.
+                              }
+                            </p>
                           }
                         </mat-card-content>
                       </mat-card>

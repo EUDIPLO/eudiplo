@@ -221,6 +221,42 @@ describe("single-resource configuration documents", () => {
         expect(after.planFingerprint).toBe(before.planFingerprint);
     });
 
+    it("exports allowUntrustedIssuers only when a presentation configuration opts in", async () => {
+        const repository = app
+            .get(DataSource)
+            .getRepository(PresentationConfig);
+        const [optedIn, without] = await repository.find({
+            where: { tenantId: "demo" },
+            order: { id: "ASC" },
+            take: 2,
+        });
+        const auth = await token(adminClientId("demo"), adminSecret);
+        await repository.update(
+            { tenantId: "demo", id: optedIn.id },
+            { allowUntrustedIssuers: true },
+        );
+        try {
+            const exported = await download(
+                auth,
+                "PresentationConfig",
+                optedIn.id,
+            ).expect(200);
+            expect(exported.body.spec.allowUntrustedIssuers).toBe(true);
+
+            const plain = await download(
+                auth,
+                "PresentationConfig",
+                without.id,
+            ).expect(200);
+            expect(plain.body.spec).not.toHaveProperty("allowUntrustedIssuers");
+        } finally {
+            await repository.update(
+                { tenantId: "demo", id: optedIn.id },
+                { allowUntrustedIssuers: false },
+            );
+        }
+    });
+
     it("exports the allowed origins of a presentation configuration", async () => {
         const repository = app
             .get(DataSource)

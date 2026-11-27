@@ -21,16 +21,6 @@ export const SKIP_VALIDATION_SCHEMA = Joi.object({
             order: 10,
             disables: "overasking prevention of registration certificates",
         }),
-    SKIP_TRUST_AUTHORITY: Joi.boolean()
-        .default(false)
-        .description(
-            "Accept presentation configurations whose DCQL credential queries have no trusted_authorities. Presented credentials of such queries are verified without checking their issuer. Intended for development and interoperability testing only.",
-        )
-        .meta({
-            group: "skip",
-            order: 20,
-            disables: "required trusted authorities in presentation configs",
-        }),
 });
 
 /**
@@ -54,4 +44,30 @@ export function skippedProtection(flag: string): string | undefined {
         SKIP_VALIDATION_SCHEMA.describe().keys?.[flag]?.metas ?? [];
     const disables = metas.find((meta) => "disables" in meta)?.disables;
     return typeof disables === "string" ? disables : undefined;
+}
+
+/**
+ * `SKIP_*` flags that were removed, with what replaces them. A deployment that
+ * still enables one refuses to start, so the check it turned off does not
+ * come back unnoticed.
+ */
+const REMOVED_SKIP_FLAGS: Record<string, string> = {
+    SKIP_TRUST_AUTHORITY:
+        "SKIP_TRUST_AUTHORITY was removed in EUDIPLO 11.0. Set allowUntrustedIssuers to true in each presentation configuration whose credential queries have no trusted_authorities instead (development and interoperability tests only), and unset SKIP_TRUST_AUTHORITY.",
+};
+
+/**
+ * Why the environment cannot be used because it enables a removed `SKIP_*`
+ * flag, or undefined. Unset or `false` values are accepted.
+ */
+export function removedSkipFlagError(
+    env: Record<string, unknown>,
+): string | undefined {
+    const enabled = Object.keys(REMOVED_SKIP_FLAGS).filter((key) => {
+        const value = env[key];
+        return value === true || String(value).toLowerCase() === "true";
+    });
+    return enabled.length > 0
+        ? enabled.map((key) => REMOVED_SKIP_FLAGS[key]).join(" ")
+        : undefined;
 }

@@ -70,7 +70,6 @@ function setup(
     const service = new PresentationRegistrationCertificateService(
         {
             publicUrl: "https://eudiplo.example",
-            skipTrustAuthority: false,
             skipOveraskingCheck,
         },
         certService as never,

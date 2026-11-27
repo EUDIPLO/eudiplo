@@ -4,7 +4,6 @@ import { RegistrationCertificateStorage } from "./registration-certificate-stora
 
 const settings = {
     publicUrl: "https://eudiplo.example",
-    skipTrustAuthority: false,
     skipOveraskingCheck: false,
 };
 const actor = { entity: { id: "t" } } as never;

@@ -1406,6 +1406,7 @@ describe("PresentationConfig v1 to v2", () => {
                 id: "pid",
                 format: "dc+sd-jwt",
                 meta: { vct_values: ["urn:eudi:pid:de:1"] },
+                trusted_authorities: [{ type: "etsi_tl", values: [{ trustListId: "pid-issuers" }] }],
             },
         ],
     };
@@ -1434,6 +1435,7 @@ describe("PresentationConfig v1 to v2", () => {
             "presentation-config-v3-typed-claim-values",
             "presentation-config-v4-allowed-origins",
             "presentation-config-v5-registration-certificate",
+            "presentation-config-v6-allow-untrusted-issuers",
         ]);
         expect(result.document.spec.registration_cert).toEqual({
             privacy_policy: privacy.privacy_policy,
@@ -1524,6 +1526,7 @@ describe("PresentationConfig v2 to v3", () => {
                         id: "pid",
                         format: "dc+sd-jwt",
                         meta: { vct_values: ["urn:eudi:pid:de:1"] },
+                        trusted_authorities: [{ type: "etsi_tl", values: [{ trustListId: "pid-issuers" }] }],
                         claims: [{ path: ["age_equal_or_over", "18"], values }],
                     },
                 ],
@@ -1540,9 +1543,10 @@ describe("PresentationConfig v2 to v3", () => {
             "presentation-config-v3-typed-claim-values",
             "presentation-config-v4-allowed-origins",
             "presentation-config-v5-registration-certificate",
+            "presentation-config-v6-allow-untrusted-issuers",
         ]);
         expect(result.document.$schema).toBe(
-            schemaUrl("PresentationConfig", 5),
+            schemaUrl("PresentationConfig", 6),
         );
         expect(result.document.spec).toEqual(v2.spec);
         expect(
@@ -1591,6 +1595,7 @@ describe("PresentationConfig v3 to v4", () => {
                     id: "pid",
                     format: "dc+sd-jwt",
                     meta: { vct_values: ["urn:eudi:pid:de:1"] },
+                    trusted_authorities: [{ type: "etsi_tl", values: [{ trustListId: "pid-issuers" }] }],
                 },
             ],
         },
@@ -1609,9 +1614,10 @@ describe("PresentationConfig v3 to v4", () => {
         expect(result.migrations).toEqual([
             "presentation-config-v4-allowed-origins",
             "presentation-config-v5-registration-certificate",
+            "presentation-config-v6-allow-untrusted-issuers",
         ]);
         expect(result.document.$schema).toBe(
-            schemaUrl("PresentationConfig", 5),
+            schemaUrl("PresentationConfig", 6),
         );
         expect(result.document.spec).toEqual(spec);
         expect(
@@ -2033,6 +2039,7 @@ describe("PresentationConfig v4 to v5", () => {
                 id: "pid",
                 format: "dc+sd-jwt",
                 meta: { vct_values: ["urn:eudi:pid:de:1"] },
+                trusted_authorities: [{ type: "etsi_tl", values: [{ trustListId: "pid-issuers" }] }],
             },
         ],
     };
@@ -2060,6 +2067,7 @@ describe("PresentationConfig v4 to v5", () => {
 
         expect(result.migrations).toEqual([
             "presentation-config-v5-registration-certificate",
+            "presentation-config-v6-allow-untrusted-issuers",
         ]);
         expect(result.issues).toEqual([]);
         expect(result.document.spec.registration_cert).toEqual({
@@ -2253,5 +2261,86 @@ describe("retired resource kinds", () => {
                 }),
             },
         ]);
+    });
+});
+
+describe("PresentationConfig v5 to v6", () => {
+    const untrusted = {
+        id: "pid",
+        format: "dc+sd-jwt",
+        meta: { vct_values: ["urn:eudi:pid:de:1"] },
+    };
+    const trusted = {
+        ...untrusted,
+        id: "mdl",
+        trusted_authorities: [
+            { type: "etsi_tl", values: [{ trustListId: "pid-issuers" }] },
+        ],
+    };
+    const v5 = (spec: Record<string, unknown>) => ({
+        $schema: schemaUrl("PresentationConfig", 5),
+        spec: { id: "age", ...spec },
+    });
+
+    it("upgrades a document whose queries name trusted authorities unchanged and only once", () => {
+        const document = v5({ dcql_query: { credentials: [trusted] } });
+        const result = migrateDocument(document, validateConfigDocument);
+
+        expect(result.migrations).toEqual([
+            "presentation-config-v6-allow-untrusted-issuers",
+        ]);
+        expect(result.issues).toEqual([]);
+        expect(result.document.$schema).toBe(schemaUrl("PresentationConfig"));
+        expect(result.document.spec).toEqual(document.spec);
+        expect(
+            migrateDocument(result.document, validateConfigDocument).migrations,
+        ).toEqual([]);
+    });
+
+    it("asks for a decision about queries without trusted authorities and does not opt in", () => {
+        const result = migrateDocument(
+            v5({ dcql_query: { credentials: [untrusted, trusted] } }),
+            validateConfigDocument,
+        );
+
+        expect(result.document.spec).not.toHaveProperty(
+            "allowUntrustedIssuers",
+        );
+        expect(result.issues).toEqual([
+            expect.objectContaining({
+                severity: "required-input",
+                code: "TRUSTED_AUTHORITY_REQUIRED",
+                path: "/spec/dcql_query/credentials",
+                message: expect.stringContaining(
+                    "Credential queries without trusted_authorities: pid.",
+                ),
+            }),
+        ]);
+    });
+
+    it("accepts allowUntrustedIssuers only from v6 on", () => {
+        const spec = {
+            id: "age",
+            allowUntrustedIssuers: true,
+            dcql_query: { credentials: [untrusted] },
+        };
+        const errors = (version: number) =>
+            validateConfigDocument(
+                normalizeDocument({
+                    $schema: schemaUrl("PresentationConfig", version),
+                    spec,
+                }),
+            );
+        expect(errors(5)).not.toEqual([]);
+        expect(errors(6)).toEqual([]);
+    });
+
+    it("reads a bare file with allowUntrustedIssuers as v6", () => {
+        expect(
+            bareFileVersion("PresentationConfig", {
+                id: "age",
+                allowUntrustedIssuers: false,
+            }),
+        ).toBe(6);
     });
 });

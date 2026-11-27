@@ -14,8 +14,8 @@ const { trusted_authorities: _, ...untrustedPid } = trustedPid;
 
 function setup(
     options: {
-        skipTrustAuthority?: boolean;
         stored?: unknown[];
+        storedAllowUntrustedIssuers?: boolean;
         validate?: ReturnType<typeof vi.fn>;
         unregistered?: ReturnType<typeof vi.fn>;
     } = {},
@@ -27,6 +27,7 @@ function setup(
             id: "pid",
             tenantId: "tenant",
             dcql_query: { credentials: options.stored ?? [trustedPid] },
+            allowUntrustedIssuers: options.storedAllowUntrustedIssuers ?? false,
         }),
     };
     const configImportService = { importConfigsForTenant: vi.fn() };
@@ -45,11 +46,6 @@ function setup(
         { register: vi.fn() } as any,
         auditLogService as any,
         federationTrustAnchors as any,
-        {
-            publicUrl: "https://eudiplo.example",
-            skipTrustAuthority: options.skipTrustAuthority ?? false,
-            skipOveraskingCheck: false,
-        },
     );
     return {
         service,
@@ -130,15 +126,62 @@ describe("PresentationConfigService trusted authorities", () => {
         expect(repository.save).not.toHaveBeenCalled();
     });
 
-    it("stores a config without trusted_authorities with SKIP_TRUST_AUTHORITY", async () => {
-        const { service, repository } = setup({ skipTrustAuthority: true });
+    it("stores a config without trusted_authorities that sets allowUntrustedIssuers", async () => {
+        const { service, repository } = setup();
 
         await service.storePresentationConfig("tenant", {
             id: "pid",
+            allowUntrustedIssuers: true,
             dcql_query: { credentials: [untrustedPid] },
         } as any);
 
         expect(repository.save).toHaveBeenCalled();
+    });
+
+    it("turns a stored opt-in off when a replacing config leaves allowUntrustedIssuers out", async () => {
+        const { service, repository } = setup({
+            storedAllowUntrustedIssuers: true,
+        });
+
+        await service.storePresentationConfig("tenant", {
+            id: "pid",
+            dcql_query: { credentials: [trustedPid] },
+        } as any);
+
+        expect(repository.save).toHaveBeenCalledWith(
+            expect.objectContaining({ allowUntrustedIssuers: false }),
+        );
+    });
+
+    it("keeps a stored opt-in on an update that does not name allowUntrustedIssuers", async () => {
+        const { service, repository } = setup({
+            stored: [untrustedPid],
+            storedAllowUntrustedIssuers: true,
+        });
+
+        await service.updatePresentationConfig("pid", "tenant", {
+            description: "renamed",
+        } as any);
+
+        expect(repository.save).toHaveBeenCalledWith(
+            expect.objectContaining({ allowUntrustedIssuers: true }),
+        );
+    });
+
+    it("rejects an update that turns allowUntrustedIssuers off while a query has no trusted_authorities", async () => {
+        const { service, repository } = setup({
+            stored: [untrustedPid],
+            storedAllowUntrustedIssuers: true,
+        });
+
+        await expect(
+            service.updatePresentationConfig("pid", "tenant", {
+                allowUntrustedIssuers: false,
+            } as any),
+        ).rejects.toThrow(
+            "Credential queries without trusted_authorities: pid.",
+        );
+        expect(repository.save).not.toHaveBeenCalled();
     });
 
     it("keeps the stored config when an imported file has no trusted_authorities", async () => {

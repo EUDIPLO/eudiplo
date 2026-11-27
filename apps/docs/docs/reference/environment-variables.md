@@ -77,6 +77,11 @@ and defaults to `false`. On startup, EUDIPLO warns that protection mechanisms
 are disabled and lists the active skip flags with the protection each one turns
 off. Use them only for development and interoperability tests.
 
+`SKIP_TRUST_AUTHORITY` was removed in 11.0: a presentation configuration accepts
+credential queries without trusted authorities only with its own
+`allowUntrustedIssuers` ([DCQL](../presentation/dcql.md#accept-only-trusted-issuers)).
+The backend refuses to start while `SKIP_TRUST_AUTHORITY=true` is set.
+
 <ConfigTable group="skip" />
 
 ## Status

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { VALIDATION_SCHEMA } from "./combined.schema.js";
 import {
     getActiveSkipFlags,
+    removedSkipFlagError,
     SKIP_VALIDATION_SCHEMA,
     skippedProtection,
 } from "./skip-validation.schema.js";
@@ -22,8 +23,8 @@ describe("SKIP_VALIDATION_SCHEMA", () => {
         )) {
             expect(skippedProtection(key)).toEqual(expect.any(String));
         }
-        expect(skippedProtection("SKIP_TRUST_AUTHORITY")).toBe(
-            "required trusted authorities in presentation configs",
+        expect(skippedProtection("SKIP_OVERASKING_CHECK")).toBe(
+            "overasking prevention of registration certificates",
         );
     });
 
@@ -50,5 +51,36 @@ describe("getActiveSkipFlags", () => {
                 key === "SKIP_OVERASKING_CHECK" ? false : undefined,
             ),
         ).toEqual([]);
+    });
+});
+
+describe("removed SKIP_* flags", () => {
+    it("refuses SKIP_TRUST_AUTHORITY=true and names allowUntrustedIssuers", () => {
+        expect(
+            removedSkipFlagError({ SKIP_TRUST_AUTHORITY: "true" }),
+        ).toContain("allowUntrustedIssuers");
+        expect(removedSkipFlagError({ SKIP_TRUST_AUTHORITY: true })).toEqual(
+            expect.any(String),
+        );
+    });
+
+    it("accepts the flag unset or false", () => {
+        expect(removedSkipFlagError({})).toBeUndefined();
+        expect(
+            removedSkipFlagError({ SKIP_TRUST_AUTHORITY: "false" }),
+        ).toBeUndefined();
+    });
+
+    it("makes the combined schema reject the environment", () => {
+        const { error } = VALIDATION_SCHEMA.validate(
+            {
+                SKIP_TRUST_AUTHORITY: "true",
+                MASTER_SECRET: "x".repeat(40),
+                AUTH_CLIENT_ID: "admin",
+                AUTH_CLIENT_SECRET: "secret",
+            },
+            { allowUnknown: true },
+        );
+        expect(error?.message).toContain("SKIP_TRUST_AUTHORITY was removed");
     });
 });

@@ -46,6 +46,7 @@ import type { EudiHubRegistrationCertificate } from '../../../registrar/eudi-hub
 import { formatLifetime } from '../../../utils/duration';
 import { RoleLockDirective } from '../../../common/role-lock.directive';
 import { PRESENTATION_WRITE_ROLES } from '../../../services/resource-roles';
+import { credentialsWithoutTrust } from '../dcql-query-editor/simple-dcql';
 
 @Component({
   selector: 'app-presentation-show',
@@ -190,6 +191,11 @@ export class PresentationShowComponent implements OnInit {
 
   get credentialQueries(): any[] {
     return this.config?.dcql_query?.credentials || [];
+  }
+
+  /** Credential queries without issuer trust, which the backend refuses unless the config opts in. */
+  get queriesWithoutTrust(): string[] {
+    return credentialsWithoutTrust(this.config?.dcql_query);
   }
 
   get statusCheckMode(): 'strict' | 'best_effort' | 'disabled' {

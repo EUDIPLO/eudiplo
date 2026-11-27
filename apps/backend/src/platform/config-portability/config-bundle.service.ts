@@ -2291,6 +2291,9 @@ export class ConfigBundleService {
                         ? entity.allowedOrigins
                         : undefined,
                     readerAuth: entity.readerAuth,
+                    // Only an opt-in is exported, like a default left unset.
+                    allowUntrustedIssuers:
+                        entity.allowUntrustedIssuers || undefined,
                 };
             case "AttributeProvider":
             case "WebhookEndpoint":

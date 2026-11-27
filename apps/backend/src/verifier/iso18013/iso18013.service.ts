@@ -523,7 +523,7 @@ export class Iso18013Service {
         }
         const missingAuthorities = missingTrustedAuthorities(
             [mdocCred],
-            this.configService.get<boolean>("SKIP_TRUST_AUTHORITY") ?? false,
+            config.allowUntrustedIssuers,
         );
         if (missingAuthorities) {
             throw new BadRequestException(missingAuthorities);

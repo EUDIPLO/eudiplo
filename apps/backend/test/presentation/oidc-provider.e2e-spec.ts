@@ -473,8 +473,8 @@ describe("OpenID Provider", () => {
 
     test("a subject needs its credential query in the scope's config", async () => {
         const auth = `Bearer ${authToken}`;
-        // EUDIPLO refuses a config without trusted_authorities unless
-        // SKIP_TRUST_AUTHORITY is set; a query the config lacks is refused too.
+        // EUDIPLO refuses a config without trusted_authorities unless it sets
+        // allowUntrustedIssuers; a query the config lacks is refused too.
         const refused = await request(app.getHttpServer())
             .post("/verifier/oidc-clients")
             .set("Authorization", auth)

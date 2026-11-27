@@ -2666,6 +2666,10 @@ export type PresentationConfig = {
      */
     statusCheckMode?: 'strict' | 'best_effort' | 'disabled';
     /**
+     * Accept DCQL credential queries without trusted_authorities. Credentials of such queries are verified without checking their issuer: any issuer with a valid signature is accepted. For development and interoperability tests only. Defaults to false.
+     */
+    allowUntrustedIssuers?: boolean;
+    /**
      * Unique identifier for the VP request.
      */
     id: string;
@@ -3255,6 +3259,10 @@ export type PresentationConfigCreateDto = {
      * Whether reader authentication is required for mDoc requests.
      */
     readerAuth?: boolean | null;
+    /**
+     * Accept DCQL credential queries without trusted_authorities. Credentials of such queries are verified without checking their issuer: any issuer with a valid signature is accepted. For development and interoperability tests only. Defaults to false.
+     */
+    allowUntrustedIssuers?: boolean;
 };
 
 export type PresentationConfigUpdateDto = {
@@ -3589,6 +3597,10 @@ export type PresentationConfigUpdateDto = {
      * Whether reader authentication is required for mDoc requests.
      */
     readerAuth?: boolean | null;
+    /**
+     * Accept DCQL credential queries without trusted_authorities. Credentials of such queries are verified without checking their issuer: any issuer with a valid signature is accepted. For development and interoperability tests only. Defaults to false.
+     */
+    allowUntrustedIssuers?: boolean;
 };
 
 export type TrustListEntityInfo = {
@@ -7856,7 +7868,7 @@ export type PresentationManagementControllerStorePresentationConfigData = {
 
 export type PresentationManagementControllerStorePresentationConfigErrors = {
     /**
-     * The configuration is invalid: a field fails validation, a DCQL credential query has no trusted_authorities (unless SKIP_TRUST_AUTHORITY is set), or the imported registration certificate (registration_cert.jwt) is refused because it is not a JWT, is expired or not yet valid, is not issued to the relying party of the access certificate (sub, or intermediary.sub with an intermediary, against its organizationIdentifier for a legal person or serialNumber for a natural person), or does not authorize the requested DCQL credentials.
+     * The configuration is invalid: a field fails validation, a DCQL credential query has no trusted_authorities (unless allowUntrustedIssuers is true), or the imported registration certificate (registration_cert.jwt) is refused because it is not a JWT, is expired or not yet valid, is not issued to the relying party of the access certificate (sub, or intermediary.sub with an intermediary, against its organizationIdentifier for a legal person or serialNumber for a natural person), or does not authorize the requested DCQL credentials.
      */
     400: unknown;
     /**
@@ -7998,7 +8010,7 @@ export type PresentationManagementControllerUpdateConfigurationData = {
 
 export type PresentationManagementControllerUpdateConfigurationErrors = {
     /**
-     * The configuration is invalid: a field fails validation, a DCQL credential query has no trusted_authorities (unless SKIP_TRUST_AUTHORITY is set), or the imported registration certificate (registration_cert.jwt) is refused because it is not a JWT, is expired or not yet valid, is not issued to the relying party of the access certificate (sub, or intermediary.sub with an intermediary, against its organizationIdentifier for a legal person or serialNumber for a natural person), or does not authorize the requested DCQL credentials.
+     * The configuration is invalid: a field fails validation, a DCQL credential query has no trusted_authorities (unless allowUntrustedIssuers is true), or the imported registration certificate (registration_cert.jwt) is refused because it is not a JWT, is expired or not yet valid, is not issued to the relying party of the access certificate (sub, or intermediary.sub with an intermediary, against its organizationIdentifier for a legal person or serialNumber for a natural person), or does not authorize the requested DCQL credentials.
      */
     400: unknown;
     /**

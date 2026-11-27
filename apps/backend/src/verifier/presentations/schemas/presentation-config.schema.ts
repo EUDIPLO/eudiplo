@@ -528,6 +528,12 @@ export const PresentationConfigCreateSchema = z
             .describe(
                 "Whether reader authentication is required for mDoc requests.",
             ),
+        allowUntrustedIssuers: z
+            .boolean()
+            .optional()
+            .describe(
+                "Accept DCQL credential queries without trusted_authorities. Credentials of such queries are verified without checking their issuer: any issuer with a valid signature is accepted. For development and interoperability tests only. Defaults to false.",
+            ),
     })
     .describe("Payload for creating presentation verifier configuration.")
     .strict();

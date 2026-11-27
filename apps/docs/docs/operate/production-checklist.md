@@ -96,6 +96,9 @@ again after major upgrades. Each item links to the guide that explains it.
       you know when they expire: EUDIPLO does not renew them.
 - [ ] No `SKIP_*` flag is set; the startup log lists active ones
       ([Skip flags](../reference/environment-variables.md#skip-flags)).
+- [ ] No presentation configuration sets `allowUntrustedIssuers`; the Web
+      Client marks such a configuration with **Untrusted issuers accepted**
+      ([DCQL](../presentation/dcql.md#accept-only-trusted-issuers)).
 - [ ] Outside the container image, for example with `node dist/main.js` from a
       source build, `NODE_ENV=production` is set. Otherwise EUDIPLO skips TLS
       certificate checks when it fetches status lists and trust lists, returns internal error messages to API

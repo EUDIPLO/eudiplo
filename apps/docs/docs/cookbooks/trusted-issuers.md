@@ -82,5 +82,5 @@ General problems are covered in [Troubleshooting](../troubleshooting.md).
 ## Next steps
 
 - [Trust lists](../trust/trust-lists.md): entity types, wallet provider lists and renewal.
-- [DCQL](../presentation/dcql.md): `trusted_authorities` together with other query options.
+- [DCQL](../presentation/dcql.md#accept-only-trusted-issuers): `trusted_authorities` together with other query options, and why accepting credentials without issuer trust is for tests only.
 - [Keys and certificates](../trust/keys-and-certificates.md): import issuer certificates from your PKI.

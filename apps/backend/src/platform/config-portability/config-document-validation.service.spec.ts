@@ -11,12 +11,10 @@ describe("ConfigDocumentValidationService", () => {
         namedCurve: "P-256",
     }).privateKey.export({ format: "jwk" });
     const migrations = new ConfigMigrationService(new ConfigResourceRegistry());
-    const skipTrustAuthority = { value: false };
     const skipOveraskingCheck = { value: false };
     const service = new ConfigDocumentValidationService(migrations, {
         get: (key: string) =>
             ({
-                SKIP_TRUST_AUTHORITY: skipTrustAuthority.value,
                 SKIP_OVERASKING_CHECK: skipOveraskingCheck.value,
             })[key],
         getOrThrow: (key: string) => {
@@ -290,10 +288,6 @@ describe("ConfigDocumentValidationService", () => {
             },
         });
 
-        afterEach(() => {
-            skipTrustAuthority.value = false;
-        });
-
         it("accepts credential queries with trusted_authorities", () => {
             expect(
                 service.validate(
@@ -322,9 +316,17 @@ describe("ConfigDocumentValidationService", () => {
             ]);
         });
 
-        it("accepts them with SKIP_TRUST_AUTHORITY", () => {
-            skipTrustAuthority.value = true;
-            expect(service.validate(presentation(), undefined)).toEqual([]);
+        it("accepts them when the spec sets allowUntrustedIssuers", () => {
+            const document = presentation();
+            expect(
+                service.validate(
+                    {
+                        ...document,
+                        spec: { ...document.spec, allowUntrustedIssuers: true },
+                    },
+                    undefined,
+                ),
+            ).toEqual([]);
         });
 
         describe("transaction data", () => {

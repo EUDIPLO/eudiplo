@@ -154,6 +154,63 @@ describe("Presentation - Offer Creation", () => {
             .expect(400);
     });
 
+    test("accepts a query without trusted_authorities only with allowUntrustedIssuers", async () => {
+        const server = app.getHttpServer();
+        const auth = `Bearer ${authToken}`;
+        const config = {
+            id: "untrusted-issuers",
+            description: "No issuer trust",
+            dcql_query: {
+                credentials: [
+                    {
+                        id: "pid",
+                        format: "dc+sd-jwt",
+                        meta: { vct_values: ["https://example.com/pid"] },
+                    },
+                ],
+            },
+        };
+
+        const refused = await request(server)
+            .post("/verifier/config")
+            .trustLocalhost()
+            .set("Authorization", auth)
+            .send(config)
+            .expect(400);
+        expect(JSON.stringify(refused.body)).toContain(
+            "Credential queries without trusted_authorities: pid.",
+        );
+
+        await request(server)
+            .post("/verifier/config")
+            .trustLocalhost()
+            .set("Authorization", auth)
+            .send({ ...config, allowUntrustedIssuers: true })
+            .expect(201);
+        const stored = await request(server)
+            .get(`/verifier/config/${config.id}`)
+            .trustLocalhost()
+            .set("Authorization", auth)
+            .expect(200);
+        expect(stored.body.allowUntrustedIssuers).toBe(true);
+
+        // Turning the opt-in off while the query still lacks trust is refused.
+        await request(server)
+            .patch(`/verifier/config/${config.id}`)
+            .trustLocalhost()
+            .set("Authorization", auth)
+            .send({ allowUntrustedIssuers: false })
+            .expect(400);
+
+        // A request can be created from it.
+        await request(server)
+            .post("/verifier/offer")
+            .trustLocalhost()
+            .set("Authorization", auth)
+            .send({ response_type: ResponseType.URI, requestId: config.id })
+            .expect(201);
+    });
+
     test("client_id in offer URI matches the accessKeyChainId certificate when multiple access keys exist", async () => {
         // A second access key chain with a distinct certificate (different from the fixture default)
         const secondKeyMaterial = {

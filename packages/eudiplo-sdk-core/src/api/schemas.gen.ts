@@ -6236,6 +6236,11 @@ export const PresentationConfigSchema = {
             type: 'string',
             default: 'strict'
         },
+        allowUntrustedIssuers: {
+            type: 'boolean',
+            description: 'Accept DCQL credential queries without trusted_authorities. Credentials of such queries are verified without checking their issuer: any issuer with a valid signature is accepted. For development and interoperability tests only. Defaults to false.',
+            default: false
+        },
         id: {
             type: 'string',
             description: 'Unique identifier for the VP request.'
@@ -7381,6 +7386,10 @@ export const PresentationConfigCreateDtoSchema = {
                 'boolean',
                 'null'
             ]
+        },
+        allowUntrustedIssuers: {
+            type: 'boolean',
+            description: 'Accept DCQL credential queries without trusted_authorities. Credentials of such queries are verified without checking their issuer: any issuer with a valid signature is accepted. For development and interoperability tests only. Defaults to false.'
         }
     },
     required: [
@@ -8120,6 +8129,10 @@ export const PresentationConfigUpdateDtoSchema = {
                 'boolean',
                 'null'
             ]
+        },
+        allowUntrustedIssuers: {
+            type: 'boolean',
+            description: 'Accept DCQL credential queries without trusted_authorities. Credentials of such queries are verified without checking their issuer: any issuer with a valid signature is accepted. For development and interoperability tests only. Defaults to false.'
         }
     },
     additionalProperties: false

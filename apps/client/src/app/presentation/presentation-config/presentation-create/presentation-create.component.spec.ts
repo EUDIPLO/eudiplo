@@ -23,6 +23,7 @@ const query = {
       id: 'pid',
       format: 'dc+sd-jwt',
       meta: { vct_values: ['urn:pid'] },
+      trusted_authorities: [{ type: 'etsi_tl', values: [{ trustListId: 'pid-issuers' }] }],
       claims: [{ path: ['given_name'] }],
     },
   ],
@@ -562,6 +563,42 @@ describe('Verification config editor', () => {
     ).toBe('No changes');
   });
 
+  it('loads a stored opt-in into the toggle and keeps it on save', async () => {
+    route.snapshot.params = { id: 'existing' };
+    route.snapshot.url = [{ path: 'existing' }, { path: 'edit' }];
+    service.getPresentationById.mockResolvedValue({
+      id: 'existing',
+      description: 'Existing request',
+      allowUntrustedIssuers: true,
+      dcql_query: {
+        credentials: [{ id: 'pid', format: 'dc+sd-jwt', meta: { vct_values: ['urn:x'] } }],
+      },
+    });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(component.allowsUntrustedIssuers).toBe(true);
+    expect(component.form.dirty).toBe(false);
+
+    component.createOrUpdatePresentation();
+    await vi.waitFor(() => expect(component.saving).toBe(false));
+    expect(client.patch).toHaveBeenCalledWith(
+      expect.objectContaining({ body: expect.objectContaining({ allowUntrustedIssuers: true }) })
+    );
+  });
+
+  it('refuses Save for a query without issuer trust and names the toggle', () => {
+    fill();
+    component.queryControl.setValue({
+      credentials: [{ id: 'pid', format: 'dc+sd-jwt', meta: { vct_values: ['urn:x'] } }],
+    });
+    component.createOrUpdatePresentation();
+    expect(service.createConfiguration).not.toHaveBeenCalled();
+    expect(component.validationMessage).toBe(
+      'Add issuer trust to pid, or turn on Accept credentials without issuer trust.'
+    );
+    expect(component.activeStep).toBe(1);
+  });
+
   it('counts added and removed list entries and an imported query as unsaved changes', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     fill();
@@ -716,6 +753,45 @@ describe('Verification config editor', () => {
     fill();
     component.form.patchValue({ allowedOrigins: '  \n ' });
     expect(component.allowedOriginsSummary).toBe('Not restricted');
+  });
+
+  it('sends allowUntrustedIssuers false by default and leaves it out of exports', () => {
+    fill();
+    expect(component['getCompleteConfiguration'](true).allowUntrustedIssuers).toBeUndefined();
+    component.createOrUpdatePresentation();
+    expect(service.createConfiguration).toHaveBeenCalledWith(
+      expect.objectContaining({ allowUntrustedIssuers: false })
+    );
+  });
+
+  it('warns with a link to the cookbook while untrusted issuers are allowed', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fill();
+    component.queryControl.setValue({
+      credentials: [{ id: 'pid', format: 'dc+sd-jwt', meta: { vct_values: ['urn:x'] } }],
+    });
+    component.guided = false;
+    component.activeStep = 1;
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.querySelector('#untrusted-issuers-hint')?.textContent).toContain(
+      'saving is refused for: pid'
+    );
+
+    component.form.patchValue({ allowUntrustedIssuers: true });
+    fixture.detectChanges();
+    const warning = element.querySelector('#untrusted-issuers-hint.untrusted-warning');
+    expect(warning?.textContent).toContain("The issuer's authority is not validated.");
+    expect(warning?.querySelector('a')?.getAttribute('href')).toBe(
+      'https://docs.eudiplo.dev/cookbooks/trusted-issuers'
+    );
+    expect(component.querySummary[0].trust).toBe('No issuer trust: any issuer is accepted');
+    component.createOrUpdatePresentation();
+    expect(service.createConfiguration).toHaveBeenCalledWith(
+      expect.objectContaining({ allowUntrustedIssuers: true })
+    );
   });
 
   it('clears allowed origins with null and leaves them out of exports', () => {

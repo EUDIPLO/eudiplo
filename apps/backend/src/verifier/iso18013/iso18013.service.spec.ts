@@ -463,6 +463,29 @@ describe("Iso18013Service.processResponse presentation webhook", () => {
         expect(verify).not.toHaveBeenCalled();
     });
 
+    it("verifies an mso_mdoc query without trusted_authorities when the config sets allowUntrustedIssuers", async () => {
+        delete mdlQuery.trusted_authorities;
+        (
+            service as unknown as {
+                presentationConfigService: {
+                    getPresentationConfig: ReturnType<typeof vi.fn>;
+                };
+            }
+        ).presentationConfigService.getPresentationConfig.mockResolvedValue({
+            allowUntrustedIssuers: true,
+            dcql_query: { credentials: [mdlQuery] },
+        });
+
+        const error = await service
+            .processResponse("wallet-nonce", "encrypted")
+            .catch((error) => error);
+
+        expect(String(error?.message)).not.toContain(
+            "Credential queries without trusted_authorities",
+        );
+        expect(verify).toHaveBeenCalled();
+    });
+
     it("reports an undecryptable response as failed", async () => {
         vi.mocked(hpkeOpen).mockImplementation(() => {
             throw new Error("bad tag");

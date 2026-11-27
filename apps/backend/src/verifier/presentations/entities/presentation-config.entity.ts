@@ -469,4 +469,19 @@ export class PresentationConfig {
      */
     @Column("boolean", { nullable: true })
     readerAuth?: boolean | null;
+
+    /**
+     * Accept DCQL credential queries without `trusted_authorities`. Their
+     * credentials are verified without checking who issued them: any issuer
+     * with a valid signature is accepted. For development and
+     * interoperability tests only; queries with `trusted_authorities` are
+     * still checked against them. Defaults to `false`.
+     */
+    @ApiPropertyOptional({
+        description:
+            "Accept DCQL credential queries without trusted_authorities. Credentials of such queries are verified without checking their issuer: any issuer with a valid signature is accepted. For development and interoperability tests only. Defaults to false.",
+        default: false,
+    })
+    @Column("boolean", { default: false })
+    allowUntrustedIssuers?: boolean;
 }

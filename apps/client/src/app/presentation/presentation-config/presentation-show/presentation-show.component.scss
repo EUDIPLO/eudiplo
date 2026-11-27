@@ -294,3 +294,39 @@ mat-expansion-panel {
     word-break: break-all;
   }
 }
+
+.untrusted-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 12px 16px;
+  border-left: 3px solid var(--eudiplo-warning);
+  background: var(--eudiplo-warning-subtle);
+
+  mat-icon {
+    flex: none;
+    color: var(--eudiplo-warning);
+  }
+}
+
+.untrusted-warning.refused {
+  border-left-color: var(--eudiplo-danger);
+  background: color-mix(in srgb, var(--eudiplo-danger) 10%, transparent);
+
+  mat-icon {
+    color: var(--eudiplo-danger);
+  }
+}
+
+.no-trust {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 16px 0 0;
+
+  mat-icon {
+    flex: none;
+    color: var(--eudiplo-warning);
+  }
+}

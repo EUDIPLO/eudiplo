@@ -34,6 +34,7 @@ import { AddOidcProvider1786400000000 } from "../src/database/migrations/1786400
 import { RemoveSandboxRegistrar1786500000000 } from "../src/database/migrations/1786500000000-RemoveSandboxRegistrar.js";
 import { AllowDeferredTransactionWithoutHolderKey1786700000000 } from "../src/database/migrations/1786700000000-AllowDeferredTransactionWithoutHolderKey.js";
 import { AddWalletInstanceRevocation1786800000000 } from "../src/database/migrations/1786800000000-AddWalletInstanceRevocation.js";
+import { AddAllowUntrustedIssuersToPresentationConfig1787000000000 } from "../src/database/migrations/1787000000000-AddAllowUntrustedIssuersToPresentationConfig.js";
 import { describeWithContainers } from "./container-runtime.js";
 import {
     addTokensValidAfterContract,
@@ -1199,6 +1200,44 @@ describe("Migration tests", () => {
         },
     );
 
+    describeNullableColumn(
+        "AddAllowUntrustedIssuersToPresentationConfig1787000000000",
+        new AddAllowUntrustedIssuersToPresentationConfig1787000000000(),
+        {
+            table: "presentation_config",
+            column: "allowUntrustedIssuers",
+            entities: async () => {
+                const [
+                    { PresentationConfig },
+                    { WebhookEndpointEntity },
+                    { TenantEntity },
+                    { ClientEntity },
+                ] = await Promise.all([
+                    import(
+                        "../src/verifier/presentations/entities/presentation-config.entity.js"
+                    ),
+                    import(
+                        "../src/issuer/configuration/webhook-endpoint/entities/webhook-endpoint.entity.js"
+                    ),
+                    import("../src/auth/tenant/entities/tenant.entity.js"),
+                    import("../src/auth/client/entities/client.entity.js"),
+                ]);
+                return [
+                    PresentationConfig,
+                    WebhookEndpointEntity,
+                    TenantEntity,
+                    ClientEntity,
+                ];
+            },
+            seed: [
+                `INSERT INTO "tenant_entity" ("id", "name") VALUES ('t', 't')`,
+                `INSERT INTO "presentation_config" ("id", "tenantId", "dcql_query") VALUES ('pid', 't', '{"credentials":[]}')`,
+            ],
+            row: `"id" = 'pid'`,
+            defaultValue: { sqlite: 0, postgres: false },
+        },
+    );
+
     describe("NormalizeTrustListEntityInfo1786200000000", () => {
         const entity = (info: Record<string, unknown>) => ({
             type: "internal",
@@ -1502,7 +1541,7 @@ describe("Migration tests", () => {
                 if (tmpDir) rmSync(tmpDir, { recursive: true, force: true });
             });
 
-            test("adds a nullable column, keeps the rows, is idempotent and reversible", async () => {
+            test("adds the column, keeps the rows, is idempotent and reversible", async () => {
                 await expectAddedAndReversible(
                     dataSource,
                     driftAfterSynchronize,
@@ -1531,7 +1570,7 @@ describe("Migration tests", () => {
                 await postgresContainer?.stop();
             });
 
-            test("adds a nullable column, keeps the rows, is idempotent and reversible", async () => {
+            test("adds the column, keeps the rows, is idempotent and reversible", async () => {
                 await expectAddedAndReversible(
                     dataSource,
                     driftAfterSynchronize,
@@ -3113,6 +3152,12 @@ function describeNullableColumn(
         row: string;
         /** Extra checks on the migrated schema, before `down()`. */
         afterUp?: (dataSource: DataSource) => Promise<void>;
+        /**
+         * For a NOT NULL column with a default: the value the seeded row
+         * reads back per database. Unset, the column is nullable and reads
+         * null.
+         */
+        defaultValue?: { sqlite: unknown; postgres: unknown };
     },
 ) {
     const { table, column } = options;
@@ -3163,12 +3208,17 @@ function describeNullableColumn(
             const added = (await queryRunner.getTable(table))?.findColumnByName(
                 column,
             );
-            expect(added?.isNullable).toBe(true);
+            const expected = options.defaultValue
+                ? dataSource.options.type === "postgres"
+                    ? options.defaultValue.postgres
+                    : options.defaultValue.sqlite
+                : null;
+            expect(added?.isNullable).toBe(!options.defaultValue);
             await expect(
                 dataSource.query(
                     `SELECT "${column}" FROM "${table}" WHERE ${options.row}`,
                 ),
-            ).resolves.toEqual([{ [column]: null }]);
+            ).resolves.toEqual([{ [column]: expected }]);
             // SQLite always rebuilds the table here; only the column order
             // differs, so the drift check is for PostgreSQL.
             if (dataSource.options.type === "postgres") {
@@ -3201,7 +3251,7 @@ function describeNullableColumn(
                 if (tmpDir) rmSync(tmpDir, { recursive: true, force: true });
             });
 
-            test("adds a nullable column, keeps the rows, is idempotent and reversible", async () => {
+            test("adds the column, keeps the rows, is idempotent and reversible", async () => {
                 await expectAddedAndReversible(
                     dataSource,
                     driftAfterSynchronize,
@@ -3229,7 +3279,7 @@ function describeNullableColumn(
                 await postgresContainer?.stop();
             });
 
-            test("adds a nullable column, keeps the rows, is idempotent and reversible", async () => {
+            test("adds the column, keeps the rows, is idempotent and reversible", async () => {
                 await expectAddedAndReversible(
                     dataSource,
                     driftAfterSynchronize,

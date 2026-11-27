@@ -12,7 +12,6 @@ import {
 } from "../domain/dcql-claim-policy.js";
 import { TransactionDataBindingError } from "../domain/transaction-data-binding.js";
 import { InvalidTrustedAuthoritiesError } from "../ports/trust-list-ref-resolver.js";
-import type { PresentationSettings } from "../presentation-settings.js";
 import { CredentialVerifierFormatRegistry } from "./credential-verifier-format-registry.js";
 import {
     CredentialVerificationFailedError,
@@ -36,7 +35,7 @@ function setup(
     result: Partial<CredentialVerificationResult> = {},
     request: Record<string, unknown> = {},
     credentialSets?: PresentationQuery["dcql_query"]["credential_sets"],
-    settings: Partial<PresentationSettings> = {},
+    options: { allowUntrustedIssuers?: boolean } = {},
 ) {
     const format: CredentialVerifierFormat = {
         format: "dc+sd-jwt",
@@ -54,13 +53,7 @@ function setup(
     const useCase = new VerifyPresentationResponse(
         new CredentialVerifierFormatRegistry([format]),
         trustLists,
-        {
-            publicUrl: "https://eudiplo.example",
-            // Most cases are about other checks; the requirement itself has
-            // its own cases.
-            skipTrustAuthority: true,
-            ...settings,
-        },
+        { publicUrl: "https://eudiplo.example", skipOveraskingCheck: false },
     );
     const payload = {
         nonce: "request-nonce",
@@ -80,6 +73,9 @@ function setup(
     } as SessionData;
     const query: PresentationQuery = {
         tenantId: "tenant",
+        // Most cases are about other checks; the requirement itself has its
+        // own cases.
+        allowUntrustedIssuers: options.allowUntrustedIssuers ?? true,
         dcql_query: { credentials, credential_sets: credentialSets },
     };
     const run = (vpToken: Record<string, string[]>) =>
@@ -134,7 +130,7 @@ describe("VerifyPresentationResponse", () => {
             {},
             {},
             undefined,
-            { skipTrustAuthority: false },
+            { allowUntrustedIssuers: false },
         );
 
         const error = await run({ pid: ["vp"], mdl: ["vp"] }).catch((e) => e);
@@ -145,7 +141,7 @@ describe("VerifyPresentationResponse", () => {
         expect(format.verify).not.toHaveBeenCalled();
     });
 
-    it("verifies credential queries with trusted_authorities without SKIP_TRUST_AUTHORITY", async () => {
+    it("verifies credential queries with trusted_authorities without allowUntrustedIssuers", async () => {
         const authorities = [
             {
                 type: "etsi_tl" as const,
@@ -157,7 +153,7 @@ describe("VerifyPresentationResponse", () => {
             {},
             {},
             undefined,
-            { skipTrustAuthority: false },
+            { allowUntrustedIssuers: false },
         );
 
         await expect(run({ pid: ["vp"] })).resolves.toEqual([
