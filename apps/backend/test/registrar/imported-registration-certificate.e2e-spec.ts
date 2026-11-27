@@ -1,5 +1,7 @@
+import { randomUUID, webcrypto } from "node:crypto";
 import { INestApplication } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import * as x509 from "@peculiar/x509";
 import { decodeJwt } from "jose";
 import request from "supertest";
 import { App } from "supertest/types";
@@ -31,8 +33,9 @@ describe("Imported registration certificate without a registrar (e2e)", () => {
 
     const api = () => request(app.getHttpServer());
 
-    const certificate = (claims: string[][]) =>
+    const certificate = (claims: string[][], extra: object = {}) =>
         unsignedJwt({
+            ...extra,
             iat: Math.floor(Date.now() / 1000),
             exp: Math.floor(Date.now() / 1000) + 3600,
             credentials: [
@@ -106,6 +109,103 @@ describe("Imported registration certificate without a registrar (e2e)", () => {
         expect(JSON.stringify(res.body)).toContain(
             "Registration certificate is expired",
         );
+    });
+
+    test("refuses to store a certificate issued to another relying party than the access certificate's", async () => {
+        const res = await storeConfig(
+            "imported-other-relying-party",
+            certificate([["given_name"], ["family_name"]], {
+                sub: { legal_name: "Other GmbH", id: "VATDE-999999999" },
+            }),
+        ).expect(400);
+        expect(JSON.stringify(res.body)).toContain(
+            "The registration certificate does not belong to the access certificate",
+        );
+    });
+
+    test("stores and attaches a certificate whose sub is the organizationIdentifier of the pinned access certificate", async () => {
+        const relyingParty = "LEIXG-529900T8BM49AURSDO55";
+        const crypto = webcrypto as Crypto;
+        const algorithm = {
+            name: "ECDSA",
+            namedCurve: "P-256",
+            hash: "SHA-256",
+        };
+        const keys = (await crypto.subtle.generateKey(algorithm, true, [
+            "sign",
+            "verify",
+        ])) as CryptoKeyPair;
+        const accessCertificate =
+            await x509.X509CertificateGenerator.createSelfSigned(
+                {
+                    serialNumber: "01",
+                    name: `CN=Example, O=Example GmbH, 2.5.4.97=${relyingParty}, C=DE`,
+                    notBefore: new Date(Date.now() - 60_000),
+                    notAfter: new Date(Date.now() + 3_600_000),
+                    signingAlgorithm: algorithm,
+                    keys,
+                },
+                crypto,
+            );
+        const accessKeyChainId = randomUUID();
+        const configId = `imported-matching-${randomUUID()}`;
+        const { kty, crv, x, y, d } = await crypto.subtle.exportKey(
+            "jwk",
+            keys.privateKey,
+        );
+        const imported = await api()
+            .post("/key-chain/import")
+            .set("Authorization", `Bearer ${authToken}`)
+            .send({
+                id: accessKeyChainId,
+                description: "Access certificate with organizationIdentifier",
+                usageType: "access",
+                kmsProvider: "db",
+                crt: [accessCertificate.toString("base64")],
+                key: { kty, crv, x, y, d },
+            });
+        expect(imported.status, JSON.stringify(imported.body)).toBe(201);
+
+        try {
+            const jwt = certificate([["given_name"], ["family_name"]], {
+                sub: relyingParty,
+            });
+            await api()
+                .post("/verifier/config")
+                .set("Authorization", `Bearer ${authToken}`)
+                .send({
+                    id: configId,
+                    accessKeyChainId,
+                    dcql_query: { credentials: [credentialQuery] },
+                    registration_cert: { jwt },
+                })
+                .expect((r) =>
+                    expect(r.status, JSON.stringify(r.body)).toBe(201),
+                );
+
+            const offer = await createPresentationRequest(app, authToken, {
+                response_type: ResponseType.URI,
+                requestId: configId,
+            });
+            expect(offer.status).toBe(201);
+            const requestUri = new URLSearchParams(offer.body.uri).get(
+                "request_uri",
+            )!;
+            const requestObject = await api()
+                .get(new URL(requestUri).pathname)
+                .trustLocalhost()
+                .expect(200);
+            expect(decodeJwt(requestObject.text).verifier_info).toEqual([
+                { format: "registration_cert", data: jwt },
+            ]);
+        } finally {
+            await api()
+                .delete(`/verifier/config/${configId}`)
+                .set("Authorization", `Bearer ${authToken}`);
+            await api()
+                .delete(`/key-chain/${accessKeyChainId}`)
+                .set("Authorization", `Bearer ${authToken}`);
+        }
     });
 
     test("attaches a certificate that lists the claims in another order", async () => {

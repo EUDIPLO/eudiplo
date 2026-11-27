@@ -222,6 +222,9 @@ importers:
       '@owf/crypto':
         specifier: ^0.9.0
         version: 0.9.0
+      '@owf/eudi-access-certificate':
+        specifier: ^0.8.0
+        version: 0.8.0
       '@owf/eudi-attestation-schema':
         specifier: 0.8.0
         version: 0.8.0
@@ -4589,6 +4592,9 @@ packages:
 
   '@owf/crypto@0.9.0':
     resolution: {integrity: sha512-JRff7En8vvwt0++9YVskJT31Y4lcsh+PbJK80E83izv1MuXkMWAYOU/G200myYrhPg3zTb4fT4lwZatfXXFeCA==}
+
+  '@owf/eudi-access-certificate@0.8.0':
+    resolution: {integrity: sha512-356+6Dbi4lK6c/lQGvEJsqFGIgottMiD4S9Q7Ij4yPAFZxPDD/OtWNgZE+z/byXRr2o/mbk8Bf854y2mA80Rgg==}
 
   '@owf/eudi-attestation-schema@0.8.0':
     resolution: {integrity: sha512-OBYVCgLnd5UZNdmlIFqlsm6/H9N2mRPRe0KQSxUEv1G7QGLupyPoyNC4rhASGrrT+ISPHymw7clkYSDntnSjlg==}
@@ -19543,6 +19549,11 @@ snapshots:
     dependencies:
       '@noble/hashes': 2.4.0
       '@owf/identity-common': 0.9.0
+
+  '@owf/eudi-access-certificate@0.8.0':
+    dependencies:
+      '@owf/identity-common': 0.9.0
+      '@owf/x509': 0.9.0
 
   '@owf/eudi-attestation-schema@0.8.0':
     dependencies:

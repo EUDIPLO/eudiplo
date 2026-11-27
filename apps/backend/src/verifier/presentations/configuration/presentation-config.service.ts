@@ -96,7 +96,7 @@ export class PresentationConfigService {
                     // remove the stored config.
                     requireCheckableTransactionData(data);
                     await this.requireTrustedAuthorities(tid, data);
-                    this.registrationCertificates.validate({
+                    await this.registrationCertificates.validate({
                         ...data,
                         tenantId: tid,
                     });
@@ -208,7 +208,7 @@ export class PresentationConfigService {
             allowUntrustedIssuers: vprequest.allowUntrustedIssuers === true,
             tenantId,
         } as PresentationConfig;
-        this.registrationCertificates.validate(merged);
+        await this.registrationCertificates.validate(merged);
 
         const saved = replace
             ? await this.repository.save(merged)
@@ -260,12 +260,14 @@ export class PresentationConfigService {
         await this.requireTrustedAuthorities(tenantId, merged, existing);
 
         // A stored certificate that has expired since does not block other
-        // changes; it is checked when it or the DCQL query changes.
+        // changes; it is checked when it, the DCQL query or the access key
+        // chain changes.
         if (
             Object.hasOwn(vprequest, "registration_cert") ||
-            Object.hasOwn(vprequest, "dcql_query")
+            Object.hasOwn(vprequest, "dcql_query") ||
+            Object.hasOwn(vprequest, "accessKeyChainId")
         ) {
-            this.registrationCertificates.validate(merged);
+            await this.registrationCertificates.validate(merged);
         }
 
         const saved = await this.repository.save(merged);

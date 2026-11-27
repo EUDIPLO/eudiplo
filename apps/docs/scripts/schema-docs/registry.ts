@@ -89,6 +89,8 @@ export const schemaDocs: SchemaDoc[] = [
         descriptions: {
             accessKeyChainId:
                 "Access key chain that signs the request, determines the `client_id` and signs `readerAuth`; without it, an access key chain of the tenant is used.",
+            "registration_cert.jwt":
+                "Registration certificate JWT issued by a registrar. Attached to every request object as is; it must be valid, be issued to the relying party of the access certificate that signs the request (`sub`, or `intermediary.sub` with an intermediary), and authorize every credential the DCQL query requests.",
         },
     },
     { name: "oidc-client", schema: CreateOidcClientSchema },
