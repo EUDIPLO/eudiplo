@@ -40,7 +40,11 @@ export function sessionLogView(entry: SessionLogEntry): SessionLogView {
     ) {
       // The message line already carries it.
       continue;
-    } else if (['string', 'number', 'boolean'].includes(typeof value)) {
+    } else if (
+      typeof value === 'string' ||
+      typeof value === 'number' ||
+      typeof value === 'boolean'
+    ) {
       view.fields.push({ key, value: String(value) });
     } else {
       rest[key] = value;
