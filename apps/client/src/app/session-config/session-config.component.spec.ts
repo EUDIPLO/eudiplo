@@ -16,6 +16,10 @@ import {
 } from '../common/settings-screen.testing';
 import { ConfigOwnershipService } from '../config-portability/config-ownership.service';
 import { SessionConfigComponent } from './session-config.component';
+import { grantEveryRole, grantRoles } from '../common/role-lock.testing';
+
+// The tests are about what the actions do; role locks have their own tests.
+beforeEach(() => grantEveryRole());
 
 /** A response, or `'unreachable'` for a backend that does not answer. */
 type StubResponse = { status: number; body?: unknown } | 'unreachable';
@@ -122,6 +126,29 @@ describe('SessionConfigComponent', () => {
     message:
       "Tenant 'tenant' is file-managed by provisioning. Detach it before changing it through the API or UI.",
   };
+
+  it('shows the settings to a reader in a disabled form that sends nothing', async () => {
+    grantRoles(['presentation:read']);
+    responses['GET /api/session-config'] = { status: 200, body: { ttlSeconds: 3600 } };
+
+    const element = await render();
+
+    expect(element.querySelector('app-read-only-notice')?.textContent).toContain(
+      'Read-only: changing these settings needs the issuance:manage or presentation:manage role.'
+    );
+    const ttl = element.querySelector<HTMLInputElement>('input[formcontrolname="ttlSeconds"]')!;
+    expect(ttl.disabled).toBe(true);
+    expect(ttl.value).toBe('3600');
+    expect(element.querySelector<HTMLButtonElement>('.ttl-presets button')!.disabled).toBe(true);
+    const save = button(element, 'Save Configuration');
+    expect(save.getAttribute('aria-disabled')).toBe('true');
+    save.click();
+    element.querySelector('form')!.dispatchEvent(new Event('submit'));
+    await fixture.whenStable();
+
+    expect(requests).toEqual(['GET /api/session-config']);
+    expect(fixture.componentInstance.hasUnsavedChanges()).toBe(false);
+  });
 
   it('shows an error with a retry instead of an editable form when loading fails', async () => {
     responses['GET /api/session-config'] = loadFailure;

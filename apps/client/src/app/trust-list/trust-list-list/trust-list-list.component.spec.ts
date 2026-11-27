@@ -1,12 +1,16 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import type { TrustList } from '@eudiplo/sdk-core';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { describeListStates } from '../../common/base-async-list.testing';
 import { ConfigDocumentService } from '../../config-portability/config-document.service';
 import { TrustListService } from '../trust-list.service';
 import { TrustListListComponent } from './trust-list-list.component';
+import { grantEveryRole } from '../../common/role-lock.testing';
+
+// The tests are about what the actions do; role locks have their own tests.
+beforeEach(() => grantEveryRole());
 
 describe('TrustListListComponent', () => {
   const trustList = {

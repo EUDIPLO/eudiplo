@@ -1,5 +1,7 @@
 import type { Routes } from '@angular/router';
 import { unsavedChangesGuard } from '../guards/unsaved-changes.guard';
+import { PRESENTATION_WRITE_ROLES, requireRole } from '../services/resource-roles';
+import { RoleGuard } from '../guards/roles.guard';
 
 export const presentationOfferRoutes: Routes = [
   {
@@ -28,6 +30,7 @@ export const presentationConfigRoutes: Routes = [
   },
   {
     path: 'create',
+    ...requireRole(PRESENTATION_WRITE_ROLES),
     loadComponent: () =>
       import('./presentation-config/presentation-create/presentation-create.component').then(
         (m) => m.PresentationCreateComponent
@@ -43,6 +46,7 @@ export const presentationConfigRoutes: Routes = [
   },
   {
     path: ':id/edit',
+    ...requireRole(PRESENTATION_WRITE_ROLES),
     loadComponent: () =>
       import('./presentation-config/presentation-create/presentation-create.component').then(
         (m) => m.PresentationCreateComponent
@@ -55,7 +59,8 @@ export const presentationConfigRoutes: Routes = [
       import('./presentation-config/presentation-create/presentation-create.component').then(
         (m) => m.PresentationCreateComponent
       ),
-    data: { copy: true },
+    canActivate: [RoleGuard],
+    data: { role: PRESENTATION_WRITE_ROLES, copy: true },
     canDeactivate: [unsavedChangesGuard],
   },
 ];

@@ -181,7 +181,7 @@
         </div>
       }
       <mat-card-content>
-        @if (dashboardService.canManageKeyChains) {
+        @if (dashboardService.canReadKeyChains) {
           <section class="setup-section" aria-labelledby="prerequisites-heading">
             <h3 id="prerequisites-heading" class="section-title">Prerequisites</h3>
             <p class="section-description">Required for both issuance and verification</p>
@@ -201,9 +201,13 @@
                   </p>
                 </div>
                 @if (dashboardService.totalKeyChains === 0) {
-                  <a matButton="tonal" routerLink="/keys/create">
-                    <mat-icon>add</mat-icon> Create Key Chain
-                  </a>
+                  @if (dashboardService.canManageKeyChains) {
+                    <a matButton="tonal" routerLink="/keys/create">
+                      <mat-icon>add</mat-icon> Create Key Chain
+                    </a>
+                  } @else {
+                    <span class="step-count">{{ keyCreateLockedMessage }}</span>
+                  }
                 } @else {
                   <span class="step-count">{{ dashboardService.totalKeyChains }} key chain(s)</span>
                 }
@@ -226,9 +230,16 @@
                   </p>
                 </div>
                 @if (!dashboardService.hasUsableAccessCertificate) {
-                  <a matButton="tonal" [routerLink]="dashboardService.accessCertificateRoute">
-                    <mat-icon>verified</mat-icon> Configure
-                  </a>
+                  @if (dashboardService.accessCertificateRoute; as route) {
+                    <a matButton="tonal" [routerLink]="route">
+                      <mat-icon>verified</mat-icon>
+                      {{ dashboardService.accessCertificateLinkLabel }}
+                    </a>
+                  } @else {
+                    <span class="step-count"
+                      >Creating an access key chain needs the keys:manage role.</span
+                    >
+                  }
                 } @else {
                   <span class="step-count">
                     {{ dashboardService.accessKeyChains }} access key chain(s)
@@ -394,17 +405,13 @@
       </div>
       @if (
         dashboardService.hasLoaded &&
-        (((dashboardService.canManageIssuance || dashboardService.canOfferIssuance) &&
-          !dashboardService.isReadyToIssue) ||
+        ((dashboardService.canOfferIssuance && !dashboardService.isReadyToIssue) ||
           (dashboardService.canReadPresentationConfigs && !dashboardService.isReadyToVerify))
       ) {
         <div class="actions-hint">
           <mat-icon>info</mat-icon>
           <span>
-            @if (
-              (dashboardService.canManageIssuance || dashboardService.canOfferIssuance) &&
-              dashboardService.issueReadinessReason
-            ) {
+            @if (dashboardService.canOfferIssuance && dashboardService.issueReadinessReason) {
               Issuance is blocked: <strong>{{ dashboardService.issueReadinessReason }}</strong>.
             }
             @if (
@@ -670,7 +677,7 @@
       </mat-card-header>
       <mat-card-content>
         <ul class="signal-list">
-          @if (dashboardService.canManageKeyChains) {
+          @if (dashboardService.canReadKeyChains) {
             <li class="signal" [class]="accessCertificateTone">
               <span class="signal-icon"><mat-icon>verified</mat-icon></span>
               <span class="signal-label"

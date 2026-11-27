@@ -30,6 +30,10 @@ import { getApiErrorMessage } from '../utils/error-message';
 import { openErrorSnackBar } from '../utils/error-snackbar';
 import { wholeNumberValidator } from '../utils/whole-number-validator';
 import type { PageWithUnsavedChanges } from '../services/unsaved-changes.service';
+import { ReadOnlyNoticeComponent } from '../common/read-only-notice.component';
+import { RoleLockDirective } from '../common/role-lock.directive';
+import { SHARED_WRITE_ROLES } from '../services/resource-roles';
+import { JwtService } from '../services/jwt.service';
 
 @Component({
   selector: 'app-session-config',
@@ -45,6 +49,8 @@ import type { PageWithUnsavedChanges } from '../services/unsaved-changes.service
     MatSnackBarModule,
     MatProgressSpinnerModule,
     ConfigOwnershipDirective,
+    RoleLockDirective,
+    ReadOnlyNoticeComponent,
     ConfigOwnershipNoticeComponent,
     LoadErrorComponent,
   ],
@@ -53,6 +59,15 @@ import type { PageWithUnsavedChanges } from '../services/unsaved-changes.service
   styleUrl: './session-config.component.scss',
 })
 export class SessionConfigComponent implements OnInit, PageWithUnsavedChanges {
+  /** Creating, changing and deleting it needs issuance:manage or presentation:manage; reading needs less. */
+  readonly writeRoles = SHARED_WRITE_ROLES;
+  private readonly jwtService = inject(JwtService);
+
+  /** A caller without the write role reads the form, disabled, with a notice why. */
+  get readOnly(): boolean {
+    return !this.jwtService.hasRole(this.writeRoles);
+  }
+
   configForm: FormGroup;
   isLoading = true;
   isSaving = false;
@@ -101,6 +116,8 @@ export class SessionConfigComponent implements OnInit, PageWithUnsavedChanges {
   }
 
   ngOnInit() {
+    // Disabled controls keep their values, so nothing counts as an unsaved change.
+    if (this.readOnly) this.configForm.disable();
     void this.loadConfig();
   }
 
@@ -173,6 +190,8 @@ export class SessionConfigComponent implements OnInit, PageWithUnsavedChanges {
   async onSave(): Promise<void> {
     // `disabledInteractive` keeps the button clickable while it looks disabled.
     if (this.isSaving || this.loadError) return;
+    // The form is disabled for readers, and Save is locked; this only guards a stray submit.
+    if (this.readOnly) return;
     if (this.configForm.invalid) {
       showFieldsToFix(this.configForm, {
         snackBar: this.snackBar,

@@ -52,19 +52,19 @@ import { KeyUsageType } from "./types/key-usage-type.js";
 
 /** Roles that read each kind of configuration that can name a key chain. */
 const readRoles: Record<KeyChainReferenceKind, Role[]> = {
-    KeyChainDefaults: [Role.Issuances, Role.Presentations, Role.Keys],
-    IssuanceConfig: [Role.Issuances],
-    CredentialConfig: [Role.Issuances],
-    PresentationConfig: [Role.Presentations, Role.PresentationRequest],
-    StatusList: [Role.Issuances],
-    TrustList: [Role.Issuances, Role.Presentations],
+    KeyChainDefaults: [Role.IssuanceRead, Role.PresentationRead, Role.Keys],
+    IssuanceConfig: [Role.IssuanceRead],
+    CredentialConfig: [Role.IssuanceRead],
+    PresentationConfig: [Role.PresentationRead],
+    StatusList: [Role.IssuanceRead],
+    TrustList: [Role.IssuanceRead, Role.PresentationRead],
 };
 
 const KMS_PROVIDER_IN_USE =
     "Key chains of the tenant use a provider of the stored configuration that holds its own credentials, and the request would remove it or make it one that other tenants use too.";
 
-const TENANT_ADMIN_REQUIRED =
-    "The caller lacks the `tenant:admin` or `tenants:manage` role or a tenant context.";
+const KEYS_EXPORT_REQUIRED =
+    "The caller lacks the `keys:export` role or a tenant context.";
 
 /**
  * KeyChainController manages unified key chains.
@@ -75,7 +75,7 @@ const TENANT_ADMIN_REQUIRED =
  * - Rotation policy and previous keys (for grace period)
  */
 @ApiTags("Key Chain")
-@Secured([Role.Issuances, Role.Presentations, Role.Keys])
+@Secured([Role.Keys])
 @Controller("key-chain")
 export class KeyChainController {
     constructor(
@@ -87,6 +87,7 @@ export class KeyChainController {
     /**
      * Get available KMS providers and their capabilities.
      */
+    @Secured([Role.IssuanceRead, Role.PresentationRead, Role.Keys])
     @Get("providers")
     @ApiOperation({ summary: "Get available KMS providers" })
     @ApiResponse({
@@ -101,6 +102,7 @@ export class KeyChainController {
     /**
      * Liveness/readiness probe for every registered KMS provider.
      */
+    @Secured([Role.IssuanceRead, Role.PresentationRead, Role.Keys])
     @Get("providers/health")
     @ApiOperation({ summary: "Health probe for every KMS provider" })
     @ApiResponse({
@@ -120,11 +122,11 @@ export class KeyChainController {
      * requires the same roles as the configuration export.
      */
     @Get("providers/config")
-    @Secured([Role.Tenants, Role.TenantAdmin])
+    @Secured([Role.KeysExport])
     @ApiOperation({
         summary: "Get tenant KMS provider configuration",
         description:
-            "Returns tenant-specific KMS config (if present) and the effective merged config. Credentials are returned as `<redacted>`, a secret reference (`${vault:…}`, `${env:…}`) of the tenant file as written; `${ENV_VAR}` placeholders of the tenant file are returned as stored. Answers 400 with the reason when the stored tenant `kms.json` is not JSON or no valid KMS configuration, or names a variable, a file or a server it may not use. Requires the `tenant:admin` or `tenants:manage` role.",
+            "Returns tenant-specific KMS config (if present) and the effective merged config. Credentials are returned as `<redacted>`, a secret reference (`${vault:…}`, `${env:…}`) of the tenant file as written; `${ENV_VAR}` placeholders of the tenant file are returned as stored. Answers 400 with the reason when the stored tenant `kms.json` is not JSON or no valid KMS configuration, or names a variable, a file or a server it may not use. Requires the `keys:export` role.",
     })
     @ApiResponse({
         status: 200,
@@ -136,7 +138,7 @@ export class KeyChainController {
         description:
             "The stored tenant kms.json is not JSON, is no valid KMS configuration or holds a setting it may not use.",
     })
-    @ApiResponse({ status: 403, description: TENANT_ADMIN_REQUIRED })
+    @ApiResponse({ status: 403, description: KEYS_EXPORT_REQUIRED })
     getTenantKmsConfig(
         @Token() token: TokenPayload,
     ): KmsTenantConfigResponseDto {
@@ -150,11 +152,11 @@ export class KeyChainController {
     }
 
     @Put("providers/config")
-    @Secured([Role.Tenants, Role.TenantAdmin])
+    @Secured([Role.KeysExport])
     @ApiOperation({
         summary: "Create or replace tenant KMS provider configuration",
         description:
-            "A credential sent as `<redacted>` keeps the stored value of the provider with the same `id` and `type`; send a new value to replace it. `<redacted>` for a credential that is not stored is rejected with 400. A `${ENV_VAR}` placeholder is rejected with 400, unless the stored configuration holds the same value in the same field of the provider and the address its credentials are sent to stays the same, and never in `defaultProvider` or the `id` of a provider: only the operator writes placeholders, to the tenant's `kms.json` file. The same holds for a file of the backend's host (`library` of a `pkcs11` provider, `certFile`, `keyFile` and `caFile` of mTLS authentication): a new path is rejected with 400, and a stored one is kept only while it is listed in `KMS_TENANT_FILES`. An `aws-kms` provider without `accessKeyId` and `secretAccessKey` is rejected with 400, unless the stored configuration holds it without credentials and with the same `region` and `KMS_TENANT_AWS_DEFAULT_CREDENTIALS` is set. The servers of the providers (`vaultUrl`; `baseUrl` and `auth.tokenUrl` of an `http` provider; `baseUrl` and `tokenUrl` of a `csc` provider) must pass the outbound URL policy of the instance (HTTPS, a public address and, when set, a host of `OUTBOUND_URL_ALLOWED_HOSTS`); another server is rejected with 400. A stored tenant `kms.json` that is not JSON or no valid KMS configuration is replaced; nothing of it is kept, so `<redacted>`, a placeholder or a file of the backend's host is rejected with 400. A provider that holds its own credentials and is not a `db` provider cannot be removed, or changed into one that uses a `${ENV_VAR}` placeholder, mTLS files or the AWS credentials of the backend's environment, while key chains of the tenant use it: the request is rejected with 409. A credential that is a secret reference is rejected with 400 when the operator's secret policy does not let the tenant name it for the server it is sent to. The response is redacted like GET. Requires the `tenant:admin` or `tenants:manage` role.",
+            "A credential sent as `<redacted>` keeps the stored value of the provider with the same `id` and `type`; send a new value to replace it. `<redacted>` for a credential that is not stored is rejected with 400. A `${ENV_VAR}` placeholder is rejected with 400, unless the stored configuration holds the same value in the same field of the provider and the address its credentials are sent to stays the same, and never in `defaultProvider` or the `id` of a provider: only the operator writes placeholders, to the tenant's `kms.json` file. The same holds for a file of the backend's host (`library` of a `pkcs11` provider, `certFile`, `keyFile` and `caFile` of mTLS authentication): a new path is rejected with 400, and a stored one is kept only while it is listed in `KMS_TENANT_FILES`. An `aws-kms` provider without `accessKeyId` and `secretAccessKey` is rejected with 400, unless the stored configuration holds it without credentials and with the same `region` and `KMS_TENANT_AWS_DEFAULT_CREDENTIALS` is set. The servers of the providers (`vaultUrl`; `baseUrl` and `auth.tokenUrl` of an `http` provider; `baseUrl` and `tokenUrl` of a `csc` provider) must pass the outbound URL policy of the instance (HTTPS, a public address and, when set, a host of `OUTBOUND_URL_ALLOWED_HOSTS`); another server is rejected with 400. A stored tenant `kms.json` that is not JSON or no valid KMS configuration is replaced; nothing of it is kept, so `<redacted>`, a placeholder or a file of the backend's host is rejected with 400. A provider that holds its own credentials and is not a `db` provider cannot be removed, or changed into one that uses a `${ENV_VAR}` placeholder, mTLS files or the AWS credentials of the backend's environment, while key chains of the tenant use it: the request is rejected with 409. A credential that is a secret reference is rejected with 400 when the operator's secret policy does not let the tenant name it for the server it is sent to. The response is redacted like GET. Requires the `keys:export` role.",
     })
     @ApiBody({ type: KmsConfigDto })
     @ApiResponse({
@@ -167,7 +169,7 @@ export class KeyChainController {
         description:
             "The configuration is invalid or holds a setting the API does not accept in a tenant KMS configuration.",
     })
-    @ApiResponse({ status: 403, description: TENANT_ADMIN_REQUIRED })
+    @ApiResponse({ status: 403, description: KEYS_EXPORT_REQUIRED })
     @ApiResponse({ status: 409, description: KMS_PROVIDER_IN_USE })
     async updateTenantKmsConfig(
         @Token() token: TokenPayload,
@@ -190,17 +192,17 @@ export class KeyChainController {
     }
 
     @Delete("providers/config")
-    @Secured([Role.Tenants, Role.TenantAdmin])
+    @Secured([Role.KeysExport])
     @ApiOperation({
         summary: "Delete tenant KMS provider configuration",
         description:
-            "Removes <CONFIG_FOLDER>/<tenantId>/kms.json and falls back to global KMS config. Rejected with 409 while key chains of the tenant use a provider of the file that holds its own credentials and is not a `db` provider. Requires the `tenant:admin` or `tenants:manage` role.",
+            "Removes <CONFIG_FOLDER>/<tenantId>/kms.json and falls back to global KMS config. Rejected with 409 while key chains of the tenant use a provider of the file that holds its own credentials and is not a `db` provider. Requires the `keys:export` role.",
     })
     @ApiResponse({
         status: 204,
         description: "Tenant-specific KMS config removed.",
     })
-    @ApiResponse({ status: 403, description: TENANT_ADMIN_REQUIRED })
+    @ApiResponse({ status: 403, description: KEYS_EXPORT_REQUIRED })
     @ApiResponse({ status: 409, description: KMS_PROVIDER_IN_USE })
     @HttpCode(204)
     async deleteTenantKmsConfig(@Token() token: TokenPayload): Promise<void> {
@@ -215,6 +217,7 @@ export class KeyChainController {
     /**
      * List user-manageable signing key chains for the tenant.
      */
+    @Secured([Role.IssuanceRead, Role.PresentationRead, Role.Keys])
     @Get()
     @ApiOperation({
         summary: "List user-manageable signing key chains for the tenant",
@@ -240,6 +243,7 @@ export class KeyChainController {
     /**
      * Get a specific key chain by ID.
      */
+    @Secured([Role.IssuanceRead, Role.PresentationRead, Role.Keys])
     @Get(":id")
     @ApiOperation({ summary: "Get a key chain by ID" })
     @ApiResponse({
@@ -263,18 +267,18 @@ export class KeyChainController {
      * key chain management roles.
      */
     @Get(":id/export")
-    @Secured([Role.Tenants, Role.TenantAdmin])
+    @Secured([Role.KeysExport])
     @ApiOperation({
         summary: "Export a key chain in config-import format",
         description:
-            "Returns the key chain in the same format used by config import JSON files. For keys held in the database (`db` provider) the response includes the private key; for external KMS providers only the public key is returned because the private key never leaves the KMS. As in every configuration file, a `${` in a stored value is written as `$${`, which a config import reads as `${` and `POST /api/key-chain/import` stores as sent. Requires the `tenant:admin` or `tenants:manage` role.",
+            "Returns the key chain in the same format used by config import JSON files. For keys held in the database (`db` provider) the response includes the private key; for external KMS providers only the public key is returned because the private key never leaves the KMS. As in every configuration file, a `${` in a stored value is written as `$${`, which a config import reads as `${` and `POST /api/key-chain/import` stores as sent. Requires the `keys:export` role.",
     })
     @ApiResponse({
         status: 200,
         description: "Key chain export data",
         type: KeyChainExportDto,
     })
-    @ApiResponse({ status: 403, description: TENANT_ADMIN_REQUIRED })
+    @ApiResponse({ status: 403, description: KEYS_EXPORT_REQUIRED })
     @ApiResponse({ status: 404, description: "Key chain not found" })
     export(
         @Token() token: TokenPayload,

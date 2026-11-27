@@ -1,4 +1,5 @@
 @use 'page';
+@use 'role-picker';
 
 @include page.base;
 
@@ -19,3 +20,5 @@
     width: 100%;
   }
 }
+
+@include role-picker.options;

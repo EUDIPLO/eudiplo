@@ -15,6 +15,7 @@
           [routerLink]="['edit']"
           matTooltip="Edit list"
           aria-label="Edit list"
+          [appRequiresRole]="writeRoles"
           appConfigManaged
           managedKind="TrustList"
           [managedResourceId]="trustList.id"
@@ -41,6 +42,7 @@
           [disabled]="deleting"
           disabledInteractive
           class="delete-action"
+          [appRequiresRole]="writeRoles"
           appConfigManaged
           managedKind="TrustList"
           [managedResourceId]="trustList.id"
@@ -132,8 +134,8 @@
         <mat-card-content>
           @if (!canReadCredentialConfigs) {
             <p class="url-description">
-              You need the <code>issuance:manage</code> role to see which credential configs
-              reference this trust list.
+              You need the <code>issuance:read</code> role to see which credential configs reference
+              this trust list.
             </p>
           } @else if (relatedCredentialConfigsLoading) {
             <p class="url-description"><output>Loading credential configs…</output></p>
@@ -172,9 +174,8 @@
         <mat-card-content>
           @if (!canReadPresentationConfigs) {
             <p class="url-description">
-              You need the <code>presentation:manage</code> or
-              <code>presentation:request</code> role to see which verification configs reference
-              this trust list.
+              You need the <code>presentation:read</code> role to see which verification configs
+              reference this trust list.
             </p>
           } @else if (relatedPresentationConfigsLoading) {
             <p class="url-description"><output>Loading verification configs…</output></p>

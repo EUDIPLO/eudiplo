@@ -1,0 +1,13 @@
+// Options of a role picker: the role, and below it the roles it includes (RoleIncludesPipe).
+@mixin options {
+  .role-option {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.3;
+  }
+
+  .role-includes {
+    color: var(--mat-sys-on-surface-variant);
+    font: var(--mat-sys-body-small);
+  }
+}

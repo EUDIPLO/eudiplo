@@ -334,7 +334,7 @@ describe("authenticated doctor checks", () => {
             expect(find(checks, "KMS providers")).toEqual({
                 name: "KMS providers",
                 status: "skip",
-                message: `Needs a tenant client with issuance:manage, presentation:manage or keys:manage (/api/key-chain/providers/health returned HTTP ${status}).`,
+                message: `Needs a tenant client with issuance:read, presentation:read or keys:manage, or a role that includes one of them (/api/key-chain/providers/health returned HTTP ${status}).`,
             });
             // Every other check passes, so --strict passes as well.
             expect(hasFailedChecks(checks, true)).toBe(false);

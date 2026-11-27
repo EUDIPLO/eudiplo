@@ -4,6 +4,7 @@ import request from "supertest";
 import { App } from "supertest/types";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { AuditLogService } from "../../src/audit-log/audit-log.service.js";
+import { Role } from "../../src/auth/roles/role.enum.js";
 import { getToken, setupIssuanceTestApp } from "../utils.js";
 
 describe("Audit log filters, search and retention", () => {
@@ -24,7 +25,9 @@ describe("Audit log filters, search and retention", () => {
         items.map((item) => item.actionType);
 
     beforeAll(async () => {
-        const context = await setupIssuanceTestApp();
+        const context = await setupIssuanceTestApp({
+            extraRoles: [Role.AuditRead],
+        });
         app = context.app;
         rootToken = context.authToken;
         // Creating the tenant records `tenant_created` in it.
@@ -33,6 +36,7 @@ describe("Audit log filters, search and retention", () => {
             context.clientId,
             context.clientSecret,
             "audit-other",
+            [Role.AuditRead],
         );
         auditLog = app.get(AuditLogService);
         await auditLog.record({

@@ -68,8 +68,8 @@ describe('TenantCreateComponent', () => {
   });
 
   it('preselects roles with which the admin client can set up the tenant', () => {
-    // With clients:manage alone the client could grant nothing, to itself or to others.
-    expect(component.tenantForm.value.roles).toEqual(['clients:manage', 'tenant:admin']);
+    // tenant:admin includes clients:manage and every other tenant role, which it can grant.
+    expect(component.tenantForm.value.roles).toEqual(['tenant:admin']);
   });
 
   it('omits an empty description from create requests', async () => {

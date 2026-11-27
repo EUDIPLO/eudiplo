@@ -2,7 +2,7 @@ import { ApplicationRef } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angular/router';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ConfigDocumentService } from '../../config-portability/config-document.service';
 import { ConfigOwnershipService } from '../../config-portability/config-ownership.service';
@@ -10,6 +10,10 @@ import { ConfigOwnershipService } from '../../config-portability/config-ownershi
 import { renderDownloadButton } from '../../config-portability/config-document.testing';
 import { WebhookEndpointService } from '../webhook-endpoint.service';
 import { WebhookEndpointShowComponent } from './webhook-endpoint-show.component';
+import { grantEveryRole } from '../../common/role-lock.testing';
+
+// The tests are about what the actions do; role locks have their own tests.
+beforeEach(() => grantEveryRole());
 
 describe('WebhookEndpointShowComponent', () => {
   const endpoint = {

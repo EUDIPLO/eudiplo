@@ -16,8 +16,10 @@
         "enum": [
           "presentation:manage",
           "presentation:request",
+          "presentation:read",
           "issuance:manage",
           "issuance:offer",
+          "issuance:read",
           "clients:manage",
           "users:manage",
           "tenants:manage",
@@ -26,7 +28,8 @@
           "audit:read",
           "sessions:read",
           "credentials:status",
-          "keys:manage"
+          "keys:manage",
+          "keys:export"
         ]
       }
     },

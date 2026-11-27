@@ -34,6 +34,7 @@ test.beforeAll(async () => {
   tenant = await createTenant('fed-anchors', 'Federation Trust Anchors', [
     'issuance:manage',
     'presentation:manage',
+    'keys:manage',
   ]);
   // A presentation configuration needs a key chain to sign its requests.
   await createKeyChain(tenant.token, 'access', 'Federation verifier access');

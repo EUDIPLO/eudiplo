@@ -10,6 +10,7 @@ import { renderDownloadButton } from '../../../config-portability/config-documen
 import { PresentationManagementService } from '../presentation-management.service';
 import { JwtService } from '../../../services/jwt.service';
 import { ConfigOwnershipService } from '../../../config-portability/config-ownership.service';
+import { effectiveRoles } from '../../../services/role-grants';
 
 describe('PresentationShowComponent', () => {
   let component: PresentationShowComponent;
@@ -231,7 +232,10 @@ describe('PresentationShowComponent EUDI Hub', () => {
       {} as never,
       {} as never,
       { open } as never,
-      { hasRole: (role: string) => roles.includes(role) } as never,
+      {
+        hasRole: (role: string | string[]) =>
+          [role].flat().some((r) => effectiveRoles(roles).includes(r)),
+      } as never,
       {} as never
     );
     return { component, getPresentationById, snackBar, open };
@@ -363,7 +367,8 @@ describe('PresentationShowComponent page', () => {
         {
           provide: JwtService,
           useValue: {
-            hasRole: (role: string) => roles.includes(role),
+            hasRole: (role: string | string[]) =>
+              [role].flat().some((r) => effectiveRoles(roles).includes(r)),
             canUseConfigPortability: () => false,
           },
         },
@@ -491,17 +496,16 @@ describe('PresentationShowComponent page', () => {
       [...page.querySelectorAll('.hero-actions a')].find((a) =>
         a.textContent?.includes('New Verification')
       );
-    const manager = await render(config);
+    const reader = await render(config, { roles: ['presentation:read'] });
     await vi.waitFor(() => {
-      manager.fixture.detectChanges();
-      expect(manager.page.querySelector('.hero')).not.toBeNull();
+      reader.fixture.detectChanges();
+      expect(reader.page.querySelector('.hero')).not.toBeNull();
     });
-    expect(offer(manager.page)).toBeUndefined();
+    expect(offer(reader.page)).toBeUndefined();
 
     TestBed.resetTestingModule();
-    const requester = await render(config, {
-      roles: ['presentation:manage', 'presentation:request'],
-    });
+    // presentation:manage includes presentation:request.
+    const requester = await render(config, { roles: ['presentation:manage'] });
     await vi.waitFor(() => {
       requester.fixture.detectChanges();
       expect(offer(requester.page)?.getAttribute('href')).toBe('/offer/presentation/age-check');

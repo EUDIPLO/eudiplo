@@ -185,4 +185,44 @@ describe("documents applied as they are", () => {
             ),
         ).toBe(false);
     });
+
+    it("recognizes a generated-secret client whose roles the Client v3 upgrade extended", () => {
+        const before: ConfigDocument = {
+            $schema: schemaUrl("Client", 2),
+            kind: "Client",
+            metadata: { generation: 1 },
+            spec: {
+                clientId: "admin",
+                secret: "!generate",
+                roles: ["clients:manage", "issuance:manage"],
+            },
+        };
+        const after: ConfigDocument = {
+            ...before,
+            $schema: schemaUrl("Client", 3),
+            spec: {
+                ...before.spec,
+                roles: [
+                    "clients:manage",
+                    "issuance:manage",
+                    "audit:read",
+                    "keys:manage",
+                ],
+            },
+        };
+        expect(
+            documentAppliedAsIs(after, applied(before), "folder:/config/demo"),
+        ).toBe(true);
+        // A role the upgrade would not add still counts as a change.
+        const edited: ConfigDocument = {
+            ...after,
+            spec: {
+                ...after.spec,
+                roles: [...(after.spec.roles as string[]), "registrar:manage"],
+            },
+        };
+        expect(
+            documentAppliedAsIs(edited, applied(before), "folder:/config/demo"),
+        ).toBe(false);
+    });
 });

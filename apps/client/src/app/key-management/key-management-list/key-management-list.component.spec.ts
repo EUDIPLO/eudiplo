@@ -4,10 +4,18 @@ import { provideRouter } from '@angular/router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ConfigOwnershipDirective } from '../../config-portability/config-ownership.directive';
+import { ConfigOwnershipService } from '../../config-portability/config-ownership.service';
+import { expectUnavailable, tooltipOf } from '../../common/unavailable-action.testing';
+import { JwtService } from '../../services/jwt.service';
+import { effectiveRoles } from '../../services/role-grants';
 import { keyChainDeleteQuestion } from '../key-chain-delete-question';
 import { keyChainRotateQuestion } from '../key-chain-rotate-question';
 import { KeyChainService } from '../key-chain.service';
 import { KeyManagementListComponent } from './key-management-list.component';
+import { grantEveryRole } from '../../common/role-lock.testing';
+
+// The tests are about what the actions do; role locks have their own tests.
+beforeEach(() => grantEveryRole());
 
 describe('KeyManagementListComponent', () => {
   let component: KeyManagementListComponent;
@@ -80,7 +88,8 @@ describe('KeyManagementListComponent delete', () => {
     };
     const component = new KeyManagementListComponent(
       keyChainService as never,
-      { open: vi.fn() } as never
+      { open: vi.fn() } as never,
+      { hasRole: () => true } as never
     );
     vi.spyOn(component, 'loadAllKeys').mockResolvedValue();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
@@ -110,7 +119,8 @@ describe('KeyManagementListComponent rotate', () => {
     keyChainService = { rotate: vi.fn().mockResolvedValue(undefined) };
     component = new KeyManagementListComponent(
       keyChainService as never,
-      { open: vi.fn() } as never
+      { open: vi.fn() } as never,
+      { hasRole: () => true } as never
     );
     vi.spyOn(component, 'loadAllKeys').mockResolvedValue();
   });
@@ -427,5 +437,85 @@ describe('KeyManagementListComponent filters', () => {
     const edit = row.querySelector('.key-actions a[mattooltip="Edit"]');
     expect(edit?.getAttribute('href')).toBe('/a/edit');
     expect(edit?.getAttribute('aria-label')).toMatch(/^Edit key chain \S/);
+  });
+});
+
+describe('KeyManagementListComponent without keys:manage', () => {
+  // issuance:manage reads and selects key chains; creating and changing them needs keys:manage.
+  const roles = ['issuance:manage'];
+  const keyChain = {
+    id: 'access',
+    description: 'Access',
+    usageType: 'access',
+    type: 'standalone',
+    kmsProvider: 'db',
+    rotationPolicy: { enabled: true },
+  };
+
+  async function render(): Promise<ComponentFixture<KeyManagementListComponent>> {
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [KeyManagementListComponent],
+      providers: [
+        provideRouter([]),
+        {
+          provide: KeyChainService,
+          useValue: {
+            getAll: vi.fn().mockResolvedValue([keyChain]),
+            getDefaultAccess: vi.fn().mockResolvedValue({ defaultAccessKeyChainId: null }),
+            delete: vi.fn(),
+            rotate: vi.fn(),
+          },
+        },
+        {
+          provide: JwtService,
+          useValue: {
+            hasRole: (role: string | string[]) =>
+              [role].flat().some((r) => effectiveRoles(roles).includes(r)),
+          },
+        },
+        { provide: ConfigOwnershipService, useValue: { get: async () => undefined } },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(KeyManagementListComponent);
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(fixture.componentInstance.isLoading).toBe(false));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('lists the key chains but locks Create key, Edit, Rotate, Delete and the default', async () => {
+    const fixture = await render();
+    const element = fixture.nativeElement as HTMLElement;
+    const reason = 'Needs the keys:manage role';
+
+    expect(fixture.componentInstance.canManageKeyChains).toBe(false);
+    expect(element.textContent).toContain('Access');
+    const create = element.querySelector<HTMLAnchorElement>('a[mattooltip="Create Key"]')!;
+    expect(create.getAttribute('aria-disabled')).toBe('true');
+    const edit = element.querySelector('a[aria-label="Edit key chain Access"]')!;
+    expect(edit.getAttribute('aria-disabled')).toBe('true');
+    expect(tooltipOf(fixture, edit)).toBe(`Edit. ${reason}`);
+    expectUnavailable(
+      fixture,
+      element.querySelector<HTMLButtonElement>('button[aria-label="Rotate key chain Access now"]')!,
+      `Rotate key now. ${reason}`
+    );
+    const remove = element.querySelector<HTMLButtonElement>(
+      'button[aria-label="Delete key chain Access"]'
+    )!;
+    expectUnavailable(fixture, remove, `Delete. ${reason}`);
+    expect(element.querySelector('button.default-toggle')?.getAttribute('aria-disabled')).toBe(
+      'true'
+    );
+
+    const confirm = vi.spyOn(window, 'confirm');
+    remove.click();
+    expect(confirm).not.toHaveBeenCalled();
+    expect(TestBed.inject(KeyChainService).delete).not.toHaveBeenCalled();
   });
 });

@@ -101,7 +101,7 @@ role changes and secret rotation), KMS provider configuration,
 and session retention settings.
 
 Read the audit log under **Administration → Activity Logs** in the web client,
-or with role `audit:read` or `clients:manage` through the API:
+or with role `audit:read` through the API:
 
 | Endpoint | Returns |
 | --- | --- |

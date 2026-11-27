@@ -7,7 +7,7 @@
         presented.
       </p>
     </div>
-    <a matButton="filled" [routerLink]="['create']">
+    <a matButton="filled" [routerLink]="['create']" [appRequiresRole]="writeRoles" matTooltip="">
       <mat-icon>add</mat-icon>
       Create webhook endpoint
     </a>
@@ -24,7 +24,7 @@
       <span class="empty-icon"><mat-icon>webhook</mat-icon></span>
       <strong>No webhook endpoints yet.</strong>
       <p>Create an endpoint, then name it in a credential offer or a verification config.</p>
-      <a matButton="filled" [routerLink]="['create']">
+      <a matButton="filled" [routerLink]="['create']" [appRequiresRole]="writeRoles" matTooltip="">
         <mat-icon>add</mat-icon>
         Create webhook endpoint
       </a>
@@ -105,6 +105,7 @@
               <span class="row-actions">
                 <a
                   matIconButton
+                  [appRequiresRole]="writeRoles"
                   [routerLink]="endpoint.id | itemRoute: 'edit'"
                   appConfigManaged
                   managedKind="WebhookEndpoint"
@@ -118,8 +119,9 @@
                   matIconButton
                   class="delete-action"
                   (click)="deleteEndpoint(endpoint)"
-                  [disabled]="!canManage || deleting.has(endpoint.id)"
+                  [disabled]="deleting.has(endpoint.id)"
                   disabledInteractive
+                  [appRequiresRole]="writeRoles"
                   appConfigManaged
                   managedKind="WebhookEndpoint"
                   [managedResourceId]="endpoint.id"

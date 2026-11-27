@@ -506,6 +506,9 @@ importers:
       '@badgateway/oauth2-client':
         specifier: ^3.4.0
         version: 3.4.0
+      '@eudiplo/config-format':
+        specifier: workspace:*
+        version: link:../../packages/eudiplo-config-format
       '@eudiplo/sdk-core':
         specifier: workspace:*
         version: link:../../packages/eudiplo-sdk-core

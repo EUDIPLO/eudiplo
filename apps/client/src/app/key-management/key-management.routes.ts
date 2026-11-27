@@ -1,5 +1,7 @@
 import type { Routes } from '@angular/router';
 import { unsavedChangesGuard } from '../guards/unsaved-changes.guard';
+import { requireRole } from '../services/resource-roles';
+import { KEY_ADMIN_ROLE } from './key-chain.service';
 
 export const keyManagementRoutes: Routes = [
   {
@@ -16,6 +18,7 @@ export const keyManagementRoutes: Routes = [
   },
   {
     path: 'create',
+    ...requireRole(KEY_ADMIN_ROLE),
     loadComponent: () =>
       import('./key-create-wizard/key-create-wizard.component').then(
         (m) => m.KeyCreateWizardComponent
@@ -31,6 +34,7 @@ export const keyManagementRoutes: Routes = [
   },
   {
     path: ':id/edit',
+    ...requireRole(KEY_ADMIN_ROLE),
     loadComponent: () =>
       import('./key-management-create/key-management-create.component').then(
         (m) => m.KeyManagementCreateComponent

@@ -9,3 +9,5 @@ export * from "./claim-formats.js";
 export * from "./display-entries.js";
 export * from "./trust-list-entity-info.js";
 export * from "./tenant-folder.js";
+export * from "./client-roles.js";
+export * from "./role-model.js";

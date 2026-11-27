@@ -64,7 +64,11 @@ import { ConfigOwnershipNoticeComponent } from '../../../config-portability/conf
 import { asSentence, getApiErrorMessage } from '../../../utils/error-message';
 import { openErrorSnackBar } from '../../../utils/error-snackbar';
 import { certificateBase64, certificateValidator } from '../../../utils/certificate-validator';
-import { KeyChainService } from '../../../key-management/key-chain.service';
+import {
+  KEY_ADMIN_ROLE,
+  KEY_CREATE_LOCKED_MESSAGE,
+  KeyChainService,
+} from '../../../key-management/key-chain.service';
 import { FrontendConfigService } from '../../../services/frontend-config.service';
 import { JwtService } from '../../../services/jwt.service';
 import { ApiService } from '../../../core';
@@ -125,6 +129,13 @@ type WalletProviderTrustListEntry = Omit<WalletProviderTrustListRefDto, 'verifie
   styleUrl: './issuance-config-create.component.scss',
 })
 export class IssuanceConfigCreateComponent implements OnInit, PageWithUnsavedChanges {
+  /** Only keys:manage creates key chains, so only it gets the links to create a missing one. */
+  get canCreateKeyChains(): boolean {
+    return this.jwtService.hasRole(KEY_ADMIN_ROLE);
+  }
+
+  readonly keyCreateLockedMessage = KEY_CREATE_LOCKED_MESSAGE;
+
   readonly languageOptionsWith = languageOptionsWith;
 
   private trustListVerifierValidator(control: AbstractControl): ValidationErrors | null {

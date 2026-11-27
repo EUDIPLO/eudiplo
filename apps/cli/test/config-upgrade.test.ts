@@ -248,7 +248,7 @@ describe("config upgrade", () => {
             JSON.parse(await readFile(join(source, "info.json"), "utf8")),
         ).toEqual({ name: "Example" });
     });
-    it("upgrades a v1 client file to v2 with the spec unchanged", async () => {
+    it("upgrades a v1 client file to v3, keeping roles that need no addition", async () => {
         const { cwd, context, output } = await setup();
         const source = join(cwd, "client-folder");
         await mkdir(join(source, "clients"), { recursive: true });
@@ -280,9 +280,46 @@ describe("config upgrade", () => {
             ),
         );
         expect(result.$schema).toBe(
-            "https://eudiplo.dev/schemas/v2/ClientConfigFile.schema.json",
+            "https://eudiplo.dev/schemas/v3/ClientConfigFile.schema.json",
         );
         expect(result.spec).toEqual(spec);
+    });
+    it("adds the roles of the 11.0 role model to a v2 client file", async () => {
+        const { cwd, context } = await setup();
+        const source = join(cwd, "client-roles-folder");
+        await mkdir(join(source, "clients"), { recursive: true });
+        await writeFile(
+            join(source, "info.json"),
+            JSON.stringify({
+                $schema: schemaUrl("Tenant"),
+                metadata: { generation: 1 },
+                spec: { name: "Example" },
+            }),
+        );
+        await writeFile(
+            join(source, "clients", "admin.json"),
+            JSON.stringify({
+                $schema: schemaUrl("Client", 2),
+                spec: {
+                    clientId: "admin",
+                    roles: ["clients:manage", "presentation:manage"],
+                },
+            }),
+        );
+
+        expect(await runCli(["config", "upgrade", source], context)).toBe(0);
+        const result = JSON.parse(
+            await readFile(
+                join(`${source}.upgraded`, "clients", "admin.json"),
+                "utf8",
+            ),
+        );
+        expect(result.spec.roles).toEqual([
+            "clients:manage",
+            "presentation:manage",
+            "audit:read",
+            "keys:manage",
+        ]);
     });
     it("upgrades a v3 presentation configuration to v4 with the spec unchanged", async () => {
         const { cwd, context, output } = await setup();

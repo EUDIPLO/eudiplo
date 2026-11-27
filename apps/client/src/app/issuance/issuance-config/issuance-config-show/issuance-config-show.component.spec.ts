@@ -6,6 +6,7 @@ import { provideRouter } from '@angular/router';
 import { IssuanceConfigShowComponent } from './issuance-config-show.component';
 import { renderDownloadButton } from '../../../config-portability/config-document.testing';
 import { IssuanceConfigService } from '../issuance-config.service';
+import { effectiveRoles } from '../../../services/role-grants';
 
 describe('IssuanceConfigShowComponent', () => {
   let component: IssuanceConfigShowComponent;
@@ -228,7 +229,10 @@ describe('IssuanceConfigShowComponent EUDI Hub', () => {
       { open: vi.fn() } as never,
       {} as never,
       { open } as never,
-      { hasRole: (role: string) => roles.includes(role) } as never
+      {
+        hasRole: (role: string | string[]) =>
+          [role].flat().some((r) => effectiveRoles(roles).includes(r)),
+      } as never
     );
     return { component, getConfig, open };
   }

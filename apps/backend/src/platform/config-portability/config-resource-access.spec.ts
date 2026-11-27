@@ -98,6 +98,12 @@ describe("mayReadConfigOwnership", () => {
         expect(mayReadConfigOwnership([Role.Issuances], "KmsConfig")).toBe(
             false,
         );
+        expect(mayReadConfigOwnership([Role.Issuances], "KeyChain")).toBe(
+            false,
+        );
+        expect(mayReadConfigOwnership([Role.KeysExport], "KmsConfig")).toBe(
+            true,
+        );
         expect(mayReadConfigOwnership(undefined, "Tenant")).toBe(false);
     });
 
@@ -164,10 +170,13 @@ describe("mayReadConfigOwnership", () => {
 });
 
 describe("mayExportConfigDocument", () => {
-    it("needs an admin role for a key chain, which carries private keys", () => {
+    it("needs keys:export for a key chain, which carries private keys", () => {
         for (const role of [Role.Keys, Role.Issuances, Role.Presentations]) {
             expect(mayExportConfigDocument([role], "KeyChain")).toBe(false);
         }
+        expect(mayExportConfigDocument([Role.KeysExport], "KeyChain")).toBe(
+            true,
+        );
         expect(mayExportConfigDocument([Role.TenantAdmin], "KeyChain")).toBe(
             true,
         );

@@ -104,9 +104,23 @@
             <mat-form-field appearance="outline" subscriptSizing="dynamic">
               <mat-label>Roles</mat-label>
               <mat-select formControlName="roles" multiple>
+                <!-- Only the role names, without what they include -->
+                <mat-select-trigger>{{
+                  clientForm.get('roles')?.value?.join(', ')
+                }}</mat-select-trigger>
                 @for (option of roleOptions; track option.role) {
-                  <mat-option [value]="option.role" [disabled]="option.locked">
-                    {{ option.role }}
+                  <mat-option
+                    [value]="option.role"
+                    [disabled]="option.locked"
+                    [attr.aria-label]="option.role"
+                    [attr.aria-description]="(option.role | roleIncludes) || null"
+                  >
+                    <span class="role-option">
+                      <span>{{ option.role }}</span>
+                      @if (option.role | roleIncludes; as includes) {
+                        <small class="role-includes" aria-hidden="true">{{ includes }}</small>
+                      }
+                    </span>
                   </mat-option>
                 }
               </mat-select>

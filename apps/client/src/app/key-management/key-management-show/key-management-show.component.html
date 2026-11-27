@@ -48,6 +48,8 @@
         <button
           matButton="tonal"
           [routerLink]="['edit']"
+          [appRequiresRole]="keyAdminRole"
+          matTooltip=""
           appConfigManaged
           managedKind="KeyChain"
           [managedResourceId]="keyId"
@@ -65,6 +67,7 @@
               disabledInteractive
               matTooltip="Rotate key now"
               aria-label="Rotate key now"
+              [appRequiresRole]="keyAdminRole"
               appConfigManaged
               managedKind="KeyChain"
               [managedResourceId]="keyId"
@@ -104,6 +107,7 @@
               disabledInteractive
               [matTooltip]="defaultToggleTooltip"
               [attr.aria-label]="defaultToggleLabel"
+              [appRequiresRole]="keyAdminRole"
               appConfigManaged
               managedKind="KeyChainDefaults"
               managedResourceId="defaults"
@@ -119,6 +123,7 @@
             disabledInteractive
             [matTooltip]="deleting ? 'Deleting the key chain…' : 'Delete key chain'"
             aria-label="Delete key chain"
+            [appRequiresRole]="keyAdminRole"
             appConfigManaged
             managedKind="KeyChain"
             [managedResourceId]="keyId"

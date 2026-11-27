@@ -80,3 +80,4 @@ export { RemoveSandboxRegistrar1786500000000 } from "./1786500000000-RemoveSandb
 export { AddAuditLogTenantTimestampIndex1786600000000 } from "./1786600000000-AddAuditLogTenantTimestampIndex.js";
 export { AllowDeferredTransactionWithoutHolderKey1786700000000 } from "./1786700000000-AllowDeferredTransactionWithoutHolderKey.js";
 export { AddWalletInstanceRevocation1786800000000 } from "./1786800000000-AddWalletInstanceRevocation.js";
+export { UpgradeClientRolesToRoleModel111786900000000 } from "./1786900000000-UpgradeClientRolesToRoleModel11.js";

@@ -40,6 +40,7 @@ export class StatusListConfigController {
      * Get the current status list configuration for the tenant.
      * Returns null for fields using global defaults.
      */
+    @Secured([Role.IssuanceRead])
     @Get()
     @ApiOperation({
         summary: "Get status list configuration",
