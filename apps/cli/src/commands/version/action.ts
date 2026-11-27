@@ -1,6 +1,6 @@
-import { isSea } from "node:sea";
 import packageJson from "../../../package.json" with { type: "json" };
 import type { CommandContext } from "../../types.js";
+import { assertNever } from "../../utils.js";
 
 export function versionText(): string {
     return `${packageJson.name} ${packageJson.version}`;
@@ -33,14 +33,22 @@ export async function versionStatusText(
 }
 
 function updateCommand(context: CommandContext): string {
-    const installationMethod =
-        context.installationMethod ?? (isSea() ? "standalone" : "npm");
-    return installationMethod === "standalone"
-        ? "curl -fsSL https://eudiplo.dev/install.sh | bash"
-        : "npm install -g @eudiplo/cli@latest";
+    const installationMethod = context.installationMethod;
+    switch (installationMethod) {
+        case "npx":
+            return "npx @eudiplo/cli@latest";
+        case "npm":
+            return "npm install -g @eudiplo/cli@latest";
+        case "standalone":
+            return "curl -fsSL https://eudiplo.dev/install.sh | bash";
+        default:
+            assertNever(installationMethod);
+    }
 }
 
-async function fetchLatestVersion(context: CommandContext): Promise<string> {
+async function fetchLatestVersionForNpm(
+    context: CommandContext,
+): Promise<string> {
     const response = await context.fetch(
         `https://registry.npmjs.org/${encodeURIComponent(packageJson.name)}/latest`,
     );
@@ -55,12 +63,52 @@ async function fetchLatestVersion(context: CommandContext): Promise<string> {
     return metadata.version;
 }
 
+async function fetchLatestVersionForStandalone(
+    context: CommandContext,
+): Promise<string> {
+    const response = await context.fetch(
+        "https://api.github.com/repos/EUDIPLO/eudiplo/releases/latest",
+        { headers: { Accept: "application/vnd.github+json" } },
+    );
+    if (!response.ok) {
+        throw new Error(`GitHub releases returned HTTP ${response.status}`);
+    }
+
+    const release = await response.json();
+    if (!isReleaseMetadata(release)) {
+        throw new Error("GitHub release response did not include a tag_name");
+    }
+    return release.tag_name.replace(/^v/, "");
+}
+
+async function fetchLatestVersion(context: CommandContext): Promise<string> {
+    const installationMethod = context.installationMethod;
+    switch (installationMethod) {
+        case "npx":
+        case "npm":
+            return fetchLatestVersionForNpm(context);
+        case "standalone":
+            return fetchLatestVersionForStandalone(context);
+        default:
+            assertNever(installationMethod);
+    }
+}
+
 function isPackageMetadata(value: unknown): value is { version: string } {
     return (
         typeof value === "object" &&
         value !== null &&
         "version" in value &&
         typeof value.version === "string"
+    );
+}
+
+function isReleaseMetadata(value: unknown): value is { tag_name: string } {
+    return (
+        typeof value === "object" &&
+        value !== null &&
+        "tag_name" in value &&
+        typeof value.tag_name === "string"
     );
 }
 

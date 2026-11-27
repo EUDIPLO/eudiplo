@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { schemaUrl } from "@eudiplo/config-format/config-format.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import packageJson from "../package.json" with { type: "json" };
 import { runCli } from "../src/runtime.js";
 import {
     drivers,
@@ -286,9 +287,113 @@ describe("EUDIPLO CLI", () => {
         );
     });
 
-    it("uses the standalone installer when the binary has an update", async () => {
+    it("uses the npx hint for npx runs and checks the npm registry", async () => {
+        const requested: string[] = [];
         const { context, output } = await createContext({
-            fetch: async () => Response.json({ version: "99.0.0" }),
+            fetch: async (input) => {
+                requested.push(String(input));
+                return Response.json({ version: "99.0.0" });
+            },
+            installationMethod: "npx",
+        });
+
+        const code = await runCli(["version"], context);
+
+        expect(code).toBe(0);
+        expect(requested).toEqual([
+            "https://registry.npmjs.org/%40eudiplo%2Fcli/latest",
+        ]);
+        expect(output.stdout).toContain("latest 99.0.0");
+        expect(output.stdout).toContain(
+            "update available: npx @eudiplo/cli@latest",
+        );
+        expect(output.stdout).not.toContain("npm install -g");
+    });
+
+    it("checks the npm registry for npm installations", async () => {
+        const requested: string[] = [];
+        const { context } = await createContext({
+            fetch: async (input) => {
+                requested.push(String(input));
+                return Response.json({ version: "99.0.0" });
+            },
+            installationMethod: "npm",
+        });
+
+        await runCli(["version"], context);
+
+        expect(requested).toEqual([
+            "https://registry.npmjs.org/%40eudiplo%2Fcli/latest",
+        ]);
+    });
+
+    it("compares the standalone binary against the latest GitHub release", async () => {
+        const requests: { url: string; accept: string | null }[] = [];
+        const { context, output } = await createContext({
+            fetch: async (input, init) => {
+                requests.push({
+                    url: String(input),
+                    accept: new Headers(init?.headers).get("accept"),
+                });
+                return Response.json({ tag_name: "v99.0.0" });
+            },
+            installationMethod: "standalone",
+        });
+
+        const code = await runCli(["version"], context);
+
+        expect(code).toBe(0);
+        expect(requests).toEqual([
+            {
+                url: "https://api.github.com/repos/EUDIPLO/eudiplo/releases/latest",
+                accept: "application/vnd.github+json",
+            },
+        ]);
+        expect(output.stdout).toContain("latest 99.0.0");
+        expect(output.stdout).toContain(
+            "update available: curl -fsSL https://eudiplo.dev/install.sh | bash",
+        );
+        expect(output.stdout).not.toContain("npm install -g");
+    });
+
+    it("accepts GitHub release tags without a v prefix", async () => {
+        const { context, output } = await createContext({
+            fetch: async () => Response.json({ tag_name: "99.1.0" }),
+            installationMethod: "standalone",
+        });
+
+        await runCli(["version"], context);
+
+        expect(output.stdout).toContain("latest 99.1.0");
+    });
+
+    it("keeps pre-release suffixes of GitHub release tags", async () => {
+        const { context, output } = await createContext({
+            fetch: async () => Response.json({ tag_name: "v99.0.0-rc.1" }),
+            installationMethod: "standalone",
+        });
+
+        await runCli(["version"], context);
+
+        expect(output.stdout).toContain("latest 99.0.0-rc.1");
+    });
+
+    it("reports up to date when the standalone binary matches the release", async () => {
+        const { context, output } = await createContext({
+            fetch: async () =>
+                Response.json({ tag_name: `v${packageJson.version}` }),
+            installationMethod: "standalone",
+        });
+
+        await runCli(["version"], context);
+
+        expect(output.stdout).toContain("up to date");
+        expect(output.stdout).not.toContain("update available");
+    });
+
+    it("does not fail version output when GitHub releases are unavailable", async () => {
+        const { context, output } = await createContext({
+            fetch: async () => new Response("rate limited", { status: 403 }),
             installationMethod: "standalone",
         });
 
@@ -296,9 +401,37 @@ describe("EUDIPLO CLI", () => {
 
         expect(code).toBe(0);
         expect(output.stdout).toContain(
-            "update available: curl -fsSL https://eudiplo.dev/install.sh | bash",
+            "latest unavailable: GitHub releases returned HTTP 403",
         );
-        expect(output.stdout).not.toContain("npm install -g");
+        expect(output.stdout).not.toContain("update available");
+    });
+
+    it("does not fail version output when the GitHub release has no tag", async () => {
+        const { context, output } = await createContext({
+            fetch: async () => Response.json({ name: "no tag here" }),
+            installationMethod: "standalone",
+        });
+
+        const code = await runCli(["version"], context);
+
+        expect(code).toBe(0);
+        expect(output.stdout).toContain(
+            "latest unavailable: GitHub release response did not include a tag_name",
+        );
+    });
+
+    it("does not fail version output when the GitHub lookup throws", async () => {
+        const { context, output } = await createContext({
+            fetch: async () => {
+                throw new Error("offline");
+            },
+            installationMethod: "standalone",
+        });
+
+        const code = await runCli(["version"], context);
+
+        expect(code).toBe(0);
+        expect(output.stdout).toContain("latest unavailable: offline");
     });
 
     it("does not fail version output when the registry is unavailable", async () => {
@@ -1599,7 +1732,7 @@ async function createContext(
             EUDIPLO_CLI_CONFIG: configPath,
             PATH: process.env.PATH,
         },
-        installationMethod: options.installationMethod,
+        installationMethod: options.installationMethod ?? "npm",
         interactive: options.interactive,
         prompt: options.prompt,
         // Never open a real TLS socket from the test suite.

@@ -41,7 +41,17 @@ npm install -g @eudiplo/cli   # installs the `eudiplo` command
 npx @eudiplo/cli --version    # one-off run without installing
 ```
 
-`eudiplo version` also checks npm for a newer CLI. To uninstall, delete the
+`eudiplo version` also checks for a newer CLI and prints the update command for
+the way it was installed. If the lookup fails, it prints `latest unavailable: …`
+and still exits successfully.
+
+| Installation                     | Latest version from | Update hint                                         |
+| -------------------------------- | ------------------- | --------------------------------------------------- |
+| npm (`npm install -g`)           | npm registry        | `npm install -g @eudiplo/cli@latest`                |
+| `npx @eudiplo/cli`               | npm registry        | `npx @eudiplo/cli@latest`                           |
+| Standalone binary (`install.sh`) | GitHub releases     | `curl -fsSL https://eudiplo.dev/install.sh \| bash` |
+
+To uninstall, delete the
 binary (`rm ~/.local/bin/eudiplo`) or run `npm uninstall -g @eudiplo/cli`;
 `~/.eudiplo` holds your instance registrations.
 
