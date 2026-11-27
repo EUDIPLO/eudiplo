@@ -1378,6 +1378,7 @@ describe("OID4VP request object signing key", () => {
     ) {
         const find = vi.fn(async ({ keyId }: { keyId?: string }) => ({
             keyId: keyId ?? "current-default",
+            crt: [`leaf-of-${keyId ?? "current-default"}`],
         }));
         const getCertChain = vi.fn(({ keyId }: { keyId: string }) => [
             `cert-of-${keyId}`,
@@ -1464,6 +1465,22 @@ describe("OID4VP request object signing key", () => {
 
     const federationClientId =
         "openid_federation:https://verifier.example/issuers/tenant";
+
+    it("does not match the registration certificate of a federation request with an access certificate", async () => {
+        const { service, forRequest } = createService(
+            { clientId: federationClientId, accessKeyChainId: "access-a" },
+            { registration_cert: { jwt: "registration.cert.jwt" } },
+        );
+
+        await service.createAuthorizationRequest("session");
+
+        expect(forRequest).toHaveBeenCalledWith(
+            expect.anything(),
+            expect.anything(),
+            undefined,
+            "presentation",
+        );
+    });
 
     it("signs a federation request without x5c and encrypts to the published tenant key", async () => {
         const { service, signJWT } = createService({
@@ -1578,7 +1595,7 @@ describe("OID4VP request object signing key", () => {
         expect(keyId).toBe("access-a");
     });
 
-    it("hands the configured registration certificate and the request's DCQL query to the check and attaches the result", async () => {
+    it("hands the configured registration certificate, the request's DCQL query and the signing access certificate to the check and attaches the result", async () => {
         const { service, signJWT, forRequest } = createService(
             {
                 clientId: "x509_hash:hash-of-access-a",
@@ -1594,6 +1611,7 @@ describe("OID4VP request object signing key", () => {
                 registration_cert: { jwt: "registration.cert.jwt" },
             }),
             { credentials: [] },
+            "leaf-of-access-a",
             "presentation",
         );
         expect(signJWT.mock.calls[0][0].verifier_info).toEqual([

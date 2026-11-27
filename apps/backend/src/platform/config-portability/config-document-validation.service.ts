@@ -283,11 +283,15 @@ export class ConfigDocumentValidationService {
      * does not block the import.
      *
      * @param wholePlaceholders as for {@link validate}.
+     * @param accessCertificate leaf certificate of the access key chain the
+     * presentation config would sign with; without it, the certificate is
+     * not matched against an access certificate.
      */
     validateRegistrationCertificate(
         document: ConfigDocument,
         tenantId: string,
         wholePlaceholders: ReadonlySet<string> | undefined,
+        accessCertificate?: string,
     ): ConfigMigrationIssue[] {
         if (document.kind !== "PresentationConfig") return [];
         const spec = document.spec as Record<string, any>;
@@ -316,6 +320,7 @@ export class ConfigDocumentValidationService {
                 skipOveraskingCheck:
                     this.configService.get<boolean>("SKIP_OVERASKING_CHECK") ??
                     false,
+                accessCertificate,
             },
         );
         if (!problem) return [];

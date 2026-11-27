@@ -60,7 +60,7 @@ EUDIPLO sends a certificate signing request for the existing key, so the private
 
 ## Step 3: Register the verifier
 
-Request the registration certificate after the access certificate. EUDIPLO attaches it to every request of `membership-check`, whichever access key chain signs it, so request a new one whenever you change that key chain or its certificate.
+Request the registration certificate after the access certificate. It names the organization of the access certificate, and requests signed by an access certificate of another organization fail with `400` ([Access certificate match](../trust/registration-certificates.md#access-certificate-match)), so request a new one whenever you change that key chain or its certificate.
 
 1. Copy a fresh access token (step 1).
 2. Open **Credential Verification → Verification Configs**, select `membership-check`, go to the **Security** tab and choose **Request from EUDI Hub** on the **Registration Certificate** card.
@@ -116,6 +116,7 @@ Generate a new request for `membership-check` and scan it with your wallet, as i
 | **Request from EUDI Hub** is missing or locked | `membership-demo-admin` lacks `registrar:manage`, or the configuration is provisioned from a configuration file | Use a client with the role; change provisioned configurations in their files. |
 | Saving a changed DCQL query of `membership-check` fails with `400` | The registration certificate does not cover the new query ([Overasking check](../trust/registration-certificates.md#overasking-check)) | Clear the registration certificate in the same save, then request a new one for the saved query (step 3). |
 | Requests to `membership-check` fail with `400` | The registration certificate has expired | Request a new registration certificate (step 3). |
+| Requests to `membership-check` fail with "The registration certificate does not belong to the access certificate" | The access key chain that signs the requests, or the tenant's default access key chain, changed to one of another organization ([Access certificate match](../trust/registration-certificates.md#access-certificate-match)) | Select the access key chain the certificate was requested for, or request a new registration certificate (step 3). |
 
 Status codes and retries after an EUDI Hub failure are listed under [Errors](../trust/eudi-hub.md#errors). General problems are covered in [Troubleshooting](../troubleshooting.md).
 
