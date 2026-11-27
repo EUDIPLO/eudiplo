@@ -15,7 +15,10 @@ import { LOG_VALIDATION_SCHEMA } from "../observability/log-validation.schema.js
 import { SECRETS_VALIDATION_SCHEMA } from "../secrets/secrets-validation.schema.js";
 import { CONFIG_VALIDATION_SCHEMA } from "./config-validation.schema.js";
 import { CORS_VALIDATION_SCHEMA } from "./cors-validation.schema.js";
-import { SKIP_VALIDATION_SCHEMA } from "./skip-validation.schema.js";
+import {
+    removedSkipFlagError,
+    SKIP_VALIDATION_SCHEMA,
+} from "./skip-validation.schema.js";
 import { TLS_VALIDATION_SCHEMA } from "./tls-validation.schema.js";
 import { BASE_VALIDATION_SCHEMA } from "./validation.schema.js";
 
@@ -42,4 +45,8 @@ export const VALIDATION_SCHEMA = BASE_VALIDATION_SCHEMA.concat(
     .concat(SECRETS_VALIDATION_SCHEMA)
     .concat(EUDI_HUB_VALIDATION_SCHEMA)
     .concat(TLS_VALIDATION_SCHEMA)
-    .concat(SKIP_VALIDATION_SCHEMA);
+    .concat(SKIP_VALIDATION_SCHEMA)
+    .custom((env, helpers) => {
+        const removed = removedSkipFlagError(env);
+        return removed ? helpers.message({ custom: removed }) : env;
+    });

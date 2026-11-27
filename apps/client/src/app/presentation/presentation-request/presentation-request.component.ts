@@ -39,6 +39,7 @@ import { showFieldsToFix } from '../../common/field-to-fix.util';
 import { LoadErrorComponent } from '../../common/load-error.component';
 import { focusAfterRenderIfLost } from '../../common/focus-if-lost.util';
 import { WEBHOOK_ENDPOINT_ROLES } from '../../webhook-endpoint/webhook-endpoint-roles';
+import { credentialsWithoutTrust } from '../presentation-config/dcql-query-editor/simple-dcql';
 
 type ClientIdScheme = 'x509_hash' | 'x509_san_dns' | 'openid_federation';
 
@@ -176,6 +177,17 @@ export class PresentationRequestComponent implements OnInit {
     if (!this.form.get('dcapi')?.value || !config?.allowedOrigins?.length) return null;
     if (config.allowedOrigins.includes(this.pageOrigin)) return null;
     return `Verification config "${config.id}" does not list this page's origin, ${this.pageOrigin}, under Allowed origins (Digital Credentials API).`;
+  }
+
+  /**
+   * Credential queries of the selected config without issuer trust; while the config does not
+   * opt in, the backend refuses every presentation against it.
+   */
+  get queriesWithoutTrust(): string[] {
+    const config = this.selectedConfig;
+    return config && !config.allowUntrustedIssuers
+      ? credentialsWithoutTrust(config.dcql_query)
+      : [];
   }
 
   get selectedConfig(): PresentationConfig | undefined {

@@ -189,21 +189,21 @@ export class ConfigDocumentValidationService {
     }
 
     /**
-     * Every DCQL credential query needs a trusted authority unless
-     * `SKIP_TRUST_AUTHORITY` is set, so the plan reports what apply would
-     * reject.
+     * Every DCQL credential query needs a trusted authority unless the
+     * configuration sets `allowUntrustedIssuers`, so the plan reports what
+     * apply would reject.
      */
     private validateTrustedAuthorities(
         document: ConfigDocument,
     ): ConfigMigrationIssue[] {
-        const credentials = (document.spec as Record<string, any>).dcql_query
-            ?.credentials;
+        const spec = document.spec as Record<string, any>;
+        const credentials = spec.dcql_query?.credentials;
         if (!Array.isArray(credentials)) return [];
         const violation = missingTrustedAuthorities(
             credentials.filter(
                 (credential) => credential && typeof credential === "object",
             ),
-            this.configService.get<boolean>("SKIP_TRUST_AUTHORITY") ?? false,
+            spec.allowUntrustedIssuers === true,
         );
         if (!violation) return [];
         return [

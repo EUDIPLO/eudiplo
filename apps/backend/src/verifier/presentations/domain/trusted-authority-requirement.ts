@@ -2,8 +2,9 @@
  * Every DCQL credential query of a presentation config must name a trusted
  * authority, an `etsi_tl` trust list or an `openid_federation` trust anchor.
  * Without one, any validly signed issuer would be accepted (see
- * {@link verifierTrustOptions}). `SKIP_TRUST_AUTHORITY` lifts the requirement
- * for development and interoperability tests.
+ * {@link verifierTrustOptions}). A presentation config lifts the requirement
+ * for its own queries with `allowUntrustedIssuers`, for development and
+ * interoperability tests.
  *
  * Pure function; the caller decides how a violation is reported.
  */
@@ -44,13 +45,16 @@ export function federationTrustAnchorIds(
 
 /**
  * Why the credential queries violate the requirement, or undefined when each
- * has a `trusted_authorities` entry with at least one value, or `skip` is set.
+ * has a `trusted_authorities` entry with at least one value, or the
+ * presentation config sets `allowUntrustedIssuers`. The PresentationConfig
+ * v5 → v6 step of `@eudiplo/config-format` and `credentialsWithoutTrust` in
+ * the Web Client apply the same rule.
  */
 export function missingTrustedAuthorities(
     credentials: readonly CredentialQueryAuthorities[],
-    skip: boolean,
+    allowUntrustedIssuers: boolean | null | undefined,
 ): string | undefined {
-    if (skip) {
+    if (allowUntrustedIssuers === true) {
         return undefined;
     }
     const missing = credentials
@@ -64,5 +68,5 @@ export function missingTrustedAuthorities(
     if (missing.length === 0) {
         return undefined;
     }
-    return `Credential queries without trusted_authorities: ${missing.join(", ")}. Add a trust list or an OpenID Federation trust anchor to each, or set SKIP_TRUST_AUTHORITY=true for development and interoperability tests.`;
+    return `Credential queries without trusted_authorities: ${missing.join(", ")}. Add a trust list or an OpenID Federation trust anchor to each, or set allowUntrustedIssuers to true in the presentation configuration to accept credentials of any issuer, for development and interoperability tests only.`;
 }

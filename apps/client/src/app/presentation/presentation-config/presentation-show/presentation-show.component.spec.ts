@@ -31,6 +31,68 @@ describe('PresentationShowComponent', () => {
   });
 });
 
+describe('PresentationShowComponent issuer trust', () => {
+  const untrusted = { id: 'pid', format: 'dc+sd-jwt', meta: { vct_values: ['urn:x'] } };
+
+  async function render(config: Record<string, unknown>): Promise<HTMLElement> {
+    await TestBed.configureTestingModule({
+      imports: [PresentationShowComponent],
+      providers: [provideRouter([])],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(PresentationShowComponent);
+    fixture.componentInstance.config = { lifeTime: 300, ...config } as never;
+    fixture.detectChanges();
+    return fixture.nativeElement as HTMLElement;
+  }
+
+  it('warns that the issuer is not validated, with the cookbook link, while untrusted issuers are accepted', async () => {
+    const element = await render({
+      id: 'open',
+      allowUntrustedIssuers: true,
+      dcql_query: { credentials: [untrusted] },
+    });
+    expect(element.textContent).toContain('Untrusted issuers accepted');
+    const warning = element.querySelector('.untrusted-warning');
+    expect(warning?.textContent).toContain("The issuer's authority is not validated.");
+    expect(warning?.querySelector('a')?.getAttribute('href')).toBe(
+      'https://docs.eudiplo.dev/cookbooks/trusted-issuers'
+    );
+    expect(element.textContent).toContain('Accepted from any issuer (issuer not validated)');
+  });
+
+  it('says every presentation is refused when a query has no issuer trust and the config does not opt in', async () => {
+    const element = await render({
+      id: 'stale',
+      dcql_query: {
+        credentials: [
+          untrusted,
+          { ...untrusted, id: 'mdl', trusted_authorities: [{ type: 'etsi_tl', values: [] }] },
+        ],
+      },
+    });
+    expect(element.textContent).not.toContain('Untrusted issuers accepted');
+    const refused = element.querySelector('.untrusted-warning.refused');
+    expect(refused?.textContent).toContain('Every presentation against this config is refused.');
+    expect(refused?.textContent).toContain('pid, mdl have');
+  });
+
+  it('shows no warning when every query has issuer trust', async () => {
+    const element = await render({
+      id: 'trusted',
+      dcql_query: {
+        credentials: [
+          {
+            ...untrusted,
+            trusted_authorities: [{ type: 'etsi_tl', values: [{ trustListId: 'l' }] }],
+          },
+        ],
+      },
+    });
+    expect(element.querySelector('.untrusted-warning')).toBeNull();
+    expect(element.textContent).toContain('Refused');
+  });
+});
+
 describe('PresentationShowComponent loading', () => {
   it('says why the configuration could not be loaded instead of a blank page, and retries', async () => {
     const getPresentationById = vi

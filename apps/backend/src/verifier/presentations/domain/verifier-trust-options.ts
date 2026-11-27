@@ -37,8 +37,8 @@ export function trustListAuthorities(
  *   key `kid` of its resolved `openid_credential_issuer` metadata
  *   (`federation-only`). No `x5c` is needed; mDOCs are rejected. The
  *   trust anchors must be registered with pinned keys for `tenantId`.
- * - none: the issuer is not checked. Only reachable with
- *   `SKIP_TRUST_AUTHORITY` (see {@link missingTrustedAuthorities}).
+ * - none: the issuer is not checked. Only reachable when the presentation
+ *   config sets `allowUntrustedIssuers` (see {@link missingTrustedAuthorities}).
  */
 export function verifierTrustOptions(input: {
     trustLists: TrustListRef[];

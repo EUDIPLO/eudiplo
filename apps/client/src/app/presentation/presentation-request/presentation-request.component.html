@@ -70,6 +70,26 @@
                 </div>
               }
 
+              @if (queriesWithoutTrust.length) {
+                <div class="readiness-hint readiness-error" role="note">
+                  <mat-icon aria-hidden="true">error</mat-icon>
+                  <span>
+                    Every presentation against this config is refused:
+                    {{ queriesWithoutTrust.join(', ') }}
+                    {{ queriesWithoutTrust.length === 1 ? 'has' : 'have' }} no issuer trust entry.
+                    Add issuer trust to the config, or accept credentials without it.
+                  </span>
+                </div>
+              } @else if (selectedConfig?.allowUntrustedIssuers) {
+                <div class="readiness-hint" role="note">
+                  <mat-icon aria-hidden="true">warning</mat-icon>
+                  <span>
+                    This config accepts credentials without issuer trust from any issuer whose
+                    signature is valid: the issuer's authority is not validated.
+                  </span>
+                </div>
+              }
+
               @if (selectedConfig) {
                 <dl class="details">
                   @if (selectedConfig.description) {

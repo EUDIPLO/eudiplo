@@ -44,6 +44,7 @@ import {
 } from '../../../registrar/eudi-hub-dialog/eudi-hub-registration-dialog.component';
 import type { EudiHubRegistrationCertificate } from '../../../registrar/eudi-hub.service';
 import { formatLifetime } from '../../../utils/duration';
+import { credentialsWithoutTrust } from '../dcql-query-editor/simple-dcql';
 
 @Component({
   selector: 'app-presentation-show',
@@ -184,6 +185,11 @@ export class PresentationShowComponent implements OnInit {
 
   get credentialQueries(): any[] {
     return this.config?.dcql_query?.credentials || [];
+  }
+
+  /** Credential queries without issuer trust, which the backend refuses unless the config opts in. */
+  get queriesWithoutTrust(): string[] {
+    return credentialsWithoutTrust(this.config?.dcql_query);
   }
 
   get statusCheckMode(): 'strict' | 'best_effort' | 'disabled' {

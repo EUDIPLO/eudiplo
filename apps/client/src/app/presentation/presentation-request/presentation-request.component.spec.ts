@@ -56,6 +56,27 @@ describe('PresentationRequestComponent', () => {
     expect(component).toBeTruthy();
   });
 
+  it('says before a request is created that a config without issuer trust refuses every presentation', async () => {
+    const credential = { id: 'pid', format: 'dc+sd-jwt', meta: { vct_values: ['urn:x'] } };
+    service.loadConfigurations.mockResolvedValue([
+      { id: 'stale', dcql_query: { credentials: [credential] } },
+      { id: 'open', allowUntrustedIssuers: true, dcql_query: { credentials: [credential] } },
+    ]);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const element = fixture.nativeElement as HTMLElement;
+
+    component.form.patchValue({ requestId: 'stale' });
+    fixture.detectChanges();
+    expect(component.queriesWithoutTrust).toEqual(['pid']);
+    expect(element.textContent).toContain('Every presentation against this config is refused');
+
+    component.form.patchValue({ requestId: 'open' });
+    fixture.detectChanges();
+    expect(component.queriesWithoutTrust).toEqual([]);
+    expect(element.textContent).toContain("the issuer's authority is not validated");
+  });
+
   describe('Generate Request', () => {
     let open: ReturnType<typeof vi.spyOn>;
 

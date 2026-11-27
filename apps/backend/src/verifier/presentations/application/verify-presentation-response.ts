@@ -43,6 +43,8 @@ export interface PresentationQuery {
     tenantId: string;
     statusCheckMode?: RevocationCheckMode;
     skewSeconds?: number;
+    /** Accept credential queries without `trusted_authorities`. */
+    allowUntrustedIssuers?: boolean | null;
     dcql_query: {
         credentials: Array<
             DcqlCredentialQuery & {
@@ -119,7 +121,7 @@ export class CredentialVerificationFailedError extends Error {
  * the presentation config's DCQL query and returns the disclosed claims.
  *
  * Checks, in order: every credential query names a trusted authority (unless
- * `SKIP_TRUST_AUTHORITY`), so a config stored before 9.0 without one does
+ * the config sets `allowUntrustedIssuers`), so a config stored without one does
  * not verify without an issuer check; all required credentials are present
  * with at least one presentation; per credential id, it is part of the query,
  * it has a single presentation unless the query allows `multiple`, its
@@ -160,7 +162,7 @@ export class VerifyPresentationResponse {
 
         const missingAuthorities = missingTrustedAuthorities(
             query.dcql_query.credentials,
-            this.settings.skipTrustAuthority,
+            query.allowUntrustedIssuers,
         );
         if (missingAuthorities) {
             throw new InvalidTrustedAuthoritiesError(missingAuthorities);

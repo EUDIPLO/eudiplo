@@ -1,6 +1,5 @@
 import {
     BadRequestException,
-    Inject,
     Injectable,
     NotFoundException,
 } from "@nestjs/common";
@@ -36,10 +35,6 @@ import {
 import { PresentationConfigCreateDto } from "../dto/presentation-config-create.dto.js";
 import { PresentationConfigUpdateDto } from "../dto/presentation-config-update.dto.js";
 import { PresentationConfig } from "../entities/presentation-config.entity.js";
-import {
-    PRESENTATION_SETTINGS,
-    type PresentationSettings,
-} from "../presentation-settings.js";
 import { PresentationRegistrationCertificateService } from "./presentation-registration-certificate.service.js";
 
 function idTaken(id: string): ResourceIdTaken {
@@ -60,8 +55,6 @@ export class PresentationConfigService {
         configImportOrchestrator: ConfigImportOrchestratorService,
         private readonly auditLogService: AuditLogService,
         private readonly federationTrustAnchors: FederationTrustAnchorService,
-        @Inject(PRESENTATION_SETTINGS)
-        private readonly settings: PresentationSettings,
     ) {
         // Register presentation config import in REFERENCES phase
         // This runs after CORE (keys, certs) and CONFIGURATION phases
@@ -210,6 +203,9 @@ export class PresentationConfigService {
         await this.requireTrustedAuthorities(tenantId, vprequest);
         const merged = {
             ...vprequest,
+            // A replaced config takes the file's value: an omitted opt-in
+            // turns a stored one off instead of keeping it.
+            allowUntrustedIssuers: vprequest.allowUntrustedIssuers === true,
             tenantId,
         } as PresentationConfig;
         this.registrationCertificates.validate(merged);
@@ -293,13 +289,14 @@ export class PresentationConfigService {
     }
 
     /**
-     * Every DCQL credential query needs a trusted authority unless
-     * `SKIP_TRUST_AUTHORITY` is set.
+     * Every DCQL credential query needs a trusted authority unless the
+     * configuration sets `allowUntrustedIssuers`.
      * @throws BadRequestException naming the queries without one.
      */
     private async requireTrustedAuthorities(
         tenantId: string,
         config: {
+            allowUntrustedIssuers?: boolean | null;
             dcql_query?: {
                 credentials: readonly CredentialQueryAuthorities[];
             };
@@ -314,7 +311,7 @@ export class PresentationConfigService {
         const credentials = config.dcql_query?.credentials ?? [];
         const violation = missingTrustedAuthorities(
             credentials,
-            this.settings.skipTrustAuthority,
+            config.allowUntrustedIssuers,
         );
         if (violation) {
             throw new BadRequestException(violation);
@@ -381,6 +378,7 @@ function sanitizeForLog(config: PresentationConfig): Record<string, unknown> {
         accessKeyChainId: config.accessKeyChainId,
         allowedOrigins: config.allowedOrigins,
         readerAuth: config.readerAuth,
+        allowUntrustedIssuers: config.allowUntrustedIssuers,
     };
 }
 

@@ -6,6 +6,7 @@ import {
   dcqlReferenceError,
   trustError,
   onlyEmptyClaimsUnsupported,
+  credentialsWithoutTrust,
 } from './simple-dcql';
 
 const credential = {
@@ -185,5 +186,27 @@ describe('federation authority errors', () => {
       'Choose a registered federation trust anchor, or fix the value in DCQL JSON.'
     );
     expect(trustError([{ type: 'openid_federation', values: ['https://ta.example'] }])).toBeNull();
+  });
+});
+
+describe('credentialsWithoutTrust', () => {
+  it('lists queries without a trusted authority value, from JSON text too', () => {
+    const query = {
+      credentials: [
+        { id: 'pid' },
+        { id: 'mdl', trusted_authorities: [{ type: 'etsi_tl', values: [] }] },
+        {
+          id: 'diploma',
+          trusted_authorities: [{ type: 'etsi_tl', values: [{ trustListId: 'issuers' }] }],
+        },
+      ],
+    };
+    expect(credentialsWithoutTrust(query)).toEqual(['pid', 'mdl']);
+    expect(credentialsWithoutTrust(JSON.stringify(query))).toEqual(['pid', 'mdl']);
+  });
+
+  it('returns nothing for a query it cannot read', () => {
+    expect(credentialsWithoutTrust('{ not json')).toEqual([]);
+    expect(credentialsWithoutTrust(undefined)).toEqual([]);
   });
 });

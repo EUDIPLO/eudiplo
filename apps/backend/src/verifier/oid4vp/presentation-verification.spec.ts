@@ -50,7 +50,7 @@ function setup(
         sdJwtPayload?: Record<string, unknown>;
         mdocResult?: Record<string, unknown>;
         resolveTrustListRefs?: ReturnType<typeof vi.fn>;
-        skipTrustAuthority?: boolean;
+        allowUntrustedIssuers?: boolean;
     } = {},
 ) {
     const sdJwt = {
@@ -88,12 +88,7 @@ function setup(
             new MdocCredentialVerifierFormat(mdoc as any, logger as any),
         ]),
         trustedAuthorities as any,
-        {
-            publicUrl: "https://eudiplo.example",
-            // These cases are about other checks; the requirement itself
-            // has its own case.
-            skipTrustAuthority: options.skipTrustAuthority ?? true,
-        },
+        { publicUrl: "https://eudiplo.example", skipOveraskingCheck: false },
     );
     const oid4vp = Object.assign(
         Object.create(Oid4vpService.prototype) as Oid4vpService,
@@ -118,6 +113,9 @@ function setup(
     };
     const config = {
         tenantId: "tenant",
+        // These cases are about other checks; the requirement itself has its
+        // own case.
+        allowUntrustedIssuers: options.allowUntrustedIssuers ?? true,
         dcql_query: { credentials },
     } as unknown as PresentationConfig;
     const session = {
@@ -457,7 +455,7 @@ describe("OID4VP presentation verification", () => {
     it("rejects a config without trusted_authorities as a bad request", async () => {
         const { service, config, session, sdJwt } = setup(
             [{ id: "pid", format: "dc+sd-jwt" }],
-            { skipTrustAuthority: false },
+            { allowUntrustedIssuers: false },
         );
         const error = await service
             .parseResponse(

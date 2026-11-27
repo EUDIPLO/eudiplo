@@ -304,6 +304,12 @@ describe("config upgrade", () => {
                         id: "pid",
                         format: "dc+sd-jwt",
                         meta: { vct_values: ["urn:eudi:pid:de:1"] },
+                        trusted_authorities: [
+                            {
+                                type: "etsi_tl",
+                                values: [{ trustListId: "pid-issuers" }],
+                            },
+                        ],
                     },
                 ],
             },
@@ -330,9 +336,50 @@ describe("config upgrade", () => {
             ),
         );
         expect(result.$schema).toBe(
-            "https://eudiplo.dev/schemas/v5/PresentationConfigFile.schema.json",
+            "https://eudiplo.dev/schemas/v6/PresentationConfigFile.schema.json",
         );
         expect(result.spec).toEqual(spec);
+    });
+
+    it("stops a v5 presentation configuration without trusted authorities until the operator decides", async () => {
+        const { cwd, context, output } = await setup();
+        const source = join(cwd, "age.json");
+        const credential = {
+            id: "pid",
+            format: "dc+sd-jwt",
+            meta: { vct_values: ["urn:eudi:pid:de:1"] },
+        };
+        const write = (spec: Record<string, unknown>) =>
+            writeFile(
+                source,
+                JSON.stringify({
+                    $schema: schemaUrl("PresentationConfig", 5),
+                    spec: { id: "age", ...spec },
+                }),
+            );
+
+        await write({ dcql_query: { credentials: [credential] } });
+        expect(await runCli(["config", "upgrade", source], context)).toBe(1);
+        expect(output.stderr).toContain(
+            "/spec/dcql_query/credentials: required-input TRUSTED_AUTHORITY_REQUIRED",
+        );
+        await expect(access(`${source}.upgraded.json`)).rejects.toThrow();
+
+        // The decision: a v6 file that opts in is current.
+        await writeFile(
+            source,
+            JSON.stringify({
+                $schema: schemaUrl("PresentationConfig", 6),
+                spec: {
+                    id: "age",
+                    allowUntrustedIssuers: true,
+                    dcql_query: { credentials: [credential] },
+                },
+            }),
+        );
+        expect(
+            await runCli(["config", "upgrade", source, "--check"], context),
+        ).toBe(0);
     });
 
     it("upgrades a v4 issuance configuration to v5 and blocks an invalid federation entity id", async () => {
@@ -788,6 +835,14 @@ describe("config upgrade", () => {
                                 id: "pid",
                                 format: "dc+sd-jwt",
                                 meta: { vct_values: ["urn:eudi:pid:de:1"] },
+                                trusted_authorities: [
+                                    {
+                                        type: "etsi_tl",
+                                        values: [
+                                            { trustListId: "pid-issuers" },
+                                        ],
+                                    },
+                                ],
                             },
                         ],
                     },
@@ -807,7 +862,7 @@ describe("config upgrade", () => {
         const result = JSON.parse(
             await readFile(join(cwd, "age.json.upgraded.json"), "utf8"),
         );
-        expect(result.$schema).toBe(schemaUrl("PresentationConfig", 5));
+        expect(result.$schema).toBe(schemaUrl("PresentationConfig", 6));
         expect(result.spec.registration_cert).toEqual({
             purpose,
             privacy_policy: "https://verifier.example/privacy",

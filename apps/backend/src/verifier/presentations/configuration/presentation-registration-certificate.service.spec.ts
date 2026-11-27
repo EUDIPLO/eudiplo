@@ -37,7 +37,6 @@ function setup(skipOveraskingCheck = false) {
     const service = new PresentationRegistrationCertificateService(
         {
             publicUrl: "https://eudiplo.example",
-            skipTrustAuthority: false,
             skipOveraskingCheck,
         },
         logger as never,

@@ -53,7 +53,7 @@ rejects versions newer than its own.
 | `KeyChainDefaults`   | `KeyChainDefaultsConfigFile`  | 2               | yes       |
 | `IssuanceConfig`     | `IssuanceConfigFile`          | 7               | yes       |
 | `CredentialConfig`   | `CredentialConfigFile`        | 5               |           |
-| `PresentationConfig` | `PresentationConfigFile`      | 5               |           |
+| `PresentationConfig` | `PresentationConfigFile`      | 6               |           |
 | `AttributeProvider`  | `AttributeProviderConfigFile` | 1               |           |
 | `WebhookEndpoint`    | `WebhookEndpointConfigFile`   | 1               |           |
 | `TrustList`          | `TrustListConfigFile`         | 2               |           |
@@ -108,6 +108,15 @@ with `REGISTRATION_CERT_NOT_REQUESTED` when the certificate was requested from
 the registrar and no `jwt` is set. A bare presentation file with
 `registration_cert.purpose` or `.privacy_policy` is read as v5. 9.x cannot read
 v5 files.
+
+**PresentationConfig v6** came with EUDIPLO 11.0. It adds the optional
+`allowUntrustedIssuers`, which replaces the removed `SKIP_TRUST_AUTHORITY`
+environment variable ([DCQL](../presentation/dcql.md#accept-only-trusted-issuers)).
+A v5 file is a valid v6 file, except that a credential query without
+`trusted_authorities` stops the v5 to v6 step with
+`TRUSTED_AUTHORITY_REQUIRED`: add a trusted authority to the query, or change
+`$schema` to v6 and set `allowUntrustedIssuers` to `true`. A bare presentation
+file with `allowUntrustedIssuers` is read as v6. 10.x cannot read v6 files.
 
 **IssuanceConfig v4** came with EUDIPLO 10.0. It adds the optional
 `walletAttestationStatusCheckMode` (`strict`, `best_effort` or `disabled`) to the

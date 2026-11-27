@@ -34,6 +34,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import {
@@ -80,6 +81,7 @@ import { ConfigOwnershipDirective } from '../../../config-portability/config-own
 import { ConfigOwnershipNoticeComponent } from '../../../config-portability/config-ownership-notice.component';
 import { DcqlQueryEditorComponent } from '../dcql-query-editor/dcql-query-editor.component';
 import {
+  credentialsWithoutTrust,
   dcqlReferenceError,
   parseDcql,
   readSimpleDcql,
@@ -119,6 +121,7 @@ function dcqlCredentialCount(value: unknown): number | 'unreadable' {
     MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
+    MatSlideToggleModule,
     MatProgressSpinnerModule,
     MatSnackBarModule,
     ReactiveFormsModule,
@@ -254,6 +257,7 @@ export class PresentationCreateComponent implements OnInit, PageWithUnsavedChang
           return error ? { invalidReference: error } : null;
         },
       ]),
+      allowUntrustedIssuers: new FormControl<boolean>(false, { nonNullable: true }),
       lifeTime: new FormControl(300, [Validators.required, Validators.min(1)]),
       statusCheckMode: new FormControl<'strict' | 'best_effort' | 'disabled'>('strict'),
       registrationCertJwt: new FormControl(undefined),
@@ -338,6 +342,7 @@ export class PresentationCreateComponent implements OnInit, PageWithUnsavedChang
           if (!formData.statusCheckMode) {
             formData.statusCheckMode = 'strict';
           }
+          formData.allowUntrustedIssuers = formData.allowUntrustedIssuers === true;
           if (formData.dcql_query && typeof formData.dcql_query === 'object') {
             formData.dcql_query = JSON.stringify(formData.dcql_query, null, 2);
           }
@@ -421,6 +426,16 @@ export class PresentationCreateComponent implements OnInit, PageWithUnsavedChang
     return this.form.get('dcql_query') as FormControl;
   }
 
+  /** Whether the config accepts credential queries without issuer trust. */
+  get allowsUntrustedIssuers(): boolean {
+    return this.form.get('allowUntrustedIssuers')?.value === true;
+  }
+
+  /** Credential queries without issuer trust, which save refuses unless untrusted issuers are allowed. */
+  get queriesWithoutTrust(): string[] {
+    return credentialsWithoutTrust(this.queryControl.value);
+  }
+
   toggleGuided(): void {
     this.guided = !this.guided;
     this.furthestStep = Math.max(this.furthestStep, this.activeStep);
@@ -428,9 +443,9 @@ export class PresentationCreateComponent implements OnInit, PageWithUnsavedChang
 
   private stepFields(step: number): string[] {
     if (step === 0) return ['id', 'description'];
-    if (step === 1) return ['dcql_query'];
+    if (step === 1) return ['dcql_query', 'allowUntrustedIssuers'];
     return Object.keys(this.form.controls).filter(
-      (key) => !['id', 'description', 'dcql_query'].includes(key)
+      (key) => !['id', 'description', 'dcql_query', 'allowUntrustedIssuers'].includes(key)
     );
   }
 
@@ -450,6 +465,16 @@ export class PresentationCreateComponent implements OnInit, PageWithUnsavedChang
           ? 'Check the errors in Credentials.'
           : `Check the highlighted fields in ${['Name', 'Credentials', 'Settings'][step]}.`;
       this.focusStepFieldToFix(step, () => (step === 1 ? this.queryErrorField() : undefined));
+      return false;
+    }
+    if (step === 1 && !this.allowsUntrustedIssuers && this.queriesWithoutTrust.length) {
+      // The backend refuses such a config; say so before Save instead of after.
+      this.validationMessage = `Add issuer trust to ${this.queriesWithoutTrust.join(', ')}, or turn on Accept credentials without issuer trust.`;
+      this.focusStepFieldToFix(step, () =>
+        this.stepElement(step)?.querySelector<HTMLElement>(
+          '[formcontrolname="allowUntrustedIssuers"] button'
+        )
+      );
       return false;
     }
     this.validationMessage = '';
@@ -599,7 +624,9 @@ export class PresentationCreateComponent implements OnInit, PageWithUnsavedChang
             ? trustSummary(credential.trusted_authorities)
             : credential.trusted_authorities
               ? 'Review issuer trust in DCQL JSON'
-              : 'No issuer trust constraint configured',
+              : this.allowsUntrustedIssuers
+                ? 'No issuer trust: any issuer is accepted'
+                : 'No issuer trust: saving is refused',
         type: Array.isArray(credential.meta?.vct_values)
           ? credential.meta.vct_values.join(', ')
           : typeof credential.meta?.doctype_value === 'string'
@@ -905,6 +932,12 @@ export class PresentationCreateComponent implements OnInit, PageWithUnsavedChang
       formValue.accessKeyChainId = undefined;
     }
 
+    // Saves send false to turn a stored opt-in off; exports leave the default out.
+    formValue.allowUntrustedIssuers = formValue.allowUntrustedIssuers === true;
+    if (forExport && !formValue.allowUntrustedIssuers) {
+      formValue.allowUntrustedIssuers = undefined;
+    }
+
     const allowedOrigins = parseAllowedOrigins(formValue.allowedOrigins);
     // null clears the list on update; exports leave an empty list out
     formValue.allowedOrigins = allowedOrigins.length
@@ -978,7 +1011,8 @@ export class PresentationCreateComponent implements OnInit, PageWithUnsavedChang
       value.registrationCertPurpose.length > 0 ||
       value.attached.length > 0 ||
       value.lifeTime !== 300 ||
-      value.statusCheckMode !== 'strict'
+      value.statusCheckMode !== 'strict' ||
+      value.allowUntrustedIssuers === true
     );
   }
 
@@ -1051,7 +1085,12 @@ export class PresentationCreateComponent implements OnInit, PageWithUnsavedChang
       const existingId = this.form.get('id')?.value;
       this.getFormArray('attached').clear();
       this.registrationCertPurposeArray.clear();
-      this.form.reset({ lifeTime: 300, statusCheckMode: 'strict', webhookEndpointId: '' });
+      this.form.reset({
+        lifeTime: 300,
+        statusCheckMode: 'strict',
+        webhookEndpointId: '',
+        allowUntrustedIssuers: false,
+      });
       this.loadRegistrationCertIntoForm(registrationCert);
       (formData.attached || []).forEach(() => this.addAttachment());
       this.form.patchValue(formData);

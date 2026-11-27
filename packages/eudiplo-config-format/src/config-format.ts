@@ -46,7 +46,7 @@ export const CONFIG_FORMATS = {
     PresentationConfig: {
         slug: "presentation-config",
         file: "PresentationConfigFile",
-        version: 5,
+        version: 6,
     },
     AttributeProvider: {
         slug: "attribute-provider",
@@ -154,7 +154,8 @@ function hasTrustListFormat(spec: Record<string, unknown>): boolean {
  * v4 moved it to `key-chain-defaults.json`), and a presentation configuration
  * with `allowedOrigins` or an `etsi_tl` value with `format`, which
  * PresentationConfig v4 added, or with `registration_cert.purpose` or
- * `registration_cert.privacy_policy`, which PresentationConfig v5 added, and a
+ * `registration_cert.privacy_policy`, which PresentationConfig v5 added, or
+ * with `allowUntrustedIssuers`, which PresentationConfig v6 added, and a
  * credential configuration with `format` on a claim field, which
  * CredentialConfig v5 added.
  */
@@ -170,6 +171,7 @@ export function bareFileVersion(
     if (kind === "KeyChainDefaults") return "authorizationServer" in spec ? 2 : 1;
     if (kind === "CredentialConfig") return hasClaimFieldFormat(spec.fields) ? 5 : 1;
     if (kind === "PresentationConfig") {
+        if ("allowUntrustedIssuers" in spec) return 6;
         const certificate = spec.registration_cert;
         if (
             object(certificate) &&
@@ -685,6 +687,57 @@ function registrationCertificateNotGenerated(): ConfigMigrationIssue {
     };
 }
 
+/**
+ * PresentationConfig v6 adds the optional `allowUntrustedIssuers`, which
+ * replaces the `SKIP_TRUST_AUTHORITY` environment variable of earlier
+ * releases. A v5 spec is a valid v6 spec. One with a credential query
+ * without `trusted_authorities` was only accepted with that variable; v6
+ * refuses it unless the spec opts in. The step does not opt in on its own,
+ * since only the operator can decide to accept any issuer; it asks for that
+ * decision (`required-input`). The rule matches `missingTrustedAuthorities`
+ * in the backend and `credentialsWithoutTrust` in the Web Client.
+ */
+const presentationConfigV5ToV6: ConfigMigration = {
+    id: "presentation-config-v6-allow-untrusted-issuers",
+    kind: "PresentationConfig",
+    from: 5,
+    to: 6,
+    migrate(spec) {
+        if (spec.allowUntrustedIssuers === true) return { spec };
+        const query = object(spec.dcql_query) ? spec.dcql_query : {};
+        const credentials = Array.isArray(query.credentials)
+            ? query.credentials
+            : [];
+        const missing = credentials
+            .filter(object)
+            .filter(
+                (credential) =>
+                    !(
+                        Array.isArray(credential.trusted_authorities) &&
+                        credential.trusted_authorities.some(
+                            (authority) =>
+                                object(authority) &&
+                                Array.isArray(authority.values) &&
+                                authority.values.length > 0,
+                        )
+                    ),
+            )
+            .map((credential) => String(credential.id ?? ""));
+        if (missing.length === 0) return { spec };
+        return {
+            spec,
+            issues: [
+                {
+                    severity: "required-input",
+                    code: "TRUSTED_AUTHORITY_REQUIRED",
+                    path: "/spec/dcql_query/credentials",
+                    message: `Credential queries without trusted_authorities: ${missing.join(", ")}. EUDIPLO 11.0 no longer reads SKIP_TRUST_AUTHORITY and refuses this configuration. Add a trust list or an OpenID Federation trust anchor to each, or set $schema to v6 and allowUntrustedIssuers to true to accept credentials of any issuer (development and interoperability tests only).`,
+                },
+            ],
+        };
+    },
+};
+
 /** The flat registration certificate fields of PresentationConfig v4 and earlier. */
 const PRESENTATION_REGISTRATION_CERT_FORM_FIELDS = [
     "registrationCertImportJwt",
@@ -988,6 +1041,7 @@ const CONFIG_MIGRATIONS: readonly ConfigMigration[] = [
         migrate: (spec) => ({ spec }),
     },
     presentationConfigV4ToV5,
+    presentationConfigV5ToV6,
     trustListV1ToV2,
 ];
 export function schemaUrl(

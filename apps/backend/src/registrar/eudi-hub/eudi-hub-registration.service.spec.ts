@@ -138,7 +138,6 @@ describe("EudiHubRegistrationService", () => {
                 issuance as any,
                 {
                     publicUrl: "https://eudiplo.example",
-                    skipTrustAuthority: false,
                     skipOveraskingCheck: false,
                 },
             ),

@@ -325,6 +325,32 @@ export function simpleDcqlError(query: SimpleDcql): string | null {
   return dcqlReferenceError(buildSimpleDcql(query));
 }
 
+/**
+ * IDs of the credential queries without a `trusted_authorities` entry that
+ * has a value, which the backend refuses unless the verification config sets
+ * `allowUntrustedIssuers`. Empty when the query cannot be read. Same rule as
+ * `missingTrustedAuthorities` in the backend.
+ */
+export function credentialsWithoutTrust(value: unknown): string[] {
+  const query = parseDcql(value);
+  if (!record(query) || !Array.isArray(query['credentials'])) return [];
+  return query['credentials']
+    .filter(record)
+    .filter(
+      (credential) =>
+        !(
+          Array.isArray(credential['trusted_authorities']) &&
+          credential['trusted_authorities'].some(
+            (authority) =>
+              record(authority) &&
+              Array.isArray(authority['values']) &&
+              authority['values'].length > 0
+          )
+        )
+    )
+    .map((credential) => String(credential['id'] ?? ''));
+}
+
 export function trustSummary(authorities: TrustedAuthority[] | undefined): string {
   if (!authorities?.length) return 'No issuer trust constraint configured';
   return authorities

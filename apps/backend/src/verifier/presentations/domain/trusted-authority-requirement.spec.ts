@@ -39,7 +39,7 @@ describe("missingTrustedAuthorities", () => {
         expect(violation).toContain(
             "Credential queries without trusted_authorities: pid, mdl.",
         );
-        expect(violation).toContain("SKIP_TRUST_AUTHORITY=true");
+        expect(violation).toContain("allowUntrustedIssuers");
     });
 
     it("does not count an entry without values", () => {
@@ -56,7 +56,15 @@ describe("missingTrustedAuthorities", () => {
         ).toContain("without trusted_authorities: pid.");
     });
 
-    it("accepts every query when SKIP_TRUST_AUTHORITY is set", () => {
+    it("requires trusted authorities when allowUntrustedIssuers is null or unset", () => {
+        for (const allow of [null, undefined]) {
+            expect(missingTrustedAuthorities([{ id: "pid" }], allow)).toContain(
+                "without trusted_authorities: pid.",
+            );
+        }
+    });
+
+    it("accepts every query when the config sets allowUntrustedIssuers", () => {
         expect(
             missingTrustedAuthorities([{ id: "pid" }], true),
         ).toBeUndefined();

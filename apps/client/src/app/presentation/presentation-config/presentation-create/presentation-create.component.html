@@ -183,7 +183,8 @@
                 <h2 id="credentials-heading">Credentials and claims</h2>
                 <p>
                   The credentials a wallet presents, the claims it discloses and the issuers you
-                  trust for each. Every credential needs at least one issuer trust entry.
+                  trust for each. Every credential needs at least one issuer trust entry, unless you
+                  accept credentials without issuer trust below.
                 </p>
               </div>
               <mat-card appearance="outlined">
@@ -192,6 +193,39 @@
                     [control]="queryControl"
                     [knownCredentials]="knownCredentials"
                   />
+                  <div class="untrusted-issuers">
+                    <mat-slide-toggle
+                      formControlName="allowUntrustedIssuers"
+                      aria-describedby="untrusted-issuers-hint"
+                    >
+                      Accept credentials without issuer trust
+                    </mat-slide-toggle>
+                    @if (allowsUntrustedIssuers) {
+                      <p id="untrusted-issuers-hint" class="untrusted-warning" role="note">
+                        <mat-icon aria-hidden="true">warning</mat-icon>
+                        <span>
+                          <strong>The issuer's authority is not validated.</strong>
+                          A credential without an issuer trust entry is accepted from any issuer
+                          whose signature is valid, including one that anybody can set up. Use this
+                          with caution, for development and interoperability tests only.
+                          <a
+                            href="https://docs.eudiplo.dev/cookbooks/trusted-issuers"
+                            target="_blank"
+                            rel="noopener"
+                            >Accept only trusted issuers (opens in a new tab)</a
+                          >
+                        </span>
+                      </p>
+                    } @else {
+                      <p id="untrusted-issuers-hint" class="hint">
+                        Off by default: every credential needs at least one issuer trust entry.
+                        @if (queriesWithoutTrust.length) {
+                          Without one, saving is refused for:
+                          <strong>{{ queriesWithoutTrust.join(', ') }}</strong>.
+                        }
+                      </p>
+                    }
+                  </div>
                 </mat-card-content>
               </mat-card>
             </section>
@@ -686,6 +720,15 @@
                         }
                       </ul>
                     </div>
+                  }
+                  @if (allowsUntrustedIssuers) {
+                    <p class="untrusted-warning" role="note">
+                      <mat-icon aria-hidden="true">warning</mat-icon>
+                      <span>
+                        <strong>Untrusted issuers accepted.</strong> Credentials without an issuer
+                        trust entry are accepted from any issuer whose signature is valid.
+                      </span>
+                    </p>
                   }
                   @if (hasAdvancedQuery) {
                     <p class="setup-notice">
