@@ -436,7 +436,7 @@ describe("Key Chain — Import (e2e)", () => {
         // decryption key of tenants that other tests use.
         const guardedTenantId = "key-encryption-guard";
         let guardedAdminToken: string;
-        let issuanceManagerToken: string;
+        let keyManagerToken: string;
         let guarded: { id: string; privateJwk: JWK };
 
         /**
@@ -494,13 +494,13 @@ describe("Key Chain — Import (e2e)", () => {
                 configService.getOrThrow<string>("AUTH_CLIENT_ID"),
                 configService.getOrThrow<string>("AUTH_CLIENT_SECRET"),
                 guardedTenantId,
-                [Role.Clients, Role.Issuances],
+                [Role.Clients, Role.Keys],
             );
-            issuanceManagerToken = await clientToken(
+            keyManagerToken = await clientToken(
                 app,
                 guardedAdminToken,
-                `key-chain-issuance-manager-${v4()}`,
-                [Role.Issuances],
+                `key-chain-key-manager-${v4()}`,
+                [Role.Keys],
             );
             guarded = await encryptionKeyChain(guardedTenantId);
         });
@@ -510,7 +510,7 @@ describe("Key Chain — Import (e2e)", () => {
             async (usageType) => {
                 await request(app.getHttpServer())
                     .post("/key-chain/import")
-                    .set("Authorization", `Bearer ${issuanceManagerToken}`)
+                    .set("Authorization", `Bearer ${keyManagerToken}`)
                     .send({
                         id: guarded.id,
                         key: privateKey,
@@ -527,7 +527,7 @@ describe("Key Chain — Import (e2e)", () => {
         test("stays the decryption key when a key chain with usage type encrypt is created", async () => {
             await request(app.getHttpServer())
                 .post("/key-chain")
-                .set("Authorization", `Bearer ${issuanceManagerToken}`)
+                .set("Authorization", `Bearer ${keyManagerToken}`)
                 .send({ usageType: KeyUsageType.Encrypt, type: "standalone" })
                 .expect(201);
 
@@ -537,7 +537,7 @@ describe("Key Chain — Import (e2e)", () => {
         test("can be read without private key material", async () => {
             const response = await request(app.getHttpServer())
                 .get(`/key-chain/${guarded.id}`)
-                .set("Authorization", `Bearer ${issuanceManagerToken}`)
+                .set("Authorization", `Bearer ${keyManagerToken}`)
                 .expect(200);
 
             expect(response.body.usageType).toBe(KeyUsageType.Encrypt);
@@ -548,7 +548,7 @@ describe("Key Chain — Import (e2e)", () => {
 
         test("update, rotate and delete do not find it", async () => {
             const server = app.getHttpServer();
-            const auth = `Bearer ${issuanceManagerToken}`;
+            const auth = `Bearer ${keyManagerToken}`;
 
             await request(server)
                 .put(`/key-chain/${guarded.id}`)

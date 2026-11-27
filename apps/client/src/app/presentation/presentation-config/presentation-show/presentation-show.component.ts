@@ -44,6 +44,8 @@ import {
 } from '../../../registrar/eudi-hub-dialog/eudi-hub-registration-dialog.component';
 import type { EudiHubRegistrationCertificate } from '../../../registrar/eudi-hub.service';
 import { formatLifetime } from '../../../utils/duration';
+import { RoleLockDirective } from '../../../common/role-lock.directive';
+import { PRESENTATION_WRITE_ROLES } from '../../../services/resource-roles';
 import {
   credentialsWithoutTrust,
   ISSUER_TRUST_LABELS,
@@ -65,6 +67,7 @@ import {
     MatTabsModule,
     RouterModule,
     ConfigOwnershipDirective,
+    RoleLockDirective,
     ConfigOwnershipNoticeComponent,
     LoadErrorComponent,
   ],
@@ -73,6 +76,9 @@ import {
   styleUrls: ['./presentation-show.component.scss'],
 })
 export class PresentationShowComponent implements OnInit {
+  /** Creating, changing and deleting it needs presentation:manage; reading needs less. */
+  readonly writeRoles = PRESENTATION_WRITE_ROLES;
+
   config?: PresentationConfig;
   /** Set when the page's data could not be loaded, so the page is not left blank. */
   loadError = '';

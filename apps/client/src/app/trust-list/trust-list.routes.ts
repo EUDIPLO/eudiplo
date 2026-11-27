@@ -1,5 +1,6 @@
 import type { Routes } from '@angular/router';
 import { unsavedChangesGuard } from '../guards/unsaved-changes.guard';
+import { requireRole, SHARED_WRITE_ROLES } from '../services/resource-roles';
 
 export const trustListRoutes: Routes = [
   {
@@ -9,6 +10,7 @@ export const trustListRoutes: Routes = [
   },
   {
     path: 'create',
+    ...requireRole(SHARED_WRITE_ROLES),
     loadComponent: () =>
       import('./trust-list-edit/trust-list-edit.component').then((m) => m.TrustListEditComponent),
     canDeactivate: [unsavedChangesGuard],
@@ -20,6 +22,7 @@ export const trustListRoutes: Routes = [
   },
   {
     path: ':id/edit',
+    ...requireRole(SHARED_WRITE_ROLES),
     loadComponent: () =>
       import('./trust-list-edit/trust-list-edit.component').then((m) => m.TrustListEditComponent),
     canDeactivate: [unsavedChangesGuard],

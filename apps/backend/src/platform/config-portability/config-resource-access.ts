@@ -1,8 +1,11 @@
-import { Role } from "../../auth/roles/role.enum.js";
+import { effectiveRoles, Role } from "../../auth/roles/role.enum.js";
 import type { ConfigResourceKind } from "./config-resource.types.js";
 
-/** Roles that hold the tenant's configuration bundles and therefore every kind. */
-const CONFIG_ADMIN_ROLES: readonly Role[] = [Role.Tenants, Role.TenantAdmin];
+/**
+ * The role that holds the tenant's configuration bundles and therefore every
+ * kind; `tenants:manage` implies it.
+ */
+const CONFIG_ADMIN_ROLE = Role.TenantAdmin;
 
 /**
  * Roles of the management endpoints that change each kind, besides the admin
@@ -15,9 +18,9 @@ const CONFIG_RESOURCE_MANAGE_ROLES: Record<
     // Session and status list settings are stored on the tenant.
     Tenant: [Role.Issuances, Role.Presentations],
     Client: [Role.Clients],
-    KmsConfig: [],
-    KeyChain: [Role.Issuances, Role.Presentations, Role.Keys],
-    KeyChainDefaults: [Role.Issuances, Role.Presentations, Role.Keys],
+    KmsConfig: [Role.KeysExport],
+    KeyChain: [Role.Keys],
+    KeyChainDefaults: [Role.Keys],
     IssuanceConfig: [Role.Issuances],
     CredentialConfig: [Role.Issuances],
     PresentationConfig: [Role.Presentations],
@@ -37,25 +40,25 @@ export function mayReadConfigOwnership(
     roles: readonly Role[] | undefined,
     kind: ConfigResourceKind,
 ): boolean {
-    const allowed = new Set([
-        ...CONFIG_ADMIN_ROLES,
+    const allowed = new Set<string>([
+        CONFIG_ADMIN_ROLE,
         ...CONFIG_RESOURCE_MANAGE_ROLES[kind],
     ]);
-    return (roles ?? []).some((role) => allowed.has(role));
+    return effectiveRoles(roles ?? []).some((role) => allowed.has(role));
 }
 
 /**
  * Whether a token may export one resource of a kind as a configuration
  * document. A key chain document carries the private keys of keys held in
- * the database, so it needs the roles of the key export. The other kinds
- * follow {@link mayReadConfigOwnership}.
+ * the database, so it needs `keys:export`, the role of the key export. The
+ * other kinds follow {@link mayReadConfigOwnership}.
  */
 export function mayExportConfigDocument(
     roles: readonly Role[] | undefined,
     kind: ConfigResourceKind,
 ): boolean {
     if (kind === "KeyChain") {
-        return (roles ?? []).some((role) => CONFIG_ADMIN_ROLES.includes(role));
+        return effectiveRoles(roles ?? []).includes(Role.KeysExport);
     }
     return mayReadConfigOwnership(roles, kind);
 }

@@ -33,7 +33,7 @@ import { Oid4vpService } from "../oid4vp/oid4vp.service.js";
 
 @ApiTags("Verifier")
 @ApiExtraModels(OfferResponse, Iso18013OfferResponse)
-@Secured([Role.PresentationRequest, Role.Presentations])
+@Secured([Role.PresentationRequest])
 @Controller("verifier/offer")
 export class VerifierOfferController {
     constructor(

@@ -1,6 +1,7 @@
 import { HttpService } from "@nestjs/axios";
 import {
     BadRequestException,
+    Inject,
     Injectable,
     Logger,
     OnModuleDestroy,
@@ -8,6 +9,11 @@ import {
 } from "@nestjs/common";
 import * as x509 from "@peculiar/x509";
 import axios from "axios";
+import {
+    SECRET_REFERENCES,
+    SecretReferences,
+} from "../../../platform/secrets/application/secret-references.js";
+import type { SecretScope } from "../../../platform/secrets/domain/secret-use.js";
 import { OutboundUrlPolicyService } from "../../../webhook/outbound-url-policy.service.js";
 import type { KmsAlgorithmPolicy } from "../domain/signing-algs.js";
 import type { KmsProviderInfoDto } from "../dto/kms-provider-capabilities.dto.js";
@@ -22,12 +28,23 @@ import { CscKmsAdapter } from "./adapters/csc-kms.adapter.js";
 import { DbKmsAdapter } from "./adapters/db-kms.adapter.js";
 import { HttpKmsAdapter } from "./adapters/http-kms.adapter.js";
 import { Pkcs11KmsAdapter } from "./adapters/pkcs11-kms.adapter.js";
+import { ReferencedKmsAdapter } from "./adapters/referenced-kms-adapter.js";
 import { VaultKmsAdapter } from "./adapters/vault-kms.adapter.js";
 import type { KmsAdapter } from "./kms-adapter.js";
 import { KmsConfigService } from "./kms-config.service.js";
+import {
+    kmsCredentials,
+    kmsCredentialUse,
+} from "./kms-credential-references.js";
 import { KmsCryptoProvider } from "./kms-crypto-provider.js";
 
 const DEFAULT_PROVIDER_ID = "db";
+
+/** Whose `kms.json` a provider comes from, and its index there. */
+interface ProviderOwner {
+    scope: SecretScope;
+    index: number;
+}
 
 /**
  * How long adapters that are no longer handed out stay usable before they
@@ -91,6 +108,10 @@ export class KmsProviderRegistry implements OnModuleInit, OnModuleDestroy {
         private readonly kmsConfig: KmsConfigService,
         private readonly httpService: HttpService,
         outboundUrlPolicy: OutboundUrlPolicyService,
+        // Required, so a missing binding fails the startup instead of
+        // sending references as text; specs pass none and get no policy.
+        @Inject(SECRET_REFERENCES)
+        private readonly secrets: SecretReferences = new SecretReferences(),
     ) {
         const client = axios.create({
             lookup: outboundUrlPolicy.safeLookup as never,
@@ -233,13 +254,20 @@ export class KmsProviderRegistry implements OnModuleInit, OnModuleDestroy {
             return cached;
         }
 
-        const bundle = { config, ...this.buildBundle(config) };
+        const bundle = { config, ...this.buildBundle(config, tenantId) };
         this.tenantBundles.set(tenantId, bundle);
         if (cached) this.retire(cached.adapters.values());
         return bundle;
     }
 
-    private buildBundle(config: KmsConfig): {
+    /**
+     * @param tenantId the tenant whose `kms.json` the providers that are not
+     * the global file's come from
+     */
+    private buildBundle(
+        config: KmsConfig,
+        tenantId?: string,
+    ): {
         adapters: Map<string, KmsAdapter>;
         defaultProviderId: string;
     } {
@@ -248,15 +276,35 @@ export class KmsProviderRegistry implements OnModuleInit, OnModuleDestroy {
 
         // mergeConfigs hands on the providers of the global file as they
         // are, so every other provider comes from the tenant's file.
-        const global = new Set(this.kmsConfig.getConfig().providers);
+        const globalProviders = this.kmsConfig.getConfig().providers;
+        const global = new Set(globalProviders);
         for (const provider of config.providers) {
+            const isGlobal = global.has(provider);
+            // Where the provider's credentials come from, for the policy of
+            // their secret references: the index in its own kms.json. Only
+            // looked up for a provider with references.
+            const owner = (): ProviderOwner => {
+                if (isGlobal || tenantId === undefined)
+                    return {
+                        scope: { type: "instance" },
+                        index: globalProviders.indexOf(provider),
+                    };
+                // The index must come from the file `config` was built from.
+                const snapshot = this.kmsConfig.getTenantSnapshot(tenantId);
+                const index =
+                    snapshot.config === config
+                        ? (snapshot.file?.providers.findIndex(
+                              (candidate) => candidate.id === provider.id,
+                          ) ?? -1)
+                        : -1;
+                return { scope: { type: "tenant", tenantId }, index };
+            };
             adapters.set(
                 provider.id,
-                this.instantiate(
+                this.instantiateWithReferences(
                     provider,
-                    global.has(provider)
-                        ? this.httpService
-                        : this.tenantHttpService,
+                    isGlobal ? this.httpService : this.tenantHttpService,
+                    owner,
                 ),
             );
         }
@@ -327,6 +375,45 @@ export class KmsProviderRegistry implements OnModuleInit, OnModuleDestroy {
             await this.dispose(bundle.adapters.values());
         }
         await this.dispose(this.globalBundle.adapters.values());
+    }
+
+    /**
+     * The adapter of `provider`, or, when credentials of it are secret
+     * references, one that reads them under the policy when it is used and
+     * rebuilds the adapter when a value changes.
+     */
+    private instantiateWithReferences(
+        provider: KmsProviderConfig,
+        httpService: HttpService,
+        ownerOf: () => ProviderOwner,
+    ): KmsAdapter {
+        const references = kmsCredentials(provider).filter((credential) =>
+            this.secrets.isReference(credential.value),
+        );
+        if (references.length === 0)
+            return this.instantiate(provider, httpService);
+        const owner = ownerOf();
+        return new ReferencedKmsAdapter(
+            provider,
+            references,
+            (path) => {
+                const use = kmsCredentialUse(
+                    owner.scope,
+                    owner.index,
+                    provider,
+                    path,
+                );
+                // Without its place in the file, no grant bound to a field
+                // and an address may apply.
+                if (owner.index < 0) delete use.destination;
+                return use;
+            },
+            this.secrets,
+            (resolved) => this.instantiate(resolved, httpService),
+            (adapter) => this.retire([adapter]),
+            // The operator's references are not shown to tenants.
+            owner.scope.type === "instance",
+        );
     }
 
     /**

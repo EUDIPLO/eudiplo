@@ -4,7 +4,7 @@
       <h1 #listHeading tabindex="-1">Verification Configs</h1>
       <p>Reusable requests that say which credentials and claims a wallet presents.</p>
     </div>
-    <a matButton="filled" [routerLink]="['create']">
+    <a matButton="filled" [routerLink]="['create']" [appRequiresRole]="writeRoles" matTooltip="">
       <mat-icon>add</mat-icon>
       Create config
     </a>
@@ -21,7 +21,7 @@
       <span class="empty-icon"><mat-icon>tune</mat-icon></span>
       <strong>No verification configs yet</strong>
       <p>Create a config for each set of credentials and claims you request from a wallet.</p>
-      <a matButton="filled" [routerLink]="['create']">
+      <a matButton="filled" [routerLink]="['create']" [appRequiresRole]="writeRoles" matTooltip="">
         <mat-icon>add</mat-icon>
         Create config
       </a>
@@ -130,6 +130,7 @@
               <span class="row-actions">
                 <button
                   matIconButton
+                  [appRequiresRole]="writeRoles"
                   [routerLink]="config.id | itemRoute: 'edit'"
                   matTooltip="Edit verification config"
                   appConfigManaged
@@ -152,6 +153,7 @@
                       'Deleting the verification config…'
                     )
                   "
+                  [appRequiresRole]="writeRoles"
                   appConfigManaged
                   managedKind="PresentationConfig"
                   [managedResourceId]="config.id"

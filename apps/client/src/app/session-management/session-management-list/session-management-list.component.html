@@ -385,22 +385,11 @@
 
 <!-- The header and the empty state offer the same ways to start a session. -->
 <ng-template #createActions>
-  @if (canOfferIssuance && canUseIssuanceForm) {
+  @if (canOfferIssuance) {
     <a matButton="filled" [routerLink]="['/offer/issuance']">
       <mat-icon>add</mat-icon>
       Issuance Offer
     </a>
-  } @else if (canOfferIssuance) {
-    <button
-      matButton="filled"
-      type="button"
-      disabled
-      disabledInteractive
-      [matTooltip]="issuanceFormLockedReason"
-    >
-      <mat-icon>add</mat-icon>
-      Issuance Offer
-    </button>
   }
   @if (canRequestPresentation) {
     <a matButton="tonal" [routerLink]="['/offer/presentation']">

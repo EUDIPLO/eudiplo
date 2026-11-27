@@ -13,7 +13,7 @@ import { ConfigOwnershipService } from '../../../config-portability/config-owner
 import { ApiService } from '../../../core';
 import { PresentationManagementService } from '../../../presentation/presentation-config/presentation-management.service';
 import { JwtService } from '../../../services/jwt.service';
-import { grantHint } from '../../../services/role-grants';
+import { effectiveRoles, grantHint } from '../../../services/role-grants';
 import { ApiClientService } from '../api-client.service';
 import { SecretDialogComponent } from '../secret-dialog/secret-dialog.component';
 import { ClientCreateComponent, type ConfigSource } from './client-create.component';
@@ -48,7 +48,9 @@ describe('ClientCreateComponent config restrictions', () => {
       useValue: {
         getRoles: () => callerRoles,
         hasRole: (role: string | string[]) =>
-          (Array.isArray(role) ? role : [role]).some((r) => callerRoles.includes(r)),
+          (Array.isArray(role) ? role : [role]).some((r) =>
+            effectiveRoles(callerRoles).includes(r)
+          ),
         grantHint: () => grantHint(callerRoles),
         canUseConfigPortability: () => false,
       },
@@ -342,10 +344,10 @@ describe('ClientCreateComponent config restrictions', () => {
     expect(requests).not.toContain('GET /api/issuer/credentials');
     expect(snackBar.open).not.toHaveBeenCalled();
     expect(hint(fixture, PRESENTATION)).toBe(
-      'Locked: listing verification configs needs presentation:manage or presentation:request. The client stays limited to stored-presentation.'
+      'Locked: listing verification configs needs presentation:read. The client stays limited to stored-presentation.'
     );
     expect(hint(fixture, CREDENTIAL)).toBe(
-      'Locked: listing credential configs needs issuance:manage. The client stays limited to stored-issuance-a, stored-issuance-b.'
+      'Locked: listing credential configs needs issuance:read. The client stays limited to stored-issuance-a, stored-issuance-b.'
     );
     for (const label of [PRESENTATION, CREDENTIAL]) {
       expect(select(fixture, label).getAttribute('aria-disabled')).toBe('true');
@@ -373,7 +375,7 @@ describe('ClientCreateComponent config restrictions', () => {
     expect(requests).toContain('GET /api/verifier/config');
     expect(requests).not.toContain('GET /api/issuer/credentials');
     expect(hint(fixture, CREDENTIAL)).toBe(
-      'Locked: listing credential configs needs issuance:manage. The client may use all credential configs.'
+      'Locked: listing credential configs needs issuance:read. The client may use all credential configs.'
     );
     expect(select(fixture, PRESENTATION).getAttribute('aria-disabled')).toBe('false');
   });

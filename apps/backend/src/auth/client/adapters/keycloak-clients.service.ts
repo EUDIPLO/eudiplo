@@ -17,6 +17,10 @@ import { splitCommaSeparatedList } from "../../../shared/domain/comma-separated-
 import { OIDC_DEFAULTS } from "../../auth-settings.js";
 import { keycloakAuthorizationRoles } from "../../keycloak-authorization-roles.js";
 import { syncEudiploRealmRoles } from "../../keycloak-realm-roles.js";
+import {
+    ROLE_MODEL_11_MARKER,
+    upgradeRealmToRoleModel11,
+} from "../../keycloak-role-model-upgrade.js";
 import { allRoles, Role } from "../../roles/role.enum.js";
 import { ClientsProvider } from "../client.provider.js";
 import {
@@ -171,13 +175,13 @@ export class KeycloakClientsProvider
                 const missingRoles = existingRoles.filter(
                     (role) => !roles.some((r) => r.name === role),
                 );
-                if (missingRoles.length) {
-                    // Create missing roles
-                    await Promise.all(
-                        missingRoles.map((role) =>
-                            this.kc.roles.create({ name: role }),
-                        ),
-                    );
+                await Promise.all(
+                    missingRoles
+                        .filter((role) => role !== ROLE_MODEL_11_MARKER)
+                        .map((role) => this.kc.roles.create({ name: role })),
+                );
+                if (missingRoles.includes(ROLE_MODEL_11_MARKER)) {
+                    await upgradeRealmToRoleModel11(this.kc, this.logger);
                 }
 
                 await this.ensureBootstrapAdminClient();

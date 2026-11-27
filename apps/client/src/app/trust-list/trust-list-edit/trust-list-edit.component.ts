@@ -61,6 +61,8 @@ import {
 } from './trust-list-electronic-address';
 import { fromFormQueryParams } from '../../common/return-to-form';
 import type { PageWithUnsavedChanges } from '../../services/unsaved-changes.service';
+import { JwtService } from '../../services/jwt.service';
+import { KEY_ADMIN_ROLE } from '../../key-management/key-chain.service';
 
 /** The message set of each electronic address control. */
 const ELECTRONIC_ADDRESS_FIELDS = {
@@ -143,6 +145,11 @@ const CREATED_KEY_CHAIN_NAMES: Record<TrustListKeyChainUsage, string> = {
   styleUrl: './trust-list-edit.component.scss',
 })
 export class TrustListEditComponent implements OnInit, PageWithUnsavedChanges {
+  /** Only keys:manage creates key chains, so only it gets the links to create a missing one. */
+  get canCreateKeyChains(): boolean {
+    return this.injector.get(JwtService).hasRole(KEY_ADMIN_ROLE);
+  }
+
   trustListId?: string | null;
   trustList?: TrustList;
   form!: FormGroup;

@@ -1,4 +1,9 @@
 import {
+    CLAIM_FIELD_FORMAT_TYPE_MESSAGE,
+    CLAIM_FIELD_FORMATS,
+    claimFieldFormatAllowed,
+} from "@eudiplo/config-format/claim-formats.js";
+import {
     DISPLAY_COLOR_MESSAGE,
     DISPLAY_COLOR_PATTERN,
     DISPLAY_DESCRIPTION_DESCRIPTION,
@@ -8,11 +13,6 @@ import {
     duplicateDisplayLocaleMessage,
     findDuplicateDisplayLocales,
 } from "@eudiplo/config-format/display-entries.js";
-import {
-    CLAIM_FIELD_FORMAT_TYPE_MESSAGE,
-    CLAIM_FIELD_FORMATS,
-    claimFieldFormatAllowed,
-} from "@eudiplo/config-format/claim-formats.js";
 import { z } from "zod";
 import {
     ACTIVE_CREDENTIALS_REQUIRE_STATUS_MANAGEMENT,

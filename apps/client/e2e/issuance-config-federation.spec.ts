@@ -24,7 +24,11 @@ test.beforeAll(async () => {
     !hasRootCredentials,
     'Set AUTH_CLIENT_ID and AUTH_CLIENT_SECRET of the backend to create a tenant.'
   );
-  tenant = await createTenant('federation', 'Federation Entity', ['issuance:manage']);
+  // keys:manage creates the key chains and gets the links that create them.
+  tenant = await createTenant('federation', 'Federation Entity', [
+    'issuance:manage',
+    'keys:manage',
+  ]);
   const response = await fetch(`${api}/api/frontend-config`, {
     headers: { Authorization: `Bearer ${tenant.token}` },
   });

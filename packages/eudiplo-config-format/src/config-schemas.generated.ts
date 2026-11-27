@@ -9680,6 +9680,146 @@ export const CONFIG_SCHEMAS: Record<string, any>[] = [
   },
   {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://eudiplo.dev/schemas/v3/ClientConfigFile.schema.json",
+    "title": "ClientConfigFile",
+    "type": "object",
+    "properties": {
+      "$schema": {
+        "type": "string",
+        "const": "https://eudiplo.dev/schemas/v3/ClientConfigFile.schema.json"
+      },
+      "metadata": {
+        "type": "object",
+        "properties": {
+          "generation": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Monotonically increasing configuration generation."
+          },
+          "ownership": {
+            "type": "string",
+            "enum": [
+              "unmanaged",
+              "file-managed"
+            ],
+            "description": "Requested ownership recorded when the document is applied."
+          }
+        },
+        "additionalProperties": false
+      },
+      "spec": {
+        "allOf": [
+          {
+            "$ref": "#/$defs/CreateClientDto"
+          },
+          {
+            "type": "object",
+            "required": [
+              "clientId"
+            ],
+            "properties": {
+              "clientId": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        ]
+      }
+    },
+    "required": [
+      "$schema",
+      "spec"
+    ],
+    "additionalProperties": false,
+    "$defs": {
+      "CreateClientDto": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9._:-]+$",
+            "description": "Unique client identifier."
+          },
+          "secret": {
+            "description": "Optional client secret for confidential clients.",
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "description": "Optional human-readable client description.",
+            "type": "string",
+            "minLength": 1
+          },
+          "roles": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "presentation:manage",
+                "presentation:request",
+                "presentation:read",
+                "issuance:manage",
+                "issuance:offer",
+                "issuance:read",
+                "clients:manage",
+                "users:manage",
+                "tenants:manage",
+                "tenant:admin",
+                "registrar:manage",
+                "audit:read",
+                "sessions:read",
+                "credentials:status",
+                "keys:manage",
+                "keys:export"
+              ]
+            },
+            "description": "Roles assigned to the client. At least one role is required."
+          },
+          "allowedPresentationConfigs": {
+            "description": "Optional allow-list of presentation config ids this client can use.",
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "allowedIssuanceConfigs": {
+            "description": "Optional allow-list of issuance config ids this client can use.",
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "clientId",
+          "roles"
+        ],
+        "additionalProperties": false,
+        "title": "CreateClientDto"
+      }
+    }
+  },
+  {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://eudiplo.dev/schemas/v3/CredentialConfigFile.schema.json",
     "title": "CredentialConfigFile",
     "type": "object",

@@ -102,8 +102,11 @@ describe("SessionController", () => {
                 expect(allows([Role.IssuanceOffer])).toBe(true);
                 expect(allows([Role.PresentationRequest])).toBe(true);
                 expect(allows([Role.SessionsRead])).toBe(true);
-                expect(allows([Role.Issuances])).toBe(false);
-                expect(allows([Role.Presentations])).toBe(false);
+                // The manage roles imply issuance:offer and presentation:request.
+                expect(allows([Role.Issuances])).toBe(true);
+                expect(allows([Role.Presentations])).toBe(true);
+                expect(allows([Role.IssuanceRead])).toBe(false);
+                expect(allows([Role.PresentationRead])).toBe(false);
                 expect(allows([Role.CredentialStatus])).toBe(false);
             },
         );
@@ -141,8 +144,11 @@ describe("SessionController", () => {
                 expect(allows([Role.PresentationRequest])).toBe(true);
                 expect(allows([Role.SessionsRead])).toBe(false);
                 expect(allows([Role.CredentialStatus])).toBe(false);
-                expect(allows([Role.Issuances])).toBe(false);
-                expect(allows([Role.Presentations])).toBe(false);
+                // The manage roles imply issuance:offer and presentation:request.
+                expect(allows([Role.Issuances])).toBe(true);
+                expect(allows([Role.Presentations])).toBe(true);
+                expect(allows([Role.IssuanceRead])).toBe(false);
+                expect(allows([Role.PresentationRead])).toBe(false);
             },
         );
     });

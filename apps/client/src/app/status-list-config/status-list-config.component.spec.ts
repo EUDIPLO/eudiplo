@@ -17,6 +17,10 @@ import {
 } from '../common/settings-screen.testing';
 import { ConfigOwnershipService } from '../config-portability/config-ownership.service';
 import { StatusListConfigComponent } from './status-list-config.component';
+import { grantEveryRole, grantRoles } from '../common/role-lock.testing';
+
+// The tests are about what the actions do; role locks have their own tests.
+beforeEach(() => grantEveryRole());
 
 /**
  * A response, `'unreachable'` for a backend that does not answer, or `'empty'`
@@ -109,6 +113,26 @@ describe('StatusListConfigComponent', () => {
   afterEach(() => {
     client.setConfig({ fetch: () => new Promise<Response>(() => undefined) });
     vi.unstubAllGlobals();
+  });
+
+  it('shows the settings to a reader in a disabled form that sends nothing', async () => {
+    grantRoles(['issuance:read']);
+
+    const element = await render();
+
+    expect(element.querySelector('app-read-only-notice')?.textContent).toContain(
+      'Read-only: changing these settings needs the issuance:manage role.'
+    );
+    const capacity = element.querySelector<HTMLInputElement>('input[formcontrolname="capacity"]')!;
+    expect(capacity.disabled).toBe(true);
+    expect(element.querySelector<HTMLButtonElement>('.presets button')!.disabled).toBe(true);
+    fixture.componentInstance.choosePreset('capacity', 1000);
+    expect(button(element, 'Save Configuration').getAttribute('aria-disabled')).toBe('true');
+    element.querySelector('form')!.dispatchEvent(new Event('submit'));
+    await fixture.whenStable();
+
+    expect(requests).toEqual(['GET /api/status-list-config']);
+    expect(fixture.componentInstance.hasUnsavedChanges()).toBe(false);
   });
 
   it('shows an error with a retry instead of an editable form when loading fails', async () => {

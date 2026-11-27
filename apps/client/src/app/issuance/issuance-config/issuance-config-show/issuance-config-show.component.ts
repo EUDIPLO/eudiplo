@@ -36,6 +36,8 @@ import { ConfigOwnershipNoticeComponent } from '../../../config-portability/conf
 import { getApiErrorMessage } from '../../../utils/error-message';
 import { copyToClipboard } from '../../../utils/copy-to-clipboard';
 import { LoadErrorComponent } from '../../../common/load-error.component';
+import { RoleLockDirective } from '../../../common/role-lock.directive';
+import { ISSUANCE_WRITE_ROLES } from '../../../services/resource-roles';
 
 interface ChainedAuthorizationServerView {
   enabled: boolean;
@@ -79,6 +81,7 @@ interface AuthorizationServerRow {
     MatTableModule,
     RouterModule,
     ConfigOwnershipDirective,
+    RoleLockDirective,
     ConfigOwnershipNoticeComponent,
     LoadErrorComponent,
   ],
@@ -87,6 +90,9 @@ interface AuthorizationServerRow {
   styleUrl: './issuance-config-show.component.scss',
 })
 export class IssuanceConfigShowComponent implements OnInit {
+  /** Creating, changing and deleting it needs issuance:manage; reading needs less. */
+  readonly writeRoles = ISSUANCE_WRITE_ROLES;
+
   config?: IssuanceConfig;
   /** Set when the page's data could not be loaded, so the page is not left blank. */
   loadError = '';

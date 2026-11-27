@@ -27,12 +27,23 @@ import {
 import type { Role } from '../services/jwt.service';
 import { hasHttpStatus } from '../utils/error-message';
 
-/** Roles that list, create, rotate and delete key chains and read the KMS providers. */
-export const KEY_CHAIN_ROLES: Role[] = ['issuance:manage', 'presentation:manage', 'keys:manage'];
+/**
+ * Roles that list key chains and read the KMS providers. Creating, rotating
+ * and deleting key chains needs `keys:manage`.
+ */
+export const KEY_CHAIN_ROLES: Role[] = ['issuance:read', 'presentation:read', 'keys:manage'];
+
+/**
+ * The role that creates, imports, changes, rotates and deletes key chains,
+ * requests their certificates and sets the default access key chain.
+ */
+export const KEY_ADMIN_ROLE: Role = 'keys:manage';
+
+/** Says where a caller without `keys:manage` would be offered to create a key chain. */
+export const KEY_CREATE_LOCKED_MESSAGE = 'Creating key chains needs the keys:manage role.';
 
 /** Message shown when the backend rejects a key administration request. */
-export const KEY_ADMIN_FORBIDDEN_MESSAGE =
-  'This action requires the tenant:admin or tenants:manage role';
+export const KEY_ADMIN_FORBIDDEN_MESSAGE = 'This action requires the keys:export role';
 
 /** True when the SDK error is the backend's 403 response. */
 export function isForbidden(error: unknown): boolean {

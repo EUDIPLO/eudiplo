@@ -18,16 +18,16 @@ A tenant `membership-demo` that issues an SD-JWT VC of type `urn:example:members
 
 1. Open **Administration → Tenants** and choose **Create tenant**.
 2. Enter **Tenant ID** `membership-demo` and **Name** `Membership Demo`.
-3. Under **Initial Admin Client → Client Roles**, keep the preselected `clients:manage` and `tenant:admin` and add exactly these roles:
+3. Under **Initial Admin Client → Client Roles**, keep the preselected `tenant:admin`. It includes every role of the tenant, among them these four, which the recipe uses:
 
     | Role                   | Allows                                                           |
     | ---------------------- | ---------------------------------------------------------------- |
-    | `issuance:manage`      | Keys, issuer settings and credential types                       |
+    | `issuance:manage`      | Issuer settings and credential types                             |
     | `issuance:offer`       | Creating credential offers and viewing issuance sessions         |
     | `presentation:manage`  | Verification configurations                                      |
     | `presentation:request` | Creating presentation requests and viewing presentation sessions |
 
-    Add `registrar:manage` only if your wallet needs registrar certificates. Never give a tenant client `tenants:manage`: it controls **all** tenants of the instance.
+    `tenant:admin` also includes `registrar:manage`, which registrar certificates need. Never give a tenant client `tenants:manage`: it controls **all** tenants of the instance.
 
 4. Choose **Create tenant**. The dialog **Client Secret Generated** shows the client ID `membership-demo-admin` and its secret. Copy both and store them; the secret is not shown again.
 5. Choose **Login as this Client**.

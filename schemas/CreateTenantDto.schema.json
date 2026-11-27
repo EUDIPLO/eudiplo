@@ -25,18 +25,21 @@
         "type": "string",
         "enum": [
           "tenants:manage",
+          "tenant:admin",
           "issuance:offer",
           "issuance:manage",
+          "issuance:read",
           "presentation:request",
           "presentation:manage",
+          "presentation:read",
           "clients:manage",
           "users:manage",
           "registrar:manage",
-          "tenant:admin",
           "audit:read",
           "sessions:read",
           "credentials:status",
-          "keys:manage"
+          "keys:manage",
+          "keys:export"
         ]
       }
     },

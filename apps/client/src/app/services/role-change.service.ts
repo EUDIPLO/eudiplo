@@ -4,6 +4,7 @@ import { ActivatedRouteSnapshot, Router } from '@angular/router';
 import { merge, Subscription } from 'rxjs';
 import { ApiRefusalService, ApiService, OidcService, ROLE_RENEWAL_INTERVAL_MS } from '../core';
 import { JwtService, type Role } from './jwt.service';
+import { includedRoles } from './role-grants';
 
 interface SeenCaller {
   client?: string;
@@ -19,6 +20,17 @@ interface SeenCaller {
  * role check refuses a request, it loads the caller of its token again, at most
  * once a minute, which with the built-in server carries the client's current roles.
  */
+/**
+ * The roles to name of those lost: the caller's roles include the roles they
+ * imply, so a lost `issuance:manage` also takes `issuance:offer` and
+ * `issuance:read`. Only the roles no other lost role includes are named.
+ */
+function namedRoles(lost: string[]): string[] {
+  return lost.filter(
+    (role) => !lost.some((other) => other !== role && includedRoles(other).includes(role))
+  );
+}
+
 @Injectable({ providedIn: 'root' })
 export class RoleChangeService implements OnDestroy {
   private subscription?: Subscription;
@@ -102,7 +114,7 @@ export class RoleChangeService implements OnDestroy {
     if (!before || !now || before.client !== now.client || this.router.url.startsWith('/login')) {
       return false;
     }
-    const lost = before.roles.filter((role) => !now.roles.includes(role));
+    const lost = namedRoles(before.roles.filter((role) => !now.roles.includes(role)));
     if (lost.length === 0) return false;
 
     const named = lost.length === 1 ? `the role ${lost[0]}` : `the roles ${lost.join(', ')}`;

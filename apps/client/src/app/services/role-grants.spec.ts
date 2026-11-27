@@ -12,10 +12,11 @@ describe('grantableRoles', () => {
     );
   });
 
-  it('offers only the held roles otherwise', () => {
+  it('offers only the held roles otherwise, including the roles they imply', () => {
     expect(grantableRoles(['clients:manage', 'issuance:offer', 'offline_access'])).toEqual([
       'clients:manage',
       'issuance:offer',
+      'issuance:read',
     ]);
   });
 });
@@ -44,7 +45,7 @@ describe('grantHint', () => {
     [['tenant:admin'], 'You can grant every role except tenants:manage and tenant:admin.'],
     [
       ['clients:manage'],
-      'You can grant only roles you hold, except tenants:manage and tenant:admin.',
+      'You can grant only roles you have, including those your roles include, except tenants:manage and tenant:admin.',
     ],
   ])('explains the grants of %j', (callerRoles, hint) => {
     expect(grantHint(callerRoles)).toBe(hint);

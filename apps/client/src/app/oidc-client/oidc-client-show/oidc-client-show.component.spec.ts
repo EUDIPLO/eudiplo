@@ -8,6 +8,7 @@ import { OidcClientSecretDialogComponent } from '../oidc-client-secret-dialog/oi
 import { JwtService } from '../../services/jwt.service';
 import { OidcClientService } from '../oidc-client.service';
 import { OidcClientShowComponent, toLocalDateTime } from './oidc-client-show.component';
+import { effectiveRoles } from '../../services/role-grants';
 
 const secret = (id: string, expiresAt: string | null = null) => ({
   id,
@@ -46,7 +47,13 @@ async function render(
       },
       { provide: MatDialog, useValue: { open } },
       { provide: MatSnackBar, useValue: snackBar },
-      { provide: JwtService, useValue: { hasRole: (role: string) => roles.includes(role) } },
+      {
+        provide: JwtService,
+        useValue: {
+          hasRole: (role: string | string[]) =>
+            [role].flat().some((r) => effectiveRoles(roles).includes(r)),
+        },
+      },
     ],
   }).compileComponents();
   TestBed.inject(Router).navigate = navigate;

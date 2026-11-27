@@ -65,6 +65,7 @@ export class StatusListManagementController {
     /**
      * Get all status lists for the tenant.
      */
+    @Secured([Role.IssuanceRead])
     @Get()
     @ApiOperation({
         summary: "List all status lists",
@@ -85,6 +86,7 @@ export class StatusListManagementController {
     /**
      * Get a specific status list by ID.
      */
+    @Secured([Role.IssuanceRead])
     @Get(":listId")
     @ApiOperation({
         summary: "Get a status list",

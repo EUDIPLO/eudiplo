@@ -164,15 +164,19 @@
               </mat-card-content>
 
               <mat-card-actions>
-                <a
-                  matButton="tonal"
-                  [routerLink]="['/keys/create']"
-                  [queryParams]="{ kmsProvider: row.name }"
-                  [attr.aria-label]="'Create key with provider ' + row.name"
-                >
-                  <mat-icon>add</mat-icon>
-                  Create key
-                </a>
+                @if (canCreateKeyChains) {
+                  <a
+                    matButton="tonal"
+                    [routerLink]="['/keys/create']"
+                    [queryParams]="{ kmsProvider: row.name }"
+                    [attr.aria-label]="'Create key with provider ' + row.name"
+                  >
+                    <mat-icon>add</mat-icon>
+                    Create key
+                  </a>
+                } @else {
+                  <p class="role-hint">{{ keyCreateLockedMessage }}</p>
+                }
               </mat-card-actions>
             </mat-card>
           </li>

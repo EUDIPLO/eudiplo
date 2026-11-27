@@ -47,6 +47,8 @@ import {
   credentialConfigReferencesTrustList,
   presentationConfigReferencesTrustList,
 } from '../trust-list-reference';
+import { RoleLockDirective } from '../../common/role-lock.directive';
+import { SHARED_WRITE_ROLES } from '../../services/resource-roles';
 
 interface EntityInfo {
   name: string;
@@ -93,6 +95,7 @@ type TrustListEntity = InternalEntity | ExternalEntity;
     MatTooltipModule,
     RouterModule,
     ConfigOwnershipDirective,
+    RoleLockDirective,
     ConfigOwnershipNoticeComponent,
     LoadErrorComponent,
   ],
@@ -101,6 +104,9 @@ type TrustListEntity = InternalEntity | ExternalEntity;
   styleUrl: './trust-list-show.component.scss',
 })
 export class TrustListShowComponent implements OnInit {
+  /** Creating, changing and deleting it needs issuance:manage or presentation:manage; reading needs less. */
+  readonly writeRoles = SHARED_WRITE_ROLES;
+
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly snackBar = inject(MatSnackBar);
@@ -225,9 +231,9 @@ export class TrustListShowComponent implements OnInit {
     );
   }
 
-  /** Credential configs, and so their references to this list, need `issuance:manage`. */
+  /** Credential configs, and so their references to this list, need `issuance:read`. */
   get canReadCredentialConfigs(): boolean {
-    return this.jwtService.hasRole('issuance:manage');
+    return this.jwtService.hasRole('issuance:read');
   }
 
   private async loadRelatedCredentialConfigs(): Promise<void> {
@@ -248,9 +254,9 @@ export class TrustListShowComponent implements OnInit {
     }
   }
 
-  /** Presentation configs, and so their DCQL trust references, need a presentation role. */
+  /** Presentation configs, and so their DCQL trust references, need `presentation:read`. */
   get canReadPresentationConfigs(): boolean {
-    return this.jwtService.hasRole(['presentation:manage', 'presentation:request']);
+    return this.jwtService.hasRole('presentation:read');
   }
 
   private async loadRelatedPresentationConfigs(): Promise<void> {

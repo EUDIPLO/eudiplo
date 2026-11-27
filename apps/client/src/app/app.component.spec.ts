@@ -1,3 +1,4 @@
+import { effectiveRoles } from './services/role-grants';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { Component } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
@@ -90,7 +91,7 @@ describe('AppComponent navigation', () => {
           provide: JwtService,
           useValue: {
             hasRole: (role: Role | Role[]) =>
-              (Array.isArray(role) ? role : [role]).some((r) => roles.includes(r)),
+              (Array.isArray(role) ? role : [role]).some((r) => effectiveRoles(roles).includes(r)),
             hasTenantContext: () => true,
             canUseConfigPortability: JwtService.prototype.canUseConfigPortability,
             getCaller: () => undefined,
@@ -114,7 +115,7 @@ describe('AppComponent navigation', () => {
     [null, ['API Clients', 'Users'], []],
     ['keycloak', ['API Clients', 'Users'], []],
     ['builtin', ['API Clients'], ['Users']],
-    ['generic', ['Activity Logs'], ['API Clients', 'Users']],
+    ['generic', [], ['API Clients', 'Users']],
   ])('with auth mode %s lists %j and hides %j', (authMode, listed, hidden) => {
     const items = menuItems(['clients:manage', 'users:manage'], authMode);
 
@@ -126,11 +127,22 @@ describe('AppComponent navigation', () => {
     [['users:manage'], 'generic', false],
     [['users:manage'], 'builtin', false],
     [['users:manage'], 'keycloak', true],
-    [['clients:manage'], 'generic', true],
+    [['clients:manage'], 'generic', false],
+    [['clients:manage'], 'builtin', true],
+    [['audit:read'], 'generic', true],
   ])('with %j and auth mode %s shows the Administration section: %s', (roles, mode, shown) => {
     const nav = renderNav(roles, mode).querySelector('mat-sidenav')!;
 
     expect(nav.textContent?.includes('Administration')).toBe(shown);
+  });
+
+  // Matches the route guard in app.routes.ts and the backend audit log controller.
+  it.each<[Role[], boolean]>([
+    [['audit:read'], true],
+    [['tenant:admin'], true],
+    [['clients:manage', 'users:manage'], false],
+  ])('lists Activity Logs for %j: %s', (roles, shown) => {
+    expect(menuItems(roles).includes('Activity Logs')).toBe(shown);
   });
 
   it('loads the auth mode once signed in and then hides the entries the instance lacks', async () => {
@@ -224,9 +236,13 @@ describe('AppComponent navigation', () => {
 
   // Matches the route guard in session-management.routes.ts and the backend session controllers.
   it.each<[Role[], string[]]>([
-    [['issuance:manage'], ['Session Settings']],
-    [['presentation:manage'], ['Session Settings']],
-    [['issuance:offer'], ['All Sessions']],
+    // The manage roles include issuance:offer and presentation:request, which read sessions.
+    [['issuance:manage'], ['All Sessions', 'Session Settings']],
+    [['presentation:manage'], ['All Sessions', 'Session Settings']],
+    // issuance:offer includes issuance:read, which reads the session settings.
+    [['issuance:offer'], ['All Sessions', 'Session Settings']],
+    [['issuance:read'], ['Session Settings']],
+    [['sessions:read'], ['All Sessions']],
     [
       ['presentation:request', 'presentation:manage'],
       ['All Sessions', 'Session Settings'],
@@ -237,17 +253,39 @@ describe('AppComponent navigation', () => {
     ).toEqual(entries);
   });
 
-  // New Issuance reads the credential configs and issuer settings, which need issuance:manage.
+  // New Issuance needs issuance:offer, which includes issuance:read for the form's data and
+  // which issuance:manage includes.
   it.each<[Role[], boolean]>([
     [['issuance:offer', 'issuance:manage'], true],
-    [['issuance:offer'], false],
-    [['issuance:manage'], false],
+    [['issuance:offer'], true],
+    [['issuance:manage'], true],
+    [['presentation:request', 'credentials:status'], false],
   ])('lists New Issuance for %j: %s', (roles, shown) => {
     expect(menuItems(roles).includes('New Issuance')).toBe(shown);
   });
 
-  it('leaves out the empty Credential Issuance section for issuance:offer alone', () => {
-    const element = renderNav(['issuance:offer']);
+  // The configuration pages open with issuance:read, which issuance:offer includes.
+  it('lists the issuance configuration pages for issuance:offer and issuance:read', () => {
+    const items = menuItems(['issuance:offer']);
+    expect(items).toContain('New Issuance');
+    for (const entry of ['Credential Configs', 'Issuer Settings', 'Status Lists']) {
+      expect(items).toContain(entry);
+    }
+    TestBed.resetTestingModule();
+    const readOnly = menuItems(['issuance:read']);
+    expect(readOnly).not.toContain('New Issuance');
+    expect(readOnly).toContain('Credential Configs');
+  });
+
+  // Presentation configs and OIDC clients open with presentation:read.
+  it('lists the verification configuration pages for presentation:read', () => {
+    const items = menuItems(['presentation:read']);
+    expect(items).toContain('Verification Configs');
+    expect(items).not.toContain('New Verification');
+  });
+
+  it('leaves out the Credential Issuance section without an issuance role', () => {
+    const element = renderNav(['presentation:request']);
     expect(element.querySelector('button[aria-controls="nav-section-issuance"]')).toBeNull();
   });
 
@@ -259,10 +297,13 @@ describe('AppComponent navigation', () => {
     expect(header !== null).toBe(shown);
   });
 
+  // Either read role opens them, so issuance:offer and presentation:request see them too.
   it.each(['Webhook Endpoints', 'Trust Lists'])(
-    'hides %s from clients that cannot manage them',
+    'hides %s from clients that cannot read issuance or verification configuration',
     (entry) => {
-      expect(menuItems(['issuance:offer', 'presentation:request'])).not.toContain(entry);
+      expect(menuItems(['sessions:read', 'keys:export', 'audit:read'])).not.toContain(entry);
+      TestBed.resetTestingModule();
+      expect(menuItems(['issuance:read'])).toContain(entry);
     }
   );
 });
@@ -572,7 +613,8 @@ describe('AppComponent skip link', () => {
 
 describe('AppComponent collapsible navigation', () => {
   function render(
-    hasRole: (role: Role | Role[]) => boolean = (role) => [role].flat().includes('issuance:manage')
+    hasRole: (role: Role | Role[]) => boolean = (role) =>
+      [role].flat().some((r) => effectiveRoles(['issuance:manage']).includes(r))
   ) {
     localStorage.clear();
     TestBed.configureTestingModule({

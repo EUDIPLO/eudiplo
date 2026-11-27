@@ -37,7 +37,7 @@ When the prompt says `audit <area>` instead of naming a change set, there is no 
 Authorization and tenancy
 - Every new or changed management route carries `@Secured([...])` (`apps/backend/src/auth/secure.decorator.ts`, roles in `apps/backend/src/auth/roles/role.enum.ts`) with the least role that works.
 - The tenant id comes from `@Token()`, never from a body, query or path parameter.
-- Sessions, keys, configs and lists are filtered by tenant in every query the change adds. Role scoping of session lists and key export holds (issuance roles see issuance sessions, only `tenant:admin` exports keys or reads KMS configuration).
+- Sessions, keys, configs and lists are filtered by tenant in every query the change adds. Role scoping of session lists and key export holds (issuance roles see issuance sessions, only `keys:export`, which `tenant:admin` includes, exports keys or reads KMS configuration; roles include narrower roles, see `apps/backend/src/auth/roles/role.enum.ts`).
 - A wallet-facing route (OID4VCI, OID4VP, `.well-known`, status and trust lists) is added to `GLOBAL_PREFIX_EXCLUSIONS` in `apps/backend/src/main.helpers.ts` and deliberately unauthenticated; check that it leaks nothing tenant-private.
 
 Outbound requests (SSRF and exfiltration)

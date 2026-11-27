@@ -30,10 +30,12 @@ import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { showFieldsToFix } from '../../common/field-to-fix.util';
 import { focusAfterRenderIfLost } from '../../common/focus-if-lost.util';
 import type { PageWithUnsavedChanges } from '../../services/unsaved-changes.service';
+import { RoleIncludesPipe } from '../../common/role-includes.pipe';
 
 @Component({
   selector: 'app-user-create',
   imports: [
+    RoleIncludesPipe,
     ReactiveFormsModule,
     MatCardModule,
     MatDialogModule,

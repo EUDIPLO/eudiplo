@@ -20,6 +20,7 @@ export class SessionConfigController {
     /**
      * Get the current session storage configuration for the authenticated tenant.
      */
+    @Secured([Role.IssuanceRead, Role.PresentationRead])
     @Get()
     @ApiOperation({
         summary: "Get session storage configuration",

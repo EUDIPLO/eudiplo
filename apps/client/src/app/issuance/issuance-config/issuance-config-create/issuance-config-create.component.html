@@ -581,15 +581,20 @@
                                       <span
                                         >The chosen key chain does not exist or is not an
                                         Authorization Server key, so this server's token requests
-                                        fail. Choose another key, or
-                                        <a
-                                          routerLink="/keys/create"
-                                          [queryParams]="authorizationServerKeyLinkParams"
-                                          target="_blank"
-                                          rel="noopener"
-                                          >create one (opens in a new tab)</a
-                                        >, then check again.</span
-                                      >
+                                        fail.
+                                        @if (canCreateKeyChains) {
+                                          Choose another key, or
+                                          <a
+                                            routerLink="/keys/create"
+                                            [queryParams]="authorizationServerKeyLinkParams"
+                                            target="_blank"
+                                            rel="noopener"
+                                            >create one (opens in a new tab)</a
+                                          >, then check again.
+                                        } @else {
+                                          Choose another key. {{ keyCreateLockedMessage }}
+                                        }
+                                      </span>
                                     } @else if (authorizationServerKeyChainsLoadFailed) {
                                       <span
                                         >The key chains could not be loaded, so the list may be
@@ -598,15 +603,20 @@
                                     } @else {
                                       <span
                                         >No Authorization Server key exists yet; EUDIPLO creates one
-                                        on the first token request. To use your own,
-                                        <a
-                                          routerLink="/keys/create"
-                                          [queryParams]="authorizationServerKeyLinkParams"
-                                          target="_blank"
-                                          rel="noopener"
-                                          >create one (opens in a new tab)</a
-                                        >, then check again.</span
-                                      >
+                                        on the first token request.
+                                        @if (canCreateKeyChains) {
+                                          To use your own,
+                                          <a
+                                            routerLink="/keys/create"
+                                            [queryParams]="authorizationServerKeyLinkParams"
+                                            target="_blank"
+                                            rel="noopener"
+                                            >create one (opens in a new tab)</a
+                                          >, then check again.
+                                        } @else {
+                                          {{ keyCreateLockedMessage }}
+                                        }
+                                      </span>
                                     }
                                   </p>
                                   <div class="fx-row justify-start align-center">
@@ -1097,14 +1107,19 @@
                                 <span
                                   >No key with usage type OpenID Federation Entity Key exists, so
                                   the entity configuration cannot be signed and is not published.
-                                  <a
-                                    routerLink="/keys/create"
-                                    [queryParams]="federationKeyLinkParams"
-                                    target="_blank"
-                                    rel="noopener"
-                                    >Create a federation key (opens in a new tab)</a
-                                  >, then check again. A trust engine
-                                  (FEDERATION_ENTITY_PROVIDER=http) needs no key here.</span
+                                  @if (canCreateKeyChains) {
+                                    <a
+                                      routerLink="/keys/create"
+                                      [queryParams]="federationKeyLinkParams"
+                                      target="_blank"
+                                      rel="noopener"
+                                      >Create a federation key (opens in a new tab)</a
+                                    >, then check again.
+                                  } @else {
+                                    {{ keyCreateLockedMessage }}
+                                  }
+                                  A trust engine (FEDERATION_ENTITY_PROVIDER=http) needs no key
+                                  here.</span
                                 >
                               }
                             </p>

@@ -8,10 +8,10 @@ import { MigrationInterface, QueryRunner, TableColumn } from "typeorm";
  * `trusted_authorities` only when it opts in itself. Existing rows get
  * `false`, so they keep requiring a trusted authority per query.
  */
-export class AddAllowUntrustedIssuersToPresentationConfig1786900000000
+export class AddAllowUntrustedIssuersToPresentationConfig1787000000000
     implements MigrationInterface
 {
-    name = "AddAllowUntrustedIssuersToPresentationConfig1786900000000";
+    name = "AddAllowUntrustedIssuersToPresentationConfig1787000000000";
 
     public async up(queryRunner: QueryRunner): Promise<void> {
         const table = await queryRunner.getTable("presentation_config");

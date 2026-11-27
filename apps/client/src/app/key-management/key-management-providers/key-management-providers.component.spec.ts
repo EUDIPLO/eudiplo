@@ -1,4 +1,5 @@
 import '@angular/compiler';
+import { effectiveRoles } from '../../services/role-grants';
 import { TestBed } from '@angular/core/testing';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -23,7 +24,10 @@ describe('KeyManagementProvidersComponent tenant KMS configuration', () => {
       keyChainService as never,
       snackBar as never,
       dialog as never,
-      { hasRole: (role: string[]) => role.some((r) => roles.includes(r)) } as never
+      {
+        hasRole: (role: string | string[]) =>
+          [role].flat().some((r) => effectiveRoles(roles).includes(r)),
+      } as never
     );
   }
 
@@ -112,7 +116,7 @@ describe('KeyManagementProvidersComponent tenant KMS configuration', () => {
 
     expect(await create().saveTenantConfig({ providers: [] } as never)).toBe(false);
 
-    expect(snackBar.open.mock.lastCall?.[0]).toContain('tenant:admin');
+    expect(snackBar.open.mock.lastCall?.[0]).toContain('keys:export');
   });
 
   it('saves from the editor and keeps the edit there when the save fails', async () => {
@@ -255,7 +259,8 @@ describe('KeyManagementProvidersComponent tenant KMS configuration', () => {
         {
           provide: JwtService,
           useValue: {
-            hasRole: (role: string[]) => role.some((r) => roles.includes(r)),
+            hasRole: (role: string | string[]) =>
+              [role].flat().some((r) => effectiveRoles(roles).includes(r)),
             canUseConfigPortability: () => false,
           },
         },

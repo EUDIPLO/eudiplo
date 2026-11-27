@@ -30,6 +30,10 @@ import { getApiErrorMessage } from '../utils/error-message';
 import { openErrorSnackBar } from '../utils/error-snackbar';
 import { wholeNumberValidator } from '../utils/whole-number-validator';
 import type { PageWithUnsavedChanges } from '../services/unsaved-changes.service';
+import { ReadOnlyNoticeComponent } from '../common/read-only-notice.component';
+import { RoleLockDirective } from '../common/role-lock.directive';
+import { ISSUANCE_WRITE_ROLES } from '../services/resource-roles';
+import { JwtService } from '../services/jwt.service';
 
 const listFormat = new Intl.ListFormat('en', { type: 'conjunction' });
 
@@ -60,6 +64,8 @@ const newListsOnly = new Set<keyof StatusListConfig>(['capacity', 'bits']);
     MatProgressSpinnerModule,
     RouterLink,
     ConfigOwnershipDirective,
+    RoleLockDirective,
+    ReadOnlyNoticeComponent,
     ConfigOwnershipNoticeComponent,
     LoadErrorComponent,
   ],
@@ -68,6 +74,15 @@ const newListsOnly = new Set<keyof StatusListConfig>(['capacity', 'bits']);
   styleUrl: './status-list-config.component.scss',
 })
 export class StatusListConfigComponent implements OnInit, PageWithUnsavedChanges {
+  /** Creating, changing and deleting it needs issuance:manage; reading needs less. */
+  readonly writeRoles = ISSUANCE_WRITE_ROLES;
+  private readonly jwtService = inject(JwtService);
+
+  /** A caller without the write role reads the form, disabled, with a notice why. */
+  get readOnly(): boolean {
+    return !this.jwtService.hasRole(this.writeRoles);
+  }
+
   configForm: FormGroup;
   isLoading = true;
   isSaving = false;
@@ -126,6 +141,8 @@ export class StatusListConfigComponent implements OnInit, PageWithUnsavedChanges
   }
 
   ngOnInit() {
+    // Disabled controls keep their values, so nothing counts as an unsaved change.
+    if (this.readOnly) this.configForm.disable();
     void this.loadConfig();
   }
 
@@ -169,6 +186,8 @@ export class StatusListConfigComponent implements OnInit, PageWithUnsavedChanges
   async onSave(): Promise<void> {
     // `disabledInteractive` keeps the button clickable while it looks disabled.
     if (this.isSaving || this.loadError) return;
+    // The form is disabled for readers, and Save is locked; this only guards a stray submit.
+    if (this.readOnly) return;
     if (this.configForm.invalid) {
       const control = (name: string) => [this.configForm.get(name)];
       showFieldsToFix(this.configForm, {
@@ -282,6 +301,7 @@ export class StatusListConfigComponent implements OnInit, PageWithUnsavedChanges
 
   /** Puts a preset into a field, as typing it would. */
   choosePreset(setting: 'capacity' | 'ttl', value: number | null): void {
+    if (this.readOnly) return;
     const control = this.configForm.get(setting);
     control?.setValue(value);
     control?.markAsDirty();

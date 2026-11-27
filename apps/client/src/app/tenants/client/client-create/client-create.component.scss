@@ -1,4 +1,5 @@
 @use 'page';
+@use 'role-picker';
 
 @include page.base;
 
@@ -27,3 +28,5 @@ app-config-ownership-notice,
 app-role-lock-notice {
   display: contents;
 }
+
+@include role-picker.options;

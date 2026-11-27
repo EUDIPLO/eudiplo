@@ -34,7 +34,7 @@ import { AddOidcProvider1786400000000 } from "../src/database/migrations/1786400
 import { RemoveSandboxRegistrar1786500000000 } from "../src/database/migrations/1786500000000-RemoveSandboxRegistrar.js";
 import { AllowDeferredTransactionWithoutHolderKey1786700000000 } from "../src/database/migrations/1786700000000-AllowDeferredTransactionWithoutHolderKey.js";
 import { AddWalletInstanceRevocation1786800000000 } from "../src/database/migrations/1786800000000-AddWalletInstanceRevocation.js";
-import { AddAllowUntrustedIssuersToPresentationConfig1786900000000 } from "../src/database/migrations/1786900000000-AddAllowUntrustedIssuersToPresentationConfig.js";
+import { AddAllowUntrustedIssuersToPresentationConfig1787000000000 } from "../src/database/migrations/1787000000000-AddAllowUntrustedIssuersToPresentationConfig.js";
 import { describeWithContainers } from "./container-runtime.js";
 import {
     addTokensValidAfterContract,
@@ -1201,8 +1201,8 @@ describe("Migration tests", () => {
     );
 
     describeNullableColumn(
-        "AddAllowUntrustedIssuersToPresentationConfig1786900000000",
-        new AddAllowUntrustedIssuersToPresentationConfig1786900000000(),
+        "AddAllowUntrustedIssuersToPresentationConfig1787000000000",
+        new AddAllowUntrustedIssuersToPresentationConfig1787000000000(),
         {
             table: "presentation_config",
             column: "allowUntrustedIssuers",

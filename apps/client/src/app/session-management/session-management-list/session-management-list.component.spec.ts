@@ -1,8 +1,7 @@
+import { effectiveRoles } from '../../services/role-grants';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { MatTooltip } from '@angular/material/tooltip';
-import { By } from '@angular/platform-browser';
 import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angular/router';
 import type { Session } from '@eudiplo/sdk-core';
 import { of } from 'rxjs';
@@ -45,7 +44,8 @@ describe('SessionManagementListComponent', () => {
         {
           provide: JwtService,
           useValue: {
-            hasRole: (role: string | string[]) => [role].flat().some((r) => roles.includes(r)),
+            hasRole: (role: string | string[]) =>
+              [role].flat().some((r) => effectiveRoles(roles).includes(r)),
           },
         },
         {
@@ -415,29 +415,47 @@ describe('SessionManagementListComponent', () => {
     expect(buttons.some((text) => text.includes('Verification Request'))).toBe(false);
   });
 
-  it('locks Issuance Offer with the reason and skips the credential configs without issuance:manage', async () => {
+  it('links Issuance Offer and lists the credential configs for issuance:offer without issuance:manage', async () => {
     await setup({}, ['issuance:offer', 'presentation:request']);
     fixture.detectChanges();
     const element = fixture.nativeElement as HTMLElement;
 
     for (const area of ['.header-actions', '.empty-state']) {
-      // Only the verification side stays a link.
+      // issuance:offer opens New Issuance, so both sides are links and nothing is locked.
       const links = [...element.querySelectorAll(`${area} a`)].map((a) => a.getAttribute('href'));
-      expect(links, area).toEqual(['/offer/presentation']);
-      const locked = fixture.debugElement
-        .queryAll(By.css(`${area} button`))
-        .find((button) => button.nativeElement.textContent.includes('Issuance Offer'))!;
-      expect(locked.nativeElement.getAttribute('aria-disabled'), area).toBe('true');
-      expect(locked.injector.get(MatTooltip).message, area).toContain(
-        'also needs the issuance:manage role'
+      expect(links, area).toEqual(['/offer/issuance', '/offer/presentation']);
+      expect(element.querySelectorAll(`${area} button[aria-disabled="true"]`), area).toHaveLength(
+        0
       );
+    }
+
+    // issuance:offer includes issuance:read, which reads the credential configs.
+    expect(TestBed.inject(CredentialConfigService).loadConfigurations).toHaveBeenCalled();
+    expect(component.issuanceConfigOptions).toEqual([{ value: 'issuance:pid', label: 'pid' }]);
+    expect(component.presentationConfigOptions).toHaveLength(1);
+    expect(component.configFilterHint).toBe('');
+  });
+
+  it('offers no Issuance Offer and skips the credential configs without an issuance role', async () => {
+    await setup({}, ['presentation:request', 'sessions:read']);
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+
+    for (const area of ['.header-actions', '.empty-state']) {
+      const actions = [...element.querySelectorAll(`${area} a, ${area} button`)].map((action) =>
+        action.textContent!.trim()
+      );
+      expect(
+        actions.some((text) => text.includes('Issuance Offer')),
+        area
+      ).toBe(false);
     }
 
     expect(TestBed.inject(CredentialConfigService).loadConfigurations).not.toHaveBeenCalled();
     expect(component.issuanceConfigOptions).toEqual([]);
     expect(component.presentationConfigOptions).toHaveLength(1);
     expect(element.querySelector('mat-hint')?.textContent?.trim()).toBe(
-      'Not listed, as your roles cannot read them: credential configs need issuance:manage.'
+      'Not listed, as your roles cannot read them: credential configs need issuance:read.'
     );
   });
 
@@ -447,7 +465,7 @@ describe('SessionManagementListComponent', () => {
     expect(TestBed.inject(CredentialConfigService).loadConfigurations).not.toHaveBeenCalled();
     expect(TestBed.inject(PresentationManagementService).loadConfigurations).not.toHaveBeenCalled();
     expect(component.configFilterHint).toBe(
-      'Not listed, as your roles cannot read them: credential configs need issuance:manage; verification configs need presentation:manage or presentation:request.'
+      'Not listed, as your roles cannot read them: credential configs need issuance:read; verification configs need presentation:read.'
     );
   });
 

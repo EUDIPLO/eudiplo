@@ -10,15 +10,19 @@ const roleAreas: { title: string; icon: string; roles: string[] }[] = [
   {
     title: 'Issuance',
     icon: 'card_giftcard',
-    roles: ['issuance:manage', 'issuance:offer', 'credentials:status'],
+    roles: ['issuance:manage', 'issuance:offer', 'issuance:read', 'credentials:status'],
   },
   {
     title: 'Presentation',
     icon: 'verified_user',
-    roles: ['presentation:manage', 'presentation:request'],
+    roles: ['presentation:manage', 'presentation:request', 'presentation:read'],
   },
   { title: 'Sessions and audit', icon: 'history', roles: ['sessions:read', 'audit:read'] },
-  { title: 'Keys and certificates', icon: 'key', roles: ['keys:manage', 'registrar:manage'] },
+  {
+    title: 'Keys and certificates',
+    icon: 'key',
+    roles: ['keys:manage', 'keys:export', 'registrar:manage'],
+  },
   {
     title: 'Administration',
     icon: 'admin_panel_settings',

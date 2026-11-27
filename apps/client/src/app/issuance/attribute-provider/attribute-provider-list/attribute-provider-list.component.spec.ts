@@ -1,12 +1,17 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import type { AttributeProviderEntity } from '@eudiplo/sdk-core';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { describeListStates } from '../../../common/base-async-list.testing';
 import { ConfigOwnershipService } from '../../../config-portability/config-ownership.service';
 import { JwtService } from '../../../services/jwt.service';
 import { AttributeProviderService } from '../attribute-provider.service';
 import { AttributeProviderListComponent } from './attribute-provider-list.component';
+import { grantEveryRole } from '../../../common/role-lock.testing';
+import { effectiveRoles } from '../../../services/role-grants';
+
+// The tests are about what the actions do; role locks have their own tests.
+beforeEach(() => grantEveryRole());
 
 describe('AttributeProviderListComponent', () => {
   describeListStates({
@@ -35,7 +40,13 @@ describe('AttributeProviderListComponent table', () => {
       providers: [
         provideRouter([]),
         { provide: AttributeProviderService, useValue: service },
-        { provide: JwtService, useValue: { hasRole: (role: string) => roles.includes(role) } },
+        {
+          provide: JwtService,
+          useValue: {
+            hasRole: (role: string | string[]) =>
+              [role].flat().some((r) => effectiveRoles(roles).includes(r)),
+          },
+        },
         { provide: ConfigOwnershipService, useValue: { get: async () => undefined } },
       ],
     });

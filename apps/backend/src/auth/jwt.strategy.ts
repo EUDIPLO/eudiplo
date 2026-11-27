@@ -30,7 +30,7 @@ import {
     OIDC_ISSUER_METADATA,
     type OidcIssuerMetadata,
 } from "./ports/oidc-issuer-metadata.js";
-import type { Role } from "./roles/role.enum.js";
+import { effectiveRoles, type Role } from "./roles/role.enum.js";
 import { TenantNotFound } from "./tenant/domain/tenant-data.js";
 import { TenantService } from "./tenant/tenant.service.js";
 import { InternalTokenPayload, TokenPayload } from "./token.decorator.js";
@@ -220,10 +220,15 @@ export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
      * @param payload The JWT payload
      * @returns The validated payload with tenant and client info
      */
-    validate(payload: InternalTokenPayload): Promise<TokenPayload> {
-        return this.external
+    async validate(payload: InternalTokenPayload): Promise<TokenPayload> {
+        const result = await (this.external
             ? this.validateExternalToken(payload, this.external)
-            : this.validateIntegratedToken(payload);
+            : this.validateIntegratedToken(payload));
+        // Every check after this one sees the roles the assigned ones imply.
+        return {
+            ...result,
+            roles: effectiveRoles(result.roles ?? []) as Role[],
+        };
     }
 
     /**

@@ -108,6 +108,113 @@ export const FrontendConfigResponseDtoSchema = {
     ]
 } as const;
 
+export const TerminusHealthIndicatorResultSchema = {
+    type: 'object',
+    properties: {
+        status: {
+            type: 'string',
+            enum: [
+                'up',
+                'degraded',
+                'down'
+            ],
+            description: 'The status of this health indicator'
+        },
+        responseTime: {
+            type: 'number',
+            description: 'Time the health indicator took to respond, in ms'
+        },
+        cachedResponse: {
+            type: 'boolean',
+            description: 'Whether this result was served from the cache'
+        }
+    },
+    required: [
+        'status'
+    ]
+} as const;
+
+export const TerminusHealthCheckResultSchema = {
+    type: 'object',
+    properties: {
+        status: {
+            type: 'string',
+            enum: [
+                'error',
+                'ok',
+                'degraded',
+                'shutting_down'
+            ],
+            example: 'ok'
+        },
+        info: {
+            type: [
+                'object',
+                'null'
+            ],
+            additionalProperties: {
+                allOf: [
+                    {
+                        $ref: '#/components/schemas/TerminusHealthIndicatorResult'
+                    },
+                    {
+                        type: 'object',
+                        additionalProperties: true
+                    }
+                ]
+            },
+            example: {
+                database: {
+                    status: 'up',
+                    responseTime: 12
+                }
+            }
+        },
+        error: {
+            type: [
+                'object',
+                'null'
+            ],
+            additionalProperties: {
+                allOf: [
+                    {
+                        $ref: '#/components/schemas/TerminusHealthIndicatorResult'
+                    },
+                    {
+                        type: 'object',
+                        additionalProperties: true
+                    }
+                ]
+            },
+            example: {}
+        },
+        details: {
+            type: 'object',
+            additionalProperties: {
+                allOf: [
+                    {
+                        $ref: '#/components/schemas/TerminusHealthIndicatorResult'
+                    },
+                    {
+                        type: 'object',
+                        additionalProperties: true
+                    }
+                ]
+            },
+            example: {
+                database: {
+                    status: 'up',
+                    responseTime: 12
+                }
+            }
+        }
+    },
+    required: [
+        'status',
+        'details'
+    ]
+} as const;
+
 export const RoleDtoSchema = {
     type: 'object',
     properties: {
@@ -115,8 +222,10 @@ export const RoleDtoSchema = {
             enum: [
                 'presentation:manage',
                 'presentation:request',
+                'presentation:read',
                 'issuance:manage',
                 'issuance:offer',
+                'issuance:read',
                 'clients:manage',
                 'users:manage',
                 'tenants:manage',
@@ -125,7 +234,8 @@ export const RoleDtoSchema = {
                 'audit:read',
                 'sessions:read',
                 'credentials:status',
-                'keys:manage'
+                'keys:manage',
+                'keys:export'
             ],
             type: 'string',
             description: 'OAuth2 roles',
@@ -449,8 +559,10 @@ export const ClientEntitySchema = {
                 enum: [
                     'presentation:manage',
                     'presentation:request',
+                    'presentation:read',
                     'issuance:manage',
                     'issuance:offer',
+                    'issuance:read',
                     'clients:manage',
                     'users:manage',
                     'tenants:manage',
@@ -459,7 +571,8 @@ export const ClientEntitySchema = {
                     'audit:read',
                     'sessions:read',
                     'credentials:status',
-                    'keys:manage'
+                    'keys:manage',
+                    'keys:export'
                 ]
             },
             description: 'Roles assigned to the client'
@@ -595,18 +708,21 @@ export const CreateTenantDtoSchema = {
                 type: 'string',
                 enum: [
                     'tenants:manage',
+                    'tenant:admin',
                     'issuance:offer',
                     'issuance:manage',
+                    'issuance:read',
                     'presentation:request',
                     'presentation:manage',
+                    'presentation:read',
                     'clients:manage',
                     'users:manage',
                     'registrar:manage',
-                    'tenant:admin',
                     'audit:read',
                     'sessions:read',
                     'credentials:status',
-                    'keys:manage'
+                    'keys:manage',
+                    'keys:export'
                 ]
             }
         },
@@ -1094,8 +1210,10 @@ export const UpdateClientDtoSchema = {
                 enum: [
                     'presentation:manage',
                     'presentation:request',
+                    'presentation:read',
                     'issuance:manage',
                     'issuance:offer',
+                    'issuance:read',
                     'clients:manage',
                     'users:manage',
                     'tenants:manage',
@@ -1104,7 +1222,8 @@ export const UpdateClientDtoSchema = {
                     'audit:read',
                     'sessions:read',
                     'credentials:status',
-                    'keys:manage'
+                    'keys:manage',
+                    'keys:export'
                 ]
             }
         },
@@ -1169,8 +1288,10 @@ export const CreateClientDtoSchema = {
                 enum: [
                     'presentation:manage',
                     'presentation:request',
+                    'presentation:read',
                     'issuance:manage',
                     'issuance:offer',
+                    'issuance:read',
                     'clients:manage',
                     'users:manage',
                     'tenants:manage',
@@ -1179,7 +1300,8 @@ export const CreateClientDtoSchema = {
                     'audit:read',
                     'sessions:read',
                     'credentials:status',
-                    'keys:manage'
+                    'keys:manage',
+                    'keys:export'
                 ]
             },
             description: 'Roles assigned to the client. At least one role is required.'
@@ -1248,8 +1370,10 @@ export const ManagedUserDtoSchema = {
                 enum: [
                     'presentation:manage',
                     'presentation:request',
+                    'presentation:read',
                     'issuance:manage',
                     'issuance:offer',
+                    'issuance:read',
                     'clients:manage',
                     'users:manage',
                     'tenants:manage',
@@ -1258,7 +1382,8 @@ export const ManagedUserDtoSchema = {
                     'audit:read',
                     'sessions:read',
                     'credentials:status',
-                    'keys:manage'
+                    'keys:manage',
+                    'keys:export'
                 ]
             }
         },
@@ -1298,18 +1423,21 @@ export const CreateUserDtoSchema = {
                 type: 'string',
                 enum: [
                     'tenants:manage',
+                    'tenant:admin',
                     'issuance:offer',
                     'issuance:manage',
+                    'issuance:read',
                     'presentation:request',
                     'presentation:manage',
+                    'presentation:read',
                     'clients:manage',
                     'users:manage',
                     'registrar:manage',
-                    'tenant:admin',
                     'audit:read',
                     'sessions:read',
                     'credentials:status',
-                    'keys:manage'
+                    'keys:manage',
+                    'keys:export'
                 ]
             }
         },
@@ -1342,18 +1470,21 @@ export const UpdateUserDtoSchema = {
                 type: 'string',
                 enum: [
                     'tenants:manage',
+                    'tenant:admin',
                     'issuance:offer',
                     'issuance:manage',
+                    'issuance:read',
                     'presentation:request',
                     'presentation:manage',
+                    'presentation:read',
                     'clients:manage',
                     'users:manage',
                     'registrar:manage',
-                    'tenant:admin',
                     'audit:read',
                     'sessions:read',
                     'credentials:status',
-                    'keys:manage'
+                    'keys:manage',
+                    'keys:export'
                 ]
             }
         },

@@ -37,6 +37,10 @@ import { showFieldsToFix } from '../../common/field-to-fix.util';
 import { focusAfterRenderIfLost } from '../../common/focus-if-lost.util';
 import { LoadErrorComponent } from '../../common/load-error.component';
 import type { PageWithUnsavedChanges } from '../../services/unsaved-changes.service';
+import { ReadOnlyNoticeComponent } from '../../common/read-only-notice.component';
+import { RoleLockDirective } from '../../common/role-lock.directive';
+import { ISSUANCE_WRITE_ROLES } from '../../services/resource-roles';
+import { JwtService } from '../../services/jwt.service';
 
 /** The sources of the options of the form's selects. */
 type StatusListEditSource = 'credentialConfigs' | 'keyChains';
@@ -59,6 +63,8 @@ type StatusListEditSource = 'credentialConfigs' | 'keyChains';
     MatProgressSpinnerModule,
     RouterModule,
     ConfigOwnershipDirective,
+    RoleLockDirective,
+    ReadOnlyNoticeComponent,
     ConfigOwnershipNoticeComponent,
     LoadErrorComponent,
   ],
@@ -67,6 +73,15 @@ type StatusListEditSource = 'credentialConfigs' | 'keyChains';
   styleUrl: './status-list-edit.component.scss',
 })
 export class StatusListEditComponent implements OnInit, PageWithUnsavedChanges {
+  /** Creating, changing and deleting it needs issuance:manage; reading needs less. */
+  readonly writeRoles = ISSUANCE_WRITE_ROLES;
+  private readonly jwtService = inject(JwtService);
+
+  /** A caller without the write role reads the form, disabled, with a notice why. */
+  get readOnly(): boolean {
+    return !this.jwtService.hasRole(this.writeRoles);
+  }
+
   listId?: string | null;
   form!: FormGroup;
   isLoading = true;
@@ -132,6 +147,9 @@ export class StatusListEditComponent implements OnInit, PageWithUnsavedChanges {
         wholeNumberValidator,
       ]),
     });
+
+    // A reader sees the status list in a disabled form; the create page is refused to it.
+    if (this.isEditMode && this.readOnly) this.form.disable();
 
     void this.loadData();
   }
@@ -283,6 +301,7 @@ export class StatusListEditComponent implements OnInit, PageWithUnsavedChanges {
 
   /** Puts a preset into Capacity, as typing it would. */
   setCapacity(capacity: number): void {
+    if (this.readOnly) return;
     const control = this.form.get('capacity');
     control?.setValue(capacity);
     control?.markAsDirty();
@@ -310,6 +329,8 @@ export class StatusListEditComponent implements OnInit, PageWithUnsavedChanges {
   async onSubmit(): Promise<void> {
     // `disabledInteractive` keeps Save clickable while it looks disabled.
     if (this.isSaving) return;
+    // The form is disabled for readers, and Save is locked; this only guards a stray submit.
+    if (this.readOnly) return;
     if (this.form.invalid) {
       showFieldsToFix(this.form, {
         snackBar: this.snackBar,

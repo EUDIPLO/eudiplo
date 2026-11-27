@@ -3,6 +3,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { client } from '@eudiplo/sdk-core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { JwtService } from '../services/jwt.service';
+import { effectiveRoles } from '../services/role-grants';
 import { ConfigDocumentService } from './config-document.service';
 
 describe('ConfigDocumentService', () => {
@@ -14,7 +15,10 @@ describe('ConfigDocumentService', () => {
       providers: [
         {
           provide: JwtService,
-          useValue: { hasRole: (role: string[]) => role.some((r) => roles.includes(r)) },
+          useValue: {
+            hasRole: (role: string | string[]) =>
+              [role].flat().some((r) => effectiveRoles(roles).includes(r)),
+          },
         },
         { provide: MatSnackBar, useValue: snackBar },
       ],
@@ -171,14 +175,13 @@ describe('ConfigDocumentService', () => {
       await service.downloadWithFeedback('KeyChain', 'key');
 
       expect(snackBar.open.mock.lastCall?.[0]).toBe(
-        'Failed to download configuration: Forbidden resource. It requires one of the roles tenant:admin, tenants:manage.'
+        'Failed to download configuration: Forbidden resource. It requires one of the roles keys:export.'
       );
     });
 
     it("keeps the document check's own refusal, which names the roles, as it is", async () => {
       const service = create(['issuance:manage']);
-      const reason =
-        'A key chain document contains private keys and needs tenant:admin or tenants:manage.';
+      const reason = 'A key chain document contains private keys and needs keys:export.';
       vi.spyOn(service, 'download').mockRejectedValue({ statusCode: 403, message: reason });
 
       await service.downloadWithFeedback('KeyChain', 'key');
@@ -220,21 +223,28 @@ describe('ConfigDocumentService', () => {
     ['Tenant', 'presentation:manage', true],
     ['Tenant', 'keys:manage', false],
     ['KeyChainDefaults', 'keys:manage', true],
-    ['KeyChainDefaults', 'issuance:manage', true],
+    ['KeyChainDefaults', 'keys:export', true],
+    ['KeyChainDefaults', 'tenant:admin', true],
+    ['KeyChainDefaults', 'issuance:manage', false],
     ['KeyChainDefaults', 'clients:manage', false],
     ['StatusList', 'presentation:manage', false],
     ['AttributeProvider', 'presentation:manage', false],
     ['Client', 'clients:manage', true],
     ['Client', 'issuance:manage', false],
     ['KmsConfig', 'issuance:manage', false],
+    ['KmsConfig', 'keys:manage', false],
+    ['KmsConfig', 'keys:export', true],
     ['KmsConfig', 'tenant:admin', true],
   ] as const)('offers %s to %s: %s', (kind, role, offered) => {
     expect(create([role]).canDownload(kind)).toBe(offered);
   });
 
-  it('offers key chains, which carry private keys, only to tenant administrators', () => {
+  it('offers key chains, which carry private keys, only to callers with keys:export', () => {
     expect(create(['keys:manage', 'issuance:manage']).canDownload('KeyChain')).toBe(false);
     TestBed.resetTestingModule();
+    expect(create(['keys:export']).canDownload('KeyChain')).toBe(true);
+    TestBed.resetTestingModule();
+    // tenant:admin includes keys:export.
     expect(create(['tenant:admin']).canDownload('KeyChain')).toBe(true);
   });
 });

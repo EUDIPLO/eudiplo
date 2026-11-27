@@ -16,19 +16,16 @@ import type { ConfigResourceKind } from './config-ownership.service';
 /**
  * Roles that may download a resource of each kind as a configuration
  * document, mirroring `mayExportConfigDocument` in the backend. A key chain
- * document carries the private keys of keys held in the database.
+ * document carries the private keys of keys held in the database, so it needs
+ * `keys:export`. The caller's roles from `GET /api/auth/me` include the roles
+ * its roles imply, so `tenant:admin` passes every check.
  */
 const CONFIG_DOCUMENT_ROLES: Record<ConfigResourceKind, Role[]> = {
   Tenant: [...TENANT_ADMIN_ROLES, 'issuance:manage', 'presentation:manage'],
   Client: [...TENANT_ADMIN_ROLES, 'clients:manage'],
-  KmsConfig: TENANT_ADMIN_ROLES,
-  KeyChain: TENANT_ADMIN_ROLES,
-  KeyChainDefaults: [
-    ...TENANT_ADMIN_ROLES,
-    'issuance:manage',
-    'presentation:manage',
-    'keys:manage',
-  ],
+  KmsConfig: ['keys:export'],
+  KeyChain: ['keys:export'],
+  KeyChainDefaults: ['keys:manage'],
   IssuanceConfig: [...TENANT_ADMIN_ROLES, 'issuance:manage'],
   CredentialConfig: [...TENANT_ADMIN_ROLES, 'issuance:manage'],
   PresentationConfig: [...TENANT_ADMIN_ROLES, 'presentation:manage'],

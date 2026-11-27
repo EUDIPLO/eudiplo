@@ -14,8 +14,14 @@ import {
   type JsonViewDialogData,
 } from '../../issuance/credential-config/credential-config-create/json-view-dialog/json-view-dialog.component';
 import { kmsConfigSchema } from '../../utils/schemas';
-import { KEY_ADMIN_FORBIDDEN_MESSAGE, KeyChainService, isForbidden } from '../key-chain.service';
-import { JwtService, TENANT_ADMIN_ROLES } from '../../services/jwt.service';
+import {
+  KEY_ADMIN_FORBIDDEN_MESSAGE,
+  KEY_ADMIN_ROLE,
+  KEY_CREATE_LOCKED_MESSAGE,
+  KeyChainService,
+  isForbidden,
+} from '../key-chain.service';
+import { JwtService } from '../../services/jwt.service';
 import { ConfigOwnershipDirective } from '../../config-portability/config-ownership.directive';
 import { ConfigOwnershipNoticeComponent } from '../../config-portability/config-ownership-notice.component';
 import { getApiErrorMessage } from '../../utils/error-message';
@@ -65,6 +71,13 @@ interface ProviderRow {
   changeDetection: ChangeDetectionStrategy.Eager,
 })
 export class KeyManagementProvidersComponent implements OnInit {
+  /** Only keys:manage creates key chains, so only it gets Create key. */
+  get canCreateKeyChains(): boolean {
+    return this.jwtService.hasRole(KEY_ADMIN_ROLE);
+  }
+
+  readonly keyCreateLockedMessage = KEY_CREATE_LOCKED_MESSAGE;
+
   isLoading = false;
   isSavingConfig = false;
   defaultProvider = 'db';
@@ -87,11 +100,11 @@ export class KeyManagementProvidersComponent implements OnInit {
   ) {}
 
   /**
-   * The tenant KMS configuration contains provider credentials and is only
-   * available to tenant administrators.
+   * The tenant KMS configuration contains provider credentials and needs
+   * `keys:export`.
    */
   get canManageTenantConfig(): boolean {
-    return this.jwtService.hasRole(TENANT_ADMIN_ROLES);
+    return this.jwtService.hasRole('keys:export');
   }
 
   ngOnInit(): void {

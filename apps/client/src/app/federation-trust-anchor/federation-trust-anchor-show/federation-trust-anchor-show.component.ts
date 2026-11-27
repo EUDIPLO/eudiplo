@@ -27,6 +27,8 @@ import {
   FederationTrustAnchorService,
 } from '../federation-trust-anchor.service';
 import { FederationTrustAnchorReferences } from '../federation-trust-anchor-references';
+import { RoleLockDirective } from '../../common/role-lock.directive';
+import { SHARED_WRITE_ROLES } from '../../services/resource-roles';
 
 /** The members of a pinned key the page lists; the full key is in the JWK set below. */
 interface PinnedKey {
@@ -48,6 +50,7 @@ interface PinnedKey {
     MatTooltipModule,
     RouterModule,
     ConfigOwnershipDirective,
+    RoleLockDirective,
     ConfigOwnershipNoticeComponent,
     LoadErrorComponent,
   ],
@@ -57,6 +60,9 @@ interface PinnedKey {
   providers: [FederationTrustAnchorReferences],
 })
 export class FederationTrustAnchorShowComponent implements OnInit {
+  /** Creating, changing and deleting it needs issuance:manage or presentation:manage; reading needs less. */
+  readonly writeRoles = SHARED_WRITE_ROLES;
+
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly snackBar = inject(MatSnackBar);

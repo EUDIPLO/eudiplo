@@ -5,16 +5,16 @@ import { Secured } from "../auth/secure.decorator.js";
 import { requireTenantContext } from "../auth/tenant-context.util.js";
 import { Token, TokenPayload } from "../auth/token.decorator.js";
 import { AuditLogService } from "./audit-log.service.js";
+import { AuditLogPageResponseDto } from "./dto/audit-log-page-response.dto.js";
 import {
     AuditLogListQueryDto,
     AuditLogSearchQueryDto,
 } from "./dto/audit-log-query.dto.js";
-import { AuditLogPageResponseDto } from "./dto/audit-log-page-response.dto.js";
 import { AuditLogResponseDto } from "./dto/audit-log-response.dto.js";
 import { AuditLogRetentionResponseDto } from "./dto/audit-log-retention-response.dto.js";
 
 @ApiTags("Audit Log")
-@Secured([Role.Clients, Role.AuditRead])
+@Secured([Role.AuditRead])
 @Controller("admin/audit-logs")
 export class AuditLogController {
     constructor(private readonly auditLogService: AuditLogService) {}
