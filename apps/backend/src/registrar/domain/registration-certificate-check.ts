@@ -226,7 +226,8 @@ function accessCertificateMismatch(
     const found = presented
         ? `carries '${presented}'`
         : "has no organizationIdentifier or serialNumber";
-    return `The registration certificate does not belong to the access certificate: its ${field} is ${ids.map((id) => `'${id}'`).join(", ")}, but the access certificate subject ${found}`;
+    const expected = ids.map((id) => `'${id}'`).join(", ");
+    return `The registration certificate does not belong to the access certificate: its ${field} is ${expected}, but the access certificate subject ${found}`;
 }
 
 function identifiers(value: unknown): string[] {
