@@ -1,3 +1,7 @@
+import {
+    getAccessCertificateSubjectIdentifier,
+    parseAccessCertificate,
+} from "@owf/eudi-access-certificate";
 import { decodeJwt } from "jose";
 
 /**
@@ -6,7 +10,16 @@ import { decodeJwt } from "jose";
  *
  * 1. JWT decoding (structural validation, no signature check).
  * 2. Temporal validity (`exp`, `nbf`) with a clock skew tolerance.
- * 3. Overasking: every credential requested in `dcqlQuery.credentials` must be
+ * 3. Access certificate match (ETSI TS 119 475 clause 5.1): when an access
+ *    certificate is given, the identifier the registration certificate names
+ *    must be the access certificate subject's `organizationIdentifier` (legal
+ *    person) or `serialNumber` (natural person), as
+ *    `@owf/eudi-access-certificate` reads it. That identifier is
+ *    `intermediary.sub` when the relying party acts through an intermediary
+ *    (which presents its own access certificate) and must then be present;
+ *    otherwise `sub`. The v1.1.1 shapes `act.sub.id` and `sub.id` are read
+ *    too. Certificates without any identifier are not checked.
+ * 4. Overasking: every credential requested in `dcqlQuery.credentials` must be
  *    present in the certificate's authorized `credentials` claim. Skipped when
  *    `skipOveraskingCheck` (`SKIP_OVERASKING_CHECK`) is set.
  *
@@ -21,6 +34,7 @@ type RegistrationCertificateProblemCode =
     | "INVALID_JWT"
     | "EXPIRED"
     | "NOT_YET_VALID"
+    | "ACCESS_CERTIFICATE_MISMATCH"
     | "NO_AUTHORIZED_CREDENTIALS"
     | "OVERASKING";
 
@@ -37,6 +51,11 @@ export type RegistrationCertificateCheck =
 
 export interface RegistrationCertificateCheckOptions {
     skipOveraskingCheck: boolean;
+    /**
+     * Leaf access certificate (PEM or base64 DER) the request is signed with.
+     * When omitted, the registration certificate is not matched against it.
+     */
+    accessCertificate?: string;
     /** Current time in seconds since the epoch. Defaults to now. */
     now?: number;
 }
@@ -50,6 +69,7 @@ export function checkRegistrationCertificate(
     dcqlQuery: unknown,
     {
         skipOveraskingCheck,
+        accessCertificate,
         now = Math.floor(Date.now() / 1000),
     }: RegistrationCertificateCheckOptions,
 ): RegistrationCertificateCheck {
@@ -72,6 +92,13 @@ export function checkRegistrationCertificate(
             "NOT_YET_VALID",
             "Registration certificate is not yet valid",
         );
+    }
+
+    if (accessCertificate !== undefined) {
+        const mismatch = accessCertificateMismatch(payload, accessCertificate);
+        if (mismatch) {
+            return problem("ACCESS_CERTIFICATE_MISMATCH", mismatch);
+        }
     }
 
     const credentials = (dcqlQuery as { credentials?: unknown } | null)
@@ -122,6 +149,96 @@ export function checkRegistrationCertificate(
     }
 
     return { payload };
+}
+
+/**
+ * The identifier the access certificate must carry, and the field it comes
+ * from. ETSI TS 119 475 v1.2.1 names the relying party in `sub` and an
+ * intermediary in `intermediary.sub`; v1.1.1 used `sub.id` and `act.sub.id`
+ * (Annex C: a string `act.sub`). An intermediary presents its own access
+ * certificate, so its identifier is matched instead of the relying party's.
+ */
+function expectedIdentifiers(payload: Record<string, any>): {
+    field: string;
+    ids: string[];
+    intermediary: boolean;
+} {
+    if (isRecord(payload.intermediary)) {
+        return {
+            field: "intermediary.sub",
+            ids: identifiers(payload.intermediary.sub),
+            intermediary: true,
+        };
+    }
+    if (isRecord(payload.act)) {
+        const { sub } = payload.act;
+        return isRecord(sub)
+            ? {
+                  field: "act.sub.id",
+                  ids: identifiers(sub.id),
+                  intermediary: true,
+              }
+            : { field: "act.sub", ids: identifiers(sub), intermediary: true };
+    }
+    return isRecord(payload.sub)
+        ? {
+              field: "sub.id",
+              ids: identifiers(payload.sub.id),
+              intermediary: false,
+          }
+        : { field: "sub", ids: identifiers(payload.sub), intermediary: false };
+}
+
+/**
+ * Why the access certificate does not belong to the relying party (or the
+ * intermediary) the registration certificate names, or `undefined` when it
+ * does or when the registration certificate names no identifier to compare.
+ */
+function accessCertificateMismatch(
+    payload: Record<string, any>,
+    accessCertificate: string,
+): string | undefined {
+    const { field, ids, intermediary } = expectedIdentifiers(payload);
+    if (ids.length === 0) {
+        // GEN-5.2.4-09: an intermediated certificate names the intermediary,
+        // whose access certificate signs the request.
+        return intermediary
+            ? `The registration certificate names an intermediary but no ${field} to match with the access certificate`
+            : undefined;
+    }
+
+    let presented: string | undefined;
+    try {
+        // organizationIdentifier of a legal person, serialNumber of a natural
+        // person (ETSI TS 119 475 Tables 1 and 3, ETSI TS 119 411-8).
+        presented = getAccessCertificateSubjectIdentifier(
+            parseAccessCertificate(accessCertificate),
+        )?.trim();
+    } catch (error) {
+        const reason = error instanceof Error ? `: ${error.message}` : "";
+        return `The access certificate could not be read to match it with the registration certificate${reason}`;
+    }
+
+    // GEN-5.1.1-04: with several identifiers, one match is enough.
+    if (presented && ids.includes(presented)) {
+        return undefined;
+    }
+    const found = presented
+        ? `carries '${presented}'`
+        : "has no organizationIdentifier or serialNumber";
+    return `The registration certificate does not belong to the access certificate: its ${field} is ${ids.map((id) => `'${id}'`).join(", ")}, but the access certificate subject ${found}`;
+}
+
+function identifiers(value: unknown): string[] {
+    const values = Array.isArray(value) ? value : [value];
+    return values
+        .filter((id): id is string => typeof id === "string")
+        .map((id) => id.trim())
+        .filter((id) => id.length > 0);
+}
+
+function isRecord(value: unknown): value is Record<string, any> {
+    return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
 function problem(
