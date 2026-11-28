@@ -88,7 +88,6 @@ export class KmsTenantConfigService {
                         credential.value,
                         kmsCredentialUse(
                             { type: "tenant", tenantId },
-                            index,
                             provider,
                             credential.path,
                         ),

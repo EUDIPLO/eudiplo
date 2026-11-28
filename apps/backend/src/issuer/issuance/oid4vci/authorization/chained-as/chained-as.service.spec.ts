@@ -238,32 +238,6 @@ describe("ChainedAsService wallet attestation settings", () => {
 
         expect(config.walletAttestationStatusCheckMode).toBe("strict");
     });
-
-    it("names the chained server's position, as the stored check does", async () => {
-        const service = Object.assign(
-            Object.create(ChainedAsService.prototype) as ChainedAsService,
-            {
-                issuanceService: {
-                    getIssuanceConfiguration: vi.fn().mockResolvedValue({
-                        authorizationServers: [
-                            { type: "built-in", id: "own" },
-                            {
-                                type: "chained",
-                                id: "chained",
-                                upstream: {
-                                    issuer: "https://upstream.example.org",
-                                },
-                            },
-                        ],
-                    }),
-                },
-            },
-        );
-
-        const config = await service.getChainedAsConfig("tenant-1");
-
-        expect(config.serverIndex).toBe(1);
-    });
 });
 
 describe("ChainedAsService upstream client secret", () => {
@@ -285,7 +259,6 @@ describe("ChainedAsService upstream client secret", () => {
             { tenantId: "tenant-1", upstreamCodeVerifier: "v" },
             "code",
             {
-                serverIndex: 1,
                 upstream: {
                     issuer: "https://idp.example",
                     clientId: "client",

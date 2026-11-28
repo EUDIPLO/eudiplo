@@ -320,8 +320,10 @@ decides what it may name:
   `KMS_SETTING_REFUSED`). An operator secret it may use only for one server is
   a `bound` grant, checked against the server the credential is sent to
   (`vaultUrl`, `baseUrl`, `auth.tokenUrl`, `tokenUrl`; the region's endpoint
-  for `aws-kms`). A PKCS#11 `pin` goes to a library of the host, no server, so
-  it can only be a reference of the tenant's own namespace.
+  for `aws-kms`), not against the provider's `id` or position, which the
+  tenant chooses: a provider named like the operator's gets the secret only
+  for the granted server. A PKCS#11 `pin` goes to a library of the host, no
+  server, so it can only be a reference of the tenant's own namespace.
 - A provider with a reference counts as shared, like one with a `${VAR}`
   placeholder, also without a secret policy (then the text is a literal
   credential): EUDIPLO keeps the tenant to its own keys on it

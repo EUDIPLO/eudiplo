@@ -108,13 +108,17 @@ export function withCredential<T>(
 }
 
 /**
- * How the credential at `path` of the provider at `index` of its
- * `kms.json` is used: by the tenant whose file holds it, or the instance
- * for the global file, sent to the address its destination setting names.
+ * How the credential at `path` of a provider is used: by the tenant whose
+ * `kms.json` holds it, or the instance for the global file, sent to the
+ * address its destination setting names.
+ *
+ * The field names no provider: positions in lists are `*`, and a provider's
+ * `id` is not part of it. A tenant chooses both for the providers it
+ * writes, so neither could tie a grant to a provider; the grant is tied to
+ * the kind of credential (its path) and the server it is sent to.
  */
 export function kmsCredentialUse(
     scope: SecretScope,
-    index: number,
     provider: KmsProviderConfig,
     path: (string | number)[],
 ): SecretUse {
@@ -134,7 +138,9 @@ export function kmsCredentialUse(
               : undefined;
     return {
         scope,
-        field: `KmsConfig:providers.${index}.${path.join(".")}`,
+        field: `KmsConfig:providers.*.${path
+            .map((part) => (typeof part === "number" ? "*" : part))
+            .join(".")}`,
         ...(typeof destination === "string" ? { destination } : {}),
     };
 }

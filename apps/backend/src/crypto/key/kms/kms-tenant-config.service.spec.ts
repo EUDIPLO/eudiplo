@@ -393,6 +393,57 @@ describe("KmsTenantConfigService", () => {
             ).toMatchObject({ vaultToken: "<redacted>" });
         });
 
+        it("ties a bound reference to the server, whatever ID or position the tenant gives its provider", () => {
+            const bound = "${vault:kv/operator/kms#token}";
+            const service = createService(
+                stubSecretReferences({
+                    tenants: {
+                        "tenant-a": {
+                            bound: [
+                                {
+                                    ref: bound,
+                                    fields: [
+                                        "KmsConfig:providers.*.vaultToken",
+                                    ],
+                                    destinations: ["https://vault.example.com"],
+                                },
+                            ],
+                        },
+                    },
+                }).secrets,
+            );
+            const provider = (id: string, vaultUrl: string) => ({
+                id,
+                type: "vault" as const,
+                vaultUrl,
+                vaultToken: bound,
+            });
+            const db = { id: "db", type: "db" as const };
+
+            // The granted server, under any ID and at any position.
+            for (const providers of [
+                [provider("mine", "https://vault.example.com")],
+                [db, provider("operator-kms", "https://vault.example.com")],
+                [provider("x", "https://vault.example.com"), db],
+            ])
+                expect(() =>
+                    service.saveTenantConfig("tenant-a", { providers }),
+                ).not.toThrow();
+            // The operator's provider ID does not carry the grant elsewhere.
+            expect(() =>
+                service.saveTenantConfig("tenant-a", {
+                    providers: [
+                        db,
+                        provider(
+                            "operator-kms",
+                            "https://attacker.example.com",
+                        ),
+                    ],
+                }),
+            ).toThrow(/may send it only to https:\/\/vault\.example\.com/);
+            expect(atomicWriteFileSync).toHaveBeenCalledTimes(3);
+        });
+
         it("reports nothing to plans for a configuration of another shape", () => {
             const service = createService(stubSecretReferences().secrets);
             expect(

@@ -249,103 +249,93 @@ describe("KmsProviderRegistry", () => {
     });
 
     describe("credentials that are secret references", () => {
-        it("names the tenant's file and the provider's index there, or the instance's", async () => {
+        /** The uses the registry asks the policy about, per provider. */
+        async function usesOf(
+            global: KmsConfig,
+            tenantConfig: KmsConfig,
+            ids: string[],
+        ): Promise<SecretUse[]> {
             const { secrets } = stubSecretReferences();
             const uses: SecretUse[] = [];
             vi.spyOn(secrets, "valueOf").mockImplementation(async (_, use) => {
                 uses.push(use);
                 throw new Error("stop before any request");
             });
-            const own = vaultProvider(
-                "own-vault",
-                "${vault:kv/eudiplo/acme/kms#token}",
-            );
-            const globalWithReference = vaultProvider(
-                "global-ref",
-                "${vault:kv/instance/kms#token}",
-            );
-            // Another index in the global file than in the merged one.
-            const global: KmsConfig = {
-                providers: [
-                    { id: "db", type: "db" },
-                    vaultProvider("global-only"),
-                    globalWithReference,
-                ],
-            };
-            const tenantConfig: KmsConfig = {
-                providers: [{ id: "db", type: "db" }, globalWithReference, own],
-            };
-            const tenantFile: KmsConfig = {
-                providers: [{ id: "db", type: "db" }, own],
-            };
             const registry = new KmsProviderRegistry(
                 {
                     getConfig: (tenantId?: string) =>
                         tenantId ? tenantConfig : global,
                     getTenantSnapshot: () => ({
                         config: tenantConfig,
-                        file: tenantFile,
+                        file: tenantConfig,
                     }),
                 } as never,
                 globalHttp as never,
                 { safeLookup } as never,
                 secrets,
             );
+            for (const id of ids) await registry.resolve(id, "acme").health();
+            return uses;
+        }
 
-            await registry.resolve("own-vault", "acme").health();
-            await registry.resolve("global-ref", "acme").health();
+        const own = vaultProvider(
+            "own-vault",
+            "${vault:kv/eudiplo/acme/kms#token}",
+        );
+        const globalWithReference = vaultProvider(
+            "global-ref",
+            "${vault:kv/instance/kms#token}",
+        );
+
+        it("names the scope of the file and the credential, no position or ID", async () => {
+            const global: KmsConfig = {
+                providers: [{ id: "db", type: "db" }, globalWithReference],
+            };
+            const uses = await usesOf(
+                global,
+                {
+                    providers: [
+                        { id: "db", type: "db" },
+                        globalWithReference,
+                        own,
+                    ],
+                },
+                ["own-vault", "global-ref"],
+            );
 
             expect(uses).toEqual([
                 {
                     scope: { type: "tenant", tenantId: "acme" },
-                    field: "KmsConfig:providers.1.vaultToken",
+                    field: "KmsConfig:providers.*.vaultToken",
                     destination: "https://vault.example",
                 },
                 {
                     scope: { type: "instance" },
-                    field: "KmsConfig:providers.2.vaultToken",
+                    field: "KmsConfig:providers.*.vaultToken",
                     destination: "https://vault.example",
                 },
             ]);
         });
 
-        it("gives no destination when the file changed since the configuration was built", async () => {
-            const { secrets } = stubSecretReferences();
-            const uses: SecretUse[] = [];
-            vi.spyOn(secrets, "valueOf").mockImplementation(async (_, use) => {
-                uses.push(use);
-                throw new Error("stop before any request");
-            });
-            const own = vaultProvider(
-                "own-vault",
-                "${vault:kv/eudiplo/acme/kms#token}",
+        it("asks the same when providers are reordered or one is inserted", async () => {
+            const global: KmsConfig = { providers: [{ id: "db", type: "db" }] };
+            const before = await usesOf(
+                global,
+                { providers: [{ id: "db", type: "db" }, own] },
+                ["own-vault"],
             );
-            const tenantConfig: KmsConfig = {
-                providers: [{ id: "db", type: "db" }, own],
-            };
-            const registry = new KmsProviderRegistry(
+            const reordered = await usesOf(
+                global,
                 {
-                    getConfig: (tenantId?: string) =>
-                        tenantId ? tenantConfig : globalConfig,
-                    // Another state of the file than the configuration's.
-                    getTenantSnapshot: () => ({
-                        config: { providers: [] },
-                        file: { providers: [own] },
-                    }),
-                } as never,
-                globalHttp as never,
-                { safeLookup } as never,
-                secrets,
-            );
-
-            await registry.resolve("own-vault", "acme").health();
-
-            expect(uses).toEqual([
-                {
-                    scope: { type: "tenant", tenantId: "acme" },
-                    field: "KmsConfig:providers.-1.vaultToken",
+                    providers: [
+                        own,
+                        vaultProvider("inserted"),
+                        { id: "db", type: "db" },
+                    ],
                 },
-            ]);
+                ["own-vault"],
+            );
+            expect(reordered).toEqual(before);
         });
     });
 

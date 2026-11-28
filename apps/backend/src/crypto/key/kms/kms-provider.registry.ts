@@ -40,12 +40,6 @@ import { KmsCryptoProvider } from "./kms-crypto-provider.js";
 
 const DEFAULT_PROVIDER_ID = "db";
 
-/** Whose `kms.json` a provider comes from, and its index there. */
-interface ProviderOwner {
-    scope: SecretScope;
-    index: number;
-}
-
 /**
  * How long adapters that are no longer handed out stay usable before they
  * are disposed, so that operations that resolved them earlier, such as a
@@ -276,35 +270,21 @@ export class KmsProviderRegistry implements OnModuleInit, OnModuleDestroy {
 
         // mergeConfigs hands on the providers of the global file as they
         // are, so every other provider comes from the tenant's file.
-        const globalProviders = this.kmsConfig.getConfig().providers;
-        const global = new Set(globalProviders);
+        const global = new Set(this.kmsConfig.getConfig().providers);
         for (const provider of config.providers) {
             const isGlobal = global.has(provider);
-            // Where the provider's credentials come from, for the policy of
-            // their secret references: the index in its own kms.json. Only
-            // looked up for a provider with references.
-            const owner = (): ProviderOwner => {
-                if (isGlobal || tenantId === undefined)
-                    return {
-                        scope: { type: "instance" },
-                        index: globalProviders.indexOf(provider),
-                    };
-                // The index must come from the file `config` was built from.
-                const snapshot = this.kmsConfig.getTenantSnapshot(tenantId);
-                const index =
-                    snapshot.config === config
-                        ? (snapshot.file?.providers.findIndex(
-                              (candidate) => candidate.id === provider.id,
-                          ) ?? -1)
-                        : -1;
-                return { scope: { type: "tenant", tenantId }, index };
-            };
+            // Whose file the provider's credentials come from, for the
+            // policy of their secret references.
+            const scope: SecretScope =
+                isGlobal || tenantId === undefined
+                    ? { type: "instance" }
+                    : { type: "tenant", tenantId };
             adapters.set(
                 provider.id,
                 this.instantiateWithReferences(
                     provider,
                     isGlobal ? this.httpService : this.tenantHttpService,
-                    owner,
+                    scope,
                 ),
             );
         }
@@ -385,34 +365,22 @@ export class KmsProviderRegistry implements OnModuleInit, OnModuleDestroy {
     private instantiateWithReferences(
         provider: KmsProviderConfig,
         httpService: HttpService,
-        ownerOf: () => ProviderOwner,
+        scope: SecretScope,
     ): KmsAdapter {
         const references = kmsCredentials(provider).filter((credential) =>
             this.secrets.isReference(credential.value),
         );
         if (references.length === 0)
             return this.instantiate(provider, httpService);
-        const owner = ownerOf();
         return new ReferencedKmsAdapter(
             provider,
             references,
-            (path) => {
-                const use = kmsCredentialUse(
-                    owner.scope,
-                    owner.index,
-                    provider,
-                    path,
-                );
-                // Without its place in the file, no grant bound to a field
-                // and an address may apply.
-                if (owner.index < 0) delete use.destination;
-                return use;
-            },
+            (path) => kmsCredentialUse(scope, provider, path),
             this.secrets,
             (resolved) => this.instantiate(resolved, httpService),
             (adapter) => this.retire([adapter]),
             // The operator's references are not shown to tenants.
-            owner.scope.type === "instance",
+            scope.type === "instance",
         );
     }
 
