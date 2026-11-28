@@ -2,6 +2,12 @@ import { createHash } from "node:crypto";
 import { Logger } from "@nestjs/common";
 import type { JWK } from "jose";
 import type { SecretReferences } from "../../../../platform/secrets/application/secret-references.js";
+import {
+    SecretMissingError,
+    SecretReferenceInvalidError,
+    SecretReferenceRefusedError,
+    SecretUnavailableError,
+} from "../../../../platform/secrets/domain/secret-errors.js";
 import type { SecretUse } from "../../../../platform/secrets/domain/secret-use.js";
 import type { KmsProviderConfig } from "../../schemas/kms-config.schema.js";
 import type {
@@ -12,6 +18,7 @@ import type {
     KmsKeyRef,
     KmsSigningAlg,
 } from "../kms-adapter.js";
+import { KmsCredentialError } from "../kms-credential-error.js";
 import {
     type KmsCredential,
     withCredential,
@@ -59,18 +66,47 @@ export class ReferencedKmsAdapter implements KmsAdapter {
         this.capabilities = probe.capabilities;
     }
 
+    /**
+     * The credentials' current values.
+     *
+     * @throws KmsCredentialError, whose message names no reference; the log
+     * and the error's cause have the reason
+     */
+    private async values(): Promise<string[]> {
+        try {
+            return (
+                await Promise.all(
+                    this.references.map((credential) =>
+                        this.secrets.valueOf(
+                            credential.value,
+                            this.useOf(credential.path),
+                        ),
+                    ),
+                )
+            ).map((value) => value.reveal());
+        } catch (error) {
+            const kind =
+                error instanceof SecretUnavailableError
+                    ? "unavailable"
+                    : error instanceof SecretReferenceRefusedError ||
+                        error instanceof SecretReferenceInvalidError ||
+                        error instanceof SecretMissingError
+                      ? "refused"
+                      : undefined;
+            if (!kind) throw error;
+            this.logger.warn(
+                `KMS provider '${this.providerId}': ${error instanceof Error ? error.message : String(error)}`,
+            );
+            throw new KmsCredentialError(this.providerId, kind, {
+                cause: error,
+                operatorsProvider: this.hideReasons,
+            });
+        }
+    }
+
     /** The adapter for the credentials' current values. */
     private async adapter(): Promise<KmsAdapter> {
-        const values = (
-            await Promise.all(
-                this.references.map((credential) =>
-                    this.secrets.valueOf(
-                        credential.value,
-                        this.useOf(credential.path),
-                    ),
-                ),
-            )
-        ).map((value) => value.reveal());
+        const values = await this.values();
         const fingerprint = createHash("sha256")
             .update(JSON.stringify(values))
             .digest("hex");
@@ -120,13 +156,21 @@ export class ReferencedKmsAdapter implements KmsAdapter {
         try {
             adapter = await this.adapter();
         } catch (error) {
+            // A tenant's own provider shows why; the operator's providers
+            // only that their credentials cannot be used (logged above).
             const reason =
-                error instanceof Error ? error.message : String(error);
-            if (!this.hideReasons) return { ok: false, error: reason };
-            this.logger.warn(`${this.providerId}: ${reason}`);
+                error instanceof KmsCredentialError ? error.cause : error;
+            // values() logs the credential errors; log the others here.
+            if (this.hideReasons && !(error instanceof KmsCredentialError))
+                this.logger.warn(
+                    `KMS provider '${this.providerId}': ${reason instanceof Error ? reason.message : String(reason)}`,
+                );
             return {
                 ok: false,
-                error: "the credentials of this provider cannot be read",
+                error:
+                    !this.hideReasons && reason instanceof Error
+                        ? reason.message
+                        : "the credentials of this provider cannot be read",
             };
         }
         return adapter.health();

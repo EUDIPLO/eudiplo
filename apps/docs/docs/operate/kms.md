@@ -330,7 +330,15 @@ decides what it may name:
   ([shared providers](#keys-of-a-provider-that-tenants-share)).
 - The reference is checked again each time the credential is used, so one in a
   file you wrote, or one the policy no longer grants, fails the key operation
-  and nothing is sent.
+  and nothing is sent. Through `/api/key-chain` the request is answered with
+  `409` when the configuration must change (a refused or malformed reference,
+  or one without a value) and with `503` while the secret source does not
+  answer; the message names the provider, not the reference. For a provider of
+  the global `kms.json` it is always `503` and says only that its credentials
+  cannot be read. Other requests that need the key, such as saving a trust
+  list or a wallet's request, fail as a server error. Deleting a key chain
+  still removes it from EUDIPLO; the key then stays in the KMS, and a warning
+  is logged.
 - The value is read when the provider is used and cached for 5 minutes. When it
   changes, EUDIPLO builds the provider anew with the new value; the old one is
   closed 60 seconds later, so running operations can finish.
