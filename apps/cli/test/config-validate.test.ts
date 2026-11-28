@@ -737,6 +737,7 @@ async function createContext(): Promise<{
     const output = { stdout: "", stderr: "" };
     const context: CommandContext = {
         cwd,
+        installationMethod: "npm",
         env: {
             PATH: process.env.PATH,
         },

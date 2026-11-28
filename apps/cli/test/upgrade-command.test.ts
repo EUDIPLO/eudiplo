@@ -63,6 +63,7 @@ async function setup(
     const output = { stdout: "", stderr: "" };
     const context: CommandContext = {
         cwd,
+        installationMethod: "npm",
         env: { EUDIPLO_CONTAINER_RUNTIME: "docker", PATH: bin },
         interactive: options.interactive ?? false,
         prompt: async () => options.answer ?? "",

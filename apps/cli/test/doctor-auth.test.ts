@@ -33,6 +33,7 @@ function createContext(
         [];
     const context: CommandContext = {
         cwd: "/",
+        installationMethod: "npm",
         env,
         readCertificate: async () => ({
             subject: "eudiplo.example.com",

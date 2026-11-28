@@ -1,6 +1,10 @@
 import type { CertificateReader } from "./services/tls-expiry.js";
 export type DeploymentTarget = "compose" | "external" | "kubernetes";
-type CliInstallationMethod = "npm" | "standalone";
+export type CliInstallationMethod =
+    | "npm"
+    | "npx"
+    | "standalone"
+    | "windows-archive";
 
 export interface InstanceConfig {
     target: DeploymentTarget;
@@ -26,7 +30,7 @@ export interface CliConfig {
 export interface CommandContext {
     cwd: string;
     env: NodeJS.ProcessEnv;
-    installationMethod?: CliInstallationMethod;
+    installationMethod: CliInstallationMethod;
     interactive?: boolean;
     prompt?: (question: string) => Promise<string>;
     stdout: Pick<NodeJS.WriteStream, "write">;

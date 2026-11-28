@@ -12,6 +12,7 @@ function createContext(status: (path: string) => number) {
     const output = { stdout: "", stderr: "" };
     const context: CommandContext = {
         cwd: "/",
+        installationMethod: "npm",
         env: {},
         readCertificate: validCertificate,
         stdout: {

@@ -56,6 +56,7 @@ describe("config plan / import with a tenant folder", () => {
         output = { stdout: "", stderr: "" };
         context = {
             cwd,
+            installationMethod: "npm",
             env: {
                 EUDIPLO_TOKEN: "test-token",
                 PORTAL_SECRET: "s3cr3t-value",

@@ -15,6 +15,7 @@ import { createOpenCommand } from "./commands/open/index.js";
 import { createStatusCommand } from "./commands/status/index.js";
 import { createUpgradeCommand } from "./commands/upgrade/index.js";
 import { createVersionCommand, versionText } from "./commands/version/index.js";
+import { detectInstallationMethod } from "./installation-method.js";
 import type { CommandContext } from "./types.js";
 
 export async function runCli(
@@ -102,7 +103,12 @@ function defaultContext(): CommandContext {
     return {
         cwd: process.cwd(),
         env: process.env,
-        installationMethod: isSea() ? "standalone" : "npm",
+        installationMethod: detectInstallationMethod({
+            env: process.env,
+            scriptPath: process.argv[1],
+            isSea: isSea(),
+            platform: process.platform,
+        }),
         interactive:
             process.stdin.isTTY === true && process.stdout.isTTY === true,
         stdout: process.stdout,

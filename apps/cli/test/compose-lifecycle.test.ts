@@ -60,6 +60,7 @@ async function createOptions(
     const output = { stdout: "", stderr: "" };
     const context: CommandContext = {
         cwd,
+        installationMethod: "npm",
         env: { EUDIPLO_CONTAINER_RUNTIME: runtime, PATH: bin },
         stdout: {
             write(chunk: string | Uint8Array) {

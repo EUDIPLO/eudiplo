@@ -33,6 +33,7 @@ async function createOptions(
     await writeFile(kubectl, "", "utf8");
     const context: CommandContext = {
         cwd,
+        installationMethod: "npm",
         env: { EUDIPLO_KUBECTL: kubectl },
         stdout: { write: () => true },
         stderr: { write: () => true },

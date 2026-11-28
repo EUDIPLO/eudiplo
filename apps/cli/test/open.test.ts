@@ -285,6 +285,7 @@ function createContext({ interactive }: { interactive: boolean }) {
     const output = { stdout: "", stderr: "" };
     const context: CommandContext = {
         cwd: "/",
+        installationMethod: "npm",
         env: { PATH: "" },
         interactive,
         stdout: {

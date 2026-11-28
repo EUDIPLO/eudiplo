@@ -29,6 +29,7 @@ async function setup() {
     const output = { stdout: "", stderr: "" };
     const context: CommandContext = {
         cwd,
+        installationMethod: "npm",
         env: {},
         stdout: {
             write: (text) => {

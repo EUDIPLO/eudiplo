@@ -1,6 +1,5 @@
-import { isSea } from "node:sea";
 import packageJson from "../../../package.json" with { type: "json" };
-import type { CommandContext } from "../../types.js";
+import type { CliInstallationMethod, CommandContext } from "../../types.js";
 
 export function versionText(): string {
     return `${packageJson.name} ${packageJson.version}`;
@@ -13,11 +12,12 @@ export async function versionStatusText(
     const lines = [versionText()];
 
     try {
-        const latestVersion = await fetchLatestVersion(context);
+        const source = updateSource(context);
+        const latestVersion = await source.fetchLatest(context);
         lines.push(`latest ${latestVersion}`);
         const comparison = compareSemver(currentVersion, latestVersion);
         if (comparison < 0) {
-            lines.push(`update available: ${updateCommand(context)}`);
+            lines.push(`update available: ${source.updateHint}`);
         } else if (comparison === 0) {
             lines.push("up to date");
         } else {
@@ -32,15 +32,49 @@ export async function versionStatusText(
     return lines.join("\n");
 }
 
-function updateCommand(context: CommandContext): string {
-    const installationMethod =
-        context.installationMethod ?? (isSea() ? "standalone" : "npm");
-    return installationMethod === "standalone"
-        ? "curl -fsSL https://eudiplo.dev/install.sh | bash"
-        : "npm install -g @eudiplo/cli@latest";
+const GITHUB_LATEST_RELEASE =
+    "https://api.github.com/repos/EUDIPLO/eudiplo/releases/latest";
+
+/** Where each installation method looks up the latest version, and how it updates. */
+const updateSources: Record<
+    CliInstallationMethod,
+    {
+        fetchLatest: (context: CommandContext) => Promise<string>;
+        updateHint: string;
+    }
+> = {
+    npm: {
+        fetchLatest: fetchLatestVersionForNpm,
+        updateHint: "npm install -g @eudiplo/cli@latest",
+    },
+    npx: {
+        fetchLatest: fetchLatestVersionForNpm,
+        updateHint: "npx @eudiplo/cli@latest",
+    },
+    standalone: {
+        fetchLatest: fetchLatestVersionForStandalone,
+        updateHint: "curl -fsSL https://eudiplo.dev/install.sh | bash",
+    },
+    "windows-archive": {
+        fetchLatest: fetchLatestVersionForStandalone,
+        updateHint:
+            "download the Windows archive from https://github.com/EUDIPLO/eudiplo/releases/latest",
+    },
+};
+
+function updateSource(context: CommandContext) {
+    const source = updateSources[context.installationMethod];
+    if (!source) {
+        throw new Error(
+            `unknown installation method ${JSON.stringify(context.installationMethod)}`,
+        );
+    }
+    return source;
 }
 
-async function fetchLatestVersion(context: CommandContext): Promise<string> {
+async function fetchLatestVersionForNpm(
+    context: CommandContext,
+): Promise<string> {
     const response = await context.fetch(
         `https://registry.npmjs.org/${encodeURIComponent(packageJson.name)}/latest`,
     );
@@ -55,12 +89,38 @@ async function fetchLatestVersion(context: CommandContext): Promise<string> {
     return metadata.version;
 }
 
+async function fetchLatestVersionForStandalone(
+    context: CommandContext,
+): Promise<string> {
+    const response = await context.fetch(GITHUB_LATEST_RELEASE, {
+        headers: { Accept: "application/vnd.github+json" },
+    });
+    if (!response.ok) {
+        throw new Error(`GitHub releases returned HTTP ${response.status}`);
+    }
+
+    const release = await response.json();
+    if (!isReleaseMetadata(release)) {
+        throw new Error("GitHub release response did not include a tag_name");
+    }
+    return release.tag_name.replace(/^v/, "");
+}
+
 function isPackageMetadata(value: unknown): value is { version: string } {
     return (
         typeof value === "object" &&
         value !== null &&
         "version" in value &&
         typeof value.version === "string"
+    );
+}
+
+function isReleaseMetadata(value: unknown): value is { tag_name: string } {
+    return (
+        typeof value === "object" &&
+        value !== null &&
+        "tag_name" in value &&
+        typeof value.tag_name === "string"
     );
 }
 
