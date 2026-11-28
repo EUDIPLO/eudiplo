@@ -10,6 +10,7 @@ import {
     Post,
     Put,
     Query,
+    UseFilters,
 } from "@nestjs/common";
 import {
     ApiBody,
@@ -48,6 +49,7 @@ import { ProviderHealthResponseDto } from "./dto/provider-health-response.dto.js
 import { KeyChainService } from "./key-chain.service.js";
 import { KmsKeyOwnershipService } from "./kms/kms-key-ownership.service.js";
 import { KmsTenantConfigService } from "./kms/kms-tenant-config.service.js";
+import { KmsCredentialErrorFilter } from "./kms-credential-error.filter.js";
 import { KeyUsageType } from "./types/key-usage-type.js";
 
 /** Roles that read each kind of configuration that can name a key chain. */
@@ -77,6 +79,7 @@ const KEYS_EXPORT_REQUIRED =
 @ApiTags("Key Chain")
 @Secured([Role.Keys])
 @Controller("key-chain")
+@UseFilters(KmsCredentialErrorFilter)
 export class KeyChainController {
     constructor(
         private readonly keyChainService: KeyChainService,

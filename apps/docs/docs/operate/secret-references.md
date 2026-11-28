@@ -177,7 +177,8 @@ files of every tenant folder may name only the variables you list:
 - **Failing.** When a value cannot be read, the webhook delivery fails with
   "the API key of the webhook could not be read", and the upstream login of a
   chained authorization server ends with `server_error` for the wallet, and a
-  key operation of a KMS provider fails (its health check names the reason). The log
+  key operation of a KMS provider fails, with `409` or `503` through the key
+  chain API ([KMS](kms.md#secret-references-in-a-tenant-kmsjson)). The log
   names the reference and the reason, never the value.
 
 ## What EUDIPLO shows

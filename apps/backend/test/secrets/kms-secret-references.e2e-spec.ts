@@ -154,7 +154,10 @@ describe("Secret references in a tenant kms.json", () => {
 
         const response = await createKeyChain();
 
-        expect(response.status).toBeGreaterThanOrEqual(400);
+        // A client error that names the provider, not the reference.
+        expect(response.status).toBe(409);
+        expect(response.body.message).toContain("KMS provider 'own-kms'");
+        expect(JSON.stringify(response.body)).not.toContain("OTHER_KMS_TOKEN");
         expect(mockKms.lastAuthorization).toBeUndefined();
         // The provider's health names why: the policy refused the reference.
         const health = await request(app.getHttpServer())
