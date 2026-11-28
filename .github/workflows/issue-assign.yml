@@ -1,0 +1,104 @@
+name: Issue Self-Assign
+
+# Lets contributors without a repository role take an issue by commenting
+# `/assign`, and give it back with `/unassign`.
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions: {}
+
+concurrency:
+  group: issue-assign-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  assign:
+    runs-on: ubuntu-latest
+    # Issues only (not pull requests), and only comments that start with a command.
+    if: >-
+      github.event.issue.pull_request == null &&
+      github.event.comment.user.type != 'Bot' &&
+      (startsWith(github.event.comment.body, '/assign') ||
+       startsWith(github.event.comment.body, '/unassign'))
+    permissions:
+      issues: write
+    steps:
+      - name: Handle the command
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            // Open issues one contributor can hold through /assign at a time.
+            const MAX_ASSIGNED = 3;
+
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.issue.number;
+            const comment_id = context.payload.comment.id;
+            const user = context.payload.comment.user.login;
+
+            // The first line has to be exactly the command.
+            const command = context.payload.comment.body.split(/\r?\n/)[0].trim();
+            if (command !== '/assign' && command !== '/unassign') {
+              return;
+            }
+
+            const react = (content) =>
+              github.rest.reactions.createForIssueComment({ owner, repo, comment_id, content });
+            const reply = (body) =>
+              github.rest.issues.createComment({ owner, repo, issue_number, body });
+
+            // Read the current state: the event payload can be outdated.
+            const { data: issue } = await github.rest.issues.get({ owner, repo, issue_number });
+            const assignees = issue.assignees.map((assignee) => assignee.login);
+
+            if (command === '/unassign') {
+              if (!assignees.includes(user)) {
+                await reply(`@${user} this issue is not assigned to you.`);
+                return;
+              }
+              await github.rest.issues.removeAssignees({ owner, repo, issue_number, assignees: [user] });
+              await react('+1');
+              return;
+            }
+
+            if (issue.state !== 'open') {
+              await reply(`@${user} this issue is closed, so it cannot be assigned.`);
+              return;
+            }
+            if (assignees.includes(user)) {
+              await react('+1');
+              return;
+            }
+            if (assignees.length > 0) {
+              const names = assignees.map((login) => `\`${login}\``).join(', ');
+              await reply(
+                `@${user} this issue is already assigned to ${names}. Ask in a comment if you want to help or take it over.`,
+              );
+              return;
+            }
+
+            const assigned = await github.paginate(github.rest.issues.listForRepo, {
+              owner,
+              repo,
+              state: 'open',
+              assignee: user,
+              per_page: 100,
+            });
+            const openIssues = assigned.filter((item) => !item.pull_request);
+            if (openIssues.length >= MAX_ASSIGNED) {
+              await reply(
+                `@${user} you already have ${openIssues.length} open issues assigned. Finish one or comment \`/unassign\` on it before you take another.`,
+              );
+              return;
+            }
+
+            await github.rest.issues.addAssignees({ owner, repo, issue_number, assignees: [user] });
+
+            // GitHub ignores an assignee it does not accept without an error.
+            const { data: updated } = await github.rest.issues.get({ owner, repo, issue_number });
+            if (!updated.assignees.some((assignee) => assignee.login === user)) {
+              await reply(`@${user} GitHub did not accept the assignment. A maintainer will assign you.`);
+              return;
+            }
+            await react('+1');
