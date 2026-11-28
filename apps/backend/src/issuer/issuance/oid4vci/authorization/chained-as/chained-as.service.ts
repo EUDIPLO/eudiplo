@@ -92,13 +92,6 @@ import {
  * This enables session correlation without requiring modifications to
  * the upstream OIDC provider (e.g., Keycloak).
  */
-/**
- * The chained server of the issuance configuration, with its position in
- * `authorizationServers`, which names its upstream client secret in the
- * secret policy.
- */
-type StoredChainedAsConfig = ChainedAsConfig & { serverIndex: number };
-
 @Injectable()
 export class ChainedAsService {
     private readonly logger = new Logger(ChainedAsService.name);
@@ -204,7 +197,7 @@ export class ChainedAsService {
      * Get the Chained AS configuration for a tenant.
      * @throws NotFoundException if chained AS is not configured or not enabled
      */
-    async getChainedAsConfig(tenantId: string): Promise<StoredChainedAsConfig> {
+    async getChainedAsConfig(tenantId: string): Promise<ChainedAsConfig> {
         const issuanceConfig =
             await this.issuanceService.getIssuanceConfiguration(tenantId);
 
@@ -224,8 +217,7 @@ export class ChainedAsService {
             >;
         };
 
-        const servers = issuanceConfig.authorizationServers ?? [];
-        const serverIndex = servers.findIndex(
+        const chainedServer = (issuanceConfig.authorizationServers ?? []).find(
             (server): server is ChainedServerConfig => {
                 const candidate = server as Partial<ChainedServerConfig>;
                 return (
@@ -238,12 +230,8 @@ export class ChainedAsService {
             },
         );
 
-        const chainedServer = servers[serverIndex] as
-            | ChainedServerConfig
-            | undefined;
         if (chainedServer) {
             return {
-                serverIndex,
                 enabled: true,
                 upstream: chainedServer.upstream,
                 token: chainedServer.token,
@@ -254,7 +242,7 @@ export class ChainedAsService {
                     chainedServer.walletProviderTrustLists,
                 walletAttestationStatusCheckMode:
                     chainedServer.walletAttestationStatusCheckMode,
-            } as StoredChainedAsConfig;
+            } as ChainedAsConfig;
         }
 
         throw new NotFoundException(
@@ -632,17 +620,13 @@ export class ChainedAsService {
     private async exchangeUpstreamCode(
         session: ChainedAsSession,
         code: string,
-        config: StoredChainedAsConfig,
+        config: ChainedAsConfig,
         discovery: OidcDiscoveryDocument,
         callbackUrl: string,
     ): Promise<void> {
         const upstream = config.upstream!;
         const use = (destination: string) =>
-            upstreamClientSecretUse(
-                session.tenantId,
-                config.serverIndex,
-                destination,
-            );
+            upstreamClientSecretUse(session.tenantId, destination);
         let clientSecret: string | undefined;
         if (upstream.clientSecret) {
             // The client secret may be a secret reference. It goes to the

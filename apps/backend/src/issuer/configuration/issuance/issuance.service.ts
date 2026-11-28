@@ -445,7 +445,6 @@ export class IssuanceService {
                 secret,
                 upstreamClientSecretUse(
                     tenantId,
-                    index,
                     server.upstream?.issuer ?? "",
                 ),
                 `authorizationServers[${index}].upstream.clientSecret`,

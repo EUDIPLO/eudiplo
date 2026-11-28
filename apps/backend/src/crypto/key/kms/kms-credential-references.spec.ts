@@ -77,7 +77,6 @@ describe("KMS credential references", () => {
         expect(
             kmsCredentialUse(
                 tenant,
-                2,
                 provider({
                     id: "v",
                     type: "vault",
@@ -87,13 +86,12 @@ describe("KMS credential references", () => {
             ),
         ).toEqual({
             scope: tenant,
-            field: "KmsConfig:providers.2.vaultToken",
+            field: "KmsConfig:providers.*.vaultToken",
             destination: "https://vault.example",
         });
         expect(
             kmsCredentialUse(
                 tenant,
-                0,
                 provider({
                     id: "h",
                     type: "http",
@@ -106,16 +104,26 @@ describe("KMS credential references", () => {
         expect(
             kmsCredentialUse(
                 { type: "instance" },
-                0,
                 provider({ id: "a", type: "aws-kms", region: "eu-west-1" }),
                 ["secretAccessKey"],
             ).destination,
         ).toBe("https://kms.eu-west-1.amazonaws.com");
+        // No position in a list: also nested items are `*`.
+        expect(
+            kmsCredentialUse(
+                tenant,
+                provider({
+                    id: "c",
+                    type: "csc",
+                    baseUrl: "https://csc.example",
+                }),
+                ["authorizeAuthData", 3, "value"],
+            ).field,
+        ).toBe("KmsConfig:providers.*.authorizeAuthData.*.value");
         // Only a region name becomes an address.
         expect(
             kmsCredentialUse(
                 { type: "instance" },
-                0,
                 provider({
                     id: "a",
                     type: "aws-kms",
@@ -128,7 +136,6 @@ describe("KMS credential references", () => {
         expect(
             kmsCredentialUse(
                 tenant,
-                0,
                 provider({
                     id: "p",
                     type: "pkcs11",

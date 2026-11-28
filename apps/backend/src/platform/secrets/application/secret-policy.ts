@@ -399,11 +399,19 @@ function readBoundGrant(
     if (refused) return { issues: [`${at}.ref: ${refused}`] };
     const issues: string[] = [];
     const fields = grant.fields.filter((field) => {
-        if (FIELD_PATTERN.test(field)) return true;
-        issues.push(
-            `${at}.fields: '${field}' is no field; write <Kind>:<path>, for example KmsConfig:providers.*.clientSecret`,
-        );
-        return false;
+        if (!FIELD_PATTERN.test(field)) {
+            issues.push(
+                `${at}.fields: '${field}' is no field; write <Kind>:<path>, for example KmsConfig:providers.*.clientSecret`,
+            );
+            return false;
+        }
+        if (field.split(/[:.]/).some((part) => /^\d+$/.test(part))) {
+            issues.push(
+                `${at}.fields: '${field}' names a position in a list, which changes when the list is reordered and which a tenant chooses; write * in its place`,
+            );
+            return false;
+        }
+        return true;
     });
     const destinations = new Set<string>();
     for (const destination of grant.destinations) {

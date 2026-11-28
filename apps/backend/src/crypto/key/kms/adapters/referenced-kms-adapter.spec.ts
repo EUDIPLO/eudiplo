@@ -64,7 +64,6 @@ function setup(grants: string[] = ["ACME_*"], hideReasons = false) {
         (path) =>
             kmsCredentialUse(
                 { type: "tenant", tenantId: "acme" },
-                0,
                 provider,
                 path,
             ),

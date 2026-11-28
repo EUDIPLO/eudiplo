@@ -96,11 +96,16 @@ only the tenant's own secrets there.
   settings or, for a tenant, the cloud credentials of the instance.
 - `bound` lists operator secrets a tenant may use but not read: the reference
   is accepted only in the listed fields and only while the field's URL has one
-  of the listed origins. Fields are written `<Kind>:<path>`, with `*` for any
-  key or array index: `WebhookEndpoint:auth.config.value`,
+  of the listed origins. Fields are written `<Kind>:<path>`:
+  `WebhookEndpoint:auth.config.value`,
   `AttributeProvider:auth.config.value`,
   `IssuanceConfig:authorizationServers.*.upstream.clientSecret`,
-  `KmsConfig:providers.*.vaultToken`. The URL of an
+  `KmsConfig:providers.*.vaultToken`. `*` stands for any key or position, and
+  a position in a list is always `*`; a field with a number in its place is
+  refused. A field names the kind of
+  credential, never one provider or server: positions change when a list is
+  reordered, and a tenant chooses the positions and IDs of what it writes.
+  What ties a bound secret down is the tenant, the field and the address. The URL of an
   API key is the endpoint's or provider's `url`. An upstream client secret is
   checked for `upstream.issuer` when it is stored and, when it is sent, also
   for the token endpoint that the issuer's discovery document names: list the

@@ -16,7 +16,7 @@ const tenant = (
     destination?: string,
 ): SecretUse => ({ scope: { type: "tenant", tenantId }, field, destination });
 
-const instance = (field = "KmsConfig:providers.0.vaultToken"): SecretUse => ({
+const instance = (field = "KmsConfig:providers.*.vaultToken"): SecretUse => ({
     scope: { type: "instance" },
     field,
 });
@@ -166,12 +166,12 @@ describe("SecretPolicy", () => {
             policy.refusal(ref, tenant("acme", field, destination));
         expect(
             at(
-                "KmsConfig:providers.1.clientSecret",
+                "KmsConfig:providers.*.clientSecret",
                 "https://csc.example.eu/oauth/token",
             ),
         ).toBeUndefined();
         expect(
-            at("KmsConfig:providers.0.sad", "https://sad.example.eu/sign"),
+            at("KmsConfig:providers.*.sad", "https://sad.example.eu/sign"),
         ).toBeUndefined();
         expect(
             at("WebhookEndpoint:auth.config.value", "https://csc.example.eu"),
@@ -180,7 +180,7 @@ describe("SecretPolicy", () => {
         );
         expect(
             at(
-                "KmsConfig:providers.1.clientSecret",
+                "KmsConfig:providers.*.clientSecret",
                 "https://attacker.example/csc",
             ),
         ).toBe(
@@ -188,15 +188,15 @@ describe("SecretPolicy", () => {
         );
         // The origins of one field's grant, not of another field's.
         expect(
-            at("KmsConfig:providers.1.clientSecret", "https://sad.example.eu"),
+            at("KmsConfig:providers.*.clientSecret", "https://sad.example.eu"),
         ).toMatch(/only to https:\/\/csc\.example\.eu,/);
         expect(
-            at("KmsConfig:providers.1.clientSecret", "http://csc.example.eu"),
+            at("KmsConfig:providers.*.clientSecret", "http://csc.example.eu"),
         ).toMatch(/only to/);
-        expect(at("KmsConfig:providers.1.clientSecret", "not a url")).toMatch(
+        expect(at("KmsConfig:providers.*.clientSecret", "not a url")).toMatch(
             /, not to this address$/,
         );
-        expect(at("KmsConfig:providers.1.clientSecret")).toBe(
+        expect(at("KmsConfig:providers.*.clientSecret")).toBe(
             "tenant 'acme' may send it only to https://csc.example.eu",
         );
         expect(
@@ -204,7 +204,7 @@ describe("SecretPolicy", () => {
                 ref,
                 tenant(
                     "acme-2",
-                    "KmsConfig:providers.1.clientSecret",
+                    "KmsConfig:providers.*.clientSecret",
                     "https://csc.example.eu",
                 ),
             ),
@@ -249,13 +249,40 @@ describe("SecretPolicy", () => {
         ]);
     });
 
+    it("refuses a grant field that names a position in a list", () => {
+        const grant = (field: string) => ({
+            tenants: {
+                acme: {
+                    bound: [
+                        {
+                            ref: CSC,
+                            fields: [field],
+                            destinations: ["https://csc.example.eu"],
+                        },
+                    ],
+                },
+            },
+        });
+        for (const field of [
+            "KmsConfig:providers.1.clientSecret",
+            "KmsConfig:providers.*.authorizeAuthData.0.value",
+            "IssuanceConfig:authorizationServers.0.upstream.clientSecret",
+        ])
+            expect(issuesOf(grant(field))).toEqual([
+                `tenants.acme.bound.0.fields: '${field}' names a position in a list, which changes when the list is reordered and which a tenant chooses; write * in its place`,
+            ]);
+        expect(
+            issuesOf(grant("KmsConfig:providers.*.authorizeAuthData.*.value")),
+        ).toEqual([]);
+    });
+
     it("keeps the instance's bound grants from tenants", () => {
         expect(
             policy.refusal(
                 reference("${env:VAULT_TOKEN}"),
                 tenant(
                     "acme",
-                    "KmsConfig:providers.0.vaultToken",
+                    "KmsConfig:providers.*.vaultToken",
                     "https://vault.example",
                 ),
             ),
