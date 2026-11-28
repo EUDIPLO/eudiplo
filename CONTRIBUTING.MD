@@ -25,6 +25,8 @@ Open an issue with the `feature request` label and describe the problem you want
 - Findings on the [SonarCloud dashboard](https://sonarcloud.io/project/overview?id=EUDIPLO_eudiplo) (code smells, bugs, security hotspots). They are self-contained and a good way to learn the codebase.
 - For backend refactoring, the [refactoring plan](apps/backend/docs/refactoring-plan.md). Pick one bounded slice before you start.
 
+To take an issue, comment `/assign` on it. The comment has to start with the command on its own line. You get the issue when nobody else is assigned and you hold fewer than three open issues. Comment `/unassign` to give it back.
+
 ---
 
 ## Getting started
