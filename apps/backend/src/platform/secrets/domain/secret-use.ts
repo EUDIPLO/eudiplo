@@ -10,8 +10,9 @@ export type SecretScope =
 export interface SecretUse {
     scope: SecretScope;
     /**
-     * The field that holds the reference, as `<Kind>:<path>` with array
-     * indexes, for example `KmsConfig:providers.0.clientSecret`.
+     * The field that holds the reference, as `<Kind>:<path>` with every
+     * position in a list written `*`, for example
+     * `KmsConfig:providers.*.clientSecret`.
      */
     field: string;
     /** The URL the value is sent to, when it is sent somewhere. */

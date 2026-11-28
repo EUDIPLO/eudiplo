@@ -100,8 +100,9 @@ only the tenant's own secrets there.
   `WebhookEndpoint:auth.config.value`,
   `AttributeProvider:auth.config.value`,
   `IssuanceConfig:authorizationServers.*.upstream.clientSecret`,
-  `KmsConfig:providers.*.vaultToken`. A position in a list is always `*`; a
-  field with a number in its place is refused. A field names the kind of
+  `KmsConfig:providers.*.vaultToken`. `*` stands for any key or position, and
+  a position in a list is always `*`; a field with a number in its place is
+  refused. A field names the kind of
   credential, never one provider or server: positions change when a list is
   reordered, and a tenant chooses the positions and IDs of what it writes.
   What ties a bound secret down is the tenant, the field and the address. The URL of an
